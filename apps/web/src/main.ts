@@ -1,7 +1,9 @@
 import "./style.css";
 import {
+  captureShopOffers,
   pickAutoSkillIndex,
   type Battle,
+  type CaptureShopChoice,
   type SkillResult,
   type StoneSuggestion,
   type Unit,
@@ -75,6 +77,8 @@ import {
   homeCollectCrystal,
   FUSION_MANA_COST,
   runImprintSymbol,
+  runJoinGuild,
+  runGuildCheckIn,
   runPracticeDojo,
   runSellSymbol,
   runSetArenaBans,
@@ -101,6 +105,7 @@ type View =
   | "glory"
   | "fusion"
   | "party"
+  | "guild"
   | "stages"
   | "battle";
 
@@ -218,6 +223,9 @@ function migrateSave(raw: unknown): PlayerSave | null {
     guildContribution:
       typeof p.guildContribution === "number" ? p.guildContribution : 0,
     dojoDrills: typeof p.dojoDrills === "number" ? p.dojoDrills : 0,
+    guildName: typeof p.guildName === "string" ? p.guildName : null,
+    guildCheckInDay:
+      typeof p.guildCheckInDay === "string" ? p.guildCheckInDay : null,
   };
 }
 
@@ -366,7 +374,9 @@ function refreshLegal(): void {
   const unit = battle.getUnit(battle.activeUnitId);
   if (!unit) return;
   const color = unit.team === "ally" ? "black" : "white";
-  legalHints = battle.board.legalMoves(color);
+  legalHints = battle.board
+    .legalMoves(color)
+    .filter((p) => !battle!.isForbidden(p));
   if (unit.team === "ally") {
     stoneSuggestions = battle.suggestStones(unit);
   }
@@ -546,6 +556,13 @@ function autoAllyTurn(): void {
     return;
   }
   if (battle.phase === "await_stone") battle.autoStone();
+  if (battle.phase === "await_capture_shop") {
+    battle.chooseCaptureShop(
+      (["mana", "amplify", "cleanse"] as CaptureShopChoice[])[
+        Math.floor(Math.random() * 3)
+      ]!,
+    );
+  }
   if (battle.phase === "await_skill") {
     const hits = battle.canUseSummonerSkill(unit)
       ? battle.useSkill({ useSummonerSkill: true })
@@ -654,6 +671,8 @@ function renderBoard(): string {
       const token = battle.tokenAt(x, y);
       const tokenClass = token ? ` token token-${token.id}` : "";
       const sugClass = sug ? ` suggest suggest-${sug.rank}` : "";
+      const forbid = battle.isForbidden({ x, y });
+      const forbidClass = forbid && !stone ? " forbid" : "";
       const tokenLabel =
         token?.id === "crit_charm"
           ? "치"
@@ -668,8 +687,10 @@ function renderBoard(): string {
           ? `<span class="suggest-mark">${sug.rank}</span>`
           : token
             ? `<span class="token-mark">${tokenLabel}</span>`
-            : "";
-      cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}${sugClass}" data-x="${x}" data-y="${y}" ${canClick && !stone ? "" : "disabled"}>${stoneHtml}</button>`;
+            : forbid
+              ? `<span class="forbid-mark">禁</span>`
+              : "";
+      cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}${sugClass}${forbidClass}" data-x="${x}" data-y="${y}" ${canClick && !stone && !forbid ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
   return `<div class="board size-${size}" style="grid-template-columns:repeat(${size},auto)">${cells}</div>`;
@@ -742,6 +763,8 @@ function mainContent(manaPct: number): string {
       return renderGlory();
     case "fusion":
       return renderFusion();
+    case "guild":
+      return renderGuild();
     case "party":
       return renderParty();
     case "stages":
@@ -809,7 +832,7 @@ function render(): void {
     </header>
     <main>${mainContent(manaPct)}</main>
     <nav class="tabs">
-      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "shop" || view === "pond" || view === "glory" || view === "fusion" || view === "party" ? "active" : ""}">홈</button>
+      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "shop" || view === "pond" || view === "glory" || view === "fusion" || view === "party" || view === "guild" ? "active" : ""}">홈</button>
       <button type="button" data-nav="stages" class="${tabStages ? "active" : ""}">출정</button>
       <button type="button" data-nav="collect">수집</button>
     </nav>
@@ -854,6 +877,9 @@ function renderHome(): string {
       <button type="button" class="building" data-b="glory"><strong>영광 건물</strong><small>영광 ${save.gloryPoints ?? 0}</small></button>
       <button type="button" class="building" data-b="dojo" ${save.island.summonerLevel >= 8 || save.island.buildings.some((b) => b.id === "practice_dojo") ? "" : "disabled"}>
         <strong>마법진 도장</strong><small>${save.island.summonerLevel >= 8 ? `수련 ${save.dojoDrills ?? 0}회` : "Lv.8 해금"}</small>
+      </button>
+      <button type="button" class="building" data-b="guild" ${save.island.summonerLevel >= 12 || save.island.buildings.some((b) => b.id === "guild_hall") ? "" : "disabled"}>
+        <strong>길드 홀</strong><small>${save.guildName ? save.guildName : save.island.summonerLevel >= 12 ? "가입·출석" : "Lv.12 해금"}</small>
       </button>
       <button type="button" class="building" data-b="fusion" ${save.island.summonerLevel >= 17 || save.island.buildings.some((b) => b.id === "fusion_star") ? "" : "disabled"}>
         <strong>융합의 별</strong><small>${save.island.summonerLevel >= 17 ? "동일종 융합" : "Lv.17 해금"}</small>
@@ -1104,6 +1130,41 @@ function renderGlory(): string {
   </div>`;
 }
 
+function renderCaptureShop(): string {
+  if (!battle || battle.phase !== "await_capture_shop" || autoMode) return "";
+  const offers = captureShopOffers();
+  return `<div class="capture-shop">
+    <p class="muted">사석상점 — 대량 따냄 보상</p>
+    <div class="chip-row">
+      ${offers
+        .map(
+          (o) =>
+            `<button type="button" class="chip" data-shop="${o.choice}">${o.labelKo}</button>`,
+        )
+        .join("")}
+    </div>
+  </div>`;
+}
+
+function renderGuild(): string {
+  const name = save.guildName;
+  return `<div class="panel">
+    <p class="muted">길드 홀 · 실시간 전투는 후순위 · 출석/기여 스텁</p>
+    <p>길드: <strong>${name ?? "미가입"}</strong></p>
+    <p class="muted">기여도 ${save.guildContribution ?? 0} · 출석 ${save.guildCheckInDay ?? "—"}</p>
+    ${
+      name
+        ? `<button type="button" id="btn-guild-checkin">일일 출석</button>
+           <button type="button" class="secondary" id="btn-guild-rename">이름 변경</button>`
+        : `<label class="muted">길드명
+             <input id="guild-name-input" maxlength="16" placeholder="예: 진문수호대" />
+           </label>
+           <button type="button" id="btn-guild-join">가입</button>`
+    }
+    <button type="button" class="secondary full" data-nav="home" style="margin-top:10px">섬으로</button>
+  </div>`;
+}
+
 function renderFusion(): string {
   const pairs: string[] = [];
   for (let i = 0; i < save.roster.length; i++) {
@@ -1222,6 +1283,10 @@ function renderBattle(manaPct: number): string {
   const active = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
     : null;
+  const awaitShop =
+    battle.phase === "await_capture_shop" &&
+    active?.team === "ally" &&
+    !autoMode;
   const awaitSkill =
     battle.phase === "await_skill" && active?.team === "ally" && !autoMode;
   const canUlt = !!active && battle.canUseSummonerSkill(active);
@@ -1238,11 +1303,21 @@ function renderBattle(manaPct: number): string {
   const skillHint =
     battle.phase === "await_stone" && active?.team === "ally"
       ? "추천 착수(1·2·3) 또는 칸 탭"
+      : awaitShop
+        ? "사석상점 보상을 선택하세요"
       : awaitSkill
         ? "적 소환수를 탭해 대상 지정 후 스킬"
         : autoMode
           ? `AUTO x${battleSpeed}`
           : "";
+
+  const skillRow = awaitShop
+    ? ""
+    : `<div class="skill-row">
+      ${renderSkillButtons(active, awaitSkill)}
+      <button type="button" id="sk-ult" class="ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>진문개방</button>
+      <button type="button" id="sk-smart" ${awaitSkill ? "" : "disabled"}>추천</button>
+    </div>`;
 
   return `<div class="battle-layout panel">
     <div class="battle-top">
@@ -1258,16 +1333,13 @@ function renderBattle(manaPct: number): string {
       <div class="dmg-layer">${renderDmgLayer()}</div>
       ${renderBoard()}
       ${renderSuggestStrip()}
+      ${renderCaptureShop()}
       <div style="width:100%">
         <div class="muted">서머너 마나 ${Math.floor(battle.allySummoner.mana)}/${battle.allySummoner.manaMax}</div>
         <div class="bar mana mana-lg"><i style="width:${manaPct}%"></i></div>
       </div>
     </div>
-    <div class="skill-row">
-      ${renderSkillButtons(active, awaitSkill)}
-      <button type="button" id="sk-ult" class="ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>진문개방</button>
-      <button type="button" id="sk-smart" ${awaitSkill ? "" : "disabled"}>추천</button>
-    </div>
+    ${skillRow}
     ${skillHint ? `<p class="muted skill-hint">${skillHint}</p>` : ""}
     <div class="team-row ally">${allyFront.map((u) => renderUnit(u)).join("")}</div>
     ${renderSummonerBack(allyBack, "ally")}
@@ -1433,6 +1505,9 @@ function bind(): void {
         save = r.save;
         persist();
         flash(r.message);
+        render();
+      } else if (id === "guild") {
+        view = "guild";
         render();
       } else if (id === "fusion") {
         view = "fusion";
@@ -1687,6 +1762,43 @@ function bind(): void {
       flash(r.message);
       render();
     });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-shop]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!battle) return;
+      const choice = btn.dataset.shop as CaptureShopChoice;
+      if (!battle.chooseCaptureShop(choice)) return;
+      refreshLegal();
+      render();
+    });
+  });
+
+  app.querySelector("#btn-guild-join")?.addEventListener("click", () => {
+    const input = app.querySelector<HTMLInputElement>("#guild-name-input");
+    const r = runJoinGuild(save, input?.value ?? "");
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+
+  app.querySelector("#btn-guild-checkin")?.addEventListener("click", () => {
+    const r = runGuildCheckIn(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+
+  app.querySelector("#btn-guild-rename")?.addEventListener("click", () => {
+    const next = window.prompt("새 길드명", save.guildName ?? "");
+    if (next == null) return;
+    const r = runJoinGuild(save, next);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {

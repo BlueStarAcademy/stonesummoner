@@ -68,8 +68,25 @@ describe("Modules E/F/G/H", () => {
     assert.ok(depth && trial && arena && raid);
     assert.deepEqual(modulesForStage(depth), { moduleB: true });
     assert.equal(modulesForStage(trial).moduleG, true);
+    assert.equal(modulesForStage(trial).forbidZone, true);
     assert.equal(modulesForStage(arena).manaRace, true);
     assert.equal(modulesForStage(raid).moduleF, true);
+  });
+
+  it("blocks forbidden zone plays", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: units(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      modules: { forbidZone: true },
+      rng: () => 0.1,
+    });
+    assert.equal(b.forbiddenZone.length, 1);
+    const u = b.tickUntilReady();
+    assert.ok(u);
+    assert.equal(b.playStone({ x: 2, y: 2 }), false);
+    assert.match(b.log.join("\n"), /금기구역/);
   });
 
   it("enables module E affinity and summoner stone bonus", () => {

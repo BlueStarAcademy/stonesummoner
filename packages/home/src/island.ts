@@ -8,7 +8,8 @@ export type BuildingId =
   | "fusion_star"
   | "fuse_center"
   | "craft_hall"
-  | "practice_dojo";
+  | "practice_dojo"
+  | "guild_hall";
 
 export interface BuildingDef {
   id: BuildingId;
@@ -100,6 +101,13 @@ export const PHASE_BUILDINGS: BuildingDef[] = [
     swName: "Practice Dojo",
     kind: "function",
     unlockLevel: 8,
+  },
+  {
+    id: "guild_hall",
+    nameKo: "길드 홀",
+    swName: "Guild Hall",
+    kind: "function",
+    unlockLevel: 12,
   },
 ];
 

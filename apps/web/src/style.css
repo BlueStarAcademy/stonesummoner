@@ -504,10 +504,25 @@ main {
   font-size: 0.78rem;
 }
 
-.chip.active {
-  border-color: var(--gold);
-  color: var(--gold);
-  background: #2a2438;
+.board button.cell.forbid {
+  background: repeating-linear-gradient(
+    -45deg,
+    #2a1a1a,
+    #2a1a1a 4px,
+    #3a2222 4px,
+    #3a2222 8px
+  );
+  opacity: 0.85;
+}
+
+.forbid-mark {
+  font-size: 0.65rem;
+  color: #c97a7a;
+}
+
+.capture-shop {
+  width: 100%;
+  margin: 6px 0;
 }
 
 .suggest-chip {

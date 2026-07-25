@@ -49,6 +49,7 @@ import type {
 import {
   bossVictoryPoint,
   BRILLIANT_MISSION_GOAL,
+  forbiddenZonePoints,
   pickCircleElement,
   type BattleModules,
 } from "./modules.js";
@@ -157,6 +158,10 @@ export class Battle {
   brilliantDone = false;
   /** Arena mana race winner. */
   manaRaceWinner: TeamId | null = null;
+  /** 금기구역 points. */
+  forbiddenZone: Point[] = [];
+  /** Ally large-capture shop waiting for choice. */
+  pendingCaptureShop: { unitId: string } | null = null;
   /** 1-based current wave. */
   currentWave: number;
   readonly totalWaves: number;
@@ -192,6 +197,12 @@ export class Battle {
       : null;
     this.manaSealed = !!this.modules.moduleF;
     this.victoryPointClaimed = false;
+    this.manaRaceWinner = null;
+    this.pendingCaptureShop = null;
+    this.forbiddenZone =
+      this.modules.forbidZone || this.modules.moduleC
+        ? forbiddenZonePoints(config.boardSize)
+        : [];
     this.totalWaves = Math.max(1, config.totalWaves ?? 1);
     this.currentWave = 1;
     this.spawnWaveFn = config.spawnWave;
@@ -209,6 +220,9 @@ export class Battle {
     if (this.modules.manaRace) {
       this.log.push(`맞마나 레이스: 먼저 마나 풀충전`);
     }
+    if (this.forbiddenZone.length) {
+      this.log.push(`금기구역: 중앙 ${this.forbiddenZone.length}점 착수 금지`);
+    }
   }
 
   getUnit(id: string): Unit | undefined {
@@ -217,6 +231,10 @@ export class Battle {
 
   alive(team?: TeamId): Unit[] {
     return this.units.filter((u) => u.alive && (team ? u.team === team : true));
+  }
+
+  isForbidden(p: Point): boolean {
+    return this.forbiddenZone.some((z) => z.x === p.x && z.y === p.y);
   }
 
   tokenAt(x: number, y: number): BoardToken | undefined {
@@ -320,7 +338,9 @@ export class Battle {
       (this.activeUnitId ? this.getUnit(this.activeUnitId) : undefined);
     if (!u) return [];
     const color = teamStoneColor(u.team);
-    const legal = this.board.legalMoves(color);
+    const legal = this.board
+      .legalMoves(color)
+      .filter((p) => !this.isForbidden(p));
     const manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
       (1 + this.summonerOf(u.team).boardSense);
@@ -418,6 +438,10 @@ export class Battle {
     let brilliantTarget: Point | null = null;
     if (this.modules.moduleG && unit.team === "ally") {
       brilliantTarget = this.suggestStones(unit)[0]?.point ?? null;
+    }
+    if (this.isForbidden(point)) {
+      this.log.push(`금기구역 — 착수 불가 (${point.x},${point.y})`);
+      return false;
     }
     const result = this.board.play(color, point);
     if (!result.ok) {
@@ -540,6 +564,10 @@ export class Battle {
         } else {
           this.log.push(`형상 ${sh.labelKo}`);
         }
+        if (sh.id === "axis") {
+          unit.cutImmune = Math.max(unit.cutImmune ?? 0, 1);
+          this.log.push(`형상 축 연결: 절단 면역 1회`);
+        }
       }
     }
 
@@ -580,7 +608,11 @@ export class Battle {
       this.modules.moduleD &&
       result.capturedCount >= CAPTURE_SHOP_THRESHOLD
     ) {
-      this.resolveCaptureShop(unit, pickCaptureShopChoice(this.rng));
+      if (unit.team === "enemy") {
+        this.resolveCaptureShop(unit, pickCaptureShopChoice(this.rng));
+      } else {
+        this.pendingCaptureShop = { unitId: unit.id };
+      }
     }
 
     const prog = registerStoneSummon(this.circle);
@@ -609,11 +641,33 @@ export class Battle {
     this.log.push(
       `${unit.name} stone (${point.x},${point.y}) cap=${result.capturedCount} amp=${this.currentAmplify().toFixed(2)}`,
     );
+    if (this.pendingCaptureShop) {
+      this.phase = "await_capture_shop";
+      this.log.push(`사석상점: 보상을 선택하세요`);
+    } else {
+      this.phase = "await_skill";
+    }
+    return true;
+  }
+
+  /** Module D: player/AI pick after large capture. */
+  chooseCaptureShop(choice: CaptureShopChoice): boolean {
+    if (this.phase !== "await_capture_shop" || !this.pendingCaptureShop) {
+      return false;
+    }
+    const unit = this.getUnit(this.pendingCaptureShop.unitId);
+    if (!unit) {
+      this.pendingCaptureShop = null;
+      this.phase = "await_skill";
+      return false;
+    }
+    this.resolveCaptureShop(unit, choice);
+    this.pendingCaptureShop = null;
     this.phase = "await_skill";
     return true;
   }
 
-  /** Module D: auto-resolve capture shop after large capture. */
+  /** Module D: apply a capture-shop choice. */
   resolveCaptureShop(unit: Unit, choice: CaptureShopChoice): void {
     const sm = this.summonerOf(unit.team);
     if (choice === "mana") {
@@ -886,6 +940,18 @@ export class Battle {
       };
     }
 
+    if (target.cutImmune && target.cutImmune > 0) {
+      target.cutImmune -= 1;
+      this.log.push(`${target.name} 절단 면역`);
+      return {
+        attackerId: attacker.id,
+        targetId: target.id,
+        damage: 0,
+        crit: false,
+        usedSummonerSkill,
+      };
+    }
+
     const critBonus = attacker.critCharm ?? 0;
     if (critBonus > 0) attacker.critCharm = 0;
     const critDmgExtra = attacker.critDmgBonus ?? 0;
@@ -983,6 +1049,9 @@ export class Battle {
     const unit = this.tickUntilReady();
     if (!unit) return [];
     if (!this.autoStone()) return [];
+    if (this.phase === "await_capture_shop") {
+      this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
+    }
     if (this.canUseSummonerSkill(unit)) {
       return this.useSkill({ useSummonerSkill: true });
     }

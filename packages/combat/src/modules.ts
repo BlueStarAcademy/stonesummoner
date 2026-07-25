@@ -18,6 +18,8 @@ export interface BattleModules {
   moduleG?: boolean;
   /** Arena mana race — first to full mana gets Amp. */
   manaRace?: boolean;
+  /** Forbidden center zone (금기구역) — usually with moduleC. */
+  forbidZone?: boolean;
 }
 
 /** Module H: map stage mode → active modules. */
@@ -26,13 +28,19 @@ export function modulesForStage(stage: StageDef): BattleModules {
     case "depth":
       return { moduleB: true };
     case "trial":
-      return { moduleC: true, moduleD: true, moduleE: true, moduleG: true };
+      return {
+        moduleC: true,
+        moduleD: true,
+        moduleE: true,
+        moduleG: true,
+        forbidZone: true,
+      };
     case "arena":
       return { moduleD: true, manaRace: true };
     case "world_arena":
       return { moduleD: true, moduleE: true, manaRace: true };
     case "guild_raid":
-      return { moduleB: true, moduleE: true, moduleF: true };
+      return { moduleB: true, moduleE: true, moduleF: true, forbidZone: true };
     case "weekday":
       return { moduleB: true, moduleG: true };
     case "scenario":
@@ -53,6 +61,19 @@ export function pickCircleElement(rng: () => number = Math.random): Element {
 export function bossVictoryPoint(size: number): Point {
   const m = Math.floor(size / 2);
   return { x: m, y: m };
+}
+
+/** Forbidden zone points (금기구역): center, or 3×3 on large boards. */
+export function forbiddenZonePoints(size: number): Point[] {
+  const m = Math.floor(size / 2);
+  if (size <= 7) return [{ x: m, y: m }];
+  const pts: Point[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      pts.push({ x: m + dx, y: m + dy });
+    }
+  }
+  return pts;
 }
 
 export const BRILLIANT_MISSION_GOAL = 3;

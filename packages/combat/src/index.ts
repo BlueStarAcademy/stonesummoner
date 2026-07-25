@@ -25,6 +25,7 @@ export type { CaptureShopChoice, CaptureShopOffer } from "./captureShop.js";
 export {
   bossVictoryPoint,
   BRILLIANT_MISSION_GOAL,
+  forbiddenZonePoints,
   modulesForStage,
   pickCircleElement,
 } from "./modules.js";

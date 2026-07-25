@@ -31,4 +31,15 @@ describe("shape bonuses (module B)", () => {
     const bonuses = detectShapeBonuses(b, "black", { x: 4, y: 4 });
     assert.ok(bonuses.some((s) => s.id === "star_control"));
   });
+
+  it("detects axis chain of 3", () => {
+    const b = new Board(5);
+    b.play("black", { x: 1, y: 2 });
+    b.play("white", { x: 0, y: 0 });
+    b.play("black", { x: 2, y: 2 });
+    b.play("white", { x: 0, y: 1 });
+    b.play("black", { x: 3, y: 2 });
+    const after = detectShapeBonuses(b, "black", { x: 3, y: 2 });
+    assert.ok(after.some((x) => x.id === "axis"));
+  });
 });

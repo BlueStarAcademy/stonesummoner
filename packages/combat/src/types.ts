@@ -36,6 +36,8 @@ export interface Unit {
   critDmgBonus?: number;
   /** Absorb incoming damage before HP. */
   shieldHp?: number;
+  /** Stub: ignore next damaging hit (축 연결). */
+  cutImmune?: number;
 }
 
 export interface SummonerState {
@@ -49,6 +51,7 @@ export interface SummonerState {
 export type BattlePhase =
   | "idle"
   | "await_stone"
+  | "await_capture_shop"
   | "await_skill"
   | "resolved"
   | "finished";

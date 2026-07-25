@@ -35,6 +35,8 @@ export {
   runFusion,
   runGrindSymbol,
   runImprintSymbol,
+  runJoinGuild,
+  runGuildCheckIn,
   runPracticeDojo,
   runSellSymbol,
   runSetArenaBans,

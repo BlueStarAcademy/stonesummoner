@@ -5,7 +5,8 @@ export type ShapeBonusId =
   | "star"
   | "star_control"
   | "tiger"
-  | "kosumi";
+  | "kosumi"
+  | "axis";
 
 export interface ShapeBonus {
   id: ShapeBonusId;
@@ -117,6 +118,27 @@ function hasKosumi(board: Board, color: StoneColor, last: Point): boolean {
   return false;
 }
 
+/** Straight chain of 3+ own stones (축 연결 스텁). */
+function hasAxisChain(board: Board, color: StoneColor, last: Point): boolean {
+  for (const [dx, dy] of [
+    [1, 0],
+    [0, 1],
+  ] as const) {
+    let count = 1;
+    for (const dir of [1, -1] as const) {
+      let x = last.x + dx * dir;
+      let y = last.y + dy * dir;
+      while (inBounds(board.size, { x, y }) && board.at({ x, y }) === color) {
+        count += 1;
+        x += dx * dir;
+        y += dy * dir;
+      }
+    }
+    if (count >= 3) return true;
+  }
+  return false;
+}
+
 /**
  * Module B stub: detect shape bonuses after a successful play at `last`.
  */
@@ -174,6 +196,16 @@ export function detectShapeBonuses(
       labelKo: "쌍립(근사)",
       amplifyDelta: 0.015,
       mana: 3,
+    });
+  }
+
+  if (hasAxisChain(board, color, last)) {
+    out.push({
+      id: "axis",
+      labelKo: "축 연결",
+      amplifyDelta: 0.025,
+      mana: 5,
+      shieldPct: 0.08,
     });
   }
 

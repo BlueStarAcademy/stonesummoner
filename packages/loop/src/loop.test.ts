@@ -23,6 +23,8 @@ import {
   runFusion,
   runGrindSymbol,
   runImprintSymbol,
+  runJoinGuild,
+  runGuildCheckIn,
   runPracticeDojo,
   runSellSymbol,
   runSetArenaBans,
@@ -215,9 +217,18 @@ describe("game loop", () => {
     assert.equal(third.save.dojoDrills, 3);
     assert.equal(third.save.jinmunStones, (save.jinmunStones ?? 0) + 1);
     assert.match(third.message, /묘수 미션/);
-    // keep prior assertions on first drill message via `drill` below
     assert.match(drill.message, /도장/);
     assert.ok(drill.save.island.mana > save.island.mana);
+
+    let g = { ...third.save, island: { ...third.save.island, summonerLevel: 12 } };
+    const join = runJoinGuild(g, "진문수호");
+    assert.equal(join.save.guildName, "진문수호");
+    g = join.save;
+    const check = runGuildCheckIn(g, Date.parse("2026-07-25T12:00:00Z"));
+    assert.match(check.message, /출석/);
+    assert.ok((check.save.guildContribution ?? 0) > (g.guildContribution ?? 0));
+    const again = runGuildCheckIn(check.save, Date.parse("2026-07-25T18:00:00Z"));
+    assert.match(again.message, /이미 출석/);
   });
 
   it("sets party from roster indices", () => {

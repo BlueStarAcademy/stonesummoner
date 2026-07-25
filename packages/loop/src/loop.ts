@@ -114,6 +114,10 @@ export interface PlayerSave {
   guildContribution: number;
   /** Phase 2+: practice dojo drill count (묘수 미션 누적). */
   dojoDrills: number;
+  /** Phase 2+: guild name (local stub, not realtime). */
+  guildName: string | null;
+  /** YYYY-MM-DD of last guild check-in. */
+  guildCheckInDay: string | null;
 }
 
 export interface BattleReward {
@@ -291,6 +295,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     arenaSeasonWins: 0,
     guildContribution: 0,
     dojoDrills: 0,
+    guildName: null,
+    guildCheckInDay: null,
   };
 }
 
@@ -667,6 +673,73 @@ export function runPracticeDojo(
         ? ` · 서머너 Lv.${leveled.island.summonerLevel}`
         : ""
     }${missionNote}`,
+  };
+}
+
+/** Join or rename local guild (non-realtime stub). */
+export function runJoinGuild(
+  save: PlayerSave,
+  name: string,
+): LoopStepResult {
+  let island = syncBuildingUnlocks(tickProduction(save.island));
+  if (
+    !island.buildings.some((b) => b.id === "guild_hall") &&
+    island.summonerLevel < 12
+  ) {
+    return {
+      save: { ...save, island },
+      message: "길드 홀 해금 필요 (서머너 Lv.12)",
+    };
+  }
+  const trimmed = name.trim().slice(0, 16);
+  if (!trimmed) {
+    return { save: { ...save, island }, message: "길드 이름을 입력하세요" };
+  }
+  return {
+    save: { ...save, island, guildName: trimmed },
+    message: `길드 가입: ${trimmed}`,
+  };
+}
+
+/** Daily guild check-in → glory + contribution. */
+export function runGuildCheckIn(
+  save: PlayerSave,
+  now = Date.now(),
+): LoopStepResult {
+  let island = syncBuildingUnlocks(tickProduction(save.island, now), now);
+  if (
+    !island.buildings.some((b) => b.id === "guild_hall") &&
+    island.summonerLevel < 12
+  ) {
+    return {
+      save: { ...save, island },
+      message: "길드 홀 해금 필요 (서머너 Lv.12)",
+    };
+  }
+  if (!save.guildName) {
+    return {
+      save: { ...save, island },
+      message: "먼저 길드에 가입하세요",
+    };
+  }
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (save.guildCheckInDay === day) {
+    return {
+      save: { ...save, island },
+      message: `오늘 이미 출석했습니다 (${save.guildName})`,
+    };
+  }
+  const gloryGain = 8;
+  const contribGain = 15;
+  return {
+    save: {
+      ...save,
+      island,
+      guildCheckInDay: day,
+      gloryPoints: (save.gloryPoints ?? 0) + gloryGain,
+      guildContribution: (save.guildContribution ?? 0) + contribGain,
+    },
+    message: `길드 출석 (${save.guildName}): 영광 +${gloryGain} · 기여 +${contribGain}`,
   };
 }
 
@@ -1329,6 +1402,8 @@ export function applyRewards(
       arenaSeasonWins,
       guildContribution,
       dojoDrills: save.dojoDrills ?? 0,
+      guildName: save.guildName ?? null,
+      guildCheckInDay: save.guildCheckInDay ?? null,
     },
     reward: {
       mana: manaGain,
@@ -1385,6 +1460,8 @@ export function runSortie(
     arenaSeasonWins: save.arenaSeasonWins ?? 0,
     guildContribution: save.guildContribution ?? 0,
     dojoDrills: save.dojoDrills ?? 0,
+    guildName: save.guildName ?? null,
+    guildCheckInDay: save.guildCheckInDay ?? null,
   };
   const battle = createStageBattle(stage, mid, {
     banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,
