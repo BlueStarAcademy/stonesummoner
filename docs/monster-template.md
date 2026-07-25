@@ -99,6 +99,7 @@ symbol_slots: 6
 
 ## 3. 데이터 파일 위치 (예정)
 
-`data/monsters/*.json` — Phase 1 구현 시 위 템플릿으로 채움.
+Phase 1: `packages/data/src/monsters.ts`에 8종 + S1/S2/S3 스킬 정의.
+`packages/combat`가 쿨·데미지/힐/실드/마나 효과를 처리합니다.
 
 리더스킬은 일부만. SW처럼 서머너 장비/각성으로 이전 가능 ([summoner.md](summoner.md)).

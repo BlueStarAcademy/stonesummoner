@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "dev": "npm run dev -w stonesummoner-web",
+    "api": "npm run api -w stonesummoner-web",
     "build": "npm run build -w stonesummoner-web",
     "start": "npm run start -w stonesummoner-web",
     "cli": "npm run start -w stonesummoner-cli",

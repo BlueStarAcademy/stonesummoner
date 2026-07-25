@@ -25,6 +25,7 @@ import {
   weightedItemId,
   type BoardToken,
 } from "./items.js";
+import type { SkillDef } from "stonesummoner-data";
 import type {
   BattlePhase,
   FinishReason,
@@ -34,6 +35,49 @@ import type {
 } from "./types.js";
 
 const ATB_THRESHOLD = 100;
+
+function ensureSkillCd(unit: Unit): number[] {
+  const n = unit.skills?.length ?? 0;
+  if (!unit.skillCd || unit.skillCd.length !== n) {
+    unit.skillCd = Array.from({ length: Math.max(n, 3) }, () => 0);
+  }
+  return unit.skillCd;
+}
+
+function tickSkillCooldowns(units: Unit[]): void {
+  for (const u of units) {
+    if (!u.alive || !u.skillCd) continue;
+    u.skillCd = u.skillCd.map((c) => Math.max(0, c - 1));
+  }
+}
+
+/** Auto skill pick: S3→S2→S1; healers prefer heal when ally < 55% HP. */
+export function pickAutoSkillIndex(unit: Unit, units: Unit[]): number {
+  const skills = unit.skills;
+  if (!skills?.length) return 0;
+  const cds = ensureSkillCd(unit);
+
+  const allies = units.filter(
+    (u) => u.alive && u.team === unit.team && u.kind === "monster",
+  );
+  const lowest = allies.reduce<Unit | null>((best, u) => {
+    if (!best) return u;
+    return u.hp / u.stats.hp < best.hp / best.stats.hp ? u : best;
+  }, null);
+  const needHeal = !!lowest && lowest.hp / lowest.stats.hp < 0.55;
+
+  if (needHeal) {
+    for (let i = 0; i < skills.length; i++) {
+      if (cds[i]! > 0) continue;
+      if (skills[i]!.effects.some((e) => e.kind === "heal")) return i;
+    }
+  }
+
+  for (let i = skills.length - 1; i >= 0; i--) {
+    if (cds[i]! <= 0) return i;
+  }
+  return 0;
+}
 
 export interface BattleConfig {
   boardSize: CombatBoardSize;
@@ -89,7 +133,15 @@ export class Battle {
       config.boardSize,
       config.resetThreshold,
     );
-    this.units = config.units.map((u) => ({ ...u, stats: { ...u.stats } }));
+    this.units = config.units.map((u) => {
+      const copy: Unit = {
+        ...u,
+        stats: { ...u.stats },
+        skills: u.skills ? u.skills.map((s) => ({ ...s, effects: [...s.effects] })) : u.skills,
+      };
+      ensureSkillCd(copy);
+      return copy;
+    });
     this.allySummoner = { ...config.allySummoner };
     this.enemySummoner = { ...config.enemySummoner };
     this.powerGapCap = config.powerGapAmplifyCap ?? 1.25;
@@ -140,6 +192,7 @@ export class Battle {
       if (ready[0]) {
         const unit = ready[0];
         unit.atb = 0;
+        tickSkillCooldowns(this.units);
         this.activeUnitId = unit.id;
         this.phase = "await_stone";
         this.skillAmplifyBonus = 0;
@@ -328,13 +381,20 @@ export class Battle {
     return sm.mana >= sm.manaMax;
   }
 
+  canUseSkill(unit: Unit, skillIndex: number): boolean {
+    if (!unit.skills?.[skillIndex]) return skillIndex === 0;
+    const cds = ensureSkillCd(unit);
+    return (cds[skillIndex] ?? 0) <= 0;
+  }
+
   /**
    * Skill phase. If useSummonerSkill and mana full, cast 진문개방 (AoE).
-   * Otherwise basic attack on target (or auto-pick).
+   * Otherwise cast S1/S2/S3 (or fallback basic) on target.
    */
   useSkill(opts?: {
     targetId?: string;
     useSummonerSkill?: boolean;
+    skillIndex?: number;
   }): SkillResult[] {
     if (this.phase !== "await_skill" || !this.activeUnitId) return [];
     const unit = this.getUnit(this.activeUnitId);
@@ -345,7 +405,7 @@ export class Battle {
       unit.team === "ally" ? "enemy" : "ally",
     );
     const results: SkillResult[] = [];
-    const wantUlt = opts?.useSummonerSkill ?? this.canUseSummonerSkill(unit);
+    const wantUlt = opts?.useSummonerSkill ?? false;
 
     if (wantUlt && this.canUseSummonerSkill(unit)) {
       const sm = this.summonerOf(unit.team);
@@ -353,31 +413,30 @@ export class Battle {
       this.skillAmplifyBonus += 0.15;
       this.log.push(`${unit.name} 진문개방`);
       for (const t of enemies) {
-        const dmg = this.applyHit(unit, t, 1.8, true);
-        results.push(dmg);
+        results.push(this.applyHit(unit, t, 1.8, true));
       }
     } else {
-      let target =
-        (opts?.targetId && this.getUnit(opts.targetId)) ||
-        pickDefaultTarget(
-          this.units.filter(
-            (u) => u.team === (unit.team === "ally" ? "enemy" : "ally"),
-          ),
-        );
-      if (target?.kind === "summoner") {
-        target = pickDefaultTarget(
-          this.units.filter(
-            (u) => u.team === (unit.team === "ally" ? "enemy" : "ally"),
-          ),
-        );
+      const skillIndex =
+        opts?.skillIndex ?? pickAutoSkillIndex(unit, this.units);
+      if (!this.canUseSkill(unit, skillIndex) && unit.skills?.[skillIndex]) {
+        this.log.push(`${unit.name} 스킬 쿨다운`);
+        return [];
       }
-      if (!target || !target.alive) {
-        this.phase = "resolved";
-        this.activeUnitId = null;
-        this.checkFinish();
-        return results;
+      const skill = unit.skills?.[skillIndex];
+      if (skill) {
+        results.push(
+          ...this.resolveSkill(unit, skill, skillIndex, opts?.targetId),
+        );
+      } else {
+        const target = this.resolveSingleTarget(unit, opts?.targetId);
+        if (!target) {
+          this.phase = "resolved";
+          this.activeUnitId = null;
+          this.checkFinish();
+          return results;
+        }
+        results.push(this.applyHit(unit, target, unit.skillCoeff, false));
       }
-      results.push(this.applyHit(unit, target, unit.skillCoeff, false));
     }
 
     this.skillAmplifyBonus = 0;
@@ -385,6 +444,99 @@ export class Battle {
     this.activeUnitId = null;
     this.checkFinish();
     return results;
+  }
+
+  private resolveSingleTarget(
+    unit: Unit,
+    targetId?: string,
+  ): Unit | null {
+    let target =
+      (targetId && this.getUnit(targetId)) ||
+      pickDefaultTarget(
+        this.units.filter(
+          (u) => u.team === (unit.team === "ally" ? "enemy" : "ally"),
+        ),
+      );
+    if (target?.kind === "summoner") {
+      target = pickDefaultTarget(
+        this.units.filter(
+          (u) => u.team === (unit.team === "ally" ? "enemy" : "ally"),
+        ),
+      );
+    }
+    if (!target || !target.alive) return null;
+    return target;
+  }
+
+  private resolveSkill(
+    unit: Unit,
+    skill: SkillDef,
+    skillIndex: number,
+    targetId?: string,
+  ): SkillResult[] {
+    const results: SkillResult[] = [];
+    this.log.push(`${unit.name} ${skill.nameKo}`);
+    for (const effect of skill.effects) {
+      if (effect.kind === "damage") {
+        if (effect.target === "all_enemies") {
+          const foes = aliveSummons(
+            this.units,
+            unit.team === "ally" ? "enemy" : "ally",
+          );
+          for (const t of foes) {
+            results.push(this.applyHit(unit, t, effect.coeff, false));
+          }
+        } else {
+          const target = this.resolveSingleTarget(unit, targetId);
+          if (target) {
+            results.push(this.applyHit(unit, target, effect.coeff, false));
+          }
+        }
+      } else if (effect.kind === "heal") {
+        const target =
+          effect.target === "self"
+            ? unit
+            : this.lowestAllyMonster(unit.team) ?? unit;
+        const amount = Math.round(target.stats.hp * effect.coeff);
+        target.hp = Math.min(target.stats.hp, target.hp + amount);
+        this.log.push(`${target.name} 회복 +${amount}`);
+        results.push({
+          attackerId: unit.id,
+          targetId: target.id,
+          damage: -amount,
+          crit: false,
+          usedSummonerSkill: false,
+        });
+      } else if (effect.kind === "shield") {
+        const amount = Math.round(unit.stats.hp * effect.coeff);
+        unit.shieldHp = (unit.shieldHp ?? 0) + amount;
+        this.log.push(`${unit.name} 실드 +${amount}`);
+        results.push({
+          attackerId: unit.id,
+          targetId: unit.id,
+          damage: 0,
+          crit: false,
+          usedSummonerSkill: false,
+        });
+      } else if (effect.kind === "mana") {
+        const sm = this.summonerOf(unit.team);
+        sm.mana = Math.min(sm.manaMax, sm.mana + effect.amount);
+        this.log.push(`${unit.name} 마나 +${effect.amount}`);
+      }
+    }
+    const cds = ensureSkillCd(unit);
+    cds[skillIndex] = skill.cooldown;
+    return results;
+  }
+
+  private lowestAllyMonster(team: TeamId): Unit | null {
+    const allies = this.units.filter(
+      (u) => u.alive && u.team === team && u.kind === "monster",
+    );
+    if (allies.length === 0) return null;
+    return allies.reduce((best, u) =>
+      u.hp / u.stats.hp < best.hp / best.stats.hp ? u : best,
+    );
   }
 
   private applyHit(
@@ -491,15 +643,26 @@ export class Battle {
     const unit = this.tickUntilReady();
     if (!unit) return [];
     if (!this.autoStone()) return [];
-    return this.useSkill({ useSummonerSkill: this.canUseSummonerSkill(unit) });
+    if (this.canUseSummonerSkill(unit)) {
+      return this.useSkill({ useSummonerSkill: true });
+    }
+    return this.useSkill({
+      skillIndex: pickAutoSkillIndex(unit, this.units),
+    });
   }
 }
 
 export function makeUnit(
   partial: Omit<Unit, "hp" | "atb" | "alive"> & { hp?: number },
 ): Unit {
+  const skills = partial.skills;
+  const skillCd =
+    partial.skillCd ??
+    (skills ? skills.map(() => 0) : undefined);
   return {
     ...partial,
+    skills,
+    skillCd,
     hp: partial.hp ?? partial.stats.hp,
     atb: 0,
     alive: true,

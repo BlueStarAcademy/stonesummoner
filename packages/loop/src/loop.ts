@@ -142,6 +142,19 @@ function buildSummonerState(
   };
 }
 
+function skillsForMonster(
+  m: NonNullable<ReturnType<typeof getMonster>>,
+  evolve = 0,
+) {
+  const bump = evolve * 0.05;
+  return m.skills.map((sk) => ({
+    ...sk,
+    effects: sk.effects.map((e) =>
+      e.kind === "damage" ? { ...e, coeff: e.coeff + bump } : { ...e },
+    ),
+  }));
+}
+
 function unitFromOwned(
   save: PlayerSave,
   owned: OwnedMonster,
@@ -160,6 +173,7 @@ function unitFromOwned(
     element: m.element,
     stats: { ...stats },
     skillCoeff: m.skillCoeff + (owned.evolve ?? 0) * 0.05,
+    skills: skillsForMonster(m, owned.evolve ?? 0),
   });
 }
 
@@ -180,6 +194,7 @@ function unitFromMonsterId(
     element: m.element,
     stats: { ...stats },
     skillCoeff: m.skillCoeff,
+    skills: skillsForMonster(m, 0),
   });
 }
 
@@ -200,6 +215,26 @@ export function createNewSave(now = Date.now()): PlayerSave {
     party,
     scrolls,
     gear,
+  };
+}
+
+/** Prefixed demo save for test entry (extra mana/scrolls/levels). */
+export function createDemoSave(now = Date.now()): PlayerSave {
+  const save = createNewSave(now);
+  return {
+    ...save,
+    scrolls: 20,
+    island: {
+      ...save.island,
+      mana: 5000,
+      crystal: 30,
+      energy: save.island.energyMax,
+      summonerLevel: 5,
+      summonerExp: 40,
+    },
+    roster: save.roster.map((m, i) =>
+      i === 0 ? { ...m, level: 8, evolve: 0 } : { ...m, level: 5 },
+    ),
   };
 }
 

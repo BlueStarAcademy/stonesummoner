@@ -1,5 +1,11 @@
 import "./style.css";
-import type { Battle, SkillResult, StoneSuggestion, Unit } from "stonesummoner-combat";
+import {
+  pickAutoSkillIndex,
+  type Battle,
+  type SkillResult,
+  type StoneSuggestion,
+  type Unit,
+} from "stonesummoner-combat";
 import {
   CHAPTER1_STAGES,
   describeGear,
@@ -14,6 +20,7 @@ import {
 import { collectMana, tickProduction } from "stonesummoner-home";
 import {
   applyRewards,
+  createDemoSave,
   createNewSave,
   createStageBattle,
   describeOwned,
@@ -36,13 +43,28 @@ import {
 } from "stonesummoner-loop";
 import type { Point } from "stonesummoner-board";
 
-type View = "home" | "summon" | "enhance" | "party" | "stages" | "battle";
+type View =
+  | "auth"
+  | "home"
+  | "summon"
+  | "enhance"
+  | "party"
+  | "stages"
+  | "battle";
+
+type SessionUser = { id: string; email: string | null; kind: string };
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const SAVE_KEY = "stonesummoner.save.v5";
+const DEMO_SAVE_KEY = "stonesummoner.save.demo.v5";
 
-let save: PlayerSave = loadSave();
-let view: View = "home";
+let sessionUser: SessionUser | null = null;
+let authPanel: "menu" | "login" | "register" = "menu";
+let bootReady = false;
+let cloudTimer: ReturnType<typeof setTimeout> | null = null;
+
+let save: PlayerSave = createNewSave();
+let view: View = "auth";
 let battle: Battle | null = null;
 let currentStage: StageDef | null = null;
 let legalHints: Point[] = [];
@@ -55,6 +77,27 @@ let autoMode = false;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let dmgFloats: { id: number; text: string; crit: boolean; ult: boolean }[] = [];
 let floatSeq = 0;
+
+function localSaveKey(): string {
+  return sessionUser?.kind === "demo" ? DEMO_SAVE_KEY : SAVE_KEY;
+}
+
+async function apiJson<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T | null> {
+  try {
+    const res = await fetch(path, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      ...init,
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
 
 function migrateSave(raw: unknown): PlayerSave | null {
   if (!raw || typeof raw !== "object") return null;
@@ -85,25 +128,99 @@ function migrateSave(raw: unknown): PlayerSave | null {
   };
 }
 
-function loadSave(): PlayerSave {
+function loadLocalSave(key = localSaveKey()): PlayerSave | null {
   try {
     const raw =
-      localStorage.getItem(SAVE_KEY) ??
-      localStorage.getItem("stonesummoner.save.v4") ??
-      localStorage.getItem("stonesummoner.save.v3") ??
-      localStorage.getItem("stonesummoner.save.v2");
-    if (raw) {
-      const migrated = migrateSave(JSON.parse(raw));
-      if (migrated) return migrated;
-    }
+      localStorage.getItem(key) ??
+      (key === SAVE_KEY
+        ? localStorage.getItem("stonesummoner.save.v4") ??
+          localStorage.getItem("stonesummoner.save.v3") ??
+          localStorage.getItem("stonesummoner.save.v2")
+        : null);
+    if (raw) return migrateSave(JSON.parse(raw));
   } catch {
     /* ignore */
   }
-  return createNewSave();
+  return null;
+}
+
+function scheduleCloudSave(): void {
+  if (!sessionUser || sessionUser.id.startsWith("local-")) return;
+  if (cloudTimer) clearTimeout(cloudTimer);
+  cloudTimer = setTimeout(() => {
+    void apiJson("/api/save", {
+      method: "PUT",
+      body: JSON.stringify({ save }),
+    });
+  }, 600);
 }
 
 function persist(): void {
-  localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  localStorage.setItem(localSaveKey(), JSON.stringify(save));
+  scheduleCloudSave();
+}
+
+async function enterWithUser(
+  user: SessionUser,
+  opts?: { demo?: boolean; fresh?: boolean },
+): Promise<void> {
+  sessionUser = user;
+  if (opts?.demo) {
+    save = createDemoSave();
+    localStorage.setItem(DEMO_SAVE_KEY, JSON.stringify(save));
+    if (!user.id.startsWith("local-")) {
+      await apiJson("/api/save", {
+        method: "PUT",
+        body: JSON.stringify({ save }),
+      });
+    }
+  } else if (opts?.fresh) {
+    save = createNewSave();
+    persist();
+  } else if (!user.id.startsWith("local-")) {
+    const remote = await apiJson<{ save: unknown }>("/api/save");
+    const migrated = remote?.save ? migrateSave(remote.save) : null;
+    if (migrated) {
+      save = migrated;
+      localStorage.setItem(localSaveKey(), JSON.stringify(save));
+    } else {
+      save = loadLocalSave() ?? createNewSave();
+      await apiJson("/api/save", {
+        method: "PUT",
+        body: JSON.stringify({ save }),
+      });
+      localStorage.setItem(localSaveKey(), JSON.stringify(save));
+    }
+  } else {
+    save = loadLocalSave() ?? (opts?.demo ? createDemoSave() : createNewSave());
+    localStorage.setItem(localSaveKey(), JSON.stringify(save));
+  }
+  authPanel = "menu";
+  view = "home";
+  flash(
+    user.kind === "demo"
+      ? "데모 모드로 입장했습니다."
+      : user.kind === "guest"
+        ? "게스트로 플레이합니다."
+        : `환영합니다${user.email ? ` · ${user.email}` : ""}`,
+  );
+  render();
+}
+
+async function logout(): Promise<void> {
+  if (sessionUser && !sessionUser.id.startsWith("local-")) {
+    await apiJson("/api/auth/logout", { method: "POST", body: "{}" });
+  }
+  sessionUser = null;
+  battle = null;
+  currentStage = null;
+  autoMode = false;
+  clearAutoTimer();
+  authPanel = "menu";
+  view = "auth";
+  save = createNewSave();
+  flash("로그아웃했습니다.");
+  render();
 }
 
 function flash(msg: string): void {
@@ -212,9 +329,15 @@ function pushDamageFloats(hits: SkillResult[]): void {
   for (const h of hits) {
     floatSeq += 1;
     ids.push(floatSeq);
+    const text =
+      h.damage < 0
+        ? `+${-h.damage}`
+        : h.crit
+          ? `CRIT ${h.damage}`
+          : `-${h.damage}`;
     dmgFloats.push({
       id: floatSeq,
-      text: h.crit ? `CRIT ${h.damage}` : `-${h.damage}`,
+      text,
       crit: h.crit,
       ult: h.usedSummonerSkill,
     });
@@ -322,35 +445,67 @@ function autoAllyTurn(): void {
   }
   if (battle.phase === "await_stone") battle.autoStone();
   if (battle.phase === "await_skill") {
-    const hits = battle.useSkill({
-      useSummonerSkill: battle.canUseSummonerSkill(unit),
-    });
+    const hits = battle.canUseSummonerSkill(unit)
+      ? battle.useSkill({ useSummonerSkill: true })
+      : battle.useSkill({
+          skillIndex: pickAutoSkillIndex(unit, battle.units),
+        });
     pushDamageFloats(hits);
   }
   afterPlayerAction();
 }
 
-function castSkill(mode: "basic" | "ult" | "smart"): void {
+function castSkill(mode: "ult" | "smart" | number): void {
   if (!battle || battle.phase !== "await_skill" || autoMode) return;
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
     : null;
   if (!unit || unit.team !== "ally") return;
-  const useUlt =
-    mode === "ult" ||
-    (mode === "smart" && battle.canUseSummonerSkill(unit));
-  if (mode === "ult" && !battle.canUseSummonerSkill(unit)) {
-    flash("마나가 부족합니다.");
+
+  if (mode === "ult") {
+    if (!battle.canUseSummonerSkill(unit)) {
+      flash("마나가 부족합니다.");
+      render();
+      return;
+    }
+    const hits = battle.useSkill({ useSummonerSkill: true });
+    pushDamageFloats(hits);
+    afterPlayerAction();
+    return;
+  }
+
+  const skillIndex =
+    mode === "smart" ? pickAutoSkillIndex(unit, battle.units) : mode;
+  if (typeof skillIndex === "number" && !battle.canUseSkill(unit, skillIndex)) {
+    flash("스킬 쿨다운 중");
     render();
     return;
   }
-  const targetId = useUlt ? undefined : ensureTarget();
-  const hits = battle.useSkill({
-    useSummonerSkill: useUlt,
-    targetId,
-  });
+  const targetId = ensureTarget();
+  const hits = battle.useSkill({ skillIndex, targetId });
+  if (!hits.length) {
+    flash("스킬을 사용할 수 없습니다.");
+    render();
+    return;
+  }
   pushDamageFloats(hits);
   afterPlayerAction();
+}
+
+function renderSkillButtons(active: Unit | null, awaitSkill: boolean): string {
+  const skills = active?.skills ?? [];
+  const cds = active?.skillCd ?? [];
+  const slots = [0, 1, 2].map((i) => {
+    const sk = skills[i];
+    const cd = cds[i] ?? 0;
+    const label = sk ? sk.nameKo : i === 0 ? "평타" : `S${i + 1}`;
+    const cdHint = cd > 0 ? ` CD${cd}` : "";
+    const disabled = !awaitSkill || (sk ? cd > 0 : i > 0);
+    return `<button type="button" data-skill="${i}" ${disabled ? "disabled" : ""}>
+      ${label}${cdHint}
+    </button>`;
+  });
+  return slots.join("");
 }
 
 function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
@@ -434,8 +589,38 @@ function renderSuggestStrip(): string {
   </div>`;
 }
 
+function renderAuth(): string {
+  if (authQueue === "login" || authQueue === "register") {
+    const title = authQueue === "login" ? "로그인" : "회원가입";
+    return `<div class="auth-screen">
+      <p class="auth-brand">StoneSummoner</p>
+      <h2 class="auth-title">${title}</h2>
+      <p class="auth-copy">이메일과 비밀번호로 세이브를 클라우드에 보관합니다.</p>
+      <form id="auth-form" class="auth-form">
+        <label>이메일<input name="email" type="email" autocomplete="username" required /></label>
+        <label>비밀번호<input name="password" type="password" autocomplete="${authQueue === "login" ? "current-password" : "new-password"}" minlength="6" required /></label>
+        <button type="submit">${title}</button>
+      </form>
+      <button type="button" class="secondary full" id="auth-back">뒤로</button>
+    </div>`;
+  }
+  return `<div class="auth-screen">
+    <p class="auth-brand">StoneSummoner</p>
+    <h2 class="auth-title">상징으로 키우고<br/>마법진에서 싸운다</h2>
+    <p class="auth-copy">수집형 RPG 데모 — 홈에서 소환·강화 후 가렌숲으로 출정하세요.</p>
+    <div class="auth-cta">
+      <button type="button" id="auth-demo">데모 플레이 (테스트)</button>
+      <button type="button" class="secondary" id="auth-login">로그인</button>
+      <button type="button" class="secondary" id="auth-register">회원가입</button>
+      <button type="button" class="secondary" id="auth-guest">게스트로 계속</button>
+    </div>
+  </div>`;
+}
+
 function mainContent(manaPct: number): string {
   switch (view) {
+    case "auth":
+      return renderAuth();
     case "summon":
       return renderSummon();
     case "enhance":
@@ -452,22 +637,51 @@ function mainContent(manaPct: number): string {
 }
 
 function render(): void {
-  save = { ...save, island: tickProduction(save.island) };
+  if (!bootReady) {
+    app.innerHTML = `<div class="auth-screen"><p class="auth-brand">StoneSummoner</p><p class="muted">불러오는 중…</p></div>`;
+    return;
+  }
+
+  if (view !== "auth") {
+    save = { ...save, island: tickProduction(save.island) };
+  }
   const island = save.island;
   const allyMana = battle?.allySummoner;
   const manaPct = allyMana
     ? Math.round((allyMana.mana / allyMana.manaMax) * 100)
     : 0;
   const tabStages = view === "stages" || view === "battle";
+  const demoTag = sessionUser?.kind === "demo" ? `<span class="demo-tag">DEMO</span>` : "";
+
+  if (view === "auth") {
+    app.innerHTML = `
+      <main class="auth-main">${renderAuth()}</main>
+      ${toast ? `<p class="toast auth-toast">${toast}</p>` : ""}
+    `;
+    bind();
+    if (toast) {
+      const t = toast;
+      toast = "";
+      setTimeout(() => {
+        if (!toast) {
+          const el = app.querySelector(".toast");
+          if (el) el.remove();
+        }
+      }, 2200);
+      void t;
+    }
+    return;
+  }
 
   app.innerHTML = `
     <header class="app-bar">
-      <h1>StoneSummoner</h1>
+      <h1>StoneSummoner ${demoTag}</h1>
       <div class="resources">
         <span>Lv.${island.summonerLevel}</span>
         <span>마나 ${Math.floor(island.mana)}</span>
         <span>에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}</span>
         <span>소환서 ${save.scrolls}</span>
+        <button type="button" class="linkish" id="btn-logout">나가기</button>
       </div>
       ${toast ? `<p class="toast">${toast}</p>` : ""}
     </header>
@@ -683,7 +897,7 @@ function renderBattle(manaPct: number): string {
       </div>
     </div>
     <div class="skill-row">
-      <button type="button" id="sk-basic" ${awaitSkill ? "" : "disabled"}>평타</button>
+      ${renderSkillButtons(active, awaitSkill)}
       <button type="button" id="sk-ult" class="ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>진문개방</button>
       <button type="button" id="sk-smart" ${awaitSkill ? "" : "disabled"}>추천</button>
     </div>
@@ -699,7 +913,104 @@ function renderBattle(manaPct: number): string {
   </div>`;
 }
 
+function bindAuth(): void {
+  app.querySelector("#auth-demo")?.addEventListener("click", () => {
+    void (async () => {
+      const res = await apiJson<{ user: SessionUser }>("/api/auth/demo", {
+        method: "POST",
+        body: "{}",
+      });
+      if (res?.user) {
+        await enterWithUser(res.user, { demo: true });
+        return;
+      }
+      await enterWithUser(
+        { id: "local-demo", email: null, kind: "demo" },
+        { demo: true },
+      );
+    })();
+  });
+
+  app.querySelector("#auth-guest")?.addEventListener("click", () => {
+    void (async () => {
+      const res = await apiJson<{ user: SessionUser }>("/api/auth/guest", {
+        method: "POST",
+        body: "{}",
+      });
+      if (res?.user) {
+        await enterWithUser(res.user, { fresh: !loadLocalSave() });
+        return;
+      }
+      await enterWithUser(
+        { id: "local-guest", email: null, kind: "guest" },
+        { fresh: !loadLocalSave() },
+      );
+    })();
+  });
+
+  app.querySelector("#auth-login")?.addEventListener("click", () => {
+    authQueue = "login";
+    render();
+  });
+  app.querySelector("#auth-register")?.addEventListener("click", () => {
+    authQueue = "register";
+    render();
+  });
+  app.querySelector("#auth-back")?.addEventListener("click", () => {
+    authQueue = "menu";
+    render();
+  });
+
+  app.querySelector("#auth-form")?.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const form = ev.target as HTMLFormElement;
+    const fd = new FormData(form);
+    const email = String(fd.get("email") ?? "");
+    const password = String(fd.get("password") ?? "");
+    const path =
+      authQueue === "register" ? "/api/auth/register" : "/api/auth/login";
+    void (async () => {
+      try {
+        const res = await fetch(path, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          user?: SessionUser;
+          error?: string;
+        };
+        if (!res.ok || !body.user) {
+          flash(
+            body.error === "email_taken"
+              ? "이미 가입된 이메일입니다."
+              : body.error === "invalid_credentials"
+                ? "이메일 또는 비밀번호를 확인하세요."
+                : "서버에 연결할 수 없습니다. API를 실행한 뒤 다시 시도하세요.",
+          );
+          render();
+          return;
+        }
+        await enterWithUser(body.user);
+      } catch {
+        flash("서버에 연결할 수 없습니다.");
+        render();
+      }
+    })();
+  });
+}
+
 function bind(): void {
+  if (view === "auth") {
+    bindAuth();
+    return;
+  }
+
+  app.querySelector("#btn-logout")?.addEventListener("click", () => {
+    void logout();
+  });
+
   app.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const nav = btn.dataset.nav;
@@ -873,7 +1184,11 @@ function bind(): void {
     });
   });
 
-  app.querySelector("#sk-basic")?.addEventListener("click", () => castSkill("basic"));
+  app.querySelectorAll<HTMLButtonElement>("[data-skill]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      castSkill(Number(btn.dataset.skill));
+    });
+  });
   app.querySelector("#sk-ult")?.addEventListener("click", () => castSkill("ult"));
   app.querySelector("#sk-smart")?.addEventListener("click", () => castSkill("smart"));
 
@@ -905,4 +1220,15 @@ function bind(): void {
   });
 }
 
-render();
+async function boot(): Promise<void> {
+  const me = await apiJson<{ user: SessionUser }>("/api/me");
+  bootReady = true;
+  if (me?.user) {
+    await enterWithUser(me.user);
+    return;
+  }
+  view = "auth";
+  render();
+}
+
+void boot();

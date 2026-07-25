@@ -1,3 +1,5 @@
+import type { SkillDef } from "stonesummoner-data";
+
 export type Element = "fire" | "water" | "wind" | "light" | "dark";
 export type TeamId = "ally" | "enemy";
 export type UnitKind = "summoner" | "monster";
@@ -20,8 +22,12 @@ export interface Unit {
   stats: UnitStats;
   hp: number;
   atb: number;
-  /** Skill coefficient for basic attack. */
+  /** Fallback coeff when skills missing. */
   skillCoeff: number;
+  /** S1 / S2 / S3 definitions (monsters). Summoners may omit. */
+  skills?: SkillDef[];
+  /** Remaining cooldown per skill index. */
+  skillCd?: number[];
   alive: boolean;
   /** Next skill: flat critRate bonus (consumed on hit). */
   critCharm?: number;

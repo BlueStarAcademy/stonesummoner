@@ -1,5 +1,6 @@
 export {
   applyRewards,
+  createDemoSave,
   createNewSave,
   createStageBattle,
   describeOwned,

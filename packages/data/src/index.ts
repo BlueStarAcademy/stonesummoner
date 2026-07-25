@@ -1,5 +1,7 @@
 export { MONSTERS, getMonster } from "./monsters.js";
 export type { MonsterDef, Element } from "./monsters.js";
+export { basicStrike } from "./skills.js";
+export type { SkillDef, SkillEffect } from "./skills.js";
 export { SYMBOL_SETS, createStarterHwalro, createSymbol, rollSymbolDrop } from "./symbols.js";
 export type { SymbolSetDef, SymbolSetId, SymbolInstance } from "./symbols.js";
 export {

@@ -1,7 +1,26 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { Battle, makeUnit } from "./battle.js";
+import { basicStrike } from "stonesummoner-data";
+import { Battle, makeUnit, pickAutoSkillIndex } from "./battle.js";
 import type { SummonerState, Unit } from "./types.js";
+
+const sampleSkills = [
+  basicStrike("평타", 1.2),
+  {
+    id: "s2",
+    nameKo: "강타",
+    cooldown: 2,
+    effects: [{ kind: "damage" as const, target: "single" as const, coeff: 1.6 }],
+  },
+  {
+    id: "s3",
+    nameKo: "광역",
+    cooldown: 3,
+    effects: [
+      { kind: "damage" as const, target: "all_enemies" as const, coeff: 1.1 },
+    ],
+  },
+];
 
 function summonerState(unitId: string, mana = 0): SummonerState {
   return {
@@ -32,6 +51,7 @@ function roster(): Unit[] {
       element: "fire",
       stats: { hp: 300, atk: 120, def: 30, spd: 90, critRate: 20, critDmg: 60 },
       skillCoeff: 1.2,
+      skills: sampleSkills,
     }),
     makeUnit({
       id: "e-sum",
@@ -218,6 +238,77 @@ describe("Battle flow", () => {
     assert.equal(b.playStone({ x: 1, y: 1 }), true);
     assert.ok(b.allySummoner.mana > before + 20);
     assert.match(b.log.join("\n"), /사석자석/);
+  });
+
+  it("blocks skill while on cooldown", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    b.autoStone();
+    const first = b.useSkill({ skillIndex: 2, targetId: "e-m1" });
+    assert.ok(first.length >= 1);
+    assert.match(b.log.join("\n"), /광역/);
+
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    b.autoStone();
+    const blocked = b.useSkill({ skillIndex: 2, targetId: "e-m1" });
+    assert.equal(blocked.length, 0);
+    assert.match(b.log.join("\n"), /쿨다운/);
+  });
+
+  it("heals ally_lowest and auto-picks heal skill", () => {
+    const units = roster();
+    const healer = makeUnit({
+      id: "a-heal",
+      name: "Healer",
+      team: "ally",
+      kind: "monster",
+      element: "water",
+      stats: { hp: 320, atk: 70, def: 40, spd: 200, critRate: 10, critDmg: 50 },
+      skillCoeff: 0.9,
+      skills: [
+        basicStrike("물방울", 0.9),
+        {
+          id: "s2",
+          nameKo: "치유물결",
+          cooldown: 3,
+          effects: [
+            { kind: "heal", target: "ally_lowest", coeff: 0.3 },
+          ],
+        },
+        {
+          id: "s3",
+          nameKo: "대기",
+          cooldown: 4,
+          effects: [{ kind: "damage", target: "single", coeff: 1 }],
+        },
+      ],
+    });
+    units.push(healer);
+    const hurt = units.find((u) => u.id === "a-m1")!;
+    hurt.hp = 50;
+    const b = new Battle({
+      boardSize: 5,
+      units,
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    const idx = pickAutoSkillIndex(b.getUnit("a-heal")!, b.units);
+    assert.equal(idx, 1);
+    for (const u of b.units) u.atb = u.id === "a-heal" ? 100 : 0;
+    b.tickUntilReady();
+    b.autoStone();
+    b.useSkill({ skillIndex: 1 });
+    assert.ok(b.getUnit("a-m1")!.hp > 50);
+    assert.match(b.log.join("\n"), /회복/);
   });
 
   it("resets 9x9 after threshold into empowered circle", () => {

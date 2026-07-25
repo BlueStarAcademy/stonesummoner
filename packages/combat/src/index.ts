@@ -1,4 +1,4 @@
-export { Battle, makeUnit } from "./battle.js";
+export { Battle, makeUnit, pickAutoSkillIndex } from "./battle.js";
 export type { BattleConfig, SkillResult } from "./battle.js";
 export { computeDamage, clampAmplify, elementMultiplier } from "./damage.js";
 export {

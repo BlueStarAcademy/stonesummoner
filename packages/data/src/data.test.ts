@@ -20,6 +20,14 @@ describe("phase1 data", () => {
     assert.ok(getMonster("fire_fang"));
   });
 
+  it("gives each monster three skills", () => {
+    for (const m of MONSTERS) {
+      assert.equal(m.skills.length, 3);
+      assert.equal(m.skills[0]!.cooldown, 0);
+      assert.ok(m.skills[0]!.effects.some((e) => e.kind === "damage"));
+    }
+  });
+
   it("chapter1 boards progress 5 → 7 → 9", () => {
     assert.equal(CHAPTER1_STAGES.length, 5);
     assert.equal(getStage("garen_1_1")?.boardSize, 5);

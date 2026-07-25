@@ -9,12 +9,16 @@
 
 ```bash
 npm install
-npm run dev          # PWA http://localhost:5173 (모바일 우선)
-npm run cli:demo     # 홈→출정→전투→보상 루프 (비대화형)
-npm run cli          # CLI 인터랙티브
+npm run build && npm start   # PWA+API http://localhost:8080
+# 개발 시 (터미널 2개):
+npm run api -w stonesummoner-web   # API :8080 (메모리 DB 또는 DATABASE_URL)
+npm run dev                        # Vite :5173 → /api 프록시
+npm run cli:demo                   # 홈→출정→전투→보상 루프
 npm test
-npm run build && npm start
 ```
+
+첫 화면에서 **데모 플레이 (테스트)** / 로그인 / 게스트를 고릅니다.  
+몬스터 턴에는 **S1·S2·S3** 스킬(쿨다운)과 서머너 **진문개방**을 사용합니다.
 
 ### CLI 명령
 
@@ -50,13 +54,22 @@ npm run build && npm start
 
 1. [Railway](https://railway.app) → **New Project** → **Deploy from GitHub**
 2. `BlueStarAcademy/stonesummoner` 연결
-3. 설정이 `railway.toml`을 사용합니다  
+3. **Add Plugin → PostgreSQL** 후 웹 서비스에 `DATABASE_URL` 연결(변수 참조)
+4. `railway.toml` 사용  
    - Build: `npm install && npm run build`  
    - Start: `npm run start`  
-   - Healthcheck: `/`
-4. 생성되는 Public URL로 PWA 접속 · 모바일에서 「홈 화면에 추가」
+   - Healthcheck: `/` · API: `/api/health` → `{ ok, db }`
+5. Public URL로 PWA 접속 · 「홈 화면에 추가」
 
-환경 변수: `PORT`는 Railway가 자동 주입합니다.
+| 환경 변수 | 설명 |
+|-----------|------|
+| `PORT` | Railway 자동 주입 |
+| `DATABASE_URL` | Postgres 연결 문자열 (플러그인 링크) |
+| `PGSSL` | `0`이면 SSL 비활성 (로컬 터널용). Railway는 기본 SSL |
+| `NODE_ENV` | `production`이면 Secure 쿠키 |
+
+서버 기동 시 [`apps/web/sql/001_init.sql`](apps/web/sql/001_init.sql)을 적용합니다 (`users` / `sessions` / `saves`).  
+`DATABASE_URL`이 없으면 **인메모리** 스토어로 API가 동작합니다(로컬·데모용, 재시작 시 소멸).
 
 ## PWA
 
