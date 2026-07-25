@@ -7,17 +7,36 @@ import {
   type Unit,
 } from "stonesummoner-combat";
 import {
+  ARENA_STAGES,
   CHAPTER1_STAGES,
+  CHAPTER2_STAGES,
+  DEPTH_STAGES,
+  GLORY_BUILDINGS,
+  TRIAL_STAGES,
+  WEEKDAY_STAGES,
+  canGrindSymbol,
+  canImprintSymbol,
   describeGear,
   describeSymbol,
   gearEnhanceManaCost,
   getMonster,
+  getStage,
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
+  SYMBOL_GRIND_MANA_COST,
+  SYMBOL_IMPRINT_CRYSTAL_COST,
   symbolEnhanceManaCost,
   type StageDef,
 } from "stonesummoner-data";
-import { collectMana, tickProduction } from "stonesummoner-home";
+import {
+  buildingUpgradeManaCost,
+  collectMana,
+  MAX_BUILDING_LEVEL,
+  PHASE1_BUILDINGS,
+  productionManaPerHour,
+  productionStorageCap,
+  tickProduction,
+} from "stonesummoner-home";
 import {
   applyRewards,
   createDemoSave,
@@ -32,14 +51,22 @@ import {
   MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
+  runBuyGlory,
+  runBuyScroll,
+  runDailyWish,
   runEnhance,
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
   runEvolve,
+  runGrindSymbol,
+  homeCollectCrystal,
+  runImprintSymbol,
   runSetParty,
   runSkillUp,
   runSummon,
+  runUpgradeBuilding,
+  SCROLL_BUY_MANA_COST,
   skillUpManaCost,
   skillUpMinMonsterLevel,
   stageUnlockLabel,
@@ -52,6 +79,9 @@ type View =
   | "home"
   | "summon"
   | "enhance"
+  | "shop"
+  | "pond"
+  | "glory"
   | "party"
   | "stages"
   | "battle";
@@ -130,6 +160,9 @@ function migrateSave(raw: unknown): PlayerSave | null {
     party: p.party?.length ? p.party : base.party,
     scrolls: typeof p.scrolls === "number" ? p.scrolls : base.scrolls,
     gear: p.gear ?? base.gear,
+    gloryPoints: typeof p.gloryPoints === "number" ? p.gloryPoints : 0,
+    jinmunStones: typeof p.jinmunStones === "number" ? p.jinmunStones : 0,
+    gloryLevels: p.gloryLevels ?? {},
   };
 }
 
@@ -306,6 +339,9 @@ function grantRewardIfNeeded(): void {
   const scrollGain = save.scrolls > scrollsBefore ? ` · 소환서 +${save.scrolls - scrollsBefore}` : "";
   lastRewardMsg = victory
     ? `보상: 마나 +${reward.mana}` +
+      (reward.crystal ? ` · 크리스탈 +${reward.crystal}` : "") +
+      (reward.glory ? ` · 영광 +${reward.glory}` : "") +
+      (reward.jinmun ? ` · 진문석 +${reward.jinmun}` : "") +
       (reward.summonerExp ? ` · EXP +${reward.summonerExp}` : "") +
       (reward.levelsGained
         ? ` · 서머너 Lv.${save.island.summonerLevel}`
@@ -632,6 +668,12 @@ function mainContent(manaPct: number): string {
       return renderSummon();
     case "enhance":
       return renderEnhance();
+    case "shop":
+      return renderShop();
+    case "pond":
+      return renderPond();
+    case "glory":
+      return renderGlory();
     case "party":
       return renderParty();
     case "stages":
@@ -686,6 +728,9 @@ function render(): void {
       <div class="resources">
         <span>Lv.${island.summonerLevel}</span>
         <span>마나 ${Math.floor(island.mana)}</span>
+        <span>크리스탈 ${island.crystal}</span>
+        <span>영광 ${save.gloryPoints ?? 0}</span>
+        <span>진문석 ${save.jinmunStones ?? 0}</span>
         <span>에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}</span>
         <span>소환서 ${save.scrolls}</span>
         <button type="button" class="linkish" id="btn-logout">나가기</button>
@@ -694,7 +739,7 @@ function render(): void {
     </header>
     <main>${mainContent(manaPct)}</main>
     <nav class="tabs">
-      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "party" ? "active" : ""}">홈</button>
+      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "shop" || view === "pond" || view === "glory" || view === "party" ? "active" : ""}">홈</button>
       <button type="button" data-nav="stages" class="${tabStages ? "active" : ""}">출정</button>
       <button type="button" data-nav="collect">수집</button>
     </nav>
@@ -716,16 +761,55 @@ function render(): void {
 
 function renderHome(): string {
   const pond = save.island.buildings.find((b) => b.id === "mana_pond");
+  const mine = save.island.buildings.find((b) => b.id === "crystal_mine");
+  const pondDef = PHASE1_BUILDINGS.find((b) => b.id === "mana_pond")!;
+  const pondLv = pond?.level ?? 1;
+  const pondCap = productionStorageCap(pondDef, pondLv);
   const exp = Math.floor(save.island.summonerExp ?? 0);
+  const hasWish = save.island.buildings.some((b) => b.id === "wish_temple") || save.island.summonerLevel >= 7;
   return `<div class="panel">
     <p class="muted">서머너 Lv.${save.island.summonerLevel} · EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
     <div class="island-grid">
       <button type="button" class="building" data-b="summon_hearth"><strong>소환진</strong><small>소환서 ${save.scrolls}장</small></button>
       <button type="button" class="building" data-b="power_circle"><strong>강화진</strong><small>레벨 · 진화 · 스킬업</small></button>
-      <button type="button" class="building" data-b="gateway"><strong>출정문</strong><small>시나리오 진입</small></button>
-      <button type="button" class="building" data-b="mana_pond"><strong>진액 연못</strong><small>대기 ${Math.floor(pond?.storedMana ?? 0)} / 4000</small></button>
+      <button type="button" class="building" data-b="shop"><strong>마법상점</strong><small>소환서 · 연마 · 각인</small></button>
+      <button type="button" class="building" data-b="gateway"><strong>출정문</strong><small>시나리오 · 심층 · 아레나</small></button>
+      <button type="button" class="building" data-b="mana_pond"><strong>진액 연못 Lv.${pondLv}</strong><small>대기 ${Math.floor(pond?.storedMana ?? 0)} / ${pondCap}</small></button>
+      <button type="button" class="building" data-b="crystal_mine" ${mine || save.island.summonerLevel >= 10 ? "" : "disabled"}>
+        <strong>수정 광맥</strong><small>${mine ? `대기 ${Math.floor(mine.storedCrystal ?? 0)}` : "Lv.10 해금"}</small>
+      </button>
+      <button type="button" class="building" data-b="wish" ${hasWish ? "" : "disabled"}>
+        <strong>소원의 사당</strong><small>${hasWish ? "일 1회 소원" : "Lv.7 해금"}</small>
+      </button>
+      <button type="button" class="building" data-b="glory"><strong>영광 건물</strong><small>영광 ${save.gloryPoints ?? 0}</small></button>
       <button type="button" class="building" data-b="party"><strong>파티</strong><small>출전 몬스터 편성</small></button>
     </div>
+  </div>`;
+}
+
+function renderPond(): string {
+  const pond = save.island.buildings.find((b) => b.id === "mana_pond");
+  const def = PHASE1_BUILDINGS.find((b) => b.id === "mana_pond")!;
+  const lv = pond?.level ?? 1;
+  const cap = productionStorageCap(def, lv);
+  const rate = productionManaPerHour(def, lv);
+  const maxed = lv >= MAX_BUILDING_LEVEL;
+  const cost = buildingUpgradeManaCost(lv);
+  return `<div class="panel">
+    <p class="muted">진액 연못 · 시간당 마나 생산 · 레벨업으로 생산·저장↑</p>
+    <p class="section-label">현황</p>
+    <p>Lv.${lv} · 생산 ${rate}/hr · 저장 ${Math.floor(pond?.storedMana ?? 0)} / ${cap}</p>
+    <div class="stage-list" style="margin-top:12px">
+      <button type="button" id="btn-pond-collect">
+        <strong>진액 수집</strong><br/>
+        <small class="muted">대기 ${Math.floor(pond?.storedMana ?? 0)}</small>
+      </button>
+      <button type="button" id="btn-pond-upgrade" ${maxed ? "disabled" : ""}>
+        <strong>${maxed ? "최대 레벨" : `레벨업 → Lv.${lv + 1}`}</strong><br/>
+        <small class="muted">${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `−마나 ${cost}`}</small>
+      </button>
+    </div>
+    <button type="button" class="secondary full" data-nav="home" style="margin-top:10px">섬으로</button>
   </div>`;
 }
 
@@ -847,10 +931,18 @@ function renderEnhance(): string {
       ${save.symbols
         .map((s, i) => {
           const maxed = s.enhance >= MAX_SYMBOL_ENHANCE;
-          return `<div class="sym-row">
+          const imprintable = canImprintSymbol(s);
+          const grindable = canGrindSymbol(s);
+          return `<div class="sym-row sym-row-actions">
             <button type="button" data-sym="${i}" ${maxed ? "disabled" : ""}>
               <strong>${describeSymbol(s)}</strong><br/>
               <small class="muted">${maxed ? "최대" : `강화 −마나 ${symbolEnhanceManaCost(s.enhance)}`}</small>
+            </button>
+            <button type="button" class="secondary" data-grind="${i}" ${grindable ? "" : "disabled"}>
+              연마 −${SYMBOL_GRIND_MANA_COST}
+            </button>
+            <button type="button" class="secondary" data-imprint="${i}" ${imprintable ? "" : "disabled"}>
+              ${imprintable ? `각인 −${SYMBOL_IMPRINT_CRYSTAL_COST}크` : "각인×"}
             </button>
             <button type="button" class="secondary sym-eq" data-equip-sym="${i}">장착</button>
           </div>`;
@@ -861,19 +953,100 @@ function renderEnhance(): string {
   </div>`;
 }
 
-function renderStages(): string {
+function renderShop(): string {
   return `<div class="panel">
-    <p class="muted">가렌숲 · 순차 해금 · 클리어 ${save.clearedStages.length}/5</p>
+    <p class="muted">마법상점 · 소환서 · 연마(접두어) · 각인(슬롯 4–6)</p>
+    <p class="section-label">소환서</p>
     <div class="stage-list">
-      ${CHAPTER1_STAGES.map((s) => {
-        const label = stageUnlockLabel(save, s);
-        const locked = !isStageUnlocked(save, s.id);
-        return `<button type="button" data-stage="${s.id}" ${locked ? "disabled" : ""}>
-          <strong>${label} · ${s.nameKo}</strong><br/>
-          <small class="muted">${s.boardSize}×${s.boardSize} · 웨이브 ${s.waves} · 에너지 ${s.energyCost}</small>
+      <button type="button" id="btn-buy-scroll-1">
+        <strong>소환서 1장</strong><br/>
+        <small class="muted">−마나 ${SCROLL_BUY_MANA_COST} · 보유 ${save.scrolls}</small>
+      </button>
+      <button type="button" id="btn-buy-scroll-5">
+        <strong>소환서 5장</strong><br/>
+        <small class="muted">−마나 ${SCROLL_BUY_MANA_COST * 5}</small>
+      </button>
+    </div>
+    <p class="section-label">상징 연마 (접두어)</p>
+    <div class="stage-list">
+      ${save.symbols
+        .map((s, i) => {
+          if (!canGrindSymbol(s)) return "";
+          return `<button type="button" data-grind="${i}">
+            <strong>${describeSymbol(s)}</strong><br/>
+            <small class="muted">접두어 부여/재부여 · −마나 ${SYMBOL_GRIND_MANA_COST}</small>
+          </button>`;
+        })
+        .join("") || `<p class="muted">연마할 상징이 없습니다</p>`}
+    </div>
+    <p class="section-label">상징 각인 (슬롯 4–6)</p>
+    <div class="stage-list">
+      ${save.symbols
+        .map((s, i) => {
+          if (!canImprintSymbol(s)) return "";
+          return `<button type="button" data-imprint="${i}">
+            <strong>${describeSymbol(s)}</strong><br/>
+            <small class="muted">주옵션 재부여 · −크리스탈 ${SYMBOL_IMPRINT_CRYSTAL_COST}</small>
+          </button>`;
+        })
+        .join("") || `<p class="muted">각인 가능한 상징이 없습니다 (슬롯 4–6 드롭 필요)</p>`}
+    </div>
+    <button type="button" class="secondary full" data-nav="home" style="margin-top:10px">섬으로</button>
+  </div>`;
+}
+
+function renderGlory(): string {
+  return `<div class="panel">
+    <p class="muted">영광 건물 · 아레나 포인트로 상시 버프 · 보유 영광 ${save.gloryPoints ?? 0}</p>
+    <div class="stage-list">
+      ${GLORY_BUILDINGS.map((g) => {
+        const lv = save.gloryLevels?.[g.id] ?? 0;
+        const maxed = lv >= g.maxLevel;
+        return `<button type="button" data-glory="${g.id}" ${maxed ? "disabled" : ""}>
+          <strong>${g.nameKo} Lv.${lv}/${g.maxLevel}</strong><br/>
+          <small class="muted">${g.effectKo} · ${maxed ? "MAX" : `−영광 ${g.gloryCostPerLevel}`}</small>
         </button>`;
       }).join("")}
     </div>
+    <button type="button" class="secondary full" data-nav="home" style="margin-top:10px">섬으로</button>
+  </div>`;
+}
+
+function stageButtons(list: StageDef[]): string {
+  return list
+    .map((s) => {
+      const label = stageUnlockLabel(save, s);
+      const locked = !isStageUnlocked(save, s.id);
+      const cost =
+        s.energyCost > 0 ? `에너지 ${s.energyCost}` : "에너지 0";
+      const extra =
+        s.gloryReward != null
+          ? ` · 영광 ${s.gloryReward}`
+          : s.jinmunReward != null
+            ? ` · 진문석 ${s.jinmunReward}`
+            : "";
+      return `<button type="button" data-stage="${s.id}" ${locked ? "disabled" : ""}>
+        <strong>${label} · ${s.nameKo}</strong><br/>
+        <small class="muted">${s.boardSize}×${s.boardSize} · 웨이브 ${s.waves} · ${cost}${extra}</small>
+      </button>`;
+    })
+    .join("");
+}
+
+function renderStages(): string {
+  const cleared = save.clearedStages.length;
+  return `<div class="panel">
+    <p class="muted">출정 허브 · 클리어 ${cleared} · Phase 2 콘텐츠 포함</p>
+    <p class="section-label">시나리오 1 · 가렌숲</p>
+    <div class="stage-list">${stageButtons(CHAPTER1_STAGES)}</div>
+    <p class="section-label">시나리오 2 · 용맹의 탑</p>
+    <div class="stage-list">${stageButtons(CHAPTER2_STAGES)}</div>
+    <p class="section-label">상징 심층</p>
+    <div class="stage-list">${stageButtons(DEPTH_STAGES)}</div>
+    <p class="section-label">아레나</p>
+    <div class="stage-list">${stageButtons(ARENA_STAGES)}</div>
+    <p class="section-label">요일 · 마법진 시련</p>
+    <div class="stage-list">${stageButtons([...WEEKDAY_STAGES, ...TRIAL_STAGES])}</div>
   </div>`;
 }
 
@@ -1092,17 +1265,31 @@ function bind(): void {
         view = "stages";
         render();
       } else if (id === "mana_pond") {
-        const now = Date.now();
-        const island = collectMana(save.island, "mana_pond", now);
-        save = { ...save, island };
+        view = "pond";
+        render();
+      } else if (id === "crystal_mine") {
+        const r = homeCollectCrystal(save);
+        save = r.save;
         persist();
-        flash(`진액 수집 · 마나 ${Math.floor(island.mana)}`);
+        flash(r.message);
+        render();
+      } else if (id === "wish") {
+        const r = runDailyWish(save);
+        save = r.save;
+        persist();
+        flash(r.message);
+        render();
+      } else if (id === "glory") {
+        view = "glory";
         render();
       } else if (id === "summon_hearth") {
         view = "summon";
         render();
       } else if (id === "power_circle") {
         view = "enhance";
+        render();
+      } else if (id === "shop") {
+        view = "shop";
         render();
       } else if (id === "party") {
         view = "party";
@@ -1175,6 +1362,75 @@ function bind(): void {
     });
   });
 
+  app.querySelectorAll<HTMLButtonElement>("[data-grind]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = btn.dataset.grind!;
+      const r = runGrindSymbol(save, idx);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-imprint]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = btn.dataset.imprint!;
+      const r = runImprintSymbol(save, idx);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelector("#btn-buy-scroll-1")?.addEventListener("click", () => {
+    const r = runBuyScroll(save, 1);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+  app.querySelector("#btn-buy-scroll-5")?.addEventListener("click", () => {
+    const r = runBuyScroll(save, 5);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-glory]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.glory as
+        | "mana_fountain"
+        | "ancient_sword"
+        | "guardstone"
+        | "crystal_altar"
+        | "sky_totem";
+      const r = runBuyGlory(save, id);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelector("#btn-pond-collect")?.addEventListener("click", () => {
+    const now = Date.now();
+    const island = collectMana(tickProduction(save.island, now), "mana_pond", now);
+    save = { ...save, island };
+    persist();
+    flash(`진액 수집 · 마나 ${Math.floor(island.mana)}`);
+    render();
+  });
+  app.querySelector("#btn-pond-upgrade")?.addEventListener("click", () => {
+    const r = runUpgradeBuilding(save, "mana_pond");
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+
   app.querySelectorAll<HTMLButtonElement>("[data-equip-sym]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = btn.dataset.equipSym!;
@@ -1220,7 +1476,7 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const stage = CHAPTER1_STAGES.find((s) => s.id === btn.dataset.stage);
+      const stage = getStage(btn.dataset.stage!);
       if (stage) startBattle(stage);
     });
   });

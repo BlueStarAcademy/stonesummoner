@@ -3,10 +3,15 @@ import assert from "node:assert/strict";
 import {
   PHASE1_BUILDINGS,
   addSummonerExp,
+  buildingUpgradeManaCost,
   collectMana,
   createStarterIsland,
   hasBuilding,
+  productionStorageCap,
+  runWish,
+  syncBuildingUnlocks,
   tickProduction,
+  upgradeBuilding,
 } from "./island.js";
 
 describe("Phase1 island", () => {
@@ -37,6 +42,34 @@ describe("Phase1 island", () => {
     island = tickProduction(island, 3_600_000 * 100);
     const pond = island.buildings.find((b) => b.id === "mana_pond")!;
     assert.equal(pond.storedMana, 4000);
+  });
+
+  it("upgrades mana pond rate and storage cap", () => {
+    let island = createStarterIsland(0);
+    island = { ...island, mana: 5000 };
+    const cost = buildingUpgradeManaCost(1);
+    const r = upgradeBuilding(island, "mana_pond");
+    assert.match(r.message, /진액 연못 Lv\.2/);
+    assert.equal(r.island.mana, 5000 - cost);
+    const pond = r.island.buildings.find((b) => b.id === "mana_pond")!;
+    assert.equal(pond.level, 2);
+    const def = PHASE1_BUILDINGS.find((b) => b.id === "mana_pond")!;
+    assert.equal(productionStorageCap(def, 2), 8000);
+
+    island = tickProduction(r.island, 3_600_000 * 100);
+    const full = island.buildings.find((b) => b.id === "mana_pond")!;
+    assert.equal(full.storedMana, 8000);
+  });
+
+  it("unlocks crystal mine and wish at high summoner level", () => {
+    let island = createStarterIsland(0);
+    island = { ...island, summonerLevel: 10 };
+    island = syncBuildingUnlocks(island, 0);
+    assert.ok(hasBuilding(island, "crystal_mine"));
+    assert.ok(hasBuilding(island, "wish_temple"));
+    const wish = runWish(island, Date.UTC(2026, 0, 1), () => 0.1);
+    assert.match(wish.message, /소원/);
+    assert.equal(wish.island.lastWishDay, "2026-01-01");
   });
 
   it("regens energy over time up to max", () => {

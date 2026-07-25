@@ -9,24 +9,33 @@ import { stdin as input, stdout as output } from "node:process";
 import {
   createNewSave,
   homeCollect,
+  homeCollectCrystal,
   listGear,
   listRoster,
   listStages,
   listSymbols,
+  runBuyGlory,
+  runBuyScroll,
+  runDailyWish,
   runDemoLoop,
   runEnhance,
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
   runEvolve,
+  runGrindSymbol,
+  runImprintSymbol,
   runSetParty,
   runSkillUp,
   runSortie,
   runSummon,
+  runUpgradeBuilding,
+  SCROLL_BUY_MANA_COST,
   stageUnlockLabel,
   type PlayerSave,
 } from "stonesummoner-loop";
 import { tickProduction } from "stonesummoner-home";
+import { GLORY_BUILDINGS, type GloryBuildingId } from "stonesummoner-data";
 
 function printStatus(save: PlayerSave): void {
   const { island, symbols, clearedStages, scrolls, roster } = save;
@@ -38,7 +47,7 @@ function printStatus(save: PlayerSave): void {
     `마나 ${Math.floor(island.mana)} · 크리스탈 ${island.crystal} · 에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}`,
   );
   console.log(
-    `소환서 ${scrolls} · 로스터 ${roster.length} · 상징 ${symbols.length} · 클리어 ${clearedStages.length}/${listStages().length}`,
+    `영광 ${save.gloryPoints ?? 0} · 진문석 ${save.jinmunStones ?? 0} · 소환서 ${scrolls} · 로스터 ${roster.length} · 상징 ${symbols.length} · 클리어 ${clearedStages.length}`,
   );
   console.log("────────────────────────────────────");
 }
@@ -48,7 +57,7 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | summon | enhance <i> | evolve <i> | skillup <i> <0-2> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
+    "명령: collect | crystal | wish | upgrade | glory [id] | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
@@ -84,8 +93,59 @@ async function interactive(): Promise<void> {
       continue;
     }
 
+    if (cmd === "upgrade" || cmd === "up") {
+      const r = runUpgradeBuilding(save, "mana_pond");
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "crystal" || cmd === "cr") {
+      const r = homeCollectCrystal(save);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "wish" || cmd === "w") {
+      const r = runDailyWish(save);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "glory" || cmd === "gl") {
+      if (!arg) {
+        for (const g of GLORY_BUILDINGS) {
+          const lv = save.gloryLevels?.[g.id] ?? 0;
+          console.log(
+            `${g.id} · ${g.nameKo} Lv.${lv}/${g.maxLevel} (−영광 ${g.gloryCostPerLevel}) · ${g.effectKo}`,
+          );
+        }
+        console.log(`보유 영광 ${save.gloryPoints ?? 0}`);
+        continue;
+      }
+      const r = runBuyGlory(save, arg as GloryBuildingId);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
     if (cmd === "summon" || cmd === "sum") {
       const r = runSummon(save);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "buy-scroll" || cmd === "buy" || cmd === "bs") {
+      const n = Number(arg ?? "1");
+      const r = runBuyScroll(save, Number.isFinite(n) ? n : 1);
       save = r.save;
       console.log(r.message);
       printStatus(save);
@@ -151,6 +211,22 @@ async function interactive(): Promise<void> {
       continue;
     }
 
+    if (cmd === "grind" || cmd === "gr") {
+      const r = runGrindSymbol(save, arg ?? "0");
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "imprint" || cmd === "imp") {
+      const r = runImprintSymbol(save, arg ?? "0");
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
     if (cmd === "roster" || cmd === "r") {
       for (const line of listRoster(save)) console.log(line);
       continue;
@@ -207,7 +283,7 @@ async function interactive(): Promise<void> {
     }
 
     console.log(
-      "알 수 없는 명령. collect | summon | enhance | evolve | skillup | gear | enh-gear | symbols | equip | enh-sym | roster | party | stages | go | status | demo | quit",
+      "알 수 없는 명령. collect | crystal | wish | upgrade | glory | summon | buy-scroll | enhance | evolve | skillup | gear | enh-gear | symbols | equip | enh-sym | grind | imprint | roster | party | stages | go | status | demo | quit",
     );
   }
 

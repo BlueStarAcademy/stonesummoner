@@ -2,21 +2,26 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   applySymbolsToStats,
+  canGrindSymbol,
+  canImprintSymbol,
   CHAPTER1_STAGES,
   createStarterGear,
   createStarterHwalro,
+  createSymbol,
   gearEnhanceManaCost,
   getMonster,
   getStage,
+  grindSymbolPrefix,
+  imprintSymbolMain,
   MONSTERS,
   rollSymbolDrop,
   SYMBOL_SETS,
 } from "./index.js";
 
 describe("phase1 data", () => {
-  it("has 10 monsters and 3 symbol sets", () => {
+  it("has 10 monsters and 8 symbol sets", () => {
     assert.equal(MONSTERS.length, 10);
-    assert.equal(SYMBOL_SETS.length, 3);
+    assert.equal(SYMBOL_SETS.length, 8);
     assert.ok(getMonster("fire_fang"));
     assert.ok(getMonster("mist_shaman"));
     assert.ok(getMonster("abyss_priest"));
@@ -35,6 +40,8 @@ describe("phase1 data", () => {
     assert.equal(getStage("garen_1_1")?.boardSize, 5);
     assert.equal(getStage("garen_1_4")?.boardSize, 7);
     assert.equal(getStage("garen_1_5")?.boardSize, 9);
+    assert.equal(getStage("depth_hwalro")?.mode, "depth");
+    assert.equal(getStage("arena_rookie")?.mode, "arena");
   });
 
   it("creates starter symbol", () => {
@@ -73,6 +80,48 @@ describe("phase1 data", () => {
     };
     const out = applySymbolsToStats(base, [s1, s2]);
     assert.equal(out.hp, 1150);
+  });
+
+  it("rolls imprintable mains for slots 4–6", () => {
+    const s = createSymbol("hwalro", 4, "t");
+    assert.equal(canImprintSymbol(s), true);
+    assert.equal(canImprintSymbol(createSymbol("hwalro", 1, "x")), false);
+    const next = imprintSymbolMain(s, () => 0.99);
+    assert.ok(next);
+    assert.notEqual(
+      `${next!.mainStat}:${next!.mainValue}`,
+      `${s.mainStat}:${s.mainValue}`,
+    );
+  });
+
+  it("grinds a flat prefix that does not scale with enhance", () => {
+    const s = createSymbol("hwalro", 1, "g");
+    assert.equal(canGrindSymbol(s), true);
+    const ground = grindSymbolPrefix(s, () => 0);
+    assert.ok(ground?.prefixStat);
+    assert.ok((ground!.prefixValue ?? 0) > 0);
+
+    const base = {
+      hp: 1000,
+      atk: 100,
+      def: 50,
+      spd: 100,
+      critRate: 15,
+      critDmg: 50,
+    };
+    const flat = {
+      ...ground!,
+      enhance: 0,
+      mainStat: "ATK+",
+      mainValue: 0,
+      prefixStat: "HP+",
+      prefixValue: 100,
+    };
+    const enhanced = { ...flat, enhance: 15 };
+    const a = applySymbolsToStats(base, [flat]);
+    const b = applySymbolsToStats(base, [enhanced]);
+    assert.equal(a.hp, 1100);
+    assert.equal(b.hp, 1100);
   });
 
   it("rolls phase1 symbol drops across sets", () => {

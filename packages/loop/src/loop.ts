@@ -10,27 +10,42 @@ import {
   applySymbolsToStats,
   bumpGearEnhance,
   bumpSymbolEnhance,
-  CHAPTER1_STAGES,
   createStarterGear,
   createStarterHwalro,
   describeGear,
   describeSymbol,
   gearEnhanceManaCost,
+  getGloryBuilding,
   getMonster,
+  getStage,
+  gloryBuffFromLevels,
+  imprintSymbolMain,
+  canImprintSymbol,
+  canGrindSymbol,
+  grindSymbolPrefix,
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
   rollSymbolDrop,
   symbolEnhanceManaCost,
+  SYMBOL_IMPRINT_CRYSTAL_COST,
+  SYMBOL_GRIND_MANA_COST,
+  ALL_STAGES,
   type GearSlot,
+  type GloryBuildingId,
   type StageDef,
   type SummonerGear,
   type SymbolInstance,
 } from "stonesummoner-data";
 import {
   addSummonerExp,
+  collectCrystal,
   collectMana,
   createStarterIsland,
+  runWish,
+  syncBuildingUnlocks,
   tickProduction,
+  upgradeBuilding,
+  type BuildingId,
   type IslandState,
 } from "stonesummoner-home";
 import {
@@ -51,6 +66,7 @@ import {
   skillUpManaCost,
   skillUpMinMonsterLevel,
   defaultSkillLevels,
+  SCROLL_BUY_MANA_COST,
   SUMMON_SCROLL_COST,
   type OwnedMonster,
 } from "./roster.js";
@@ -69,6 +85,7 @@ export {
   normalizeSkillLevels,
   skillUpManaCost,
   skillUpMinMonsterLevel,
+  SCROLL_BUY_MANA_COST,
   SUMMON_SCROLL_COST,
 } from "./roster.js";
 export { isStageUnlocked, stageUnlockLabel } from "./progress.js";
@@ -82,10 +99,19 @@ export interface PlayerSave {
   party: string[];
   scrolls: number;
   gear: SummonerGear;
+  /** Phase 2: arena glory currency. */
+  gloryPoints: number;
+  /** Phase 2: magic-circle trial tokens. */
+  jinmunStones: number;
+  /** Phase 2: glory building levels. */
+  gloryLevels: Partial<Record<GloryBuildingId, number>>;
 }
 
 export interface BattleReward {
   mana: number;
+  crystal?: number;
+  glory?: number;
+  jinmun?: number;
   expNote: string;
   symbol?: SymbolInstance;
   victory: boolean;
@@ -183,7 +209,17 @@ function unitFromOwned(
   const m = getMonster(owned.monsterId);
   if (!m) throw new Error(`Unknown monster ${owned.monsterId}`);
   const base = scaledMonsterStats(m, owned.level, owned.evolve ?? 0);
-  const stats = applySymbolsToStats(base, equippedSymbols(save, owned));
+  let stats = applySymbolsToStats(base, equippedSymbols(save, owned));
+  if (team === "ally") {
+    const g = gloryBuffFromLevels(save.gloryLevels ?? {});
+    stats = {
+      ...stats,
+      hp: Math.round(stats.hp * (1 + g.hpPct)),
+      atk: Math.round(stats.atk * (1 + g.atkPct)),
+      def: Math.round(stats.def * (1 + g.defPct)),
+      spd: stats.spd + g.spdFlat,
+    };
+  }
   const evoTag = (owned.evolve ?? 0) > 0 ? ` E${owned.evolve}` : "";
   const skillLevels = normalizeSkillLevels(owned.skillLevels);
   return makeUnit({
@@ -238,6 +274,9 @@ export function createNewSave(now = Date.now()): PlayerSave {
     party,
     scrolls,
     gear,
+    gloryPoints: 0,
+    jinmunStones: 0,
+    gloryLevels: {},
   };
 }
 
@@ -247,17 +286,20 @@ export function createDemoSave(now = Date.now()): PlayerSave {
   return {
     ...save,
     scrolls: 20,
+    gloryPoints: 120,
+    jinmunStones: 5,
     island: {
       ...save.island,
       mana: 5000,
       crystal: 30,
       energy: save.island.energyMax,
-      summonerLevel: 5,
+      summonerLevel: 10,
       summonerExp: 40,
     },
     roster: save.roster.map((m, i) =>
       i === 0 ? { ...m, level: 8, evolve: 0 } : { ...m, level: 5 },
     ),
+    clearedStages: ["garen_1_1", "garen_1_2", "garen_1_3", "garen_1_4", "garen_1_5"],
   };
 }
 
@@ -272,8 +314,99 @@ export function homeCollect(save: PlayerSave, now = Date.now()): LoopStepResult 
   };
 }
 
+export function homeCollectCrystal(
+  save: PlayerSave,
+  now = Date.now(),
+): LoopStepResult {
+  let island = tickProduction(save.island, now);
+  if (!island.buildings.some((b) => b.id === "crystal_mine")) {
+    island = syncBuildingUnlocks(island, now);
+  }
+  if (!island.buildings.some((b) => b.id === "crystal_mine")) {
+    return {
+      save: { ...save, island },
+      message: "수정 광맥 해금 필요 (서머너 Lv.10)",
+    };
+  }
+  const before = island.crystal;
+  island = collectCrystal(island, "crystal_mine", now);
+  const gained = island.crystal - before;
+  return {
+    save: { ...save, island },
+    message: `수정 광맥 수집: 크리스탈 +${gained} (보유 ${island.crystal})`,
+  };
+}
+
+export function runDailyWish(
+  save: PlayerSave,
+  now = Date.now(),
+  rng: () => number = Math.random,
+): LoopStepResult {
+  const r = runWish(save.island, now, rng);
+  return {
+    save: {
+      ...save,
+      island: r.island,
+      scrolls: save.scrolls + r.scrollGain,
+    },
+    message: r.message,
+  };
+}
+
+/** Upgrade a production building (mana pond / crystal mine). */
+export function runUpgradeBuilding(
+  save: PlayerSave,
+  buildingId: BuildingId = "mana_pond",
+): LoopStepResult {
+  const island = tickProduction(save.island);
+  const r = upgradeBuilding(island, buildingId);
+  return {
+    save: { ...save, island: r.island },
+    message: r.message,
+  };
+}
+
+export function runBuyGlory(
+  save: PlayerSave,
+  buildingId: GloryBuildingId,
+): LoopStepResult {
+  const def = getGloryBuilding(buildingId);
+  if (!def) return { save, message: `영광 건물 없음: ${buildingId}` };
+  const cur = save.gloryLevels[buildingId] ?? 0;
+  if (cur >= def.maxLevel) {
+    return { save, message: `${def.nameKo} 이미 최대 Lv.${def.maxLevel}` };
+  }
+  const cost = def.gloryCostPerLevel;
+  if (save.gloryPoints < cost) {
+    return {
+      save,
+      message: `영광포인트 부족 (필요 ${cost}, 보유 ${save.gloryPoints})`,
+    };
+  }
+  const nextLv = cur + 1;
+  const gloryLevels = { ...save.gloryLevels, [buildingId]: nextLv };
+  const buff = gloryBuffFromLevels(gloryLevels);
+  const island = {
+    ...save.island,
+    manaProdBonus: buff.manaProdPct,
+  };
+  return {
+    save: {
+      ...save,
+      gloryPoints: save.gloryPoints - cost,
+      gloryLevels,
+      island,
+    },
+    message: `영광: ${def.nameKo} Lv.${nextLv} (−영광 ${cost}) · ${def.effectKo}`,
+  };
+}
+
 export function listStages(): StageDef[] {
-  return CHAPTER1_STAGES;
+  return ALL_STAGES;
+}
+
+export function listScenarioStages(): StageDef[] {
+  return ALL_STAGES.filter((s) => s.mode === "scenario");
 }
 
 export function listRoster(save: PlayerSave): string[] {
@@ -583,6 +716,102 @@ export function runEnhanceSymbol(
   };
 }
 
+/** Buy summon scrolls at magic shop stub (mana). */
+export function runBuyScroll(
+  save: PlayerSave,
+  count = 1,
+): LoopStepResult {
+  const n = Math.max(1, Math.min(20, Math.floor(count)));
+  const cost = SCROLL_BUY_MANA_COST * n;
+  if (save.island.mana < cost) {
+    return {
+      save,
+      message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  const island = { ...save.island, mana: save.island.mana - cost };
+  const scrolls = save.scrolls + n;
+  return {
+    save: { ...save, island, scrolls },
+    message: `상점: 소환서 ${n}장 구매 (−마나 ${cost}) · 보유 ${scrolls}`,
+  };
+}
+
+/**
+ * Imprint (각인 스텁): re-roll main option on slots 4–6 for crystal.
+ */
+export function runImprintSymbol(
+  save: PlayerSave,
+  idOrIndex: string,
+  rng: () => number = Math.random,
+): LoopStepResult {
+  const sym = resolveSymbol(save, idOrIndex);
+  if (!sym) {
+    return { save, message: `상징을 찾을 수 없음: ${idOrIndex}` };
+  }
+  if (!canImprintSymbol(sym)) {
+    return {
+      save,
+      message: `${describeSymbol(sym)} 슬롯${sym.slot}은 각인 불가 (4–6만)`,
+    };
+  }
+  if (save.island.crystal < SYMBOL_IMPRINT_CRYSTAL_COST) {
+    return {
+      save,
+      message: `크리스탈 부족 (필요 ${SYMBOL_IMPRINT_CRYSTAL_COST}, 보유 ${save.island.crystal})`,
+    };
+  }
+  const next = imprintSymbolMain(sym, rng);
+  if (!next) {
+    return { save, message: "각인 실패" };
+  }
+  const symbols = save.symbols.map((s) => (s.id === sym.id ? next : s));
+  const island = {
+    ...save.island,
+    crystal: save.island.crystal - SYMBOL_IMPRINT_CRYSTAL_COST,
+  };
+  return {
+    save: { ...save, island, symbols },
+    message: `각인: ${describeSymbol(sym)} → ${describeSymbol(next)} (−크리스탈 ${SYMBOL_IMPRINT_CRYSTAL_COST})`,
+  };
+}
+
+/**
+ * Grind (연마 스텁): apply / re-roll flat prefix that does not scale with enhance.
+ */
+export function runGrindSymbol(
+  save: PlayerSave,
+  idOrIndex: string,
+  rng: () => number = Math.random,
+): LoopStepResult {
+  const sym = resolveSymbol(save, idOrIndex);
+  if (!sym) {
+    return { save, message: `상징을 찾을 수 없음: ${idOrIndex}` };
+  }
+  if (!canGrindSymbol(sym)) {
+    return { save, message: `${describeSymbol(sym)} 연마 불가` };
+  }
+  if (save.island.mana < SYMBOL_GRIND_MANA_COST) {
+    return {
+      save,
+      message: `마나 부족 (필요 ${SYMBOL_GRIND_MANA_COST}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  const next = grindSymbolPrefix(sym, rng);
+  if (!next) {
+    return { save, message: "연마 실패" };
+  }
+  const symbols = save.symbols.map((s) => (s.id === sym.id ? next : s));
+  const island = {
+    ...save.island,
+    mana: save.island.mana - SYMBOL_GRIND_MANA_COST,
+  };
+  return {
+    save: { ...save, island, symbols },
+    message: `연마: ${describeSymbol(sym)} → ${describeSymbol(next)} (−마나 ${SYMBOL_GRIND_MANA_COST})`,
+  };
+}
+
 /** Equip inventory symbol onto monster (replaces same slot). */
 export function runEquipSymbol(
   save: PlayerSave,
@@ -730,39 +959,74 @@ export function applyRewards(
     };
   }
 
-  const manaGain = 180 + stage.stage * 60;
+  const modeMul =
+    stage.mode === "depth" ? 1.2 : stage.mode === "arena" ? 0.6 : 1;
+  const manaGain = Math.round((180 + stage.stage * 60) * modeMul);
+  let crystalGain = 1 + Math.floor(stage.stage / 2);
+  if (stage.mode === "weekday") crystalGain += 3;
+  if (stage.mode === "depth") crystalGain += 1;
+  const gloryGain = stage.gloryReward ?? 0;
+  const jinmunGain = stage.jinmunReward ?? 0;
+  const dropChance = stage.dropChance ?? 0.65;
   const expGain = expForStage(stage);
+
   let island = {
     ...save.island,
     mana: save.island.mana + manaGain,
+    crystal: save.island.crystal + crystalGain,
   };
   const leveled = addSummonerExp(island, expGain);
   island = leveled.island;
 
   const symbols = [...save.symbols];
   let symbol: SymbolInstance | undefined;
-  if (rng() < 0.65) {
-    symbol = rollSymbolDrop(rng, `drop_${stage.id}_${symbols.length}`);
+  if (rng() < dropChance) {
+    symbol = rollSymbolDrop(
+      rng,
+      `drop_${stage.id}_${symbols.length}`,
+      stage.dropSetId,
+    );
     symbols.push(symbol);
   }
 
   let scrolls = save.scrolls;
-  if (rng() < 0.4) scrolls += 1;
+  if (rng() < (stage.mode === "weekday" ? 0.55 : 0.4)) scrolls += 1;
 
   const cleared = save.clearedStages.includes(stage.id)
     ? save.clearedStages
     : [...save.clearedStages, stage.id];
 
+  const gloryPoints = (save.gloryPoints ?? 0) + gloryGain;
+  const jinmunStones = (save.jinmunStones ?? 0) + jinmunGain;
+
+  const extras: string[] = [
+    `EXP +${expGain}`,
+    `크리스탈 +${crystalGain}`,
+  ];
+  if (gloryGain > 0) extras.push(`영광 +${gloryGain}`);
+  if (jinmunGain > 0) extras.push(`진문석 +${jinmunGain}`);
   const levelNote =
     leveled.levelsGained > 0
       ? ` · 서머너 Lv.${island.summonerLevel}(+${leveled.levelsGained})`
       : "";
 
   return {
-    save: { ...save, island, symbols, clearedStages: cleared, scrolls },
+    save: {
+      ...save,
+      island,
+      symbols,
+      clearedStages: cleared,
+      scrolls,
+      gloryPoints,
+      jinmunStones,
+      gloryLevels: save.gloryLevels ?? {},
+    },
     reward: {
       mana: manaGain,
-      expNote: `${stage.nameKo} 클리어 · EXP +${expGain}${levelNote}`,
+      crystal: crystalGain,
+      glory: gloryGain || undefined,
+      jinmun: jinmunGain || undefined,
+      expNote: `${stage.nameKo} 클리어 · ${extras.join(" · ")}${levelNote}`,
       symbol,
       victory: true,
       summonerExp: expGain,
@@ -779,12 +1043,12 @@ export function runSortie(
   stageId: string,
   opts?: { maxTurns?: number; rng?: () => number },
 ): LoopStepResult {
-  const stage = CHAPTER1_STAGES.find((s) => s.id === stageId);
+  const stage = getStage(stageId);
   if (!stage) {
     return { save, message: `알 수 없는 스테이지: ${stageId}` };
   }
   const energy = Math.floor(save.island.energy);
-  if (energy < stage.energyCost) {
+  if (stage.energyCost > 0 && energy < stage.energyCost) {
     return {
       save,
       message: `에너지 부족 (필요 ${stage.energyCost}, 보유 ${energy})`,
@@ -793,35 +1057,31 @@ export function runSortie(
   if (!isStageUnlocked(save, stageId)) {
     return {
       save,
-      message: `스테이지 잠김 — 이전 스테이지를 클리어하세요 (${stageId})`,
+      message: `콘텐츠 잠김 — 해금 조건을 확인하세요 (${stageId})`,
     };
   }
 
   const island = {
     ...save.island,
-    energy: energy - stage.energyCost,
-    energyUpdatedAt: Date.now(),
+    energy: save.island.energy - stage.energyCost,
   };
-  const mid: PlayerSave = { ...save, island };
-
+  const mid: PlayerSave = {
+    ...save,
+    island,
+    gloryPoints: save.gloryPoints ?? 0,
+    jinmunStones: save.jinmunStones ?? 0,
+    gloryLevels: save.gloryLevels ?? {},
+  };
   const battle = createStageBattle(stage, mid);
-  const { victory, turns } = resolveBattleAuto(battle, opts?.maxTurns ?? 140);
+  const { victory, turns } = resolveBattleAuto(battle, opts?.maxTurns ?? 80);
   const { save: next, reward } = applyRewards(mid, stage, victory, opts?.rng);
-
-  const dropLine = reward.symbol
-    ? ` · 상징 드롭 ${reward.symbol.setId}(${reward.symbol.slot})`
-    : "";
-  const expLine = reward.summonerExp
-    ? ` · EXP +${reward.summonerExp}`
-    : "";
-
   return {
     save: next,
-    reward,
-    battleLog: battle.log.slice(-12),
     message: victory
-      ? `승리 (${turns}턴) · 마나 +${reward.mana}${dropLine}${expLine}`
-      : `패배 (${turns}턴) · ${battle.finishReason ?? "timeout"}`,
+      ? `출정 승리 (${turns}턴) · ${reward.expNote}`
+      : `출정 패배 (${turns}턴)`,
+    reward,
+    battleLog: [`turns=${turns}`, `finish=${battle.finishReason}`],
   };
 }
 

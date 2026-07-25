@@ -10,7 +10,7 @@ export interface CombatStatBlock {
   critDmg: number;
 }
 
-/** Apply equipped symbol mains + Phase 1 set bonuses. */
+/** Apply equipped symbol mains + set bonuses (Phase 1–2). */
 export function applySymbolsToStats(
   base: CombatStatBlock,
   equipped: SymbolInstance[],
@@ -19,18 +19,30 @@ export function applySymbolsToStats(
 
   for (const s of equipped) {
     const bonus = mainStatBonus(s);
-    stats.hp += bonus.hp;
-    stats.atk += bonus.atk;
-    stats.def += bonus.def;
-    stats.spd += bonus.spd;
-    stats.critRate += bonus.critRate;
-    stats.critDmg += bonus.critDmg;
+    const prefix = prefixStatBonus(s);
+    stats.hp += bonus.hp + prefix.hp;
+    stats.atk += bonus.atk + prefix.atk;
+    stats.def += bonus.def + prefix.def;
+    stats.spd += bonus.spd + prefix.spd;
+    stats.critRate += bonus.critRate + prefix.critRate;
+    stats.critDmg += bonus.critDmg + prefix.critDmg;
   }
 
   const counts = countSets(equipped);
-  if ((counts.hwalro ?? 0) >= 2) stats.hp = Math.round(stats.hp * 1.15);
+  // 2-set stacking: floor(count/pieces) times
+  const hwalroSets = Math.floor((counts.hwalro ?? 0) / 2);
+  for (let i = 0; i < hwalroSets; i++) stats.hp = Math.round(stats.hp * 1.15);
   if ((counts.yongmaeng ?? 0) >= 4) stats.atk = Math.round(stats.atk * 1.35);
   if ((counts.haengma ?? 0) >= 4) stats.spd = Math.round(stats.spd * 1.25);
+  const gunhimSets = Math.floor((counts.gunhim ?? 0) / 2);
+  for (let i = 0; i < gunhimSets; i++) stats.def = Math.round(stats.def * 1.15);
+  const mussangSets = Math.floor((counts.mussang ?? 0) / 2);
+  stats.critRate += mussangSets * 12;
+  if ((counts.chimtu ?? 0) >= 4) stats.critDmg = Math.round(stats.critDmg * 1.4);
+  const bogangSets = Math.floor((counts.bogang ?? 0) / 2);
+  for (let i = 0; i < bogangSets; i++) stats.hp = Math.round(stats.hp * 1.08);
+  const jipjungSets = Math.floor((counts.jipjung ?? 0) / 2);
+  stats.critRate += jipjungSets * 8;
 
   return stats;
 }
@@ -43,40 +55,49 @@ function countSets(equipped: SymbolInstance[]): Partial<Record<SymbolSetId, numb
   return out;
 }
 
-function mainStatBonus(s: SymbolInstance): CombatStatBlock {
-  const scale = 1 + s.enhance * 0.08;
-  const v = s.mainValue * scale;
-  const z: CombatStatBlock = {
-    hp: 0,
-    atk: 0,
-    def: 0,
-    spd: 0,
-    critRate: 0,
-    critDmg: 0,
-  };
-  switch (s.mainStat) {
+function emptyBonus(): CombatStatBlock {
+  return { hp: 0, atk: 0, def: 0, spd: 0, critRate: 0, critDmg: 0 };
+}
+
+function applyNamedStat(
+  z: CombatStatBlock,
+  name: string,
+  value: number,
+): CombatStatBlock {
+  switch (name) {
     case "ATK+":
-      z.atk = Math.round(v);
+      z.atk = Math.round(value);
       break;
     case "HP+":
-      z.hp = Math.round(v);
+      z.hp = Math.round(value);
       break;
     case "DEF+":
-      z.def = Math.round(v);
+      z.def = Math.round(value);
       break;
     case "SPD+":
-      z.spd = Math.round(v);
+      z.spd = Math.round(value);
       break;
     case "CRI Dmg%":
-      z.critDmg = Math.round(v);
+      z.critDmg = Math.round(value);
       break;
     case "CRI Rate%":
-      z.critRate = Math.round(v);
+      z.critRate = Math.round(value);
       break;
     default:
       break;
   }
   return z;
+}
+
+function mainStatBonus(s: SymbolInstance): CombatStatBlock {
+  const scale = 1 + s.enhance * 0.08;
+  return applyNamedStat(emptyBonus(), s.mainStat, s.mainValue * scale);
+}
+
+/** Prefix (grind) is flat — never scaled by enhance. */
+function prefixStatBonus(s: SymbolInstance): CombatStatBlock {
+  if (!s.prefixStat || !s.prefixValue) return emptyBonus();
+  return applyNamedStat(emptyBonus(), s.prefixStat, s.prefixValue);
 }
 
 export function symbolEnhanceManaCost(enhance: number): number {
@@ -91,5 +112,10 @@ export function bumpSymbolEnhance(s: SymbolInstance): SymbolInstance {
 
 export function describeSymbol(s: SymbolInstance): string {
   const set = SYMBOL_SETS.find((x) => x.id === s.setId);
-  return `${set?.nameKo ?? s.setId} 슬롯${s.slot} +${s.enhance} (${s.mainStat} ${s.mainValue})`;
+  const main = `${s.mainStat} ${s.mainValue}`;
+  const prefix =
+    s.prefixStat && s.prefixValue
+      ? ` · 접두 ${s.prefixStat} ${s.prefixValue}`
+      : "";
+  return `${set?.nameKo ?? s.setId} 슬롯${s.slot} +${s.enhance} (${main}${prefix})`;
 }

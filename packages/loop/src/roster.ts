@@ -17,6 +17,8 @@ export const MAX_EVOLVE = 2;
 export const MAX_SKILL_LEVEL = 3;
 export const SUMMON_SCROLL_COST = 1;
 export const STARTER_SCROLLS = 5;
+/** Mana to buy one summon scroll at the shop stub. */
+export const SCROLL_BUY_MANA_COST = 450;
 
 /** Mana to raise level → level+1 */
 export function enhanceManaCost(level: number): number {

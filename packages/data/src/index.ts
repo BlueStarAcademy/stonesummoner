@@ -4,7 +4,19 @@ export { basicStrike } from "./skills.js";
 export type { SkillDef, SkillEffect } from "./skills.js";
 export { STONE_PASSIVE_LABEL } from "./stonePassives.js";
 export type { StonePassiveId } from "./stonePassives.js";
-export { SYMBOL_SETS, createStarterHwalro, createSymbol, rollSymbolDrop } from "./symbols.js";
+export {
+  SYMBOL_SETS,
+  createStarterHwalro,
+  createSymbol,
+  rollSymbolDrop,
+  canImprintSymbol,
+  canGrindSymbol,
+  imprintSymbolMain,
+  grindSymbolPrefix,
+  SYMBOL_IMPRINT_CRYSTAL_COST,
+  SYMBOL_GRIND_MANA_COST,
+  IMPRINTABLE_SLOTS,
+} from "./symbols.js";
 export type { SymbolSetDef, SymbolSetId, SymbolInstance } from "./symbols.js";
 export {
   applySymbolsToStats,
@@ -22,6 +34,26 @@ export {
   MAX_GEAR_ENHANCE,
 } from "./gear.js";
 export type { GearPiece, GearSlot, SummonerGear } from "./gear.js";
-export { CHAPTER1_STAGES, getStage } from "./scenario.js";
-export type { StageDef } from "./scenario.js";
+export {
+  ALL_STAGES,
+  ARENA_STAGES,
+  CHAPTER1_STAGES,
+  CHAPTER2_STAGES,
+  DEPTH_STAGES,
+  TRIAL_STAGES,
+  WEEKDAY_STAGES,
+  getStage,
+  stagesByMode,
+} from "./scenario.js";
+export type { ContentMode, StageDef } from "./scenario.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";
+export {
+  GLORY_BUILDINGS,
+  getGloryBuilding,
+  gloryBuffFromLevels,
+} from "./glory.js";
+export type {
+  GloryBuildingDef,
+  GloryBuildingId,
+  GloryCombatBuff,
+} from "./glory.js";

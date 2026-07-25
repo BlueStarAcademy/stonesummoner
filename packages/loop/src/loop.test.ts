@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { createSymbol } from "stonesummoner-data";
 import {
   createNewSave,
   homeCollect,
@@ -7,16 +8,21 @@ import {
   listGear,
   listRoster,
   listSymbols,
+  runBuyGlory,
+  runBuyScroll,
   runDemoLoop,
   runEnhance,
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
   runEvolve,
+  runGrindSymbol,
+  runImprintSymbol,
   runSetParty,
   runSkillUp,
   runSortie,
   runSummon,
+  runUpgradeBuilding,
 } from "./loop.js";
 
 describe("game loop", () => {
@@ -25,6 +31,24 @@ describe("game loop", () => {
     const r = homeCollect(save, 3_600_000);
     assert.ok(r.save.island.mana > save.island.mana);
     assert.match(r.message, /진액 연못/);
+  });
+
+  it("upgrades mana pond and grants crystal on clear", () => {
+    let save = createNewSave(0);
+    save = { ...save, island: { ...save.island, mana: 5000, energy: 50 } };
+    const up = runUpgradeBuilding(save, "mana_pond");
+    assert.match(up.message, /Lv\.2/);
+    assert.equal(
+      up.save.island.buildings.find((b) => b.id === "mana_pond")!.level,
+      2,
+    );
+    save = up.save;
+    const beforeCrystal = save.island.crystal;
+    const r = runSortie(save, "garen_1_1", { rng: () => 0.1 });
+    if (r.reward?.victory) {
+      assert.ok((r.reward.crystal ?? 0) >= 1);
+      assert.equal(r.save.island.crystal, beforeCrystal + (r.reward.crystal ?? 0));
+    }
   });
 
   it("runs sortie with energy cost and reward", () => {
@@ -38,6 +62,29 @@ describe("game loop", () => {
       assert.ok(r.save.clearedStages.includes("garen_1_1"));
       assert.ok((r.reward.summonerExp ?? 0) > 0);
     }
+  });
+
+  it("runs phase2 arena glory and depth unlock", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      clearedStages: ["garen_1_1", "garen_1_2", "garen_1_3", "garen_1_4", "garen_1_5"],
+      island: { ...save.island, mana: 8000, energy: 80, summonerLevel: 10 },
+      gloryPoints: 100,
+    };
+    assert.equal(isStageUnlocked(save, "depth_hwalro"), true);
+    assert.equal(isStageUnlocked(save, "tower_2_1"), true);
+    assert.equal(isStageUnlocked(save, "arena_rookie"), true);
+
+    const arena = runSortie(save, "arena_rookie", { rng: () => 0.1 });
+    if (arena.reward?.victory) {
+      assert.ok((arena.reward.glory ?? 0) >= 25);
+      assert.ok(arena.save.gloryPoints >= save.gloryPoints);
+    }
+
+    const buy = runBuyGlory(save, "ancient_sword");
+    assert.match(buy.message, /고대의 검/);
+    assert.equal(buy.save.gloryLevels.ancient_sword, 1);
   });
 
   it("locks later stages until previous clear", () => {
@@ -108,6 +155,42 @@ describe("game loop", () => {
     assert.match(ok.message, /스킬업/);
     assert.equal(ok.save.roster[0]!.skillLevels[1], 2);
     assert.ok(ok.save.island.mana < save.island.mana);
+  });
+
+  it("buys scrolls and imprints symbol slot 4–6", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      island: { ...save.island, mana: 2000, crystal: 20 },
+    };
+    const buy = runBuyScroll(save, 2);
+    assert.match(buy.message, /소환서 2장/);
+    assert.equal(buy.save.scrolls, save.scrolls + 2);
+    save = buy.save;
+
+    const slot4 = { ...createSymbol("hwalro", 4, "imp_test"), mainStat: "CRI Dmg%", mainValue: 11 };
+    save = { ...save, symbols: [...save.symbols, slot4] };
+    const blocked = runImprintSymbol(save, "0"); // slot 1 starter
+    assert.match(blocked.message, /각인 불가/);
+
+    const ok = runImprintSymbol(save, "imp_test", () => 0.9);
+    assert.match(ok.message, /각인/);
+    assert.equal(ok.save.island.crystal, save.island.crystal - 8);
+    const updated = ok.save.symbols.find((s) => s.id === "imp_test")!;
+    assert.ok(
+      updated.mainStat !== "CRI Dmg%" || updated.mainValue !== 11,
+    );
+  });
+
+  it("grinds symbol prefix for mana", () => {
+    let save = createNewSave(0);
+    save = { ...save, island: { ...save.island, mana: 500 } };
+    const ok = runGrindSymbol(save, "0", () => 0);
+    assert.match(ok.message, /연마/);
+    assert.equal(ok.save.island.mana, save.island.mana - 150);
+    const sym = ok.save.symbols[0]!;
+    assert.ok(sym.prefixStat);
+    assert.ok((sym.prefixValue ?? 0) > 0);
   });
 
   it("summons and enhances monsters", () => {
