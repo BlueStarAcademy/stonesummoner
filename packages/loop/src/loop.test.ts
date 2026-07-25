@@ -366,14 +366,24 @@ describe("game loop", () => {
 
   it("enhances gear and symbols, equips drops", () => {
     let save = createNewSave(0);
+    assert.ok(save.gear.weapon);
+    assert.ok(save.gear.robe);
     assert.ok(save.gear.accessory);
-    assert.equal(listGear(save).length, 2);
+    assert.equal(listGear(save).length, 4);
     assert.ok(listSymbols(save).length >= 2);
 
     const g = runEnhanceGear(save, "orb");
     assert.match(g.message, /장비 강화/);
     assert.equal(g.save.gear.orb.enhance, 1);
     save = g.save;
+
+    const w = runEnhanceGear(save, "weapon");
+    assert.match(w.message, /장비 강화/);
+    assert.equal(w.save.gear.weapon.enhance, 1);
+    assert.ok(
+      w.save.gear.weapon.skillPowerBonus > save.gear.weapon.skillPowerBonus,
+    );
+    save = w.save;
 
     const se = runEnhanceSymbol(save, "0");
     assert.match(se.message, /상징 강화/);

@@ -46,6 +46,8 @@ export interface SummonerState {
   manaMax: number;
   manaRegenPerTick: number;
   boardSense: number;
+  /** Multiplies 진문개방 skill coeff (from weapon). */
+  skillPowerBonus?: number;
 }
 
 export type BattlePhase =

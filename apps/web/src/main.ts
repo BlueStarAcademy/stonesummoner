@@ -28,6 +28,7 @@ import {
   getStage,
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
+  normalizeSummonerGear,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_IMPRINT_CRYSTAL_COST,
   symbolEnhanceManaCost,
@@ -257,7 +258,7 @@ function migrateSave(raw: unknown): PlayerSave | null {
     roster,
     party: p.party?.length ? p.party : base.party,
     scrolls: typeof p.scrolls === "number" ? p.scrolls : base.scrolls,
-    gear: p.gear ?? base.gear,
+    gear: normalizeSummonerGear(p.gear ?? base.gear),
     gloryPoints: typeof p.gloryPoints === "number" ? p.gloryPoints : 0,
     jinmunStones: typeof p.jinmunStones === "number" ? p.jinmunStones : 0,
     gloryLevels: p.gloryLevels ?? {},
@@ -689,16 +690,18 @@ function autoAllyTurn(): void {
   }
   if (battle.phase === "await_skill") {
     const hits = battle.canUseSummonerSkill(unit)
-      ? battle.useSkill({ useSummonerSkill: true })
-      : battle.useSkill({
-          skillIndex: pickAutoSkillIndex(unit, battle.units),
-        });
+      ? battle.useSkill({ summonerSkill: "open" })
+      : battle.canUseSummonerDeclare(unit)
+        ? battle.useSkill({ summonerSkill: "declare" })
+        : battle.useSkill({
+            skillIndex: pickAutoSkillIndex(unit, battle.units),
+          });
     pushDamageFloats(hits);
   }
   afterPlayerAction();
 }
 
-function castSkill(mode: "ult" | "smart" | number): void {
+function castSkill(mode: "ult" | "declare" | "smart" | number): void {
   if (!battle || battle.phase !== "await_skill" || autoMode) return;
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
@@ -711,7 +714,18 @@ function castSkill(mode: "ult" | "smart" | number): void {
       render();
       return;
     }
-    const hits = battle.useSkill({ useSummonerSkill: true });
+    const hits = battle.useSkill({ summonerSkill: "open" });
+    pushDamageFloats(hits);
+    afterPlayerAction();
+    return;
+  }
+  if (mode === "declare") {
+    if (!battle.canUseSummonerDeclare(unit)) {
+      flash("마나 50% 이상 필요합니다.");
+      render();
+      return;
+    }
+    const hits = battle.useSkill({ summonerSkill: "declare" });
     pushDamageFloats(hits);
     afterPlayerAction();
     return;
@@ -1597,8 +1611,11 @@ function renderSymbolLoadout(uid: string): string {
 }
 
 function renderEnhance(): string {
-  const acc = save.gear.accessory;
-  const orb = save.gear.orb;
+  const gear = normalizeSummonerGear(save.gear);
+  const weapon = gear.weapon;
+  const robe = gear.robe;
+  const acc = gear.accessory;
+  const orb = gear.orb;
   const body = `<div class="hub-panel">
     ${renderForgeReveal()}
     <p class="section-label">몬스터</p>
@@ -1665,6 +1682,20 @@ function renderEnhance(): string {
     </div>
     <p class="section-label">서머너 장비</p>
     <div class="stage-list">
+      <button type="button" class="stage-card" data-gear="weapon" ${weapon.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
+        <span class="stage-card-mark" aria-hidden="true">劍</span>
+        <span class="stage-card-body">
+          <strong>${describeGear(weapon)}</strong>
+          <small>스킬+${(weapon.skillPowerBonus * 100).toFixed(0)}% · ${weapon.enhance >= MAX_GEAR_ENHANCE ? "MAX" : `강화 −마나 ${gearEnhanceManaCost(weapon.enhance)}`}</small>
+        </span>
+      </button>
+      <button type="button" class="stage-card" data-gear="robe" ${robe.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
+        <span class="stage-card-mark" aria-hidden="true">袍</span>
+        <span class="stage-card-body">
+          <strong>${describeGear(robe)}</strong>
+          <small>HP+${robe.summonerHpBonus} DEF+${robe.summonerDefBonus} · ${robe.enhance >= MAX_GEAR_ENHANCE ? "MAX" : `강화 −마나 ${gearEnhanceManaCost(robe.enhance)}`}</small>
+        </span>
+      </button>
       <button type="button" class="stage-card" data-gear="accessory" ${acc.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
         <span class="stage-card-mark" aria-hidden="true">飾</span>
         <span class="stage-card-body">
@@ -2099,7 +2130,7 @@ function renderBattleTicker(): string {
   const lines = battle.log
     .filter(
       (l) =>
-        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수|묘수|맞마나|이중층/.test(l),
+        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|증폭선언|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수|묘수|맞마나|이중층/.test(l),
     )
     .slice(-3);
   if (!lines.length) {
@@ -2131,6 +2162,7 @@ function renderBattle(manaPct: number): string {
   const awaitSkill =
     battle.phase === "await_skill" && active?.team === "ally" && !autoMode;
   const canUlt = !!active && battle.canUseSummonerSkill(active);
+  const canDeclare = !!active && battle.canUseSummonerDeclare(active);
   const mission =
     battle.modules.moduleG && !battle.finishReason
       ? ` · 묘수 ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? "✓" : ""}`
@@ -2166,6 +2198,7 @@ function renderBattle(manaPct: number): string {
       }">
       ${renderSkillButtons(active, awaitSkill)}
       <button type="button" id="sk-ult" class="ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>진문개방</button>
+      <button type="button" id="sk-declare" class="declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}>증폭선언</button>
       <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>추천</button>
       ${
         battle.boards.length > 1 &&
@@ -2512,7 +2545,14 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-gear]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const slot = btn.dataset.gear === "orb" ? "orb" : "accessory";
+      const raw = btn.dataset.gear;
+      const slot =
+        raw === "weapon" ||
+        raw === "robe" ||
+        raw === "orb" ||
+        raw === "accessory"
+          ? raw
+          : "accessory";
       const r = runEnhanceGear(save, slot);
       save = r.save;
       persist();
@@ -2949,6 +2989,9 @@ function bind(): void {
     });
   });
   app.querySelector("#sk-ult")?.addEventListener("click", () => castSkill("ult"));
+  app.querySelector("#sk-declare")?.addEventListener("click", () =>
+    castSkill("declare"),
+  );
   app.querySelector("#sk-smart")?.addEventListener("click", () => castSkill("smart"));
 
   app.querySelector("#btn-speed")?.addEventListener("click", () => {

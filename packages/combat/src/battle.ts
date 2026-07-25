@@ -808,6 +808,13 @@ export class Battle {
     return sm.mana >= sm.manaMax;
   }
 
+  /** 증폭선언: half mana — short Amplify fix (no damage). */
+  canUseSummonerDeclare(unit: Unit): boolean {
+    if (unit.kind !== "summoner") return false;
+    const sm = this.summonerOf(unit.team);
+    return sm.mana >= sm.manaMax * 0.5;
+  }
+
   canUseSkill(unit: Unit, skillIndex: number): boolean {
     if (!unit.skills?.[skillIndex]) return skillIndex === 0;
     const cds = ensureSkillCd(unit);
@@ -815,12 +822,14 @@ export class Battle {
   }
 
   /**
-   * Skill phase. If useSummonerSkill and mana full, cast 진문개방 (AoE).
+   * Skill phase. Summoner skills: 진문개방 (full mana AoE) or 증폭선언 (half mana Amp).
    * Otherwise cast S1/S2/S3 (or fallback basic) on target.
    */
   useSkill(opts?: {
     targetId?: string;
     useSummonerSkill?: boolean;
+    /** "open" = 진문개방, "declare" = 증폭선언 */
+    summonerSkill?: "open" | "declare";
     skillIndex?: number;
   }): SkillResult[] {
     if (this.phase !== "await_skill" || !this.activeUnitId) return [];
@@ -832,17 +841,33 @@ export class Battle {
       unit.team === "ally" ? "enemy" : "ally",
     );
     const results: SkillResult[] = [];
-    const wantUlt = opts?.useSummonerSkill ?? false;
+    const summonerSkill =
+      opts?.summonerSkill ??
+      (opts?.useSummonerSkill ? "open" : undefined);
 
-    if (wantUlt && this.canUseSummonerSkill(unit)) {
+    if (summonerSkill === "declare" && this.canUseSummonerDeclare(unit)) {
+      const sm = this.summonerOf(unit.team);
+      const cost = sm.manaMax * 0.5;
+      sm.mana = Math.max(0, sm.mana - cost);
+      const power = 0.1 + (sm.skillPowerBonus ?? 0) * 0.05;
+      this.amplify = clampAmplify(
+        Math.max(this.amplify, 1.12) + power,
+        amplifyCapForPhase(this.circle.boardPhase),
+        this.powerGapCap,
+      );
+      this.log.push(
+        `${unit.name} 증폭선언 (Amp ${this.amplify.toFixed(2)})`,
+      );
+    } else if (summonerSkill === "open" && this.canUseSummonerSkill(unit)) {
       const sm = this.summonerOf(unit.team);
       sm.mana = 0;
       this.skillAmplifyBonus += 0.15;
       this.log.push(`${unit.name} 진문개방`);
+      const ultCoeff = 1.8 * (1 + (sm.skillPowerBonus ?? 0));
       for (const t of enemies) {
-        results.push(this.applyHit(unit, t, 1.8, true));
+        results.push(this.applyHit(unit, t, ultCoeff, true));
       }
-    } else {
+    } else if (!summonerSkill) {
       const skillIndex =
         opts?.skillIndex ?? pickAutoSkillIndex(unit, this.units);
       if (!this.canUseSkill(unit, skillIndex) && unit.skills?.[skillIndex]) {
@@ -864,6 +889,9 @@ export class Battle {
         }
         results.push(this.applyHit(unit, target, unit.skillCoeff, false));
       }
+    } else {
+      // Requested summoner skill but not ready — no-op
+      return [];
     }
 
     this.skillAmplifyBonus = 0;
@@ -1096,7 +1124,10 @@ export class Battle {
       this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
     }
     if (this.canUseSummonerSkill(unit)) {
-      return this.useSkill({ useSummonerSkill: true });
+      return this.useSkill({ summonerSkill: "open" });
+    }
+    if (this.canUseSummonerDeclare(unit)) {
+      return this.useSkill({ summonerSkill: "declare" });
     }
     return this.useSkill({
       skillIndex: pickAutoSkillIndex(unit, this.units),

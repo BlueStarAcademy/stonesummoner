@@ -33,6 +33,7 @@ export {
   describeGear,
   gearEnhanceManaCost,
   MAX_GEAR_ENHANCE,
+  normalizeSummonerGear,
 } from "./gear.js";
 export type { GearPiece, GearSlot, SummonerGear } from "./gear.js";
 export {

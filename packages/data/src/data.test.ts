@@ -14,6 +14,7 @@ import {
   grindSymbolPrefix,
   imprintSymbolMain,
   MONSTERS,
+  normalizeSummonerGear,
   rollSymbolDrop,
   SYMBOL_SETS,
   summarizeSymbolSets,
@@ -53,11 +54,45 @@ describe("phase1 data", () => {
     assert.equal(s.slot, 2);
   });
 
-  it("creates starter gear with two slots", () => {
+  it("creates starter gear with four slots", () => {
     const g = createStarterGear();
+    assert.equal(g.weapon.slot, "weapon");
+    assert.equal(g.robe.slot, "robe");
     assert.equal(g.accessory.slot, "accessory");
     assert.equal(g.orb.slot, "orb");
+    assert.ok(g.weapon.skillPowerBonus > 0);
+    assert.ok(g.robe.summonerHpBonus > 0);
     assert.ok(gearEnhanceManaCost(0) > 0);
+  });
+
+  it("normalizes legacy two-slot gear", () => {
+    const g = normalizeSummonerGear({
+      accessory: {
+        id: "acc",
+        slot: "accessory",
+        nameKo: "구회로",
+        enhance: 2,
+        manaRegenBonus: 0.2,
+        manaMaxBonus: 20,
+        boardSenseBonus: 0,
+        startManaPct: 0.07,
+      } as never,
+      orb: {
+        id: "orb",
+        slot: "orb",
+        nameKo: "구수정",
+        enhance: 1,
+        manaRegenBonus: 0,
+        manaMaxBonus: 0,
+        boardSenseBonus: 0.1,
+        startManaPct: 0,
+      } as never,
+    });
+    assert.equal(g.weapon.slot, "weapon");
+    assert.equal(g.robe.slot, "robe");
+    assert.equal(g.accessory.enhance, 2);
+    assert.equal(g.accessory.skillPowerBonus, 0);
+    assert.equal(g.weapon.skillPowerBonus > 0, true);
   });
 
   it("applies hwalro 2-set hp bonus", () => {

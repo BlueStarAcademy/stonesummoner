@@ -18,6 +18,7 @@ import {
   gearEnhanceManaCost,
   getGloryBuilding,
   getMonster,
+  normalizeSummonerGear,
   getStage,
   gloryBuffFromLevels,
   imprintSymbolMain,
@@ -176,23 +177,28 @@ function buildSummonerState(
   gear: SummonerGear,
   weakBoard = false,
 ): SummonerState {
+  const g = normalizeSummonerGear(gear);
+  const pieces = [g.weapon, g.robe, g.accessory, g.orb];
   const regen =
-    0.85 +
-    gear.accessory.manaRegenBonus +
-    gear.orb.manaRegenBonus;
+    0.85 + pieces.reduce((n, p) => n + (p.manaRegenBonus ?? 0), 0);
   const manaMax =
-    100 + gear.accessory.manaMaxBonus + gear.orb.manaMaxBonus;
+    100 + pieces.reduce((n, p) => n + (p.manaMaxBonus ?? 0), 0);
   const boardSense = weakBoard
     ? 0.02
-    : 0.05 + gear.accessory.boardSenseBonus + gear.orb.boardSenseBonus;
+    : 0.05 + pieces.reduce((n, p) => n + (p.boardSenseBonus ?? 0), 0);
   const startPct =
-    0.2 + gear.accessory.startManaPct + gear.orb.startManaPct;
+    0.2 + pieces.reduce((n, p) => n + (p.startManaPct ?? 0), 0);
+  const skillPowerBonus = pieces.reduce(
+    (n, p) => n + (p.skillPowerBonus ?? 0),
+    0,
+  );
   return {
     unitId,
     mana: Math.min(manaMax, manaMax * startPct),
     manaMax,
     manaRegenPerTick: regen,
     boardSense,
+    skillPowerBonus,
   };
 }
 
@@ -822,9 +828,12 @@ export function listRoster(save: PlayerSave): string[] {
 }
 
 export function listGear(save: PlayerSave): string[] {
+  const gear = normalizeSummonerGear(save.gear);
   return [
-    `장신구 ${describeGear(save.gear.accessory)} · regen+${save.gear.accessory.manaRegenBonus.toFixed(2)} max+${save.gear.accessory.manaMaxBonus}`,
-    `마법구 ${describeGear(save.gear.orb)} · sense+${save.gear.orb.boardSenseBonus.toFixed(2)}`,
+    `무기 ${describeGear(gear.weapon)} · 스킬+${(gear.weapon.skillPowerBonus * 100).toFixed(0)}%`,
+    `로브 ${describeGear(gear.robe)} · HP+${gear.robe.summonerHpBonus} DEF+${gear.robe.summonerDefBonus}`,
+    `장신구 ${describeGear(gear.accessory)} · regen+${gear.accessory.manaRegenBonus.toFixed(2)} max+${gear.accessory.manaMaxBonus}`,
+    `마법구 ${describeGear(gear.orb)} · sense+${gear.orb.boardSenseBonus.toFixed(2)}`,
   ];
 }
 
@@ -1064,22 +1073,23 @@ export function runEnhanceGear(
   save: PlayerSave,
   slot: GearSlot,
 ): LoopStepResult {
-  const piece = save.gear[slot];
+  const gearNorm = normalizeSummonerGear(save.gear);
+  const piece = gearNorm[slot];
   if (piece.enhance >= MAX_GEAR_ENHANCE) {
     return {
-      save,
+      save: { ...save, gear: gearNorm },
       message: `${describeGear(piece)} 이미 최대(+${MAX_GEAR_ENHANCE})`,
     };
   }
   const cost = gearEnhanceManaCost(piece.enhance);
   if (save.island.mana < cost) {
     return {
-      save,
+      save: { ...save, gear: gearNorm },
       message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
   const next = bumpGearEnhance(piece);
-  const gear = { ...save.gear, [slot]: next };
+  const gear = { ...gearNorm, [slot]: next };
   const island = { ...save.island, mana: save.island.mana - cost };
   return {
     save: { ...save, island, gear },
@@ -1304,7 +1314,7 @@ export function createStageBattle(
   save?: PlayerSave,
   opts?: { banEnemyIds?: string[]; rng?: () => number },
 ): Battle {
-  const gear = save?.gear ?? createStarterGear();
+  const gear = normalizeSummonerGear(save?.gear ?? createStarterGear());
   const allyMonsters: Unit[] = [];
   if (save?.party.length) {
     for (const uid of save.party.slice(0, 4)) {
@@ -1320,6 +1330,8 @@ export function createStageBattle(
   }
 
   const lvl = save?.island.summonerLevel ?? 1;
+  const robeHp = gear.robe.summonerHpBonus ?? 0;
+  const robeDef = gear.robe.summonerDefBonus ?? 0;
   const allySummonerUnit = makeUnit({
     id: "a-sum",
     name: `서머너 Lv.${lvl}`,
@@ -1327,9 +1339,17 @@ export function createStageBattle(
     kind: "summoner",
     element: "light",
     stats: {
-      hp: 500 + lvl * 20 + gear.accessory.manaMaxBonus * 2,
+      hp:
+        500 +
+        lvl * 20 +
+        gear.accessory.manaMaxBonus * 2 +
+        robeHp,
       atk: 85 + lvl * 3,
-      def: 42 + Math.floor(gear.accessory.enhance) + Math.floor(lvl / 2),
+      def:
+        42 +
+        Math.floor(gear.accessory.enhance) +
+        Math.floor(lvl / 2) +
+        robeDef,
       spd: 98 + Math.floor(lvl / 5),
       critRate: 15,
       critDmg: 50,

@@ -22,13 +22,18 @@ const sampleSkills = [
   },
 ];
 
-function summonerState(unitId: string, mana = 0): SummonerState {
+function summonerState(
+  unitId: string,
+  mana = 0,
+  skillPowerBonus = 0,
+): SummonerState {
   return {
     unitId,
     mana,
     manaMax: 100,
     manaRegenPerTick: 0.5,
     boardSense: 0,
+    skillPowerBonus,
   };
 }
 
@@ -111,6 +116,57 @@ describe("Battle flow", () => {
     assert.equal(hits.length, 1);
     assert.ok(hits.every((h) => h.usedSummonerSkill));
     assert.equal(b.allySummoner.mana, 0);
+  });
+
+  it("weapon skillPowerBonus raises 진문개방 damage", () => {
+    const base = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum", 100, 0),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    const buffed = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum", 100, 0.5),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const b of [base, buffed]) {
+      for (const u of b.units) {
+        u.atb = u.id === "a-sum" ? 100 : 0;
+      }
+      b.tickUntilReady();
+      b.autoStone();
+    }
+    const d0 = base.useSkill({ summonerSkill: "open" })[0]!.damage;
+    const d1 = buffed.useSkill({ summonerSkill: "open" })[0]!.damage;
+    assert.ok(d1 > d0);
+  });
+
+  it("amplify declare spends half mana and raises amplify", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum", 50),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) {
+      u.atb = u.id === "a-sum" ? 100 : 0;
+    }
+    b.tickUntilReady();
+    b.autoStone();
+    const unit = b.getUnit("a-sum")!;
+    assert.equal(b.canUseSummonerDeclare(unit), true);
+    assert.equal(b.canUseSummonerSkill(unit), false);
+    const before = b.amplify;
+    const hits = b.useSkill({ summonerSkill: "declare" });
+    assert.equal(hits.length, 0);
+    assert.ok(b.amplify > before);
+    assert.ok(b.allySummoner.mana < 50);
+    assert.match(b.log.join("\n"), /증폭선언/);
   });
 
   it("wiping enemy summons wins; summoners are not targets", () => {

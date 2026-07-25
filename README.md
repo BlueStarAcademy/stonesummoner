@@ -27,7 +27,7 @@ npm test
 | `collect` | 진액 연못 수집 |
 | `summon` | 소환진 소환 (소환서 1) |
 | `enhance 0` | 강화진 레벨업 (인덱스/uid) |
-| `gear` / `enh-gear acc\|orb` | 서머너 장비 현황·강화 |
+| `gear` / `enh-gear wpn\|robe\|acc\|orb` | 서머너 장비 현황·강화 |
 | `symbols` / `equip m s` / `enh-sym i` | 상징 목록·장착·강화 |
 | `roster` | 보유 몬스터 |
 | `party 0 1 2 3` | 파티 편성 |
