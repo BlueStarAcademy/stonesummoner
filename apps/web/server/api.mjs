@@ -45,7 +45,10 @@ export function mountApi(app, store) {
   app.get("/api/health", async (_req, res) => {
     try {
       const h = await store.health();
-      res.json(h);
+      res.json({
+        ...h,
+        ephemeral: store.mode === "memory",
+      });
     } catch (e) {
       res.status(503).json({ ok: false, db: store.mode, error: String(e) });
     }

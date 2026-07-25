@@ -71,6 +71,9 @@ npm test
 서버 기동 시 [`apps/web/sql/001_init.sql`](apps/web/sql/001_init.sql)을 적용합니다 (`users` / `sessions` / `saves`).  
 `DATABASE_URL`이 없으면 **인메모리** 스토어로 API가 동작합니다(로컬·데모용, 재시작 시 소멸).
 
+**Railway에서 `/api/save` 401이 반복되면** 거의 항상 Postgres 미연결입니다.  
+`/api/health`가 `{ "db": "memory" }`이면 플러그인 추가 후 웹 서비스 Variables에서 `DATABASE_URL` 참조를 확인하세요. 재배포 후 `{ "db": "postgres" }`가 되면 정상입니다.
+
 ## PWA
 
 프로덕션 빌드에 Service Worker + Web Manifest가 포함됩니다 (`vite-plugin-pwa`).  

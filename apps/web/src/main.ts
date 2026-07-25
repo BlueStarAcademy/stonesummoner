@@ -114,6 +114,10 @@ let sessionUser: SessionUser | null = null;
 const authUi = { pane: "menu" as "menu" | "login" | "register" };
 let bootReady = false;
 let cloudTimer: ReturnType<typeof setTimeout> | null = null;
+/** False after cloud 401 — keep local play, stop PUT spam. */
+let cloudSyncOk = true;
+let cloudAuthWarned = false;
+let ephemeralStore = false;
 
 let save: PlayerSave = createNewSave();
 let view: View = "auth";
@@ -144,11 +148,38 @@ async function apiJson<T>(
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
       ...init,
     });
+    if (res.status === 401) {
+      noteCloudUnauthorized();
+      return null;
+    }
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
     return null;
   }
+}
+
+function noteCloudUnauthorized(): void {
+  if (!sessionUser || sessionUser.id.startsWith("local-")) return;
+  if (!cloudSyncOk) return;
+  cloudSyncOk = false;
+  if (cloudTimer) {
+    clearTimeout(cloudTimer);
+    cloudTimer = null;
+  }
+  if (!cloudAuthWarned) {
+    cloudAuthWarned = true;
+    flash(
+      ephemeralStore
+        ? "서버가 메모리 DB입니다. Railway에 DATABASE_URL(Postgres)을 연결하세요. 로컬 세이브는 유지됩니다."
+        : "클라우드 세션이 만료되었습니다. 다시 로그인하면 동기화됩니다. (로컬 세이브 유지)",
+    );
+  }
+}
+
+function resetCloudSync(): void {
+  cloudSyncOk = true;
+  cloudAuthWarned = false;
 }
 
 function migrateSave(raw: unknown): PlayerSave | null {
@@ -206,6 +237,7 @@ function loadLocalSave(key = localSaveKey()): PlayerSave | null {
 }
 
 function scheduleCloudSave(): void {
+  if (!cloudSyncOk) return;
   if (!sessionUser || sessionUser.id.startsWith("local-")) return;
   if (cloudTimer) clearTimeout(cloudTimer);
   cloudTimer = setTimeout(() => {
@@ -226,6 +258,7 @@ async function enterWithUser(
   opts?: { demo?: boolean; fresh?: boolean },
 ): Promise<void> {
   sessionUser = user;
+  resetCloudSync();
   if (opts?.demo) {
     save = createDemoSave();
     localStorage.setItem(DEMO_SAVE_KEY, JSON.stringify(save));
@@ -678,6 +711,11 @@ function renderAuth(): string {
     <p class="auth-brand">StoneSummoner</p>
     <h2 class="auth-title">상징으로 키우고<br/>마법진에서 싸운다</h2>
     <p class="auth-copy">수집형 RPG 데모 — 홈에서 소환·강화 후 가렌숲으로 출정하세요.</p>
+    ${
+      ephemeralStore
+        ? `<p class="auth-warn">서버 DB가 메모리 모드입니다. 배포 환경에서는 Postgres(DATABASE_URL)를 연결하세요.</p>`
+        : ""
+    }
     <div class="auth-cta">
       <button type="button" id="auth-demo">데모 플레이 (테스트)</button>
       <button type="button" class="secondary" id="auth-login">로그인</button>
@@ -1709,6 +1747,8 @@ function bind(): void {
 }
 
 async function boot(): Promise<void> {
+  const health = await apiJson<{ ok?: boolean; db?: string }>("/api/health");
+  ephemeralStore = health?.db === "memory";
   const me = await apiJson<{ user: SessionUser }>("/api/me");
   bootReady = true;
   if (me?.user) {

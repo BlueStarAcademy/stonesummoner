@@ -9,6 +9,15 @@ const dist = path.join(__dirname, "dist");
 const port = Number(process.env.PORT) || 8080;
 
 const store = await createStore();
+if (
+  store.mode === "memory" &&
+  (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === "production")
+) {
+  console.error(
+    "[store] DATABASE_URL missing — sessions/saves are ephemeral. " +
+      "On Railway: add PostgreSQL and link DATABASE_URL to this service.",
+  );
+}
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "1mb" }));

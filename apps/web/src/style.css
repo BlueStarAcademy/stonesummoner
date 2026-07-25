@@ -807,6 +807,17 @@ button.unit-card {
   line-height: 1.45;
 }
 
+.auth-warn {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #a67c2a;
+  background: #2a2210;
+  color: #e8c56a;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 .auth-cta {
   display: flex;
   flex-direction: column;
