@@ -14,6 +14,7 @@ import {
   getStage,
   grindSymbolPrefix,
   imprintSymbolMain,
+  MAX_GEAR_ENHANCE,
   MONSTERS,
   normalizeSummonerGear,
   rollGearDrop,
@@ -89,6 +90,8 @@ describe("phase1 data", () => {
     assert.ok(g.cloak.leaderAtkBonus > 0);
     assert.ok(g.ring.leaderAtkBonus > 0);
     assert.ok(gearEnhanceManaCost(0) > 0);
+    assert.ok(gearEnhanceManaCost(14) > gearEnhanceManaCost(9));
+    assert.equal(MAX_GEAR_ENHANCE, 15);
     const sets = summarizeGearSets(g);
     assert.ok(sets.find((s) => s.setId === "assault")?.active2);
     assert.ok(sets.find((s) => s.setId === "guardian")?.active2);

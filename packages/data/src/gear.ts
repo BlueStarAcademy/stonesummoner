@@ -75,7 +75,7 @@ export interface SummonerGear {
   ring: GearPiece;
 }
 
-export const MAX_GEAR_ENHANCE = 9;
+export const MAX_GEAR_ENHANCE = 15;
 
 export const GEAR_SETS: GearSetDef[] = [
   {
@@ -356,8 +356,11 @@ export function gearLeaderAtkPct(gear: SummonerGear): number {
   return pieces + gearSetBonuses(g).leaderAtkBonus;
 }
 
+/** Mana cost to go from `enhance` → `enhance+1` (steeper past +9). */
 export function gearEnhanceManaCost(enhance: number): number {
-  return 100 + enhance * 60;
+  const base = 100 + enhance * 60;
+  const late = Math.max(0, enhance - 8) * 40;
+  return base + late;
 }
 
 /** Mana cost to re-affix a piece to another gear set. */
