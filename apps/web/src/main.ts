@@ -1874,7 +1874,7 @@ function renderEnhance(): string {
           .filter((s) => s.count > 0)
           .map(
             (s) =>
-              `${s.nameKo} ${s.count}${s.active4 ? " · 4세트" : s.active2 ? " · 2세트" : ""}`,
+              `${s.nameKo} ${s.count}${s.active6 ? " · 6세트" : s.active4 ? " · 4세트" : s.active2 ? " · 2세트" : ""}`,
           )
           .join(" · ") || "세트 조각 없음"
       }
@@ -2804,7 +2804,8 @@ function bind(): void {
         setRaw !== "mana" &&
         setRaw !== "assault" &&
         setRaw !== "guardian" &&
-        setRaw !== "sense"
+        setRaw !== "sense" &&
+        setRaw !== "tempo"
       ) {
         return;
       }

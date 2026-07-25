@@ -907,7 +907,7 @@ export function listGear(save: PlayerSave): string[] {
     .filter((s) => s.count > 0)
     .map(
       (s) =>
-        `${s.nameKo} ${s.count}${s.active4 ? "(4)" : s.active2 ? "(2)" : ""}`,
+        `${s.nameKo} ${s.count}${s.active6 ? "(6)" : s.active4 ? "(4)" : s.active2 ? "(2)" : ""}`,
     )
     .join(" · ");
   return [
@@ -1192,7 +1192,7 @@ export function runEnhanceGear(
   };
 }
 
-/** Re-affix a gear piece to another shallow set (마나/돌격/수호/감응). */
+/** Re-affix a gear piece to another shallow set. */
 export function runAffixGearSet(
   save: PlayerSave,
   slot: GearSlot,
@@ -1220,7 +1220,10 @@ export function runAffixGearSet(
   };
   const active = summarizeGearSets(gear)
     .filter((s) => s.active2)
-    .map((s) => `${s.nameKo}${s.active4 ? "4" : "2"}`)
+    .map(
+      (s) =>
+        `${s.nameKo}${s.active6 ? "6" : s.active4 ? "4" : "2"}`,
+    )
     .join("·");
   return {
     save: { ...save, island, gear },

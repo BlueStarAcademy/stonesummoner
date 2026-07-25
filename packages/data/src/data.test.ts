@@ -97,6 +97,30 @@ describe("phase1 data", () => {
     assert.ok(bonus.summonerHpBonus > 0);
   });
 
+  it("applies tempo set and 6pc bonuses", () => {
+    const g = createStarterGear();
+    for (const slot of [
+      "weapon",
+      "robe",
+      "accessory",
+      "orb",
+      "cloak",
+      "ring",
+    ] as const) {
+      g[slot] = { ...g[slot], setId: "tempo" };
+    }
+    const prog = summarizeGearSets(g).find((s) => s.setId === "tempo")!;
+    assert.equal(prog.count, 6);
+    assert.equal(prog.active2, true);
+    assert.equal(prog.active4, true);
+    assert.equal(prog.active6, true);
+    const bonus = gearSetBonuses(g);
+    assert.ok(bonus.startManaPct >= 0.08);
+    assert.ok(bonus.skillPowerBonus >= 0.03);
+    assert.ok(bonus.manaRegenBonus >= 0.05);
+    assert.ok(bonus.leaderAtkBonus >= 0.008);
+  });
+
   it("normalizes legacy two-slot gear", () => {
     const g = normalizeSummonerGear({
       accessory: {

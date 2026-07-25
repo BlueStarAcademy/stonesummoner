@@ -9,7 +9,7 @@ export type GearSlot =
   | "ring";
 
 /** Shallow gear sets — do not compete with symbol set depth. */
-export type GearSetId = "mana" | "assault" | "guardian" | "sense";
+export type GearSetId = "mana" | "assault" | "guardian" | "sense" | "tempo";
 
 export interface GearSetDef {
   id: GearSetId;
@@ -18,6 +18,8 @@ export interface GearSetDef {
   bonus2: Partial<GearSetBonus>;
   /** Extra bonus when wearing 4+ pieces (stacks on top of 2pc). */
   bonus4: Partial<GearSetBonus>;
+  /** Full 6-slot mono-set (stacks on 2+4). */
+  bonus6: Partial<GearSetBonus>;
 }
 
 export interface GearSetBonus {
@@ -37,6 +39,7 @@ export interface GearSetProgress {
   count: number;
   active2: boolean;
   active4: boolean;
+  active6: boolean;
 }
 
 export interface GearPiece {
@@ -80,24 +83,35 @@ export const GEAR_SETS: GearSetDef[] = [
     nameKo: "진액",
     bonus2: { manaRegenBonus: 0.08, manaMaxBonus: 8 },
     bonus4: { startManaPct: 0.05, manaMaxBonus: 12 },
+    bonus6: { manaRegenBonus: 0.06, manaMaxBonus: 16 },
   },
   {
     id: "assault",
     nameKo: "돌격",
     bonus2: { skillPowerBonus: 0.04, leaderAtkBonus: 0.005 },
     bonus4: { skillPowerBonus: 0.06, leaderAtkBonus: 0.01 },
+    bonus6: { skillPowerBonus: 0.05, leaderAtkBonus: 0.012 },
   },
   {
     id: "guardian",
     nameKo: "수호",
     bonus2: { summonerHpBonus: 40, summonerDefBonus: 4 },
     bonus4: { summonerHpBonus: 60, summonerDefBonus: 6 },
+    bonus6: { summonerHpBonus: 50, summonerDefBonus: 8 },
   },
   {
     id: "sense",
     nameKo: "감응",
     bonus2: { boardSenseBonus: 0.05 },
     bonus4: { boardSenseBonus: 0.08, manaRegenBonus: 0.04 },
+    bonus6: { boardSenseBonus: 0.06, startManaPct: 0.04 },
+  },
+  {
+    id: "tempo",
+    nameKo: "진속",
+    bonus2: { startManaPct: 0.04, boardSenseBonus: 0.03 },
+    bonus4: { startManaPct: 0.04, skillPowerBonus: 0.03 },
+    bonus6: { manaRegenBonus: 0.05, leaderAtkBonus: 0.008 },
   },
 ];
 
@@ -147,7 +161,8 @@ export function isGearSetId(raw: string): raw is GearSetId {
     raw === "mana" ||
     raw === "assault" ||
     raw === "guardian" ||
-    raw === "sense"
+    raw === "sense" ||
+    raw === "tempo"
   );
 }
 
@@ -313,11 +328,12 @@ export function summarizeGearSets(gear: SummonerGear): GearSetProgress[] {
       count,
       active2: count >= 2,
       active4: count >= 4,
+      active6: count >= 6,
     };
   });
 }
 
-/** Aggregate 2pc/4pc set bonuses for equipped gear. */
+/** Aggregate 2/4/6pc set bonuses for equipped gear. */
 export function gearSetBonuses(gear: SummonerGear): GearSetBonus {
   const out = emptyBonus();
   for (const prog of summarizeGearSets(gear)) {
@@ -325,6 +341,7 @@ export function gearSetBonuses(gear: SummonerGear): GearSetBonus {
     const def = getGearSet(prog.setId)!;
     mergeBonus(out, def.bonus2);
     if (prog.active4) mergeBonus(out, def.bonus4);
+    if (prog.active6) mergeBonus(out, def.bonus6);
   }
   return out;
 }
