@@ -297,7 +297,8 @@ export class Battle {
       this.regenMana();
       for (const u of this.units) {
         if (!u.alive) continue;
-        u.atb += u.stats.spd * 0.1;
+        const spdMul = (u.spdBoostTurns ?? 0) > 0 ? 1.4 : 1;
+        u.atb += u.stats.spd * 0.1 * spdMul;
       }
       const ready = this.units
         .filter((u) => u.alive && u.atb >= ATB_THRESHOLD)
@@ -305,6 +306,9 @@ export class Battle {
       if (ready[0]) {
         const unit = ready[0];
         unit.atb = 0;
+        if ((unit.spdBoostTurns ?? 0) > 0) {
+          unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) - 1;
+        }
         tickSkillCooldowns(this.units);
         this.activeUnitId = unit.id;
         this.phase = "await_stone";
@@ -419,6 +423,19 @@ export class Battle {
         unit.hp = Math.min(unit.stats.hp, unit.hp + heal);
         this.log.push(`스톤패시브: ${unit.name} 회복 +${heal}`);
       }
+      return;
+    }
+    if (token.id === "stride_sand") {
+      let boosted = 0;
+      for (const u of this.units) {
+        if (!u.alive || u.team !== unit.team || u.kind !== "monster") continue;
+        u.atb = Math.min(ATB_THRESHOLD, u.atb + 35);
+        boosted++;
+      }
+      unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) + 2;
+      this.log.push(
+        `${unit.name} 획득 ${name} (아군 ATB↑×${boosted} · 공속 2행동)`,
+      );
       return;
     }
     // capture_magnet

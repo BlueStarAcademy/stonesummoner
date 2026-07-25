@@ -959,6 +959,9 @@ main {
 .board button.cell.token-capture_magnet .token-mark {
   background: #c97be8;
 }
+.board button.cell.token-stride_sand .token-mark {
+  background: #d4c35a;
+}
 
 .battle-stage-name {
   font-family: Cinzel, "Times New Roman", Georgia, serif;

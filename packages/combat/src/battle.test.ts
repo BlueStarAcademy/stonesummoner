@@ -359,6 +359,38 @@ describe("Battle flow", () => {
     assert.match(b.log.join("\n"), /사석자석/);
   });
 
+  it("stride sand boosts ally ATB and grants spd turns", () => {
+    const units = [
+      ...roster(),
+      makeUnit({
+        id: "a-m2",
+        name: "AllyMon2",
+        team: "ally",
+        kind: "monster",
+        element: "wind",
+        stats: { hp: 280, atk: 100, def: 30, spd: 95, critRate: 15, critDmg: 55 },
+        skillCoeff: 1.1,
+        skills: sampleSkills,
+      }),
+    ];
+    const b = new Battle({
+      boardSize: 5,
+      units,
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 10;
+    b.tickUntilReady();
+    b.tokens = [{ id: "stride_sand", x: 2, y: 1 }];
+    const ally = b.getUnit("a-m2")!;
+    const before = ally.atb;
+    assert.equal(b.playStone({ x: 2, y: 1 }), true);
+    assert.ok(ally.atb >= before + 30);
+    assert.equal(b.getUnit("a-m1")!.spdBoostTurns, 2);
+    assert.match(b.log.join("\n"), /행마모래/);
+  });
+
   it("blocks skill while on cooldown", () => {
     const b = new Battle({
       boardSize: 5,

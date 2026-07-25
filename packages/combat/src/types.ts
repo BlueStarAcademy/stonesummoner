@@ -36,6 +36,8 @@ export interface Unit {
   critDmgBonus?: number;
   /** Absorb incoming damage before HP. */
   shieldHp?: number;
+  /** Remaining ATB ticks with 행마모래 SPD multiplier. */
+  spdBoostTurns?: number;
   /** Stub: ignore next damaging hit (축 연결). */
   cutImmune?: number;
 }

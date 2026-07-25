@@ -1,6 +1,10 @@
-/** Phase 1 board tokens — 치명부적 · 실드핵 · 사석자석 */
+/** Phase 1 board tokens — 치명부적 · 실드핵 · 사석자석 · 행마모래 */
 
-export type BoardItemId = "crit_charm" | "shield_core" | "capture_magnet";
+export type BoardItemId =
+  | "crit_charm"
+  | "shield_core"
+  | "capture_magnet"
+  | "stride_sand";
 
 export interface BoardItemDef {
   id: BoardItemId;
@@ -11,6 +15,7 @@ export const BOARD_ITEMS: BoardItemDef[] = [
   { id: "crit_charm", nameKo: "치명부적" },
   { id: "shield_core", nameKo: "실드핵" },
   { id: "capture_magnet", nameKo: "사석자석" },
+  { id: "stride_sand", nameKo: "행마모래" },
 ];
 
 export interface BoardToken {
@@ -32,10 +37,13 @@ export function weightedItemId(
   rng: () => number,
 ): BoardItemId {
   const roll = rng();
-  const magnetWeight = 0.28 + Math.min(0.25, boardPhase * 0.08);
+  const magnetWeight = 0.22 + Math.min(0.2, boardPhase * 0.07);
+  const critWeight = 0.28;
+  const shieldWeight = 0.25;
   if (roll < magnetWeight) return "capture_magnet";
-  if (roll < magnetWeight + 0.36) return "crit_charm";
-  return "shield_core";
+  if (roll < magnetWeight + critWeight) return "crit_charm";
+  if (roll < magnetWeight + critWeight + shieldWeight) return "shield_core";
+  return "stride_sand";
 }
 
 export function shouldSpawnItem(
