@@ -19,6 +19,7 @@ import {
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runUnequipSymbol,
   runEvolve,
   runFusion,
   runGrindSymbol,
@@ -398,6 +399,9 @@ describe("game loop", () => {
     const eq = runEquipSymbol(save, "1", String(save.symbols.length - 1));
     assert.match(eq.message, /장착/);
     assert.equal(eq.save.roster[1]!.symbolSlots[2], "extra_s3");
+    const uq = runUnequipSymbol(eq.save, "1", 3);
+    assert.match(uq.message, /해제/);
+    assert.equal(uq.save.roster[1]!.symbolSlots[2], null);
   });
 
   it("lists roster", () => {

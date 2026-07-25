@@ -1342,6 +1342,138 @@ button.unit-card {
   font-size: 0.9rem;
 }
 
+.roster-list li.is-fresh {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px #c9a22755;
+}
+
+.summon-reveal {
+  margin-top: 14px;
+  padding: 18px 14px;
+  border-radius: 16px;
+  text-align: center;
+  border: 1px solid #c9a22788;
+  background: linear-gradient(165deg, #2a2140ee, #120e1cf2);
+  animation: building-in 0.55s ease-out both;
+  box-shadow: inset 0 1px 0 #c9a22733, 0 8px 24px #0006;
+}
+
+.summon-reveal-kicker {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  color: #c4b8d4;
+  text-transform: uppercase;
+}
+
+.summon-reveal-name {
+  margin: 8px 0 4px;
+  font-family: Cinzel, "Noto Serif KR", Georgia, serif;
+  font-size: 1.25rem;
+  color: #f5e6b8;
+  letter-spacing: 0.04em;
+}
+
+.summon-reveal-meta {
+  margin: 0 0 12px;
+  color: #a89bb8;
+  font-size: 0.85rem;
+}
+
+.summon-reveal.el-fire { box-shadow: inset 0 0 0 1px #c45c5c66, 0 8px 24px #c45c5c22; }
+.summon-reveal.el-water { box-shadow: inset 0 0 0 1px #4a7ec866, 0 8px 24px #4a7ec822; }
+.summon-reveal.el-wind { box-shadow: inset 0 0 0 1px #3d9a6a66, 0 8px 24px #3d9a6a22; }
+.summon-reveal.el-light { box-shadow: inset 0 0 0 1px #e8d48a66, 0 8px 24px #e8d48a22; }
+.summon-reveal.el-dark { box-shadow: inset 0 0 0 1px #7b6cff66, 0 8px 24px #7b6cff22; }
+
+.equip-picker {
+  margin: 0 0 14px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--gold);
+  background: #120e1cee;
+  animation: home-fade 0.4s ease-out both;
+}
+
+.equip-picker-title {
+  margin: 0 0 4px;
+  font-family: Cinzel, Georgia, serif;
+  letter-spacing: 0.06em;
+  color: #e8d9a8;
+  font-size: 0.95rem;
+}
+
+.sym-row.is-picking {
+  outline: 1px solid #c9a22788;
+  border-radius: 12px;
+}
+
+.sym-eq.active {
+  border-color: var(--gold);
+  color: #f5e6b8;
+}
+
+.slot-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  margin: 8px 0 6px;
+}
+
+.slot-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 4px 2px;
+  border-radius: 8px;
+  border: 1px dashed #5a4e72;
+  background: #120e1caa;
+  font-size: 0.62rem;
+  color: #a89bb8;
+}
+
+button.slot-cell {
+  cursor: pointer;
+  color: inherit;
+}
+
+.slot-cell.filled {
+  border-style: solid;
+  border-color: var(--gold);
+  background: linear-gradient(165deg, #3a3018cc, #1a140acc);
+  color: #f5e6b8;
+}
+
+.slot-cell.empty {
+  opacity: 0.7;
+}
+
+.slot-num {
+  font-family: Cinzel, Georgia, serif;
+  font-weight: 700;
+  font-size: 0.68rem;
+  color: #e8d9a8;
+}
+
+.slot-cell.empty .slot-num {
+  color: #7a6e90;
+}
+
+.slot-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px #c9a22755;
+}
+
 .stage-list button:disabled {
   opacity: 0.55;
 }

@@ -1247,6 +1247,37 @@ export function runEquipSymbol(
   };
 }
 
+/** Unequip symbol from a monster slot (1–6). */
+export function runUnequipSymbol(
+  save: PlayerSave,
+  monsterRef: string,
+  slot: number,
+): LoopStepResult {
+  const owned = resolveOwned(save, monsterRef);
+  if (!owned) return { save, message: `몬스터 없음: ${monsterRef}` };
+  if (slot < 1 || slot > 6) {
+    return { save, message: "슬롯은 1~6입니다" };
+  }
+  const slotIdx = slot - 1;
+  const slots = [...(owned.symbolSlots ?? emptySymbolSlots())];
+  const symId = slots[slotIdx];
+  if (!symId) {
+    return { save, message: `슬롯 ${slot}이(가) 비어 있습니다` };
+  }
+  const sym = save.symbols.find((s) => s.id === symId);
+  slots[slotIdx] = null;
+  const roster = save.roster.map((m) =>
+    m.uid === owned.uid ? { ...m, symbolSlots: slots } : m,
+  );
+  const updated = roster.find((m) => m.uid === owned.uid)!;
+  return {
+    save: { ...save, roster },
+    message: sym
+      ? `해제: ${describeOwned(updated)} ← ${describeSymbol(sym)}`
+      : `해제: ${describeOwned(updated)} 슬롯 ${slot}`,
+  };
+}
+
 export function createStageBattle(
   stage: StageDef,
   save?: PlayerSave,

@@ -31,6 +31,7 @@ export {
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runUnequipSymbol,
   runEvolve,
   runFusion,
   runGrindSymbol,

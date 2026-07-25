@@ -72,6 +72,7 @@ import {
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runUnequipSymbol,
   runEvolve,
   runFusion,
   runGrindSymbol,
@@ -140,6 +141,10 @@ let stoneSuggestions: StoneSuggestion[] = [];
 let selectedTargetId: string | null = null;
 let lastReward: BattleReward | null = null;
 let lastScrollGain = 0;
+/** Most recently summoned monster uid (summon reveal card). */
+let lastSummonUid: string | null = null;
+/** Symbol index awaiting monster pick for equip. */
+let equipPickSymIndex: number | null = null;
 let toast = "";
 let battleSpeed: 1 | 2 | 3 = 1;
 let autoMode = false;
@@ -1146,10 +1151,24 @@ function renderParty(): string {
 }
 
 function renderSummon(): string {
-  const last = save.roster[save.roster.length - 1];
-  return `<div class="panel">
+  const revealed = lastSummonUid
+    ? save.roster.find((m) => m.uid === lastSummonUid)
+    : null;
+  const revDef = revealed ? getMonster(revealed.monsterId) : null;
+  const reveal = revealed
+    ? `<div class="summon-reveal el-${revDef?.element ?? "dark"}" aria-live="polite">
+        <p class="summon-reveal-kicker">소환 성공</p>
+        <p class="summon-reveal-name">${describeOwned(revealed)}</p>
+        <p class="summon-reveal-meta">${revDef?.element ?? "?"} · ${
+          save.party.includes(revealed.uid) ? "파티 편성됨" : "보유"
+        }</p>
+        <button type="button" class="secondary" id="btn-summon-dismiss">확인</button>
+      </div>`
+    : "";
+  return `<div class="summon-screen panel">
     <p class="muted">소환진 · 소환서 1장 소모</p>
-    <button type="button" class="primary full" id="btn-summon">소환하기 (${save.scrolls})</button>
+    <button type="button" class="auth-btn-primary full" id="btn-summon" ${save.scrolls < 1 ? "disabled" : ""}>소환하기 (${save.scrolls})</button>
+    ${reveal}
     <p class="muted" style="margin-top:12px">최근 보유</p>
     <ul class="roster-list">
       ${save.roster
@@ -1157,13 +1176,40 @@ function renderSummon(): string {
         .reverse()
         .map((m) => {
           const def = getMonster(m.monsterId);
-          return `<li>${describeOwned(m)}${def ? ` · ${def.element}` : ""}</li>`;
+          const fresh = m.uid === lastSummonUid ? " class=\"is-fresh\"" : "";
+          return `<li${fresh}>${describeOwned(m)}${def ? ` · ${def.element}` : ""}</li>`;
         })
         .join("")}
     </ul>
-    ${last ? "" : ""}
     <button type="button" class="secondary full" data-nav="home">섬으로</button>
   </div>`;
+}
+
+function symbolWearer(symId: string): string | null {
+  const mon = save.roster.find((m) =>
+    (m.symbolSlots ?? []).includes(symId),
+  );
+  return mon ? describeOwned(mon) : null;
+}
+
+function renderSymbolLoadout(uid: string): string {
+  const mon = save.roster.find((m) => m.uid === uid);
+  if (!mon) return "";
+  const slots = mon.symbolSlots ?? [null, null, null, null, null, null];
+  const cells = [0, 1, 2, 3, 4, 5]
+    .map((i) => {
+      const id = slots[i];
+      const sym = id ? save.symbols.find((s) => s.id === id) : null;
+      if (sym) {
+        return `<button type="button" class="slot-cell filled" data-unequip-uid="${uid}" data-unequip-slot="${i + 1}" title="탭하여 해제">
+          <span class="slot-num">${i + 1}</span>
+          <span class="slot-label">${sym.setId}</span>
+        </button>`;
+      }
+      return `<span class="slot-cell empty"><span class="slot-num">${i + 1}</span><span class="slot-label">빈칸</span></span>`;
+    })
+    .join("");
+  return `<div class="slot-row" aria-label="상징 슬롯">${cells}</div>`;
 }
 
 function renderEnhance(): string {
@@ -1223,6 +1269,7 @@ function renderEnhance(): string {
                 ${evoHint}
               </button>
             </div>
+            ${renderSymbolLoadout(m.uid)}
             <div class="skill-up-row">${skillBtns}</div>
           </div>`;
         })
@@ -1240,16 +1287,41 @@ function renderEnhance(): string {
       </button>
     </div>
     <p class="section-label">상징</p>
+    ${
+      equipPickSymIndex != null && save.symbols[equipPickSymIndex]
+        ? `<div class="equip-picker" aria-live="polite">
+            <p class="equip-picker-title">장착 대상 선택</p>
+            <p class="muted">${describeSymbol(save.symbols[equipPickSymIndex]!)}</p>
+            <div class="stage-list">
+              ${save.roster
+                .map((m) => {
+                  const inParty = save.party.includes(m.uid);
+                  const slots = m.symbolSlots ?? [];
+                  const slot = save.symbols[equipPickSymIndex!]!.slot - 1;
+                  const occupied = slots[slot] ? " · 슬롯 교체" : "";
+                  return `<button type="button" data-equip-to="${m.uid}">
+                    <strong>${describeOwned(m)}${inParty ? " · 파티" : ""}</strong><br/>
+                    <small class="muted">슬롯 ${save.symbols[equipPickSymIndex!]!.slot}${occupied}</small>
+                  </button>`;
+                })
+                .join("")}
+            </div>
+            <button type="button" class="secondary full" id="btn-equip-cancel">취소</button>
+          </div>`
+        : ""
+    }
     <div class="stage-list">
       ${save.symbols
         .map((s, i) => {
           const maxed = s.enhance >= MAX_SYMBOL_ENHANCE;
           const imprintable = canImprintSymbol(s);
           const grindable = canGrindSymbol(s);
-          return `<div class="sym-row sym-row-actions">
+          const picking = equipPickSymIndex === i;
+          const worn = symbolWearer(s.id);
+          return `<div class="sym-row sym-row-actions${picking ? " is-picking" : ""}">
             <button type="button" data-sym="${i}" ${maxed ? "disabled" : ""}>
-              <strong>${describeSymbol(s)}</strong><br/>
-              <small class="muted">${maxed ? "최대" : `강화 −마나 ${symbolEnhanceManaCost(s.enhance)}`}</small>
+              <strong>${worn ? "E · " : ""}${describeSymbol(s)}</strong><br/>
+              <small class="muted">${worn ? `착용 ${worn}` : "미장착"}${maxed ? " · 최대" : ` · 강화 −마나 ${symbolEnhanceManaCost(s.enhance)}`}</small>
             </button>
             <button type="button" class="secondary" data-grind="${i}" ${grindable ? "" : "disabled"}>
               연마 −${SYMBOL_GRIND_MANA_COST}
@@ -1257,7 +1329,7 @@ function renderEnhance(): string {
             <button type="button" class="secondary" data-imprint="${i}" ${imprintable ? "" : "disabled"}>
               ${imprintable ? `각인 −${SYMBOL_IMPRINT_CRYSTAL_COST}크` : "각인×"}
             </button>
-            <button type="button" class="secondary sym-eq" data-equip-sym="${i}">장착</button>
+            <button type="button" class="secondary sym-eq${picking ? " active" : ""}" data-equip-sym="${i}">${picking ? "선택중" : "장착"}</button>
             <button type="button" class="secondary" data-sell-sym="${i}">판매 +${symbolSellMana(s.enhance)}</button>
           </div>`;
         })
@@ -1821,10 +1893,18 @@ function bind(): void {
   });
 
   app.querySelector("#btn-summon")?.addEventListener("click", () => {
+    const before = new Set(save.roster.map((m) => m.uid));
     const r = runSummon(save);
     save = r.save;
     persist();
+    const fresh = save.roster.find((m) => !before.has(m.uid));
+    lastSummonUid = fresh?.uid ?? null;
     flash(r.message);
+    render();
+  });
+
+  app.querySelector("#btn-summon-dismiss")?.addEventListener("click", () => {
+    lastSummonUid = null;
     render();
   });
 
@@ -1996,9 +2076,36 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-equip-sym]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const idx = btn.dataset.equipSym!;
-      const mon = save.party[0] ?? save.roster[0]?.uid ?? "0";
-      const r = runEquipSymbol(save, mon, idx);
+      const idx = Number(btn.dataset.equipSym);
+      if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+      equipPickSymIndex = equipPickSymIndex === idx ? null : idx;
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-equip-to]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (equipPickSymIndex == null) return;
+      const uid = btn.dataset.equipTo!;
+      const r = runEquipSymbol(save, uid, String(equipPickSymIndex));
+      save = r.save;
+      persist();
+      equipPickSymIndex = null;
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelector("#btn-equip-cancel")?.addEventListener("click", () => {
+    equipPickSymIndex = null;
+    render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-unequip-uid]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.unequipUid!;
+      const slot = Number(btn.dataset.unequipSlot);
+      const r = runUnequipSymbol(save, uid, slot);
       save = r.save;
       persist();
       flash(r.message);
