@@ -23,10 +23,14 @@ import {
   getGearSet,
   getGloryBuilding,
   getMonster,
+  getSkillTreeNode,
+  isSkillTreeNodeId,
+  canUnlockSkillNode,
   MAX_GEAR_BAG,
   normalizeSummonerGear,
   rollGearDrop,
   rollSymbolDrop,
+  skillTreeBonuses,
   summarizeGearSets,
   getStage,
   gloryBuffFromLevels,
@@ -45,6 +49,7 @@ import {
   type GearSetId,
   type GearSlot,
   type GloryBuildingId,
+  type SkillTreeNodeId,
   type StageDef,
   type SummonerGear,
   type SymbolInstance,
@@ -116,6 +121,8 @@ export interface PlayerSave {
   gearBag: GearPiece[];
   /** Summoner awaken/transcend stub (0..MAX_SUMMONER_AWAKEN). */
   summonerAwaken: number;
+  /** Unlocked summoner skill-tree node ids. */
+  skillTree: string[];
   /** Phase 2: arena glory currency. */
   gloryPoints: number;
   /** Phase 2: magic-circle trial tokens. */
@@ -213,35 +220,42 @@ function buildSummonerState(
   gear: SummonerGear,
   weakBoard = false,
   awaken = 0,
+  skillTree: string[] = [],
 ): SummonerState {
   const g = normalizeSummonerGear(gear);
   const pieces = [g.weapon, g.robe, g.accessory, g.orb, g.cloak, g.ring];
   const sets = gearSetBonuses(g);
+  const tree = skillTreeBonuses(skillTree);
   const a = Math.max(0, awaken);
   const regen =
     0.85 +
     pieces.reduce((n, p) => n + (p.manaRegenBonus ?? 0), 0) +
     sets.manaRegenBonus +
+    tree.manaRegenBonus +
     a * 0.06;
   const manaMax =
     100 +
     pieces.reduce((n, p) => n + (p.manaMaxBonus ?? 0), 0) +
     sets.manaMaxBonus +
+    tree.manaMaxBonus +
     a * 8;
   const boardSense = weakBoard
     ? 0.02
     : 0.05 +
       pieces.reduce((n, p) => n + (p.boardSenseBonus ?? 0), 0) +
       sets.boardSenseBonus +
+      tree.boardSenseBonus +
       a * 0.015;
   const startPct =
     0.2 +
     pieces.reduce((n, p) => n + (p.startManaPct ?? 0), 0) +
     sets.startManaPct +
+    tree.startManaPct +
     a * 0.01;
   const skillPowerBonus =
     pieces.reduce((n, p) => n + (p.skillPowerBonus ?? 0), 0) +
     sets.skillPowerBonus +
+    tree.skillPowerBonus +
     a * 0.025;
   return {
     unitId,
@@ -250,6 +264,11 @@ function buildSummonerState(
     manaRegenPerTick: regen,
     boardSense,
     skillPowerBonus,
+    declareCostMul: tree.declareCostMul,
+    dualCostMul: tree.dualCostMul,
+    cleanCostMul: tree.cleanCostMul,
+    declarePowerBonus: tree.declarePowerBonus,
+    cleanAmpBonus: tree.cleanAmpBonus,
   };
 }
 
@@ -352,6 +371,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     gear,
     gearBag: [],
     summonerAwaken: 0,
+    skillTree: [],
     gloryPoints: 0,
     jinmunStones: 0,
     gloryLevels: {},
@@ -1293,6 +1313,51 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
   };
 }
 
+/** Unlock one summoner skill-tree node. */
+export function runUnlockSkillNode(
+  save: PlayerSave,
+  nodeId: string,
+): LoopStepResult {
+  if (!isSkillTreeNodeId(nodeId)) {
+    return { save, message: `알 수 없는 스킬 노드: ${nodeId}` };
+  }
+  const unlocked = [...(save.skillTree ?? [])];
+  const node = getSkillTreeNode(nodeId)!;
+  const gate = canUnlockSkillNode(
+    unlocked,
+    nodeId as SkillTreeNodeId,
+    save.island.summonerLevel,
+  );
+  if (!gate.ok) {
+    return { save, message: gate.reason };
+  }
+  if (save.island.mana < node.manaCost) {
+    return {
+      save,
+      message: `마나 부족 (필요 ${node.manaCost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  if (save.island.crystal < node.crystalCost) {
+    return {
+      save,
+      message: `크리스탈 부족 (필요 ${node.crystalCost}, 보유 ${save.island.crystal})`,
+    };
+  }
+  unlocked.push(nodeId);
+  return {
+    save: {
+      ...save,
+      skillTree: unlocked,
+      island: {
+        ...save.island,
+        mana: save.island.mana - node.manaCost,
+        crystal: save.island.crystal - node.crystalCost,
+      },
+    },
+    message: `스킬 트리: ${node.nameKo} 해금 (−마나 ${node.manaCost}${node.crystalCost > 0 ? ` · −크리스탈 ${node.crystalCost}` : ""})`,
+  };
+}
+
 export function runEnhanceSymbol(
   save: PlayerSave,
   idOrIndex: string,
@@ -1527,16 +1592,21 @@ export function createStageBattle(
 
   const lvl = save?.island.summonerLevel ?? 1;
   const awaken = save?.summonerAwaken ?? 0;
+  const treeIds = save?.skillTree ?? [];
+  const tree = skillTreeBonuses(treeIds);
   const robeHp =
     (gear.robe.summonerHpBonus ?? 0) +
     (gear.cloak.summonerHpBonus ?? 0) +
-    gearSetBonuses(gear).summonerHpBonus;
+    gearSetBonuses(gear).summonerHpBonus +
+    tree.summonerHpBonus;
   const robeDef =
     (gear.robe.summonerDefBonus ?? 0) +
     (gear.cloak.summonerDefBonus ?? 0) +
     gearSetBonuses(gear).summonerDefBonus;
   const leaderPct =
-    awakenLeaderAtkPct(awaken) + gearLeaderAtkPct(gear);
+    awakenLeaderAtkPct(awaken) +
+    gearLeaderAtkPct(gear) +
+    tree.leaderAtkBonus;
   if (leaderPct > 0) {
     for (const u of allyMonsters) {
       u.stats = {
@@ -1611,12 +1681,13 @@ export function createStageBattle(
   return new Battle({
     boardSize: stage.boardSize,
     units: [...allyUnits, ...enemyUnits],
-    allySummoner: buildSummonerState("a-sum", gear, false, awaken),
+    allySummoner: buildSummonerState("a-sum", gear, false, awaken, treeIds),
     enemySummoner: buildSummonerState(
       "e-sum",
       createStarterGear(),
       true,
       0,
+      [],
     ),
     powerGapAmplifyCap: powerGapCap,
     totalWaves,
@@ -1784,6 +1855,7 @@ export function applyRewards(
       guildRaidBest,
       seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
       summonerAwaken: save.summonerAwaken ?? 0,
+      skillTree: save.skillTree ?? [],
     },
     reward: {
       mana: manaGain,
@@ -1847,6 +1919,7 @@ export function runSortie(
     seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
     summonerAwaken: save.summonerAwaken ?? 0,
     gearBag: save.gearBag ?? [],
+    skillTree: save.skillTree ?? [],
   };
   const battle = createStageBattle(stage, mid, {
     banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,

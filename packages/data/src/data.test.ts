@@ -18,6 +18,8 @@ import {
   normalizeSummonerGear,
   rollGearDrop,
   rollSymbolDrop,
+  skillTreeBonuses,
+  SKILL_TREE_NODES,
   summarizeGearSets,
   SYMBOL_SETS,
   summarizeSymbolSets,
@@ -59,6 +61,13 @@ describe("phase1 data", () => {
     assert.ok(g.setId);
     assert.ok(g.nameKo.length > 0);
     assert.ok(g.enhance >= 0);
+  });
+
+  it("aggregates shallow skill tree bonuses", () => {
+    assert.equal(SKILL_TREE_NODES.length, 9);
+    const b = skillTreeBonuses(["root_mana", "dual_mastery"]);
+    assert.ok(b.manaRegenBonus >= 0.05);
+    assert.equal(b.dualCostMul, 0.85);
   });
 
   it("creates starter symbol", () => {

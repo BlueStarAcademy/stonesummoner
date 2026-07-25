@@ -48,6 +48,14 @@ export interface SummonerState {
   boardSense: number;
   /** Multiplies 진문개방 skill coeff (from weapon). */
   skillPowerBonus?: number;
+  /** Mana cost multipliers for summoner skills (default 1). */
+  declareCostMul?: number;
+  dualCostMul?: number;
+  cleanCostMul?: number;
+  /** Extra Amplify on 증폭선언. */
+  declarePowerBonus?: number;
+  /** Extra Amplify per stone on 진문청소. */
+  cleanAmpBonus?: number;
 }
 
 export type BattlePhase =

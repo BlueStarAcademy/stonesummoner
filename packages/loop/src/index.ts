@@ -28,6 +28,7 @@ export {
   awakenMinLevel,
   resolveBattleAuto,
   runAwakenSummoner,
+  runUnlockSkillNode,
   runAffixGearSet,
   runEquipGearBag,
   runSellGearBag,

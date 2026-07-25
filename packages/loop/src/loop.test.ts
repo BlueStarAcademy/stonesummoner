@@ -21,6 +21,7 @@ import {
   runEquipGearBag,
   runSellGearBag,
   runAwakenSummoner,
+  runUnlockSkillNode,
   awakenManaCost,
   awakenCrystalCost,
   awakenMinLevel,
@@ -518,6 +519,36 @@ describe("game loop", () => {
     const maxed = runAwakenSummoner(save);
     assert.match(maxed.message, /최대/);
     assert.equal(maxed.save.summonerAwaken, MAX_SUMMONER_AWAKEN);
+  });
+
+  it("unlocks summoner skill tree nodes with gates", () => {
+    let save = createNewSave(0);
+    assert.deepEqual(save.skillTree, []);
+    const locked = runUnlockSkillNode(save, "root_mana");
+    assert.match(locked.message, /Lv/);
+
+    save = {
+      ...save,
+      island: { ...save.island, summonerLevel: 3, mana: 5000, crystal: 10 },
+    };
+    const root = runUnlockSkillNode(save, "root_mana");
+    assert.match(root.message, /진액 회로/);
+    assert.deepEqual(root.save.skillTree, ["root_mana"]);
+    save = root.save;
+
+    const need = runUnlockSkillNode(save, "mana_pool");
+    assert.match(need.message, /Lv/);
+    save = {
+      ...save,
+      island: { ...save.island, summonerLevel: 6 },
+    };
+    const mid = runUnlockSkillNode(save, "mana_pool");
+    assert.match(mid.message, /심연 저장/);
+    assert.ok(mid.save.skillTree.includes("mana_pool"));
+
+    const battle = createStageBattle(getStage("garen_1_1")!, mid.save);
+    assert.ok(battle.allySummoner.manaMax >= 100 + 12);
+    assert.ok((battle.allySummoner.manaRegenPerTick ?? 0) >= 0.9);
   });
 
   it("lists roster", () => {

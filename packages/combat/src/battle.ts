@@ -808,25 +808,28 @@ export class Battle {
     return sm.mana >= sm.manaMax;
   }
 
-  /** 증폭선언: half mana — short Amplify fix (no damage). */
+  /** 증폭선언: half mana (× cost mul) — short Amplify fix (no damage). */
   canUseSummonerDeclare(unit: Unit): boolean {
     if (unit.kind !== "summoner") return false;
     const sm = this.summonerOf(unit.team);
-    return sm.mana >= sm.manaMax * 0.5;
+    const need = sm.manaMax * 0.5 * (sm.declareCostMul ?? 1);
+    return sm.mana >= need;
   }
 
-  /** 쌍착수: 35% mana — bonus second stone this turn. */
+  /** 쌍착수: 35% mana (× cost mul) — bonus second stone this turn. */
   canUseSummonerDual(unit: Unit): boolean {
     if (unit.kind !== "summoner") return false;
     const sm = this.summonerOf(unit.team);
-    return sm.mana >= sm.manaMax * 0.35;
+    const need = sm.manaMax * 0.35 * (sm.dualCostMul ?? 1);
+    return sm.mana >= need;
   }
 
-  /** 진문청소: 45% mana — clear 3×3 stones/tokens. */
+  /** 진문청소: 45% mana (× cost mul) — clear 3×3 stones/tokens. */
   canUseSummonerClean(unit: Unit): boolean {
     if (unit.kind !== "summoner") return false;
     const sm = this.summonerOf(unit.team);
-    return sm.mana >= sm.manaMax * 0.45;
+    const need = sm.manaMax * 0.45 * (sm.cleanCostMul ?? 1);
+    return sm.mana >= need;
   }
 
   /** Enemy stone count on the active board (for AUTO clean gating). */
@@ -922,9 +925,12 @@ export class Battle {
 
     if (summonerSkill === "declare" && this.canUseSummonerDeclare(unit)) {
       const sm = this.summonerOf(unit.team);
-      const cost = sm.manaMax * 0.5;
+      const cost = sm.manaMax * 0.5 * (sm.declareCostMul ?? 1);
       sm.mana = Math.max(0, sm.mana - cost);
-      const power = 0.1 + (sm.skillPowerBonus ?? 0) * 0.05;
+      const power =
+        0.1 +
+        (sm.skillPowerBonus ?? 0) * 0.05 +
+        (sm.declarePowerBonus ?? 0);
       this.amplify = clampAmplify(
         Math.max(this.amplify, 1.12) + power,
         amplifyCapForPhase(this.circle.boardPhase),
@@ -935,7 +941,7 @@ export class Battle {
       );
     } else if (summonerSkill === "dual" && this.canUseSummonerDual(unit)) {
       const sm = this.summonerOf(unit.team);
-      const cost = sm.manaMax * 0.35;
+      const cost = sm.manaMax * 0.35 * (sm.dualCostMul ?? 1);
       sm.mana = Math.max(0, sm.mana - cost);
       this.log.push(`${unit.name} 쌍착수`);
       this.phase = "await_stone";
@@ -948,11 +954,12 @@ export class Battle {
       }
     } else if (summonerSkill === "clean" && this.canUseSummonerClean(unit)) {
       const sm = this.summonerOf(unit.team);
-      const cost = sm.manaMax * 0.45;
+      const cost = sm.manaMax * 0.45 * (sm.cleanCostMul ?? 1);
       sm.mana = Math.max(0, sm.mana - cost);
       const center = this.pickCleanCenter(unit.team);
       const removed = this.clearNeighborhood(center);
-      const ampGain = Math.min(0.08, removed * 0.015);
+      const perStone = 0.015 + (sm.cleanAmpBonus ?? 0);
+      const ampGain = Math.min(0.08, removed * perStone);
       if (ampGain > 0) {
         this.amplify = clampAmplify(
           this.amplify + ampGain,

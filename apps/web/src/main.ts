@@ -35,6 +35,7 @@ import {
   MAX_SYMBOL_ENHANCE,
   normalizeGearPiece,
   normalizeSummonerGear,
+  SKILL_TREE_NODES,
   summarizeGearSets,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_IMPRINT_CRYSTAL_COST,
@@ -74,6 +75,7 @@ import {
   MAX_SKILL_LEVEL,
   MAX_SUMMONER_AWAKEN,
   runAwakenSummoner,
+  runUnlockSkillNode,
   runAffixGearSet,
   runEquipGearBag,
   runSellGearBag,
@@ -302,6 +304,9 @@ function migrateSave(raw: unknown): PlayerSave | null {
         ),
       ),
     ),
+    skillTree: Array.isArray(p.skillTree)
+      ? p.skillTree.filter((id): id is string => typeof id === "string")
+      : [],
   };
 }
 
@@ -1698,6 +1703,7 @@ function renderEnhance(): string {
       ? `각성 Lv.${awakenNeedLv}+`
       : `각성 +${awaken + 1} (−마나 ${awakenMana} · −크리스탈 ${awakenCrystal})`;
   const leaderPct = (awakenLeaderAtkPct(awaken) * 100).toFixed(1);
+  const treeUnlocked = new Set(save.skillTree ?? []);
   const body = `<div class="hub-panel">
     ${renderForgeReveal()}
     <p class="section-label">서머너 각성</p>
@@ -1709,6 +1715,32 @@ function renderEnhance(): string {
           <small>리더 공+${leaderPct}% · 마나·스킬 영구 보너스 · ${awakenHint}</small>
         </span>
       </button>
+    </div>
+    <p class="section-label">스킬 트리 (${treeUnlocked.size}/${SKILL_TREE_NODES.length})</p>
+    <div class="stage-list skill-tree-list">
+      ${SKILL_TREE_NODES.map((n) => {
+        const done = treeUnlocked.has(n.id);
+        const missReq = n.requires.some((r) => !treeUnlocked.has(r));
+        const lvLock = save.island.summonerLevel < n.minLevel;
+        const cost =
+          n.crystalCost > 0
+            ? `−마나 ${n.manaCost} · −크리스탈 ${n.crystalCost}`
+            : `−마나 ${n.manaCost}`;
+        const hint = done
+          ? "해금됨"
+          : lvLock
+            ? `Lv.${n.minLevel}+`
+            : missReq
+              ? "선행 필요"
+              : cost;
+        return `<button type="button" class="stage-card${done ? " is-unlocked" : ""}" data-skill-node="${n.id}" ${done ? "disabled" : ""}>
+          <span class="stage-card-mark" aria-hidden="true">${n.branch[0]!.toUpperCase()}</span>
+          <span class="stage-card-body">
+            <strong>${n.nameKo}</strong>
+            <small>${n.descKo} · ${hint}</small>
+          </span>
+        </button>`;
+      }).join("")}
     </div>
     <p class="section-label">몬스터</p>
     <div class="stage-list">
@@ -1931,7 +1963,7 @@ function renderEnhance(): string {
     </div>
     <button type="button" class="secondary full auth-btn-ghost" data-nav="home" style="margin-top:10px">섬으로</button>
   </div>`;
-  return hubShell("강화진", "각성 · 몬스터 · 장비 · 상징", body);
+  return hubShell("강화진", "각성 · 스킬트리 · 장비 · 상징", body);
 }
 
 function renderShop(): string {
@@ -2791,6 +2823,17 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-awaken]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const r = runAwakenSummoner(save);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-skill-node]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.skillNode ?? "";
+      const r = runUnlockSkillNode(save, id);
       save = r.save;
       persist();
       flash(r.message);

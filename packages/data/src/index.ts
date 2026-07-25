@@ -73,6 +73,18 @@ export {
 export type { ContentMode, StageDef } from "./scenario.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";
 export {
+  canUnlockSkillNode,
+  getSkillTreeNode,
+  isSkillTreeNodeId,
+  skillTreeBonuses,
+  SKILL_TREE_NODES,
+} from "./skillTree.js";
+export type {
+  SkillTreeBonus,
+  SkillTreeNode,
+  SkillTreeNodeId,
+} from "./skillTree.js";
+export {
   GLORY_BUILDINGS,
   getGloryBuilding,
   gloryBuffFromLevels,

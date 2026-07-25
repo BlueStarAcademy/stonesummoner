@@ -1464,6 +1464,11 @@ main {
   font-size: 0.65rem;
 }
 
+.skill-tree-list .stage-card.is-unlocked {
+  opacity: 0.72;
+  border-color: #c9a22755;
+}
+
 .skill-up-row button {
   min-height: 44px;
   font-size: 0.7rem;
