@@ -110,6 +110,49 @@ export {
 } from "./roster.js";
 export { isStageUnlocked, stageUnlockLabel } from "./progress.js";
 
+/** Shared weekly entry budget across equip vault stages. */
+export const EQUIP_VAULT_WEEKLY_LIMIT = 5;
+
+/** ISO week key (UTC), e.g. 2026-W30. */
+export function isoWeekKey(now = Date.now()): string {
+  const date = new Date(now);
+  const target = new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+  );
+  const dayNum = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(
+    ((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return `${target.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+/** Reset weekly counter when the ISO week rolls over. */
+export function syncEquipVaultWeek(
+  save: PlayerSave,
+  now = Date.now(),
+): PlayerSave {
+  const key = isoWeekKey(now);
+  if (save.equipVaultWeekKey === key) return save;
+  return {
+    ...save,
+    equipVaultWeekKey: key,
+    equipVaultWeekEntries: 0,
+  };
+}
+
+export function equipVaultRemaining(
+  save: PlayerSave,
+  now = Date.now(),
+): number {
+  const synced = syncEquipVaultWeek(save, now);
+  return Math.max(
+    0,
+    EQUIP_VAULT_WEEKLY_LIMIT - (synced.equipVaultWeekEntries ?? 0),
+  );
+}
+
 export interface PlayerSave {
   island: IslandState;
   symbols: SymbolInstance[];
@@ -147,6 +190,10 @@ export interface PlayerSave {
   guildRaidBest: number;
   /** World-arena season reward tiers claimed. */
   seasonRewardsClaimed: number;
+  /** ISO week key for equip vault entries (e.g. 2026-W30). */
+  equipVaultWeekKey: string | null;
+  /** Equip vault entries used this week. */
+  equipVaultWeekEntries: number;
 }
 
 export interface BattleReward {
@@ -406,6 +453,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     guildCheckInDay: null,
     guildRaidBest: 0,
     seasonRewardsClaimed: 0,
+    equipVaultWeekKey: isoWeekKey(now),
+    equipVaultWeekEntries: 0,
   };
 }
 
@@ -1915,6 +1964,8 @@ export function applyRewards(
       seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
       summonerAwaken: save.summonerAwaken ?? 0,
       skillTree: save.skillTree ?? [],
+      equipVaultWeekKey: save.equipVaultWeekKey ?? null,
+      equipVaultWeekEntries: save.equipVaultWeekEntries ?? 0,
     },
     reward: {
       mana: manaGain,
@@ -1944,41 +1995,56 @@ export function runSortie(
   if (!stage) {
     return { save, message: `알 수 없는 스테이지: ${stageId}` };
   }
-  const energy = Math.floor(save.island.energy);
+  let working = save;
+  if (stage.mode === "equip") {
+    working = syncEquipVaultWeek(working);
+    if ((working.equipVaultWeekEntries ?? 0) >= EQUIP_VAULT_WEEKLY_LIMIT) {
+      return {
+        save: working,
+        message: `장비 금고 주간 입장 한도 소진 (${EQUIP_VAULT_WEEKLY_LIMIT}회)`,
+      };
+    }
+  }
+  const energy = Math.floor(working.island.energy);
   if (stage.energyCost > 0 && energy < stage.energyCost) {
     return {
-      save,
+      save: working,
       message: `에너지 부족 (필요 ${stage.energyCost}, 보유 ${energy})`,
     };
   }
-  if (!isStageUnlocked(save, stageId)) {
+  if (!isStageUnlocked(working, stageId)) {
     return {
-      save,
+      save: working,
       message: `콘텐츠 잠김 — 해금 조건을 확인하세요 (${stageId})`,
     };
   }
 
   const island = {
-    ...save.island,
-    energy: save.island.energy - stage.energyCost,
+    ...working.island,
+    energy: working.island.energy - stage.energyCost,
   };
   const mid: PlayerSave = {
-    ...save,
+    ...working,
     island,
-    gloryPoints: save.gloryPoints ?? 0,
-    jinmunStones: save.jinmunStones ?? 0,
-    gloryLevels: save.gloryLevels ?? {},
-    arenaBanIds: save.arenaBanIds ?? [],
-    arenaSeasonWins: save.arenaSeasonWins ?? 0,
-    guildContribution: save.guildContribution ?? 0,
-    dojoDrills: save.dojoDrills ?? 0,
-    guildName: save.guildName ?? null,
-    guildCheckInDay: save.guildCheckInDay ?? null,
-    guildRaidBest: save.guildRaidBest ?? 0,
-    seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
-    summonerAwaken: save.summonerAwaken ?? 0,
-    gearBag: save.gearBag ?? [],
-    skillTree: save.skillTree ?? [],
+    gloryPoints: working.gloryPoints ?? 0,
+    jinmunStones: working.jinmunStones ?? 0,
+    gloryLevels: working.gloryLevels ?? {},
+    arenaBanIds: working.arenaBanIds ?? [],
+    arenaSeasonWins: working.arenaSeasonWins ?? 0,
+    guildContribution: working.guildContribution ?? 0,
+    dojoDrills: working.dojoDrills ?? 0,
+    guildName: working.guildName ?? null,
+    guildCheckInDay: working.guildCheckInDay ?? null,
+    guildRaidBest: working.guildRaidBest ?? 0,
+    seasonRewardsClaimed: working.seasonRewardsClaimed ?? 0,
+    summonerAwaken: working.summonerAwaken ?? 0,
+    gearBag: working.gearBag ?? [],
+    skillTree: working.skillTree ?? [],
+    equipVaultWeekKey: working.equipVaultWeekKey ?? isoWeekKey(),
+    equipVaultWeekEntries:
+      stage.mode === "equip"
+        ? (working.equipVaultWeekEntries ?? 0) + 1
+        : (working.equipVaultWeekEntries ?? 0),
   };
   const battle = createStageBattle(stage, mid, {
     banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,

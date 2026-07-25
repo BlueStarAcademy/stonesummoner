@@ -4,7 +4,9 @@ import { createSymbol, getStage } from "stonesummoner-data";
 import {
   createNewSave,
   createStageBattle,
+  EQUIP_VAULT_WEEKLY_LIMIT,
   homeCollect,
+  isoWeekKey,
   isStageUnlocked,
   listGear,
   listRoster,
@@ -122,6 +124,7 @@ describe("game loop", () => {
 
     const r = runSortie(save, "equip_vault_1", { rng: () => 0.01 });
     assert.ok(r.reward);
+    assert.equal(r.save.equipVaultWeekEntries, 1);
     if (r.reward?.victory) {
       assert.ok(r.reward.gear, "equip dungeon should drop gear at high chance");
       assert.ok(
@@ -136,6 +139,20 @@ describe("game loop", () => {
       assert.match(sell.message, /판매/);
       assert.ok(sell.save.island.mana > eq.save.island.mana);
     }
+  });
+
+  it("limits equip vault entries per ISO week", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      clearedStages: ["garen_1_1", "garen_1_2", "garen_1_3", "garen_1_4"],
+      island: { ...save.island, energy: 100 },
+      equipVaultWeekKey: isoWeekKey(),
+      equipVaultWeekEntries: EQUIP_VAULT_WEEKLY_LIMIT,
+    };
+    const blocked = runSortie(save, "equip_vault_1", { rng: () => 0.01 });
+    assert.match(blocked.message, /주간 입장 한도/);
+    assert.equal(blocked.save.equipVaultWeekEntries, EQUIP_VAULT_WEEKLY_LIMIT);
   });
 
   it("locks later stages until previous clear", () => {

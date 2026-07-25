@@ -123,6 +123,9 @@ import {
   skillUpManaCost,
   skillUpMinMonsterLevel,
   stageUnlockLabel,
+  EQUIP_VAULT_WEEKLY_LIMIT,
+  equipVaultRemaining,
+  syncEquipVaultWeek,
   type BattleReward,
   type PlayerSave,
 } from "stonesummoner-loop";
@@ -309,6 +312,12 @@ function migrateSave(raw: unknown): PlayerSave | null {
     skillTree: Array.isArray(p.skillTree)
       ? p.skillTree.filter((id): id is string => typeof id === "string")
       : [],
+    equipVaultWeekKey:
+      typeof p.equipVaultWeekKey === "string" ? p.equipVaultWeekKey : null,
+    equipVaultWeekEntries:
+      typeof p.equipVaultWeekEntries === "number"
+        ? Math.max(0, Math.floor(p.equipVaultWeekEntries))
+        : 0,
   };
 }
 
@@ -2245,11 +2254,16 @@ function renderFusion(): string {
   );
 }
 
-function stageButtons(list: StageDef[]): string {
+function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): string {
+  const vaultLeft = opts?.equipWeekly
+    ? equipVaultRemaining(syncEquipVaultWeek(save))
+    : null;
   return list
     .map((s) => {
       const label = stageUnlockLabel(save, s);
-      const locked = !isStageUnlocked(save, s.id);
+      const locked =
+        !isStageUnlocked(save, s.id) ||
+        (vaultLeft !== null && vaultLeft <= 0);
       const cost =
         s.energyCost > 0 ? `에너지 ${s.energyCost}` : "에너지 0";
       const extra =
@@ -2258,11 +2272,13 @@ function stageButtons(list: StageDef[]): string {
           : s.jinmunReward != null
             ? ` · 진문석 ${s.jinmunReward}`
             : "";
+      const weekly =
+        vaultLeft !== null ? ` · 주간 ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}` : "";
       return `<button type="button" class="stage-card" data-stage="${s.id}" ${locked ? "disabled" : ""}>
         <span class="stage-card-mark" aria-hidden="true">${s.boardSize}</span>
         <span class="stage-card-body">
           <strong>${label} · ${s.nameKo}</strong>
-          <small>${s.boardSize}×${s.boardSize} · 웨이브 ${s.waves} · ${cost}${extra}</small>
+          <small>${s.boardSize}×${s.boardSize} · 웨이브 ${s.waves} · ${cost}${extra}${weekly}</small>
         </span>
       </button>`;
     })
@@ -2331,8 +2347,8 @@ function renderStages(): string {
       )}
       ${section(
         "장비 금고",
-        `<div class="stage-list">${stageButtons(EQUIP_STAGES)}</div>`,
-        "클리어 시 장비 가방 보관 · 강화진에서 장착/판매",
+        `<div class="stage-list">${stageButtons(EQUIP_STAGES, { equipWeekly: true })}</div>`,
+        `주간 ${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT} · 가방 보관 후 강화진에서 장착/판매`,
       )}
       ${section(
         "월드아레나 · 밴픽",
