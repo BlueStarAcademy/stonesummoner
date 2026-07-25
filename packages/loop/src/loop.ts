@@ -18,6 +18,7 @@ import {
   gearEnhanceCrystalCost,
   gearEnhanceManaCost,
   gearLeaderAtkPct,
+  gearSellCrystal,
   gearSellMana,
   gearSetBonuses,
   GEAR_SET_AFFIX_MANA,
@@ -950,7 +951,7 @@ export function listGearBag(save: PlayerSave): string[] {
   if (bag.length === 0) return ["(가방 비어 있음)"];
   return bag.map(
     (p, i) =>
-      `[${i}] ${describeGear(p)} · 판매 +${gearSellMana(p)} · 슬롯 ${p.slot}`,
+      `[${i}] ${describeGear(p)} · 판매 +${gearSellMana(p)}${gearSellCrystal(p) > 0 ? `/+크${gearSellCrystal(p)}` : ""} · 슬롯 ${p.slot}`,
   );
 }
 
@@ -1289,7 +1290,7 @@ export function runEquipGearBag(
   };
 }
 
-/** Sell a bag piece for mana. */
+/** Sell a bag piece for mana (+ partial crystal if high enhance). */
 export function runSellGearBag(
   save: PlayerSave,
   bagIndex: number,
@@ -1300,11 +1301,20 @@ export function runSellGearBag(
     return { save, message: `가방 인덱스 없음: ${bagIndex}` };
   }
   const gain = gearSellMana(piece);
+  const crystalGain = gearSellCrystal(piece);
   bag.splice(bagIndex, 1);
-  const island = { ...save.island, mana: save.island.mana + gain };
+  const island = {
+    ...save.island,
+    mana: save.island.mana + gain,
+    crystal: (save.island.crystal ?? 0) + crystalGain,
+  };
+  const note =
+    crystalGain > 0
+      ? `+마나 ${gain} · +크리스탈 ${crystalGain}`
+      : `+마나 ${gain}`;
   return {
     save: { ...save, island, gearBag: bag },
-    message: `장비 판매: ${describeGear(piece)} (+마나 ${gain})`,
+    message: `장비 판매: ${describeGear(piece)} (${note})`,
   };
 }
 
@@ -1830,8 +1840,16 @@ export function applyRewards(
       if (gearBag.length >= MAX_GEAR_BAG) {
         const sold = gearBag.shift()!;
         const gain = gearSellMana(sold);
-        island = { ...island, mana: island.mana + gain };
-        bagSoldNote = ` · 가방초과 판매 ${describeGear(sold)}(+${gain})`;
+        const crystalGain = gearSellCrystal(sold);
+        island = {
+          ...island,
+          mana: island.mana + gain,
+          crystal: (island.crystal ?? 0) + crystalGain,
+        };
+        bagSoldNote =
+          crystalGain > 0
+            ? ` · 가방초과 판매 ${describeGear(sold)}(+${gain}/+크${crystalGain})`
+            : ` · 가방초과 판매 ${describeGear(sold)}(+${gain})`;
       }
       gearBag.push(gearDrop);
     }

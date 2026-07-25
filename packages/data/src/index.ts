@@ -35,6 +35,7 @@ export {
   gearEnhanceCrystalCost,
   gearLeaderAtkPct,
   gearPieces,
+  gearSellCrystal,
   gearSellMana,
   gearSetBonuses,
   GEAR_SET_AFFIX_MANA,

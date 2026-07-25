@@ -26,6 +26,7 @@ import {
   describeSymbol,
   gearEnhanceCrystalCost,
   gearEnhanceManaCost,
+  gearSellCrystal,
   gearSellMana,
   GEAR_SET_AFFIX_MANA,
   GEAR_SETS,
@@ -1928,7 +1929,7 @@ function renderEnhance(): string {
             </button>
             <div class="sym-card-actions">
               <button type="button" class="secondary" data-gear-equip="${i}">장착</button>
-              <button type="button" class="secondary" data-gear-sell="${i}">+${gearSellMana(p)}</button>
+              <button type="button" class="secondary" data-gear-sell="${i}">+${gearSellMana(p)}${gearSellCrystal(p) > 0 ? ` · +크${gearSellCrystal(p)}` : ""}</button>
             </div>
           </div>`,
             )

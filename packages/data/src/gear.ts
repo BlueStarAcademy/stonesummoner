@@ -432,9 +432,21 @@ export function describeGear(piece: GearPiece): string {
   return `${piece.nameKo} +${piece.enhance} [${set}]`;
 }
 
-/** Mana refund when selling a bag piece. */
+/** Mana refund when selling a bag piece (scales harder past +9). */
 export function gearSellMana(piece: GearPiece): number {
-  return 40 + piece.enhance * 30 + Math.round((piece.leaderAtkBonus ?? 0) * 500);
+  const base = 40 + piece.enhance * 35;
+  const late = piece.enhance >= 9 ? (piece.enhance - 8) * 50 : 0;
+  const leader = Math.round((piece.leaderAtkBonus ?? 0) * 500);
+  return base + late + leader;
+}
+
+/** Partial crystal refund for +12+ enhance investment (~50%). */
+export function gearSellCrystal(piece: GearPiece): number {
+  let spent = 0;
+  for (let e = 12; e < piece.enhance; e++) {
+    spent += gearEnhanceCrystalCost(e);
+  }
+  return Math.floor(spent / 2);
 }
 
 /** Max unequipped gear pieces in the bag. */

@@ -10,6 +10,8 @@ import {
   createSymbol,
   gearEnhanceCrystalCost,
   gearEnhanceManaCost,
+  gearSellCrystal,
+  gearSellMana,
   gearSetBonuses,
   getMonster,
   getStage,
@@ -111,6 +113,11 @@ describe("phase1 data", () => {
     assert.equal(gearEnhanceCrystalCost(11), 0);
     assert.equal(gearEnhanceCrystalCost(12), 1);
     assert.equal(gearEnhanceCrystalCost(14), 3);
+    assert.ok(
+      gearSellMana({ ...g.weapon, enhance: 12 }) > gearSellMana(g.weapon),
+    );
+    assert.equal(gearSellCrystal({ ...g.weapon, enhance: 12 }), 0);
+    assert.equal(gearSellCrystal({ ...g.weapon, enhance: 15 }), 3);
     const sets = summarizeGearSets(g);
     assert.ok(sets.find((s) => s.setId === "assault")?.active2);
     assert.ok(sets.find((s) => s.setId === "guardian")?.active2);

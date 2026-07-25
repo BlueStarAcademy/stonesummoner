@@ -460,6 +460,17 @@ describe("game loop", () => {
     assert.equal(late.save.island.crystal, 4);
     save = late.save;
 
+    save = {
+      ...save,
+      gearBag: [{ ...save.gear.weapon, enhance: 15, id: "sell_hi" }],
+      island: { ...save.island, crystal: 0 },
+    };
+    const sold = runSellGearBag(save, 0);
+    assert.match(sold.message, /크리스탈/);
+    assert.equal(sold.save.island.crystal, 3);
+    assert.ok(sold.save.island.mana > save.island.mana);
+    save = { ...sold.save, gearBag: [] };
+
     const affix = runAffixGearSet(save, "orb", "mana");
     assert.match(affix.message, /세트 부여/);
     assert.equal(affix.save.gear.orb.setId, "mana");
