@@ -18,6 +18,7 @@ import {
   type StoneSuggestion,
 } from "./ai.js";
 import { classifyCapture, gainsForBoardEvent } from "./boardEvents.js";
+import { detectShapeBonuses } from "./shapes.js";
 import { clampAmplify, computeDamage } from "./damage.js";
 import {
   itemDef,
@@ -363,6 +364,26 @@ export class Battle {
 
     const sm = this.summonerOf(unit.team);
     sm.mana = Math.min(sm.manaMax, sm.mana + gains.mana);
+
+    const shapes = detectShapeBonuses(this.board, color, point);
+    for (const sh of shapes) {
+      this.amplify = clampAmplify(
+        this.amplify + sh.amplifyDelta,
+        amplifyCapForPhase(this.circle.boardPhase),
+        this.powerGapCap,
+      );
+      if (sh.skillAmplifyBonus) {
+        this.skillAmplifyBonus += sh.skillAmplifyBonus;
+      }
+      sm.mana = Math.min(sm.manaMax, sm.mana + sh.mana * manaMul);
+      if (sh.shieldPct) {
+        const shield = Math.round(unit.stats.hp * sh.shieldPct);
+        unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+        this.log.push(`형상 ${sh.labelKo}: 실드 +${shield}`);
+      } else {
+        this.log.push(`형상 ${sh.labelKo}`);
+      }
+    }
 
     if (unit.stonePassive === "capture_crit" && result.capturedCount > 0) {
       unit.critDmgBonus = (unit.critDmgBonus ?? 0) + 10;

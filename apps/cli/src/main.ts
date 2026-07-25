@@ -14,8 +14,11 @@ import {
   listRoster,
   listStages,
   listSymbols,
+  runBuyEnergy,
   runBuyGlory,
   runBuyScroll,
+  runCraftEssence,
+  runCraftScroll,
   runDailyWish,
   runDemoLoop,
   runEnhance,
@@ -32,6 +35,7 @@ import {
   runSummon,
   runUpgradeBuilding,
   SCROLL_BUY_MANA_COST,
+  ENERGY_CRYSTAL_COST,
   FUSION_MANA_COST,
   stageUnlockLabel,
   type PlayerSave,
@@ -59,7 +63,7 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | crystal | wish | upgrade | glory [id] | fuse <a> <b> | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
+    "명령: collect | crystal | wish | upgrade | glory [id] | fuse <a> <b> | energy [n] | essence | craft | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
@@ -139,6 +143,31 @@ async function interactive(): Promise<void> {
 
     if (cmd === "fuse" || cmd === "fusion") {
       const r = runFusion(save, arg ?? "0", arg2 ?? "1");
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "energy" || cmd === "en") {
+      const n = Number(arg ?? "1");
+      const r = runBuyEnergy(save, Number.isFinite(n) ? n : 1);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "essence" || cmd === "ess") {
+      const r = runCraftEssence(save);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "craft" || cmd === "cf") {
+      const r = runCraftScroll(save);
       save = r.save;
       console.log(r.message);
       printStatus(save);

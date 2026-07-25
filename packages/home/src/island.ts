@@ -5,7 +5,9 @@ export type BuildingId =
   | "mana_pond"
   | "crystal_mine"
   | "wish_temple"
-  | "fusion_star";
+  | "fusion_star"
+  | "fuse_center"
+  | "craft_hall";
 
 export interface BuildingDef {
   id: BuildingId;
@@ -76,6 +78,20 @@ export const PHASE_BUILDINGS: BuildingDef[] = [
     swName: "Fusion Hexagram",
     kind: "function",
     unlockLevel: 17,
+  },
+  {
+    id: "fuse_center",
+    nameKo: "정수 공방",
+    swName: "Fuse Center",
+    kind: "function",
+    unlockLevel: 12,
+  },
+  {
+    id: "craft_hall",
+    nameKo: "제작소",
+    swName: "Craft Building",
+    kind: "function",
+    unlockLevel: 19,
   },
 ];
 

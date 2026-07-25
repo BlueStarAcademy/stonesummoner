@@ -53,9 +53,18 @@ import {
   MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
+  runBuyEnergy,
   runBuyGlory,
   runBuyScroll,
+  runCraftEssence,
+  runCraftScroll,
   runDailyWish,
+  ENERGY_CRYSTAL_COST,
+  ENERGY_BUY_AMOUNT,
+  CRAFT_SCROLL_JINMUN,
+  CRAFT_SCROLL_MANA,
+  ESSENCE_JINMUN_COST,
+  ESSENCE_CRYSTAL_GAIN,
   runEnhance,
   runEnhanceGear,
   runEnhanceSymbol,
@@ -965,7 +974,7 @@ function renderEnhance(): string {
 
 function renderShop(): string {
   return `<div class="panel">
-    <p class="muted">마법상점 · 소환서 · 연마(접두어) · 각인(슬롯 4–6)</p>
+    <p class="muted">마법상점 · 소환서 · 에너지 · 제작 · 연마 · 각인</p>
     <p class="section-label">소환서</p>
     <div class="stage-list">
       <button type="button" id="btn-buy-scroll-1">
@@ -975,6 +984,21 @@ function renderShop(): string {
       <button type="button" id="btn-buy-scroll-5">
         <strong>소환서 5장</strong><br/>
         <small class="muted">−마나 ${SCROLL_BUY_MANA_COST * 5}</small>
+      </button>
+    </div>
+    <p class="section-label">에너지 · 제작</p>
+    <div class="stage-list">
+      <button type="button" id="btn-buy-energy">
+        <strong>에너지 +${ENERGY_BUY_AMOUNT}</strong><br/>
+        <small class="muted">−크리스탈 ${ENERGY_CRYSTAL_COST}</small>
+      </button>
+      <button type="button" id="btn-craft-essence">
+        <strong>정수 변환</strong><br/>
+        <small class="muted">진문석 ${ESSENCE_JINMUN_COST} → 크리스탈 ${ESSENCE_CRYSTAL_GAIN} (Lv.12)</small>
+      </button>
+      <button type="button" id="btn-craft-scroll">
+        <strong>소환서 제작</strong><br/>
+        <small class="muted">진문석 ${CRAFT_SCROLL_JINMUN} + 마나 ${CRAFT_SCROLL_MANA} (Lv.19)</small>
       </button>
     </div>
     <p class="section-label">상징 연마 (접두어)</p>
@@ -1099,7 +1123,7 @@ function renderBattleTicker(): string {
   const lines = battle.log
     .filter(
       (l) =>
-        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방/.test(l),
+        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|형상/.test(l),
     )
     .slice(-3);
   if (!lines.length) {
@@ -1440,6 +1464,27 @@ function bind(): void {
   });
   app.querySelector("#btn-buy-scroll-5")?.addEventListener("click", () => {
     const r = runBuyScroll(save, 5);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+  app.querySelector("#btn-buy-energy")?.addEventListener("click", () => {
+    const r = runBuyEnergy(save, 1);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+  app.querySelector("#btn-craft-essence")?.addEventListener("click", () => {
+    const r = runCraftEssence(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+  app.querySelector("#btn-craft-scroll")?.addEventListener("click", () => {
+    const r = runCraftScroll(save);
     save = r.save;
     persist();
     flash(r.message);

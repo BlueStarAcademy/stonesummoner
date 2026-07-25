@@ -8,8 +8,11 @@ import {
   listGear,
   listRoster,
   listSymbols,
+  runBuyEnergy,
   runBuyGlory,
   runBuyScroll,
+  runCraftEssence,
+  runCraftScroll,
   runDemoLoop,
   runEnhance,
   runEnhanceGear,
@@ -138,6 +141,34 @@ describe("game loop", () => {
       { rng: () => 0.1, maxTurns: 120 },
     );
     assert.ok(raid.reward || /승리|패배|출정/.test(raid.message));
+  });
+
+  it("crafts scroll/essence and buys energy", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      jinmunStones: 5,
+      island: {
+        ...save.island,
+        mana: 2000,
+        crystal: 30,
+        energy: 10,
+        summonerLevel: 19,
+      },
+    };
+    const energy = runBuyEnergy(save, 1);
+    assert.match(energy.message, /에너지/);
+    assert.equal(energy.save.island.crystal, 20);
+    save = energy.save;
+
+    const essence = runCraftEssence(save);
+    assert.match(essence.message, /정수/);
+    assert.equal(essence.save.jinmunStones, 4);
+    save = essence.save;
+
+    const craft = runCraftScroll(save);
+    assert.match(craft.message, /제작/);
+    assert.equal(craft.save.scrolls, save.scrolls + 1);
   });
 
   it("sets party from roster indices", () => {

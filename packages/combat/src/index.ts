@@ -6,6 +6,8 @@ export {
   estimateCombatPower,
 } from "./power.js";
 export { gainsForBoardEvent, classifyCapture } from "./boardEvents.js";
+export { detectShapeBonuses, starPoints } from "./shapes.js";
+export type { ShapeBonus, ShapeBonusId } from "./shapes.js";
 export {
   BOARD_ITEMS,
   itemDef,

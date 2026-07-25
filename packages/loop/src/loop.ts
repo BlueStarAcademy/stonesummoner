@@ -402,10 +402,17 @@ export function runBuyGlory(
 }
 
 export const FUSION_MANA_COST = 800;
+export const ENERGY_CRYSTAL_COST = 10;
+export const ENERGY_BUY_AMOUNT = 20;
+/** 제작소: 진문석 + 마나 → 소환서 */
+export const CRAFT_SCROLL_JINMUN = 2;
+export const CRAFT_SCROLL_MANA = 300;
+/** 정수 공방: 진문석 → 크리스탈 */
+export const ESSENCE_JINMUN_COST = 1;
+export const ESSENCE_CRYSTAL_GAIN = 4;
 
 /**
  * Fusion stub: sacrifice two same-species monsters → keep one with +1 evolve (cap MAX_EVOLVE).
- * Unlocks with 융합의 별 (summoner Lv.17) or allow earlier for testing if building present.
  */
 export function runFusion(
   save: PlayerSave,
@@ -480,6 +487,101 @@ export function runFusion(
       party,
     },
     message: `융합: ${describeOwned(kept)} (−마나 ${FUSION_MANA_COST}, 재료 1소모)`,
+  };
+}
+
+/** Buy energy with crystal (shop / emergency refill). */
+export function runBuyEnergy(
+  save: PlayerSave,
+  packs = 1,
+): LoopStepResult {
+  const n = Math.max(1, Math.min(10, Math.floor(packs)));
+  const cost = ENERGY_CRYSTAL_COST * n;
+  const gain = ENERGY_BUY_AMOUNT * n;
+  if (save.island.crystal < cost) {
+    return {
+      save,
+      message: `크리스탈 부족 (필요 ${cost}, 보유 ${save.island.crystal})`,
+    };
+  }
+  const max = save.island.energyMax ?? 100;
+  const energy = Math.min(max, save.island.energy + gain);
+  return {
+    save: {
+      ...save,
+      island: {
+        ...save.island,
+        crystal: save.island.crystal - cost,
+        energy,
+      },
+    },
+    message: `에너지 +${Math.floor(energy - save.island.energy)} (−크리스탈 ${cost}) · 보유 ${Math.floor(energy)}/${max}`,
+  };
+}
+
+/** Craft hall: jinmun + mana → summon scroll. */
+export function runCraftScroll(save: PlayerSave): LoopStepResult {
+  let island = syncBuildingUnlocks(tickProduction(save.island));
+  if (
+    !island.buildings.some((b) => b.id === "craft_hall") &&
+    island.summonerLevel < 19
+  ) {
+    return {
+      save: { ...save, island },
+      message: "제작소 해금 필요 (서머너 Lv.19)",
+    };
+  }
+  if ((save.jinmunStones ?? 0) < CRAFT_SCROLL_JINMUN) {
+    return {
+      save,
+      message: `진문석 부족 (필요 ${CRAFT_SCROLL_JINMUN}, 보유 ${save.jinmunStones ?? 0})`,
+    };
+  }
+  if (island.mana < CRAFT_SCROLL_MANA) {
+    return {
+      save: { ...save, island },
+      message: `마나 부족 (필요 ${CRAFT_SCROLL_MANA}, 보유 ${Math.floor(island.mana)})`,
+    };
+  }
+  return {
+    save: {
+      ...save,
+      island: { ...island, mana: island.mana - CRAFT_SCROLL_MANA },
+      jinmunStones: (save.jinmunStones ?? 0) - CRAFT_SCROLL_JINMUN,
+      scrolls: save.scrolls + 1,
+    },
+    message: `제작: 소환서 +1 (−진문석 ${CRAFT_SCROLL_JINMUN} · −마나 ${CRAFT_SCROLL_MANA})`,
+  };
+}
+
+/** Fuse center: jinmun → crystal. */
+export function runCraftEssence(save: PlayerSave): LoopStepResult {
+  let island = syncBuildingUnlocks(tickProduction(save.island));
+  if (
+    !island.buildings.some((b) => b.id === "fuse_center") &&
+    island.summonerLevel < 12
+  ) {
+    return {
+      save: { ...save, island },
+      message: "정수 공방 해금 필요 (서머너 Lv.12)",
+    };
+  }
+  if ((save.jinmunStones ?? 0) < ESSENCE_JINMUN_COST) {
+    return {
+      save,
+      message: `진문석 부족 (필요 ${ESSENCE_JINMUN_COST}, 보유 ${save.jinmunStones ?? 0})`,
+    };
+  }
+  return {
+    save: {
+      ...save,
+      island: {
+        ...island,
+        crystal: island.crystal + ESSENCE_CRYSTAL_GAIN,
+      },
+      jinmunStones: (save.jinmunStones ?? 0) - ESSENCE_JINMUN_COST,
+    },
+    message: `정수: 크리스탈 +${ESSENCE_CRYSTAL_GAIN} (−진문석 ${ESSENCE_JINMUN_COST})`,
   };
 }
 
