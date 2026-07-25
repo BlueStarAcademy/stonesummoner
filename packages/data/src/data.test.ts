@@ -11,10 +11,11 @@ describe("phase1 data", () => {
     assert.ok(getMonster("fire_fang"));
   });
 
-  it("chapter1 boards progress 5 then 7", () => {
-    assert.equal(CHAPTER1_STAGES.length, 4);
+  it("chapter1 boards progress 5 → 7 → 9", () => {
+    assert.equal(CHAPTER1_STAGES.length, 5);
     assert.equal(getStage("garen_1_1")?.boardSize, 5);
     assert.equal(getStage("garen_1_4")?.boardSize, 7);
+    assert.equal(getStage("garen_1_5")?.boardSize, 9);
   });
 
   it("creates starter symbol", () => {

@@ -6,17 +6,22 @@
     "packages/combat",
     "packages/home",
     "packages/data",
-    "apps/web"
+    "packages/loop",
+    "apps/web",
+    "apps/cli"
   ],
   "scripts": {
     "dev": "npm run dev -w stonesummoner-web",
     "build": "npm run build -w stonesummoner-web",
     "start": "npm run start -w stonesummoner-web",
-    "test": "npm test -w stonesummoner-board && npm test -w stonesummoner-combat && npm test -w stonesummoner-home && npm test -w stonesummoner-data",
+    "cli": "npm run start -w stonesummoner-cli",
+    "cli:demo": "npm run demo -w stonesummoner-cli",
+    "test": "npm test -w stonesummoner-board && npm test -w stonesummoner-combat && npm test -w stonesummoner-home && npm test -w stonesummoner-data && npm test -w stonesummoner-loop",
     "test:board": "npm test -w stonesummoner-board",
     "test:combat": "npm test -w stonesummoner-combat",
     "test:home": "npm test -w stonesummoner-home",
-    "test:data": "npm test -w stonesummoner-data"
+    "test:data": "npm test -w stonesummoner-data",
+    "test:loop": "npm test -w stonesummoner-loop"
   },
   "engines": {
     "node": ">=20"

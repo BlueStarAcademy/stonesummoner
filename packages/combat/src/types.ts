@@ -23,6 +23,10 @@ export interface Unit {
   /** Skill coefficient for basic attack. */
   skillCoeff: number;
   alive: boolean;
+  /** Next skill: flat critRate bonus (consumed on hit). */
+  critCharm?: number;
+  /** Absorb incoming damage before HP. */
+  shieldHp?: number;
 }
 
 export interface SummonerState {

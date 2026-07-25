@@ -100,6 +100,6 @@ export interface CirclePhaseState {
 ## 5. Phase 1 구현 범위
 
 - [x] 보드 엔진 5/7/9 지원
-- [ ] 전투 생성 시 스테이지별 size 선택
-- [ ] 착수 카운터 + 50수 리셋 (9×9만)
-- [ ] 강화 진문 Amplify/마나 배율 훅
+- [x] 전투 생성 시 스테이지별 size 선택
+- [x] 착수 카운터 + 50수 리셋 (9×9만)
+- [x] 강화 진문 Amplify/마나 배율 훅

@@ -13,6 +13,7 @@ export default defineConfig({
       "stonesummoner-combat": path.resolve(root, "../../packages/combat/src/index.ts"),
       "stonesummoner-data": path.resolve(root, "../../packages/data/src/index.ts"),
       "stonesummoner-home": path.resolve(root, "../../packages/home/src/index.ts"),
+      "stonesummoner-loop": path.resolve(root, "../../packages/loop/src/index.ts"),
     },
   },
   plugins: [

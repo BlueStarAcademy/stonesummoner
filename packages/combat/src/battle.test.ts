@@ -81,7 +81,6 @@ describe("Battle flow", () => {
       enemySummoner: summonerState("e-sum"),
       rng: () => 0.5,
     });
-    // Force ally summoner turn
     for (const u of b.units) {
       u.atb = u.id === "a-sum" ? 100 : 0;
     }
@@ -127,5 +126,67 @@ describe("Battle flow", () => {
       b.runAutoTurn();
     }
     assert.ok(b.log.length > 0);
+  });
+
+  it("picks up crit charm and shield core", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    b.tokens = [
+      { id: "crit_charm", x: 2, y: 2 },
+      { id: "shield_core", x: 0, y: 0 },
+    ];
+    assert.equal(b.playStone({ x: 2, y: 2 }), true);
+    const mon = b.getUnit("a-m1")!;
+    assert.ok((mon.critCharm ?? 0) >= 55);
+    assert.match(b.log.join("\n"), /치명부적/);
+
+    b.phase = "await_stone";
+    b.activeUnitId = "a-m1";
+    assert.equal(b.playStone({ x: 0, y: 0 }), true);
+    assert.ok((mon.shieldHp ?? 0) > 0);
+    assert.match(b.log.join("\n"), /실드핵/);
+  });
+
+  it("capture magnet charges mana", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum", 10),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+    });
+    for (const u of b.units) u.atb = u.id === "a-sum" ? 100 : 0;
+    b.tickUntilReady();
+    b.tokens = [{ id: "capture_magnet", x: 1, y: 1 }];
+    const before = b.allySummoner.mana;
+    assert.equal(b.playStone({ x: 1, y: 1 }), true);
+    assert.ok(b.allySummoner.mana > before + 20);
+    assert.match(b.log.join("\n"), /사석자석/);
+  });
+
+  it("resets 9x9 after threshold into empowered circle", () => {
+    const b = new Battle({
+      boardSize: 9,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+      resetThreshold: 3,
+    });
+    for (let i = 0; i < 3; i++) {
+      b.runAutoTurn();
+    }
+    assert.equal(b.circle.boardPhase, 1);
+    assert.equal(b.circle.stoneSummonCount, 0);
+    assert.equal(b.tokens.length, 0);
+    assert.ok(b.board.getBoard().flat().every((c) => c === null));
+    assert.match(b.log.join("\n"), /강화 진문/);
   });
 });

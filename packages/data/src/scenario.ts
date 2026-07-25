@@ -59,6 +59,22 @@ export const CHAPTER1_STAGES: StageDef[] = [
     dropSetId: "hwalro",
     waves: 3,
   },
+  {
+    id: "garen_1_5",
+    nameKo: "가렌숲 1-5 · 진문시련",
+    map: 1,
+    stage: 5,
+    boardSize: 9,
+    energyCost: 6,
+    enemyMonsterIds: [
+      "thunder_lancer",
+      "capture_hound",
+      "ash_archer",
+      "shield_tortoise",
+    ],
+    dropSetId: "hwalro",
+    waves: 3,
+  },
 ];
 
 export function getStage(id: string): StageDef | undefined {

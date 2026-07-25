@@ -1,0 +1,21 @@
+{
+  "name": "stonesummoner-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "stonesummoner": "./src/main.ts"
+  },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "demo": "tsx src/main.ts --demo"
+  },
+  "dependencies": {
+    "stonesummoner-loop": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

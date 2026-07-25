@@ -2,6 +2,7 @@ import {
   Board,
   amplifyCapForPhase,
   createCirclePhaseState,
+  itemSpawnBonusForPhase,
   manaBonusMultiplierForPhase,
   registerStoneSummon,
   resetBoardInPlace,
@@ -12,6 +13,12 @@ import {
 import { pickAutoStone, pickDefaultTarget, teamStoneColor } from "./ai.js";
 import { classifyCapture, gainsForBoardEvent } from "./boardEvents.js";
 import { clampAmplify, computeDamage } from "./damage.js";
+import {
+  itemDef,
+  shouldSpawnItem,
+  weightedItemId,
+  type BoardToken,
+} from "./items.js";
 import type {
   BattlePhase,
   FinishReason,
@@ -30,6 +37,8 @@ export interface BattleConfig {
   /** Optional power-gap amplify cap (default 1.25). */
   powerGapAmplifyCap?: number;
   rng?: () => number;
+  /** Override empowered reset threshold (default 50 on 9×9). */
+  resetThreshold?: number;
 }
 
 export interface SkillResult {
@@ -46,6 +55,8 @@ export class Battle {
   units: Unit[];
   allySummoner: SummonerState;
   enemySummoner: SummonerState;
+  /** Tokens sitting on empty intersections. */
+  tokens: BoardToken[] = [];
   amplify = 1;
   skillAmplifyBonus = 0;
   phase: BattlePhase = "idle";
@@ -57,7 +68,10 @@ export class Battle {
 
   constructor(config: BattleConfig) {
     this.board = new Board(config.boardSize);
-    this.circle = createCirclePhaseState(config.boardSize);
+    this.circle = createCirclePhaseState(
+      config.boardSize,
+      config.resetThreshold,
+    );
     this.units = config.units.map((u) => ({ ...u, stats: { ...u.stats } }));
     this.allySummoner = { ...config.allySummoner };
     this.enemySummoner = { ...config.enemySummoner };
@@ -71,6 +85,10 @@ export class Battle {
 
   alive(team?: TeamId): Unit[] {
     return this.units.filter((u) => u.alive && (team ? u.team === team : true));
+  }
+
+  tokenAt(x: number, y: number): BoardToken | undefined {
+    return this.tokens.find((t) => t.x === x && t.y === y);
   }
 
   currentAmplify(): number {
@@ -125,7 +143,6 @@ export class Battle {
   private previewCapture(color: "black" | "white", p: Point): number {
     const trial = Board.fromGrid(this.board.getBoard());
     const ko = this.board.getKoPoint();
-    // Board doesn't expose setKo — trial starts ko-null; good enough for AI
     void ko;
     const r = trial.play(color, p);
     return r.ok ? r.capturedCount : -1;
@@ -134,9 +151,68 @@ export class Battle {
   autoPickStone(unit: Unit): Point | null {
     const color = teamStoneColor(unit.team);
     const legal = this.board.legalMoves(color);
-    return pickAutoStone(legal, this.board.size, (p) =>
-      Math.max(0, this.previewCapture(color, p)),
+    // Prefer token cells slightly for AI
+    return pickAutoStone(legal, this.board.size, (p) => {
+      const cap = Math.max(0, this.previewCapture(color, p));
+      const tokenBonus = this.tokenAt(p.x, p.y) ? 2 : 0;
+      return cap + tokenBonus;
+    });
+  }
+
+  private applyTokenPickup(unit: Unit, token: BoardToken): void {
+    this.tokens = this.tokens.filter(
+      (t) => !(t.x === token.x && t.y === token.y),
     );
+    const name = itemDef(token.id).nameKo;
+    if (token.id === "crit_charm") {
+      unit.critCharm = (unit.critCharm ?? 0) + 55;
+      this.log.push(`${unit.name} 획득 ${name} (치명↑)`);
+      return;
+    }
+    if (token.id === "shield_core") {
+      const shield = Math.round(unit.stats.hp * 0.18);
+      unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+      this.log.push(`${unit.name} 획득 ${name} (실드 +${shield})`);
+      return;
+    }
+    // capture_magnet
+    const manaMul =
+      manaBonusMultiplierForPhase(this.circle.boardPhase) *
+      (1 + this.summonerOf(unit.team).boardSense);
+    const gains = gainsForBoardEvent("item_magnet", 0, manaMul);
+    this.amplify = clampAmplify(
+      this.amplify + gains.amplifyDelta,
+      amplifyCapForPhase(this.circle.boardPhase),
+      this.powerGapCap,
+    );
+    this.skillAmplifyBonus += gains.skillAmplifyBonus;
+    const sm = this.summonerOf(unit.team);
+    sm.mana = Math.min(sm.manaMax, sm.mana + gains.mana);
+    this.log.push(
+      `${unit.name} 획득 ${name} (마나 +${Math.round(gains.mana)})`,
+    );
+  }
+
+  private trySpawnItem(): void {
+    const bonus = itemSpawnBonusForPhase(this.circle.boardPhase);
+    if (!shouldSpawnItem(bonus, this.rng)) return;
+
+    const size = this.board.size;
+    const grid = this.board.getBoard();
+    const empty: Point[] = [];
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (grid[y]![x] !== null) continue;
+        if (this.tokenAt(x, y)) continue;
+        empty.push({ x, y });
+      }
+    }
+    if (empty.length === 0) return;
+
+    const spot = empty[Math.floor(this.rng() * empty.length)]!;
+    const id = weightedItemId(this.circle.boardPhase, this.rng);
+    this.tokens.push({ id, x: spot.x, y: spot.y });
+    this.log.push(`${itemDef(id).nameKo} 스폰 (${spot.x},${spot.y})`);
   }
 
   /**
@@ -170,11 +246,19 @@ export class Battle {
     const sm = this.summonerOf(unit.team);
     sm.mana = Math.min(sm.manaMax, sm.mana + gains.mana);
 
+    const picked = this.tokenAt(point.x, point.y);
+    if (picked) this.applyTokenPickup(unit, picked);
+
     const prog = registerStoneSummon(this.circle);
     this.circle = prog.state;
     if (prog.shouldReset) {
       resetBoardInPlace(this.board);
-      this.log.push(`empowered circle phase ${this.circle.boardPhase}`);
+      this.tokens = [];
+      this.log.push(
+        `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${amplifyCapForPhase(this.circle.boardPhase)})`,
+      );
+    } else {
+      this.trySpawnItem();
     }
 
     this.log.push(
@@ -251,6 +335,9 @@ export class Battle {
     coeff: number,
     usedSummonerSkill: boolean,
   ): SkillResult {
+    const critBonus = attacker.critCharm ?? 0;
+    if (critBonus > 0) attacker.critCharm = 0;
+
     const { damage, crit } = computeDamage({
       atk: attacker.stats.atk,
       skillCoeff: coeff,
@@ -258,11 +345,20 @@ export class Battle {
       defenderElement: target.element,
       defenderDef: target.stats.def,
       amplify: this.currentAmplify(),
-      critRate: attacker.stats.critRate,
+      critRate: attacker.stats.critRate + critBonus,
       critDmg: attacker.stats.critDmg,
       rng: this.rng,
     });
-    target.hp = Math.max(0, target.hp - damage);
+
+    let remaining = damage;
+    if (target.shieldHp && target.shieldHp > 0) {
+      const absorbed = Math.min(target.shieldHp, remaining);
+      target.shieldHp -= absorbed;
+      remaining -= absorbed;
+      if (target.shieldHp <= 0) target.shieldHp = 0;
+    }
+
+    target.hp = Math.max(0, target.hp - remaining);
     if (target.hp <= 0) {
       target.alive = false;
       this.log.push(`${target.name} defeated`);

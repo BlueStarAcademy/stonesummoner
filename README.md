@@ -9,16 +9,34 @@
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173
+npm run dev          # PWA http://localhost:5173 (모바일 우선)
+npm run cli:demo     # 홈→출정→전투→보상 루프 (비대화형)
+npm run cli          # CLI 인터랙티브
 npm test
-npm run build && npm start   # production (PORT=8080)
+npm run build && npm start
 ```
+
+### CLI 명령
+
+| 명령 | 설명 |
+|------|------|
+| `collect` | 진액 연못 수집 |
+| `summon` | 소환진 소환 (소환서 1) |
+| `enhance 0` | 강화진 레벨업 (인덱스/uid) |
+| `roster` | 보유 몬스터 |
+| `stages` | 스테이지 목록 |
+| `go garen_1_1` | 출정·자동전투·보상 |
+| `status` | 재화·클리어 현황 |
+| `demo` | 데모 루프 |
+| `quit` | 종료 |
 
 ## 패키지
 
 | 경로 | 역할 |
 |------|------|
-| `apps/web` | Vite PWA (홈·출정·전투) |
+| `apps/web` | Vite PWA (**모바일 우선** 홈·출정·전투) |
+| `apps/cli` | 홈→출정→전투→보상 CLI |
+| `packages/loop` | 루프 공용 로직 |
 | `packages/board` | 5/7/9 바둑 룰 · 50수 강화 리셋 |
 | `packages/combat` | ATB · Amplify · 마나 · 진문개방 |
 | `packages/home` | 섬 건물 4종 |
