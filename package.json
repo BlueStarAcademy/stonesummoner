@@ -1,0 +1,24 @@
+{
+  "name": "stonesummoner",
+  "private": true,
+  "workspaces": [
+    "packages/board",
+    "packages/combat",
+    "packages/home",
+    "packages/data",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w stonesummoner-web",
+    "build": "npm run build -w stonesummoner-web",
+    "start": "npm run start -w stonesummoner-web",
+    "test": "npm test -w stonesummoner-board && npm test -w stonesummoner-combat && npm test -w stonesummoner-home && npm test -w stonesummoner-data",
+    "test:board": "npm test -w stonesummoner-board",
+    "test:combat": "npm test -w stonesummoner-combat",
+    "test:home": "npm test -w stonesummoner-home",
+    "test:data": "npm test -w stonesummoner-data"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "stonesummoner-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "stonesummoner-board": "*",
+    "stonesummoner-combat": "*",
+    "stonesummoner-data": "*",
+    "stonesummoner-home": "*",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vite": "^6.0.11",
+    "vite-plugin-pwa": "^0.21.1",
+    "@types/node": "^22.13.0"
+  }
+}

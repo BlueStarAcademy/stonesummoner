@@ -1,0 +1,21 @@
+{
+  "name": "stonesummoner-combat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "tsx --test src/battle.test.ts src/damage.test.ts"
+  },
+  "dependencies": {
+    "stonesummoner-board": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

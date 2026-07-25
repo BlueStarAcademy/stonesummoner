@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.railway
+.env
+.env.*
+!.env.example
+apps/web/dev-dist/
