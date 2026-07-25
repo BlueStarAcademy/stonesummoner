@@ -48,6 +48,7 @@ import type {
 } from "./types.js";
 import {
   bossVictoryPoint,
+  BRILLIANT_MISSION_GOAL,
   pickCircleElement,
   type BattleModules,
 } from "./modules.js";
@@ -114,7 +115,7 @@ export interface BattleConfig {
    * Wave 1 is already in `units`; called for wave 2+.
    */
   spawnWave?: (wave: number) => Unit[];
-  /** Magic-circle modules E/F stubs. */
+  /** Magic-circle module flags (B–G + mana race). */
   modules?: BattleModules;
   /** Module E: affinity element for this battle. */
   circleElement?: Element;
@@ -150,6 +151,12 @@ export class Battle {
   victoryPoint: Point | null;
   manaSealed: boolean;
   victoryPointClaimed: boolean;
+  /** Module G: 묘수 hits toward mission. */
+  brilliantCount = 0;
+  brilliantGoal = BRILLIANT_MISSION_GOAL;
+  brilliantDone = false;
+  /** Arena mana race winner. */
+  manaRaceWinner: TeamId | null = null;
   /** 1-based current wave. */
   currentWave: number;
   readonly totalWaves: number;
@@ -195,6 +202,12 @@ export class Battle {
       this.log.push(
         `보스보드: 필승점 (${this.victoryPoint.x},${this.victoryPoint.y}) · 마나봉인`,
       );
+    }
+    if (this.modules.moduleG) {
+      this.log.push(`묘수 미션: 추천 착수 ${this.brilliantGoal}회`);
+    }
+    if (this.modules.manaRace) {
+      this.log.push(`맞마나 레이스: 먼저 마나 풀충전`);
     }
   }
 
@@ -260,6 +273,23 @@ export class Battle {
     this.enemySummoner.mana = Math.min(
       this.enemySummoner.manaMax,
       this.enemySummoner.mana + this.enemySummoner.manaRegenPerTick,
+    );
+    this.checkManaRace("ally");
+    this.checkManaRace("enemy");
+  }
+
+  private checkManaRace(team: TeamId): void {
+    if (!this.modules.manaRace || this.manaRaceWinner) return;
+    const sm = this.summonerOf(team);
+    if (sm.mana < sm.manaMax) return;
+    this.manaRaceWinner = team;
+    this.amplify = clampAmplify(
+      this.amplify + 0.08,
+      amplifyCapForPhase(this.circle.boardPhase),
+      this.powerGapCap,
+    );
+    this.log.push(
+      `맞마나 레이스: ${team === "ally" ? "아군" : "적"} 승리 (Amp+)`,
     );
   }
 
@@ -385,6 +415,10 @@ export class Battle {
     if (!unit) return false;
 
     const color = teamStoneColor(unit.team);
+    let brilliantTarget: Point | null = null;
+    if (this.modules.moduleG && unit.team === "ally") {
+      brilliantTarget = this.suggestStones(unit)[0]?.point ?? null;
+    }
     const result = this.board.play(color, point);
     if (!result.ok) {
       this.log.push(`illegal stone ${result.reason}`);
@@ -419,6 +453,30 @@ export class Battle {
       if (this.circleElement && unit.element === this.circleElement) {
         ampDelta += 0.04;
         this.log.push(`속성 테두리 (${unit.element})`);
+      }
+      if (
+        (unit.element === "light" || unit.element === "dark") &&
+        this.circle.boardPhase >= 1
+      ) {
+        ampDelta += 0.03;
+        this.log.push(`이중층 (${unit.element})`);
+      }
+    }
+
+    if (
+      brilliantTarget &&
+      brilliantTarget.x === point.x &&
+      brilliantTarget.y === point.y
+    ) {
+      this.brilliantCount += 1;
+      this.log.push(
+        `묘수! (${this.brilliantCount}/${this.brilliantGoal})`,
+      );
+      if (!this.brilliantDone && this.brilliantCount >= this.brilliantGoal) {
+        this.brilliantDone = true;
+        manaGain += 25;
+        ampDelta += 0.05;
+        this.log.push(`묘수 미션 완료`);
       }
     }
 
@@ -461,24 +519,27 @@ export class Battle {
 
     const sm = this.summonerOf(unit.team);
     sm.mana = Math.min(sm.manaMax, sm.mana + manaGain);
+    this.checkManaRace(unit.team);
 
-    const shapes = detectShapeBonuses(this.board, color, point);
-    for (const sh of shapes) {
-      this.amplify = clampAmplify(
-        this.amplify + sh.amplifyDelta,
-        amplifyCapForPhase(this.circle.boardPhase),
-        this.powerGapCap,
-      );
-      if (sh.skillAmplifyBonus) {
-        this.skillAmplifyBonus += sh.skillAmplifyBonus;
-      }
-      sm.mana = Math.min(sm.manaMax, sm.mana + sh.mana * manaMul);
-      if (sh.shieldPct) {
-        const shield = Math.round(unit.stats.hp * sh.shieldPct);
-        unit.shieldHp = (unit.shieldHp ?? 0) + shield;
-        this.log.push(`형상 ${sh.labelKo}: 실드 +${shield}`);
-      } else {
-        this.log.push(`형상 ${sh.labelKo}`);
+    if (this.modules.moduleB) {
+      const shapes = detectShapeBonuses(this.board, color, point);
+      for (const sh of shapes) {
+        this.amplify = clampAmplify(
+          this.amplify + sh.amplifyDelta,
+          amplifyCapForPhase(this.circle.boardPhase),
+          this.powerGapCap,
+        );
+        if (sh.skillAmplifyBonus) {
+          this.skillAmplifyBonus += sh.skillAmplifyBonus;
+        }
+        sm.mana = Math.min(sm.manaMax, sm.mana + sh.mana * manaMul);
+        if (sh.shieldPct) {
+          const shield = Math.round(unit.stats.hp * sh.shieldPct);
+          unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+          this.log.push(`형상 ${sh.labelKo}: 실드 +${shield}`);
+        } else {
+          this.log.push(`형상 ${sh.labelKo}`);
+        }
       }
     }
 
@@ -515,7 +576,10 @@ export class Battle {
     const picked = this.tokenAt(point.x, point.y);
     if (picked) this.applyTokenPickup(unit, picked);
 
-    if (result.capturedCount >= CAPTURE_SHOP_THRESHOLD) {
+    if (
+      this.modules.moduleD &&
+      result.capturedCount >= CAPTURE_SHOP_THRESHOLD
+    ) {
       this.resolveCaptureShop(unit, pickCaptureShopChoice(this.rng));
     }
 
@@ -532,7 +596,10 @@ export class Battle {
       }
     } else {
       this.trySpawnItem();
-      if (shouldRollCircleEvent(this.circle.stoneSummonCount)) {
+      if (
+        this.modules.moduleC &&
+        shouldRollCircleEvent(this.circle.stoneSummonCount)
+      ) {
         this.applyCircleEvent(rollCircleEvent(this.rng), unit);
       }
     }

@@ -208,6 +208,14 @@ describe("game loop", () => {
       island: { ...sell.save.island, summonerLevel: 8 },
     };
     const drill = runPracticeDojo(save);
+    assert.equal(drill.save.dojoDrills, 1);
+    let s = drill.save;
+    s = runPracticeDojo(s).save;
+    const third = runPracticeDojo(s);
+    assert.equal(third.save.dojoDrills, 3);
+    assert.equal(third.save.jinmunStones, (save.jinmunStones ?? 0) + 1);
+    assert.match(third.message, /묘수 미션/);
+    // keep prior assertions on first drill message via `drill` below
     assert.match(drill.message, /도장/);
     assert.ok(drill.save.island.mana > save.island.mana);
   });

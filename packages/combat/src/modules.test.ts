@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { getStage } from "stonesummoner-data";
 import { Battle, makeUnit } from "./battle.js";
+import {
+  BRILLIANT_MISSION_GOAL,
+  modulesForStage,
+} from "./modules.js";
 import type { SummonerState, Unit } from "./types.js";
 
 function summonerState(unitId: string, mana = 40): SummonerState {
@@ -54,7 +59,19 @@ function units(): Unit[] {
   ];
 }
 
-describe("Modules E/F", () => {
+describe("Modules E/F/G/H", () => {
+  it("maps stage modes to module flags (H)", () => {
+    const depth = getStage("depth_hwalro");
+    const trial = getStage("trial_jinmun");
+    const arena = getStage("arena_rookie");
+    const raid = getStage("guild_raid_boss");
+    assert.ok(depth && trial && arena && raid);
+    assert.deepEqual(modulesForStage(depth), { moduleB: true });
+    assert.equal(modulesForStage(trial).moduleG, true);
+    assert.equal(modulesForStage(arena).manaRace, true);
+    assert.equal(modulesForStage(raid).moduleF, true);
+  });
+
   it("enables module E affinity and summoner stone bonus", () => {
     const b = new Battle({
       boardSize: 5,
@@ -100,5 +117,52 @@ describe("Modules E/F", () => {
     assert.equal(b.victoryPointClaimed, true);
     assert.equal(b.manaSealed, false);
     assert.ok(b.log.some((l) => /필승점 해금/.test(l)));
+  });
+
+  it("counts brilliant moves for module G", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: units(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      modules: { moduleG: true },
+      rng: () => 0.1,
+    });
+    assert.equal(b.brilliantGoal, BRILLIANT_MISSION_GOAL);
+    assert.match(b.log.join("\n"), /묘수 미션/);
+
+    const u = b.tickUntilReady();
+    assert.ok(u);
+    const top = b.suggestStones(u)[0]?.point;
+    assert.ok(top);
+    assert.equal(b.playStone(top), true);
+    assert.equal(b.brilliantCount, 1);
+    assert.ok(b.log.some((l) => /묘수!/.test(l)));
+  });
+
+  it("awards mana race when ally hits full mana", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: units(),
+      allySummoner: {
+        ...summonerState("a-sum", 90),
+        manaRegenPerTick: 0,
+      },
+      enemySummoner: {
+        ...summonerState("e-sum"),
+        manaRegenPerTick: 0,
+      },
+      modules: { manaRace: true, moduleE: true },
+      circleElement: "water",
+      rng: () => 0.1,
+    });
+    const u = b.tickUntilReady();
+    assert.ok(u);
+    assert.equal(u.kind, "summoner");
+    assert.equal(b.manaRaceWinner, null);
+    assert.equal(b.playStone({ x: 1, y: 1 }), true);
+    assert.ok(b.allySummoner.mana >= b.allySummoner.manaMax);
+    assert.equal(b.manaRaceWinner, "ally");
+    assert.ok(b.log.some((l) => /맞마나 레이스: 아군/.test(l)));
   });
 });

@@ -217,6 +217,7 @@ function migrateSave(raw: unknown): PlayerSave | null {
       typeof p.arenaSeasonWins === "number" ? p.arenaSeasonWins : 0,
     guildContribution:
       typeof p.guildContribution === "number" ? p.guildContribution : 0,
+    dojoDrills: typeof p.dojoDrills === "number" ? p.dojoDrills : 0,
   };
 }
 
@@ -852,7 +853,7 @@ function renderHome(): string {
       </button>
       <button type="button" class="building" data-b="glory"><strong>영광 건물</strong><small>영광 ${save.gloryPoints ?? 0}</small></button>
       <button type="button" class="building" data-b="dojo" ${save.island.summonerLevel >= 8 || save.island.buildings.some((b) => b.id === "practice_dojo") ? "" : "disabled"}>
-        <strong>마법진 도장</strong><small>${save.island.summonerLevel >= 8 ? "수련" : "Lv.8 해금"}</small>
+        <strong>마법진 도장</strong><small>${save.island.summonerLevel >= 8 ? `수련 ${save.dojoDrills ?? 0}회` : "Lv.8 해금"}</small>
       </button>
       <button type="button" class="building" data-b="fusion" ${save.island.summonerLevel >= 17 || save.island.buildings.some((b) => b.id === "fusion_star") ? "" : "disabled"}>
         <strong>융합의 별</strong><small>${save.island.summonerLevel >= 17 ? "동일종 융합" : "Lv.17 해금"}</small>
@@ -1196,7 +1197,7 @@ function renderBattleTicker(): string {
   const lines = battle.log
     .filter(
       (l) =>
-        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수/.test(l),
+        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수|묘수|맞마나|이중층/.test(l),
     )
     .slice(-3);
   if (!lines.length) {
@@ -1224,11 +1225,15 @@ function renderBattle(manaPct: number): string {
   const awaitSkill =
     battle.phase === "await_skill" && active?.team === "ally" && !autoMode;
   const canUlt = !!active && battle.canUseSummonerSkill(active);
+  const mission =
+    battle.modules.moduleG && !battle.finishReason
+      ? ` · 묘수 ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? "✓" : ""}`
+      : "";
   const status = battle.finishReason
     ? battle.finishReason === "ally_win"
       ? "승리! (적 소환수 전멸)"
       : "패배... (아군 소환수 전멸)"
-    : `${battle.phase} · amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} · ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})`;
+    : `${battle.phase} · amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} · ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}`;
 
   const skillHint =
     battle.phase === "await_stone" && active?.team === "ally"

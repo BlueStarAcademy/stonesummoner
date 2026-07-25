@@ -3,6 +3,7 @@ import {
   Battle,
   estimateCombatPower,
   makeUnit,
+  modulesForStage,
   type SummonerState,
   type Unit,
 } from "stonesummoner-combat";
@@ -111,6 +112,8 @@ export interface PlayerSave {
   arenaSeasonWins: number;
   /** Phase 2+: guild raid contribution points. */
   guildContribution: number;
+  /** Phase 2+: practice dojo drill count (묘수 미션 누적). */
+  dojoDrills: number;
 }
 
 export interface BattleReward {
@@ -287,6 +290,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     arenaBanIds: [],
     arenaSeasonWins: 0,
     guildContribution: 0,
+    dojoDrills: 0,
   };
 }
 
@@ -626,7 +630,7 @@ export function runSellSymbol(
   };
 }
 
-/** Practice dojo: free drill → mana (and small exp). */
+/** Practice dojo: drill → mana/exp; every 3rd drill grants 진문석 (묘수 미션). */
 export function runPracticeDojo(
   save: PlayerSave,
   now = Date.now(),
@@ -644,13 +648,25 @@ export function runPracticeDojo(
   const manaGain = 120 + island.summonerLevel * 8;
   island = { ...island, mana: island.mana + manaGain };
   const leveled = addSummonerExp(island, 15);
+  const dojoDrills = (save.dojoDrills ?? 0) + 1;
+  let jinmunStones = save.jinmunStones ?? 0;
+  let missionNote = "";
+  if (dojoDrills % 3 === 0) {
+    jinmunStones += 1;
+    missionNote = " · 묘수 미션 클리어 진문석 +1";
+  }
   return {
-    save: { ...save, island: leveled.island },
-    message: `도장 수련: 마나 +${manaGain} · EXP +15${
+    save: {
+      ...save,
+      island: leveled.island,
+      dojoDrills,
+      jinmunStones,
+    },
+    message: `도장 수련: 마나 +${manaGain} · EXP +15 · 수련 ${dojoDrills}회${
       leveled.levelsGained > 0
         ? ` · 서머너 Lv.${leveled.island.summonerLevel}`
         : ""
-    }`,
+    }${missionNote}`,
   };
 }
 
@@ -1170,13 +1186,7 @@ export function createStageBattle(
   const powerGapCap = amplifyCapFromPowerDelta(delta);
   const totalWaves = Math.max(1, stage.waves);
 
-  const modules = {
-    moduleE:
-      stage.mode === "guild_raid" ||
-      stage.mode === "world_arena" ||
-      stage.mode === "trial",
-    moduleF: stage.mode === "guild_raid",
-  };
+  const modules = modulesForStage(stage);
 
   return new Battle({
     boardSize: stage.boardSize,
@@ -1318,6 +1328,7 @@ export function applyRewards(
       arenaBanIds: save.arenaBanIds ?? [],
       arenaSeasonWins,
       guildContribution,
+      dojoDrills: save.dojoDrills ?? 0,
     },
     reward: {
       mana: manaGain,
@@ -1373,6 +1384,7 @@ export function runSortie(
     arenaBanIds: save.arenaBanIds ?? [],
     arenaSeasonWins: save.arenaSeasonWins ?? 0,
     guildContribution: save.guildContribution ?? 0,
+    dojoDrills: save.dojoDrills ?? 0,
   };
   const battle = createStageBattle(stage, mid, {
     banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,
