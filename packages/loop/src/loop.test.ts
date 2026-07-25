@@ -17,6 +17,7 @@ import {
   runDemoLoop,
   runEnhance,
   runEnhanceGear,
+  runAffixGearSet,
   runAwakenSummoner,
   awakenManaCost,
   awakenCrystalCost,
@@ -375,7 +376,7 @@ describe("game loop", () => {
     assert.ok(save.gear.weapon);
     assert.ok(save.gear.robe);
     assert.ok(save.gear.accessory);
-    assert.equal(listGear(save).length, 7);
+    assert.equal(listGear(save).length, 8);
     assert.ok(listSymbols(save).length >= 2);
 
     const g = runEnhanceGear(save, "orb");
@@ -404,6 +405,12 @@ describe("game loop", () => {
     assert.equal(ring.save.gear.ring.enhance, 1);
     assert.ok(ring.save.gear.ring.leaderAtkBonus > save.gear.ring.leaderAtkBonus);
     save = ring.save;
+
+    const affix = runAffixGearSet(save, "orb", "mana");
+    assert.match(affix.message, /세트 부여/);
+    assert.equal(affix.save.gear.orb.setId, "mana");
+    assert.ok(affix.save.island.mana < save.island.mana);
+    save = affix.save;
 
     const se = runEnhanceSymbol(save, "0");
     assert.match(se.message, /상징 강화/);

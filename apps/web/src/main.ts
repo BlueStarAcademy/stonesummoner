@@ -24,10 +24,13 @@ import {
   describeGear,
   describeSymbol,
   gearEnhanceManaCost,
+  GEAR_SET_AFFIX_MANA,
+  GEAR_SETS,
   getMonster,
   getStage,
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
+  summarizeGearSets,
   normalizeSummonerGear,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_IMPRINT_CRYSTAL_COST,
@@ -67,6 +70,7 @@ import {
   MAX_SKILL_LEVEL,
   MAX_SUMMONER_AWAKEN,
   runAwakenSummoner,
+  runAffixGearSet,
   runBuyEnergy,
   runBuyGlory,
   runBuyScroll,
@@ -1793,6 +1797,43 @@ function renderEnhance(): string {
         </span>
       </button>
     </div>
+    <p class="section-label">장비 세트</p>
+    <p class="muted">
+      ${
+        summarizeGearSets(gear)
+          .filter((s) => s.count > 0)
+          .map(
+            (s) =>
+              `${s.nameKo} ${s.count}${s.active4 ? " · 4세트" : s.active2 ? " · 2세트" : ""}`,
+          )
+          .join(" · ") || "세트 조각 없음"
+      }
+      · 부여 −마나 ${GEAR_SET_AFFIX_MANA}
+    </p>
+    <div class="gear-set-affix">
+      ${(
+        [
+          ["weapon", "무기", weapon],
+          ["robe", "로브", robe],
+          ["accessory", "장신구", acc],
+          ["orb", "마법구", orb],
+          ["cloak", "망토", cloak],
+          ["ring", "반지", ring],
+        ] as const
+      )
+        .map(
+          ([slot, label, piece]) => `<div class="gear-set-row">
+            <span class="gear-set-slot">${label}</span>
+            <div class="skill-up-row">
+              ${GEAR_SETS.map(
+                (s) =>
+                  `<button type="button" class="secondary" data-gear-set="${slot}" data-set-id="${s.id}" ${piece.setId === s.id ? "disabled" : ""}>${s.nameKo}</button>`,
+              ).join("")}
+            </div>
+          </div>`,
+        )
+        .join("")}
+    </div>
     <p class="section-label">상징</p>
     ${
       equipPickSymIndex != null && save.symbols[equipPickSymIndex]
@@ -2642,6 +2683,35 @@ function bind(): void {
           ? raw
           : "accessory";
       const r = runEnhanceGear(save, slot);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-gear-set]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const raw = btn.dataset.gearSet;
+      const setRaw = btn.dataset.setId ?? "";
+      const slot =
+        raw === "weapon" ||
+        raw === "robe" ||
+        raw === "orb" ||
+        raw === "cloak" ||
+        raw === "ring" ||
+        raw === "accessory"
+          ? raw
+          : "accessory";
+      if (
+        setRaw !== "mana" &&
+        setRaw !== "assault" &&
+        setRaw !== "guardian" &&
+        setRaw !== "sense"
+      ) {
+        return;
+      }
+      const r = runAffixGearSet(save, slot, setRaw);
       save = r.save;
       persist();
       flash(r.message);

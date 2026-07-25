@@ -1,4 +1,4 @@
-/** Summoner gear — 무기 · 로브 · 장신구 · 마법구 · 망토 · 반지 */
+/** Summoner gear — 무기 · 로브 · 장신구 · 마법구 · 망토 · 반지 (+얕은 세트) */
 
 export type GearSlot =
   | "weapon"
@@ -8,11 +8,43 @@ export type GearSlot =
   | "cloak"
   | "ring";
 
+/** Shallow gear sets — do not compete with symbol set depth. */
+export type GearSetId = "mana" | "assault" | "guardian" | "sense";
+
+export interface GearSetDef {
+  id: GearSetId;
+  nameKo: string;
+  /** Bonus when wearing 2+ pieces of this set. */
+  bonus2: Partial<GearSetBonus>;
+  /** Extra bonus when wearing 4+ pieces (stacks on top of 2pc). */
+  bonus4: Partial<GearSetBonus>;
+}
+
+export interface GearSetBonus {
+  manaRegenBonus: number;
+  manaMaxBonus: number;
+  boardSenseBonus: number;
+  startManaPct: number;
+  skillPowerBonus: number;
+  summonerHpBonus: number;
+  summonerDefBonus: number;
+  leaderAtkBonus: number;
+}
+
+export interface GearSetProgress {
+  setId: GearSetId;
+  nameKo: string;
+  count: number;
+  active2: boolean;
+  active4: boolean;
+}
+
 export interface GearPiece {
   id: string;
   slot: GearSlot;
   nameKo: string;
   enhance: number;
+  setId: GearSetId;
   /** Added to manaRegenPerTick */
   manaRegenBonus: number;
   /** Added to manaMax */
@@ -41,6 +73,83 @@ export interface SummonerGear {
 }
 
 export const MAX_GEAR_ENHANCE = 9;
+
+export const GEAR_SETS: GearSetDef[] = [
+  {
+    id: "mana",
+    nameKo: "진액",
+    bonus2: { manaRegenBonus: 0.08, manaMaxBonus: 8 },
+    bonus4: { startManaPct: 0.05, manaMaxBonus: 12 },
+  },
+  {
+    id: "assault",
+    nameKo: "돌격",
+    bonus2: { skillPowerBonus: 0.04, leaderAtkBonus: 0.005 },
+    bonus4: { skillPowerBonus: 0.06, leaderAtkBonus: 0.01 },
+  },
+  {
+    id: "guardian",
+    nameKo: "수호",
+    bonus2: { summonerHpBonus: 40, summonerDefBonus: 4 },
+    bonus4: { summonerHpBonus: 60, summonerDefBonus: 6 },
+  },
+  {
+    id: "sense",
+    nameKo: "감응",
+    bonus2: { boardSenseBonus: 0.05 },
+    bonus4: { boardSenseBonus: 0.08, manaRegenBonus: 0.04 },
+  },
+];
+
+const DEFAULT_SET_BY_SLOT: Record<GearSlot, GearSetId> = {
+  weapon: "assault",
+  robe: "guardian",
+  accessory: "mana",
+  orb: "sense",
+  cloak: "guardian",
+  ring: "assault",
+};
+
+function emptyBonus(): GearSetBonus {
+  return {
+    manaRegenBonus: 0,
+    manaMaxBonus: 0,
+    boardSenseBonus: 0,
+    startManaPct: 0,
+    skillPowerBonus: 0,
+    summonerHpBonus: 0,
+    summonerDefBonus: 0,
+    leaderAtkBonus: 0,
+  };
+}
+
+function mergeBonus(
+  into: GearSetBonus,
+  add: Partial<GearSetBonus> | undefined,
+): void {
+  if (!add) return;
+  into.manaRegenBonus += add.manaRegenBonus ?? 0;
+  into.manaMaxBonus += add.manaMaxBonus ?? 0;
+  into.boardSenseBonus += add.boardSenseBonus ?? 0;
+  into.startManaPct += add.startManaPct ?? 0;
+  into.skillPowerBonus += add.skillPowerBonus ?? 0;
+  into.summonerHpBonus += add.summonerHpBonus ?? 0;
+  into.summonerDefBonus += add.summonerDefBonus ?? 0;
+  into.leaderAtkBonus += add.leaderAtkBonus ?? 0;
+}
+
+export function getGearSet(id: GearSetId): GearSetDef | undefined {
+  return GEAR_SETS.find((s) => s.id === id);
+}
+
+export function isGearSetId(raw: string): raw is GearSetId {
+  return (
+    raw === "mana" ||
+    raw === "assault" ||
+    raw === "guardian" ||
+    raw === "sense"
+  );
+}
 
 function basePiece(
   partial: Omit<
@@ -88,6 +197,7 @@ export function createStarterGear(): SummonerGear {
       slot: "weapon",
       nameKo: "진문검",
       enhance: 0,
+      setId: "assault",
       skillPowerBonus: 0.06,
     }),
     robe: basePiece({
@@ -95,6 +205,7 @@ export function createStarterGear(): SummonerGear {
       slot: "robe",
       nameKo: "수호 로브",
       enhance: 0,
+      setId: "guardian",
       summonerHpBonus: 40,
       summonerDefBonus: 4,
     }),
@@ -103,6 +214,7 @@ export function createStarterGear(): SummonerGear {
       slot: "accessory",
       nameKo: "진액 회로",
       enhance: 0,
+      setId: "mana",
       manaRegenBonus: 0.12,
       manaMaxBonus: 10,
       startManaPct: 0.05,
@@ -112,6 +224,7 @@ export function createStarterGear(): SummonerGear {
       slot: "orb",
       nameKo: "감응 수정",
       enhance: 0,
+      setId: "sense",
       boardSenseBonus: 0.08,
     }),
     cloak: basePiece({
@@ -119,6 +232,7 @@ export function createStarterGear(): SummonerGear {
       slot: "cloak",
       nameKo: "지휘 망토",
       enhance: 0,
+      setId: "guardian",
       summonerHpBonus: 25,
       summonerDefBonus: 2,
       leaderAtkBonus: 0.008,
@@ -128,6 +242,7 @@ export function createStarterGear(): SummonerGear {
       slot: "ring",
       nameKo: "결속 반지",
       enhance: 0,
+      setId: "assault",
       skillPowerBonus: 0.02,
       leaderAtkBonus: 0.01,
     }),
@@ -140,11 +255,16 @@ export function normalizeGearPiece(
   fallbackSlot?: GearSlot,
 ): GearPiece {
   const slot = piece.slot ?? fallbackSlot ?? "accessory";
+  const setId =
+    piece.setId && isGearSetId(piece.setId)
+      ? piece.setId
+      : DEFAULT_SET_BY_SLOT[slot];
   return {
     id: piece.id,
     slot,
     nameKo: piece.nameKo,
     enhance: piece.enhance ?? 0,
+    setId,
     manaRegenBonus: piece.manaRegenBonus ?? 0,
     manaMaxBonus: piece.manaMaxBonus ?? 0,
     boardSenseBonus: piece.boardSenseBonus ?? 0,
@@ -175,18 +295,56 @@ export function normalizeSummonerGear(
   };
 }
 
-/** Sum leader ATK% from all gear pieces. */
+export function gearPieces(gear: SummonerGear): GearPiece[] {
+  const g = normalizeSummonerGear(gear);
+  return [g.weapon, g.robe, g.accessory, g.orb, g.cloak, g.ring];
+}
+
+export function summarizeGearSets(gear: SummonerGear): GearSetProgress[] {
+  const counts: Partial<Record<GearSetId, number>> = {};
+  for (const p of gearPieces(gear)) {
+    counts[p.setId] = (counts[p.setId] ?? 0) + 1;
+  }
+  return GEAR_SETS.map((def) => {
+    const count = counts[def.id] ?? 0;
+    return {
+      setId: def.id,
+      nameKo: def.nameKo,
+      count,
+      active2: count >= 2,
+      active4: count >= 4,
+    };
+  });
+}
+
+/** Aggregate 2pc/4pc set bonuses for equipped gear. */
+export function gearSetBonuses(gear: SummonerGear): GearSetBonus {
+  const out = emptyBonus();
+  for (const prog of summarizeGearSets(gear)) {
+    if (!prog.active2) continue;
+    const def = getGearSet(prog.setId)!;
+    mergeBonus(out, def.bonus2);
+    if (prog.active4) mergeBonus(out, def.bonus4);
+  }
+  return out;
+}
+
+/** Sum leader ATK% from pieces + active set bonuses. */
 export function gearLeaderAtkPct(gear: SummonerGear): number {
   const g = normalizeSummonerGear(gear);
-  return [g.weapon, g.robe, g.accessory, g.orb, g.cloak, g.ring].reduce(
+  const pieces = gearPieces(g).reduce(
     (n, p) => n + (p.leaderAtkBonus ?? 0),
     0,
   );
+  return pieces + gearSetBonuses(g).leaderAtkBonus;
 }
 
 export function gearEnhanceManaCost(enhance: number): number {
   return 100 + enhance * 60;
 }
+
+/** Mana cost to re-affix a piece to another gear set. */
+export const GEAR_SET_AFFIX_MANA = 180;
 
 /** Apply +1 enhance bonuses in place (returns new piece). */
 export function bumpGearEnhance(piece: GearPiece): GearPiece {
@@ -244,5 +402,6 @@ export function bumpGearEnhance(piece: GearPiece): GearPiece {
 }
 
 export function describeGear(piece: GearPiece): string {
-  return `${piece.nameKo} +${piece.enhance}`;
+  const set = getGearSet(piece.setId)?.nameKo ?? piece.setId;
+  return `${piece.nameKo} +${piece.enhance} [${set}]`;
 }

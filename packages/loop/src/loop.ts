@@ -17,9 +17,13 @@ import {
   describeSymbol,
   gearEnhanceManaCost,
   gearLeaderAtkPct,
+  gearSetBonuses,
+  GEAR_SET_AFFIX_MANA,
+  getGearSet,
   getGloryBuilding,
   getMonster,
   normalizeSummonerGear,
+  summarizeGearSets,
   getStage,
   gloryBuffFromLevels,
   imprintSymbolMain,
@@ -34,6 +38,7 @@ import {
   SYMBOL_GRIND_MANA_COST,
   summarizeSymbolSets,
   ALL_STAGES,
+  type GearSetId,
   type GearSlot,
   type GloryBuildingId,
   type StageDef,
@@ -203,24 +208,33 @@ function buildSummonerState(
 ): SummonerState {
   const g = normalizeSummonerGear(gear);
   const pieces = [g.weapon, g.robe, g.accessory, g.orb, g.cloak, g.ring];
+  const sets = gearSetBonuses(g);
   const a = Math.max(0, awaken);
   const regen =
     0.85 +
     pieces.reduce((n, p) => n + (p.manaRegenBonus ?? 0), 0) +
+    sets.manaRegenBonus +
     a * 0.06;
   const manaMax =
     100 +
     pieces.reduce((n, p) => n + (p.manaMaxBonus ?? 0), 0) +
+    sets.manaMaxBonus +
     a * 8;
   const boardSense = weakBoard
     ? 0.02
     : 0.05 +
       pieces.reduce((n, p) => n + (p.boardSenseBonus ?? 0), 0) +
+      sets.boardSenseBonus +
       a * 0.015;
   const startPct =
-    0.2 + pieces.reduce((n, p) => n + (p.startManaPct ?? 0), 0) + a * 0.01;
+    0.2 +
+    pieces.reduce((n, p) => n + (p.startManaPct ?? 0), 0) +
+    sets.startManaPct +
+    a * 0.01;
   const skillPowerBonus =
-    pieces.reduce((n, p) => n + (p.skillPowerBonus ?? 0), 0) + a * 0.025;
+    pieces.reduce((n, p) => n + (p.skillPowerBonus ?? 0), 0) +
+    sets.skillPowerBonus +
+    a * 0.025;
   return {
     unitId,
     mana: Math.min(manaMax, manaMax * startPct),
@@ -860,6 +874,13 @@ export function listRoster(save: PlayerSave): string[] {
 export function listGear(save: PlayerSave): string[] {
   const gear = normalizeSummonerGear(save.gear);
   const leader = (gearLeaderAtkPct(gear) * 100).toFixed(1);
+  const sets = summarizeGearSets(gear)
+    .filter((s) => s.count > 0)
+    .map(
+      (s) =>
+        `${s.nameKo} ${s.count}${s.active4 ? "(4)" : s.active2 ? "(2)" : ""}`,
+    )
+    .join(" · ");
   return [
     `무기 ${describeGear(gear.weapon)} · 스킬+${(gear.weapon.skillPowerBonus * 100).toFixed(0)}%`,
     `로브 ${describeGear(gear.robe)} · HP+${gear.robe.summonerHpBonus} DEF+${gear.robe.summonerDefBonus}`,
@@ -867,6 +888,7 @@ export function listGear(save: PlayerSave): string[] {
     `마법구 ${describeGear(gear.orb)} · sense+${gear.orb.boardSenseBonus.toFixed(2)}`,
     `망토 ${describeGear(gear.cloak)} · HP+${gear.cloak.summonerHpBonus} 리더+${(gear.cloak.leaderAtkBonus * 100).toFixed(1)}%`,
     `반지 ${describeGear(gear.ring)} · 스킬+${(gear.ring.skillPowerBonus * 100).toFixed(0)}% 리더+${(gear.ring.leaderAtkBonus * 100).toFixed(1)}%`,
+    `세트 ${sets || "없음"}`,
     `리더 합산 ATK +${leader}%`,
   ];
 }
@@ -1128,6 +1150,42 @@ export function runEnhanceGear(
   return {
     save: { ...save, island, gear },
     message: `장비 강화: ${describeGear(next)} (−마나 ${cost})`,
+  };
+}
+
+/** Re-affix a gear piece to another shallow set (마나/돌격/수호/감응). */
+export function runAffixGearSet(
+  save: PlayerSave,
+  slot: GearSlot,
+  setId: GearSetId,
+): LoopStepResult {
+  const gearNorm = normalizeSummonerGear(save.gear);
+  const piece = gearNorm[slot];
+  if (piece.setId === setId) {
+    return {
+      save: { ...save, gear: gearNorm },
+      message: `${describeGear(piece)} 이미 ${getGearSet(setId)?.nameKo ?? setId} 세트`,
+    };
+  }
+  if (save.island.mana < GEAR_SET_AFFIX_MANA) {
+    return {
+      save: { ...save, gear: gearNorm },
+      message: `마나 부족 (필요 ${GEAR_SET_AFFIX_MANA}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  const next = { ...piece, setId };
+  const gear = { ...gearNorm, [slot]: next };
+  const island = {
+    ...save.island,
+    mana: save.island.mana - GEAR_SET_AFFIX_MANA,
+  };
+  const active = summarizeGearSets(gear)
+    .filter((s) => s.active2)
+    .map((s) => `${s.nameKo}${s.active4 ? "4" : "2"}`)
+    .join("·");
+  return {
+    save: { ...save, island, gear },
+    message: `세트 부여: ${describeGear(next)} (−마나 ${GEAR_SET_AFFIX_MANA})${active ? ` · 활성 ${active}` : ""}`,
   };
 }
 
@@ -1411,9 +1469,13 @@ export function createStageBattle(
   const lvl = save?.island.summonerLevel ?? 1;
   const awaken = save?.summonerAwaken ?? 0;
   const robeHp =
-    (gear.robe.summonerHpBonus ?? 0) + (gear.cloak.summonerHpBonus ?? 0);
+    (gear.robe.summonerHpBonus ?? 0) +
+    (gear.cloak.summonerHpBonus ?? 0) +
+    gearSetBonuses(gear).summonerHpBonus;
   const robeDef =
-    (gear.robe.summonerDefBonus ?? 0) + (gear.cloak.summonerDefBonus ?? 0);
+    (gear.robe.summonerDefBonus ?? 0) +
+    (gear.cloak.summonerDefBonus ?? 0) +
+    gearSetBonuses(gear).summonerDefBonus;
   const leaderPct =
     awakenLeaderAtkPct(awaken) + gearLeaderAtkPct(gear);
   if (leaderPct > 0) {

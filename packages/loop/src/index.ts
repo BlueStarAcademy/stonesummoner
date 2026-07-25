@@ -26,6 +26,7 @@ export {
   awakenMinLevel,
   resolveBattleAuto,
   runAwakenSummoner,
+  runAffixGearSet,
   runBuyEnergy,
   runBuyGlory,
   runBuyScroll,

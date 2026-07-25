@@ -9,6 +9,7 @@ import {
   createStarterHwalro,
   createSymbol,
   gearEnhanceManaCost,
+  gearSetBonuses,
   getMonster,
   getStage,
   grindSymbolPrefix,
@@ -16,6 +17,7 @@ import {
   MONSTERS,
   normalizeSummonerGear,
   rollSymbolDrop,
+  summarizeGearSets,
   SYMBOL_SETS,
   summarizeSymbolSets,
 } from "./index.js";
@@ -67,6 +69,12 @@ describe("phase1 data", () => {
     assert.ok(g.cloak.leaderAtkBonus > 0);
     assert.ok(g.ring.leaderAtkBonus > 0);
     assert.ok(gearEnhanceManaCost(0) > 0);
+    const sets = summarizeGearSets(g);
+    assert.ok(sets.find((s) => s.setId === "assault")?.active2);
+    assert.ok(sets.find((s) => s.setId === "guardian")?.active2);
+    const bonus = gearSetBonuses(g);
+    assert.ok(bonus.skillPowerBonus > 0);
+    assert.ok(bonus.summonerHpBonus > 0);
   });
 
   it("normalizes legacy two-slot gear", () => {

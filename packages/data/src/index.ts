@@ -33,11 +33,26 @@ export {
   describeGear,
   gearEnhanceManaCost,
   gearLeaderAtkPct,
+  gearPieces,
+  gearSetBonuses,
+  GEAR_SET_AFFIX_MANA,
+  GEAR_SETS,
+  getGearSet,
+  isGearSetId,
   MAX_GEAR_ENHANCE,
   normalizeGearPiece,
   normalizeSummonerGear,
+  summarizeGearSets,
 } from "./gear.js";
-export type { GearPiece, GearSlot, SummonerGear } from "./gear.js";
+export type {
+  GearPiece,
+  GearSetBonus,
+  GearSetDef,
+  GearSetId,
+  GearSetProgress,
+  GearSlot,
+  SummonerGear,
+} from "./gear.js";
 export {
   ALL_STAGES,
   ARENA_STAGES,
