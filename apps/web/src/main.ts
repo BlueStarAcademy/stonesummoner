@@ -96,6 +96,7 @@ import {
   skillUpManaCost,
   skillUpMinMonsterLevel,
   stageUnlockLabel,
+  type BattleReward,
   type PlayerSave,
 } from "stonesummoner-loop";
 import type { Point } from "stonesummoner-board";
@@ -112,7 +113,8 @@ type View =
   | "party"
   | "guild"
   | "stages"
-  | "battle";
+  | "battle"
+  | "result";
 
 type SessionUser = { id: string; email: string | null; kind: string };
 
@@ -136,7 +138,8 @@ let currentStage: StageDef | null = null;
 let legalHints: Point[] = [];
 let stoneSuggestions: StoneSuggestion[] = [];
 let selectedTargetId: string | null = null;
-let lastRewardMsg = "";
+let lastReward: BattleReward | null = null;
+let lastScrollGain = 0;
 let toast = "";
 let battleSpeed: 1 | 2 | 3 = 1;
 let autoMode = false;
@@ -359,7 +362,8 @@ function startBattle(stage: StageDef): void {
   };
   persist();
   currentStage = stage;
-  lastRewardMsg = "";
+  lastReward = null;
+  lastScrollGain = 0;
   autoMode = false;
   clearAutoTimer();
   dmgFloats = [];
@@ -408,28 +412,74 @@ function ensureTarget(): string | undefined {
 
 function grantRewardIfNeeded(): void {
   if (!battle?.finishReason || !currentStage) return;
-  if (lastRewardMsg) return;
+  if (lastReward) return;
   const victory = battle.finishReason === "ally_win";
   const scrollsBefore = save.scrolls;
   const { save: next, reward } = applyRewards(save, currentStage, victory);
   save = next;
   persist();
-  const scrollGain = save.scrolls > scrollsBefore ? ` · 소환서 +${save.scrolls - scrollsBefore}` : "";
-  lastRewardMsg = victory
-    ? `보상: 마나 +${reward.mana}` +
-      (reward.crystal ? ` · 크리스탈 +${reward.crystal}` : "") +
-      (reward.glory ? ` · 영광 +${reward.glory}` : "") +
-      (reward.jinmun ? ` · 진문석 +${reward.jinmun}` : "") +
-      (reward.contribution ? ` · 기여도 +${reward.contribution}` : "") +
-      (reward.summonerExp ? ` · EXP +${reward.summonerExp}` : "") +
-      (reward.levelsGained
-        ? ` · 서머너 Lv.${save.island.summonerLevel}`
-        : "") +
-      (reward.symbol
-        ? ` · 상징 ${reward.symbol.setId}(${reward.symbol.slot})`
-        : "") +
-      scrollGain
-    : "패배 — 보상 없음";
+  lastScrollGain = Math.max(0, save.scrolls - scrollsBefore);
+  lastReward = reward;
+  view = "result";
+}
+
+function renderResult(): string {
+  const stage = currentStage;
+  const reward = lastReward;
+  if (!stage || !reward) {
+    return `<div class="panel"><p class="muted">결과 없음</p>
+      <button type="button" class="secondary full" data-nav="stages">출정문으로</button></div>`;
+  }
+  const win = reward.victory;
+  const rows: string[] = [];
+  if (win) {
+    rows.push(`<li><span>마나</span><strong>+${reward.mana}</strong></li>`);
+    if (reward.crystal)
+      rows.push(`<li><span>크리스탈</span><strong>+${reward.crystal}</strong></li>`);
+    if (reward.glory)
+      rows.push(`<li><span>영광</span><strong>+${reward.glory}</strong></li>`);
+    if (reward.jinmun)
+      rows.push(`<li><span>진문석</span><strong>+${reward.jinmun}</strong></li>`);
+    if (reward.contribution)
+      rows.push(
+        `<li><span>기여도</span><strong>+${reward.contribution}</strong></li>`,
+      );
+    if (reward.summonerExp)
+      rows.push(
+        `<li><span>서머너 EXP</span><strong>+${reward.summonerExp}</strong></li>`,
+      );
+    if (reward.levelsGained)
+      rows.push(
+        `<li><span>레벨</span><strong>Lv.${save.island.summonerLevel}</strong></li>`,
+      );
+    if (lastScrollGain)
+      rows.push(
+        `<li><span>소환서</span><strong>+${lastScrollGain}</strong></li>`,
+      );
+  }
+  const drop = reward.symbol
+    ? `<div class="result-drop">
+        <p class="section-label">상징 드롭</p>
+        <p class="result-drop-card">${describeSymbol(reward.symbol)}</p>
+      </div>`
+    : "";
+  return `<div class="result-screen ${win ? "is-win" : "is-lose"}">
+    <div class="result-banner">
+      <p class="result-kicker">${stage.nameKo}</p>
+      <h2 class="result-title">${win ? "승리" : "패배"}</h2>
+      <p class="result-sub">${win ? "출정 보상" : "보상 없음 — 다시 도전하세요"}</p>
+    </div>
+    ${
+      win
+        ? `<ul class="result-rewards">${rows.join("")}</ul>${drop}`
+        : `<p class="muted result-empty">${reward.expNote}</p>`
+    }
+    <div class="result-cta">
+      <button type="button" class="auth-btn-primary" id="btn-result-again">다시 도전</button>
+      <button type="button" class="secondary auth-btn-ghost" data-nav="stages">출정문</button>
+      <button type="button" class="secondary auth-btn-ghost" data-nav="home">홈으로</button>
+    </div>
+  </div>`;
 }
 
 function onCellClick(x: number, y: number): void {
@@ -546,6 +596,7 @@ function autoAllyTurn(): void {
   if (!battle || battle.finishReason) {
     autoMode = false;
     clearAutoTimer();
+    if (battle?.finishReason) grantRewardIfNeeded();
     render();
     return;
   }
@@ -854,6 +905,8 @@ function mainContent(manaPct: number): string {
       return renderStages();
     case "battle":
       return renderBattle(manaPct);
+    case "result":
+      return renderResult();
     default:
       return renderHome();
   }
@@ -879,7 +932,7 @@ function render(): void {
   const manaPct = allyMana
     ? Math.round((allyMana.mana / allyMana.manaMax) * 100)
     : 0;
-  const tabStages = view === "stages" || view === "battle";
+  const tabStages = view === "stages" || view === "battle" || view === "result";
   const demoTag = sessionUser?.kind === "demo" ? `<span class="demo-tag">DEMO</span>` : "";
 
   if (view === "auth") {
@@ -1527,7 +1580,6 @@ function renderBattle(manaPct: number): string {
     </div>
     ${renderBattleTicker()}
     <div class="muted item-legend">서머너 후열(무적) · 전열 소환수 전멸 시 승패</div>
-    ${lastRewardMsg ? `<div class="muted">${lastRewardMsg}</div>` : ""}
     ${renderSummonerBack(enemyBack, "enemy")}
     <div class="team-row enemy">${enemyFront.map((u) => renderUnit(u, { targetable: awaitSkill })).join("")}</div>
     <div class="board-wrap">
@@ -1655,6 +1707,19 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const nav = btn.dataset.nav;
+      if (view === "result" || view === "battle") {
+        autoMode = false;
+        clearAutoTimer();
+        if (nav === "home" || nav === "stages" || nav === "collect") {
+          battle = null;
+          dmgFloats = [];
+          if (nav === "home") {
+            currentStage = null;
+            lastReward = null;
+            lastScrollGain = 0;
+          }
+        }
+      }
       if (nav === "collect") {
         const now = Date.now();
         save.island = {
@@ -2108,11 +2173,33 @@ function bind(): void {
   app.querySelector("#btn-back")?.addEventListener("click", () => {
     autoMode = false;
     clearAutoTimer();
+    if (battle?.finishReason) grantRewardIfNeeded();
+    if (view === "result") {
+      battle = null;
+      dmgFloats = [];
+      view = "stages";
+      render();
+      return;
+    }
     battle = null;
     currentStage = null;
+    lastReward = null;
+    lastScrollGain = 0;
     dmgFloats = [];
     view = "stages";
     render();
+  });
+
+  app.querySelector("#btn-result-again")?.addEventListener("click", () => {
+    const stage = currentStage;
+    if (!stage) {
+      view = "stages";
+      render();
+      return;
+    }
+    battle = null;
+    dmgFloats = [];
+    startBattle(stage);
   });
 }
 
