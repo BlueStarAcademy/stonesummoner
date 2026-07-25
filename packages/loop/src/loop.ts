@@ -23,6 +23,8 @@ import {
   getGloryBuilding,
   getMonster,
   normalizeSummonerGear,
+  rollGearDrop,
+  rollSymbolDrop,
   summarizeGearSets,
   getStage,
   gloryBuffFromLevels,
@@ -32,12 +34,12 @@ import {
   grindSymbolPrefix,
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
-  rollSymbolDrop,
   symbolEnhanceManaCost,
   SYMBOL_IMPRINT_CRYSTAL_COST,
   SYMBOL_GRIND_MANA_COST,
   summarizeSymbolSets,
   ALL_STAGES,
+  type GearPiece,
   type GearSetId,
   type GearSlot,
   type GloryBuildingId,
@@ -142,6 +144,8 @@ export interface BattleReward {
   contribution?: number;
   expNote: string;
   symbol?: SymbolInstance;
+  /** Equip dungeon wearable drop (auto-equipped). */
+  gear?: GearPiece;
   victory: boolean;
   summonerExp?: number;
   levelsGained?: number;
@@ -1613,11 +1617,14 @@ export function applyRewards(
           ? 0.7
           : stage.mode === "guild_raid"
             ? 1.5
-            : 1;
+            : stage.mode === "equip"
+              ? 1.15
+              : 1;
   const manaGain = Math.round((180 + stage.stage * 60) * modeMul);
   let crystalGain = 1 + Math.floor(stage.stage / 2);
   if (stage.mode === "weekday") crystalGain += 3;
   if (stage.mode === "depth") crystalGain += 1;
+  if (stage.mode === "equip") crystalGain += 4;
   const gloryGain = stage.gloryReward ?? 0;
   const jinmunGain = stage.jinmunReward ?? 0;
   const dropChance = stage.dropChance ?? 0.65;
@@ -1640,6 +1647,19 @@ export function applyRewards(
       stage.dropSetId,
     );
     symbols.push(symbol);
+  }
+
+  let gear = normalizeSummonerGear(save.gear);
+  let gearDrop: GearPiece | undefined;
+  if (stage.mode === "equip") {
+    const gearChance = stage.gearDropChance ?? 0.75;
+    if (rng() < gearChance) {
+      gearDrop = rollGearDrop(rng, `equip_${stage.id}`);
+      if (stage.stage >= 2 && gearDrop.enhance < MAX_GEAR_ENHANCE) {
+        gearDrop = bumpGearEnhance(gearDrop);
+      }
+      gear = { ...gear, [gearDrop.slot]: gearDrop };
+    }
   }
 
   let scrolls = save.scrolls;
@@ -1674,6 +1694,7 @@ export function applyRewards(
   if (jinmunGain > 0) extras.push(`진문석 +${jinmunGain}`);
   if (contributionGain > 0) extras.push(`기여도 +${contributionGain}`);
   if (stage.mode === "world_arena") extras.push(`시즌승 ${arenaSeasonWins}`);
+  if (gearDrop) extras.push(`장비 ${describeGear(gearDrop)}`);
   const levelNote =
     leveled.levelsGained > 0
       ? ` · 서머너 Lv.${island.summonerLevel}(+${leveled.levelsGained})`
@@ -1684,6 +1705,7 @@ export function applyRewards(
       ...save,
       island,
       symbols,
+      gear,
       clearedStages: cleared,
       scrolls,
       gloryPoints,
@@ -1707,6 +1729,7 @@ export function applyRewards(
       contribution: contributionGain || undefined,
       expNote: `${stage.nameKo} 클리어 · ${extras.join(" · ")}${levelNote}`,
       symbol,
+      gear: gearDrop,
       victory: true,
       summonerExp: expGain,
       levelsGained: leveled.levelsGained,

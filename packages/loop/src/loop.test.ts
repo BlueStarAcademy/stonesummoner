@@ -107,6 +107,25 @@ describe("game loop", () => {
     assert.equal(buy.save.gloryLevels.ancient_sword, 1);
   });
 
+  it("drops gear from equip vault dungeon", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      clearedStages: ["garen_1_1", "garen_1_2", "garen_1_3", "garen_1_4"],
+      island: { ...save.island, energy: 40, mana: 5000 },
+    };
+    assert.equal(isStageUnlocked(save, "equip_vault_1"), true);
+    assert.equal(isStageUnlocked(save, "equip_vault_boss"), false);
+
+    const r = runSortie(save, "equip_vault_1", { rng: () => 0.01 });
+    assert.ok(r.reward);
+    if (r.reward?.victory) {
+      assert.ok(r.reward.gear, "equip dungeon should drop gear at high chance");
+      assert.equal(r.save.gear[r.reward.gear.slot].id, r.reward.gear.id);
+      assert.match(r.reward.expNote, /장비/);
+    }
+  });
+
   it("locks later stages until previous clear", () => {
     const save = createNewSave(0);
     assert.equal(isStageUnlocked(save, "garen_1_1"), true);

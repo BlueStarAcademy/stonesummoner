@@ -14,6 +14,7 @@ import {
   CHAPTER1_STAGES,
   CHAPTER2_STAGES,
   DEPTH_STAGES,
+  EQUIP_STAGES,
   GLORY_BUILDINGS,
   GUILD_RAID_STAGES,
   TRIAL_STAGES,
@@ -527,8 +528,18 @@ function renderResult(): string {
         `<li><span>소환서</span><strong>+${lastScrollGain}</strong></li>`,
       );
   }
-  const drop = reward.symbol
-    ? `<div class="result-drop">
+  const drop = [
+    reward.gear
+      ? `<div class="result-drop">
+        <p class="section-label">장비 드롭</p>
+        <p class="result-drop-card">${describeGear(reward.gear)}</p>
+        <div class="result-drop-cta">
+          <button type="button" class="auth-btn-primary" data-nav="enhance">강화진에서 확인</button>
+        </div>
+      </div>`
+      : "",
+    reward.symbol
+      ? `<div class="result-drop">
         <p class="section-label">상징 드롭</p>
         <p class="result-drop-card">${describeSymbol(reward.symbol)}</p>
         <div class="result-drop-cta">
@@ -536,7 +547,8 @@ function renderResult(): string {
           <button type="button" class="secondary" data-nav="shop">연마·각인</button>
         </div>
       </div>`
-    : "";
+      : "",
+  ].join("");
   return `<div class="result-wrap">
     <div class="battle-sky" aria-hidden="true">
       <img class="battle-sky-img" src="/art/battle/battle-arena-bg.webp" alt="" decoding="async" />
@@ -1205,7 +1217,7 @@ function renderHome(): string {
       ${tile("summon_hearth", "召", "소환진", `소환서 ${save.scrolls}장`)}
       ${tile("power_circle", "强", "강화진", "레벨 · 각성 · 장비")}
       ${tile("shop", "商", "마법상점", "소환서 · 연마 · 각인")}
-      ${tile("gateway", "門", "출정문", "시나리오 · 심층 · 아레나")}
+      ${tile("gateway", "門", "출정문", "시나리오 · 장비금고 · 아레나")}
       ${tile("mana_pond", "池", `진액 연못 Lv.${pondLv}`, `대기 ${storedMana} / ${pondCap}`, {
         bubble: storedMana > 0 ? String(storedMana) : undefined,
         bubbleKind: storedMana > 0 ? "mana" : undefined,
@@ -2227,6 +2239,11 @@ function renderStages(): string {
       ${section(
         "요일 · 마법진 시련",
         `<div class="stage-list">${stageButtons([...WEEKDAY_STAGES, ...TRIAL_STAGES])}</div>`,
+      )}
+      ${section(
+        "장비 금고",
+        `<div class="stage-list">${stageButtons(EQUIP_STAGES)}</div>`,
+        "클리어 시 서머너 장비 드롭 · 해당 슬롯 자동 장착",
       )}
       ${section(
         "월드아레나 · 밴픽",

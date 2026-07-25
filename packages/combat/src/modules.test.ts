@@ -71,6 +71,10 @@ describe("Modules E/F/G/H", () => {
     assert.equal(modulesForStage(trial).forbidZone, true);
     assert.equal(modulesForStage(arena).manaRace, true);
     assert.equal(modulesForStage(raid).moduleF, true);
+    const equip = getStage("equip_vault_1");
+    assert.ok(equip);
+    assert.equal(modulesForStage(equip).moduleD, true);
+    assert.equal(modulesForStage(equip).moduleG, true);
   });
 
   it("enables dual boards for guild raid modules", () => {

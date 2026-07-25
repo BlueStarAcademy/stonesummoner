@@ -16,7 +16,7 @@ import {
   imprintSymbolMain,
   MONSTERS,
   normalizeSummonerGear,
-  rollSymbolDrop,
+  rollGearDrop,
   summarizeGearSets,
   SYMBOL_SETS,
   summarizeSymbolSets,
@@ -48,6 +48,16 @@ describe("phase1 data", () => {
     assert.equal(getStage("arena_rookie")?.mode, "arena");
     assert.equal(getStage("guild_raid_boss")?.boardSize, 13);
     assert.equal(getStage("warena_qual")?.mode, "world_arena");
+    assert.equal(getStage("equip_vault_1")?.mode, "equip");
+    assert.equal(getStage("equip_vault_boss")?.gearDropChance, 1);
+  });
+
+  it("rolls equip dungeon gear drops", () => {
+    const g = rollGearDrop(() => 0.2, "test");
+    assert.ok(g.slot);
+    assert.ok(g.setId);
+    assert.ok(g.nameKo.length > 0);
+    assert.ok(g.enhance >= 0);
   });
 
   it("creates starter symbol", () => {

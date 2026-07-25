@@ -42,6 +42,7 @@ export {
   MAX_GEAR_ENHANCE,
   normalizeGearPiece,
   normalizeSummonerGear,
+  rollGearDrop,
   summarizeGearSets,
 } from "./gear.js";
 export type {
@@ -59,6 +60,7 @@ export {
   CHAPTER1_STAGES,
   CHAPTER2_STAGES,
   DEPTH_STAGES,
+  EQUIP_STAGES,
   GUILD_RAID_STAGES,
   TRIAL_STAGES,
   WEEKDAY_STAGES,

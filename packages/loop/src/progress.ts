@@ -2,6 +2,7 @@ import {
   ALL_STAGES,
   CHAPTER1_STAGES,
   CHAPTER2_STAGES,
+  EQUIP_STAGES,
   WORLD_ARENA_STAGES,
   getStage,
   type StageDef,
@@ -47,6 +48,9 @@ export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
       return save.clearedStages.includes("garen_1_3");
     case "trial":
       return save.clearedStages.includes("garen_1_5");
+    case "equip":
+      if (!save.clearedStages.includes("garen_1_4")) return false;
+      return chainUnlocked(save, EQUIP_STAGES, stageId);
     case "world_arena":
       if (!chapter2Cleared(save) && save.island.summonerLevel < 12) return false;
       return chainUnlocked(save, WORLD_ARENA_STAGES, stageId);
@@ -68,6 +72,7 @@ export function expForStage(stage: StageDef): number {
   if (stage.mode === "depth") return base + 30;
   if (stage.mode === "arena") return Math.floor(base * 0.5);
   if (stage.mode === "trial") return base + 20;
+  if (stage.mode === "equip") return base + 35;
   if (stage.mode === "world_arena") return base + 40;
   if (stage.mode === "guild_raid") return base + 80;
   return base;

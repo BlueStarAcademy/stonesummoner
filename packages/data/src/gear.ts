@@ -405,3 +405,57 @@ export function describeGear(piece: GearPiece): string {
   const set = getGearSet(piece.setId)?.nameKo ?? piece.setId;
   return `${piece.nameKo} +${piece.enhance} [${set}]`;
 }
+
+const GEAR_SLOTS: GearSlot[] = [
+  "weapon",
+  "robe",
+  "accessory",
+  "orb",
+  "cloak",
+  "ring",
+];
+
+const DROP_NAMES: Record<GearSlot, string[]> = {
+  weapon: ["진문검", "돌격 단검", "개방의 칼"],
+  robe: ["수호 로브", "비늘 로브", "요새 옷"],
+  accessory: ["진액 회로", "마나 반지끈", "충전 팔찌"],
+  orb: ["감응 수정", "국면의 눈", "따냄 구슬"],
+  cloak: ["지휘 망토", "전장의 망토", "결속 외투"],
+  ring: ["결속 반지", "돌격 반지", "진액 반지"],
+};
+
+/** Weekly equip dungeon: roll a wearable piece for a random (or fixed) slot. */
+export function rollGearDrop(
+  rng: () => number = Math.random,
+  idPrefix = "gear_drop",
+  preferredSlot?: GearSlot,
+): GearPiece {
+  const slot =
+    preferredSlot ??
+    GEAR_SLOTS[Math.floor(rng() * GEAR_SLOTS.length) % GEAR_SLOTS.length]!;
+  const setId =
+    GEAR_SETS[Math.floor(rng() * GEAR_SETS.length) % GEAR_SETS.length]!.id;
+  const names = DROP_NAMES[slot];
+  const nameKo = names[Math.floor(rng() * names.length) % names.length]!;
+  let piece = basePiece({
+    id: `${idPrefix}_${slot}_${Math.floor(rng() * 1e6)}`,
+    slot,
+    nameKo,
+    enhance: 0,
+    setId,
+    skillPowerBonus: slot === "weapon" || slot === "ring" ? 0.05 : 0,
+    summonerHpBonus: slot === "robe" || slot === "cloak" ? 35 : 0,
+    summonerDefBonus: slot === "robe" || slot === "cloak" ? 3 : 0,
+    manaRegenBonus: slot === "accessory" ? 0.1 : 0,
+    manaMaxBonus: slot === "accessory" ? 8 : 0,
+    startManaPct: slot === "accessory" ? 0.04 : 0,
+    boardSenseBonus: slot === "orb" ? 0.07 : 0,
+    leaderAtkBonus:
+      slot === "cloak" ? 0.008 : slot === "ring" ? 0.01 : 0,
+  });
+  const bumps = Math.floor(rng() * 3); // +0..+2
+  for (let i = 0; i < bumps; i++) {
+    piece = bumpGearEnhance(piece);
+  }
+  return piece;
+}

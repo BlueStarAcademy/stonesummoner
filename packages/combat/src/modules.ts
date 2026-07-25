@@ -51,6 +51,8 @@ export function modulesForStage(stage: StageDef): BattleModules {
       };
     case "weekday":
       return { moduleB: true, moduleG: true };
+    case "equip":
+      return { moduleB: true, moduleD: true, moduleG: true };
     case "scenario":
     default:
       return {

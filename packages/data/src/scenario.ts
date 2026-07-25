@@ -8,7 +8,8 @@ export type ContentMode =
   | "weekday"
   | "trial"
   | "world_arena"
-  | "guild_raid";
+  | "guild_raid"
+  | "equip";
 
 export interface StageDef {
   id: string;
@@ -27,6 +28,8 @@ export interface StageDef {
   gloryReward?: number;
   /** Magic-circle trial: 진문석. */
   jinmunReward?: number;
+  /** Equip dungeon: chance to drop wearable gear (0–1). */
+  gearDropChance?: number;
 }
 
 /** 가렌숲 chapter 1 — boards grow 5→7→9. */
@@ -356,6 +359,43 @@ export const GUILD_RAID_STAGES: StageDef[] = [
   },
 ];
 
+/** 주간 장비 금고 — 서머너 장비 드롭 스텁. */
+export const EQUIP_STAGES: StageDef[] = [
+  {
+    id: "equip_vault_1",
+    nameKo: "장비 금고 입문",
+    map: 90,
+    stage: 1,
+    boardSize: 7,
+    energyCost: 6,
+    enemyMonsterIds: ["shield_tortoise", "seal_scholar"],
+    dropSetId: "hwalro",
+    waves: 2,
+    mode: "equip",
+    dropChance: 0.22,
+    gearDropChance: 0.8,
+  },
+  {
+    id: "equip_vault_boss",
+    nameKo: "장비 금고 심층",
+    map: 90,
+    stage: 2,
+    boardSize: 9,
+    energyCost: 8,
+    enemyMonsterIds: [
+      "thunder_lancer",
+      "mist_shaman",
+      "shield_tortoise",
+      "ash_archer",
+    ],
+    dropSetId: "yongmaeng",
+    waves: 3,
+    mode: "equip",
+    dropChance: 0.3,
+    gearDropChance: 1,
+  },
+];
+
 export const ALL_STAGES: StageDef[] = [
   ...CHAPTER1_STAGES,
   ...CHAPTER2_STAGES,
@@ -365,6 +405,7 @@ export const ALL_STAGES: StageDef[] = [
   ...TRIAL_STAGES,
   ...WORLD_ARENA_STAGES,
   ...GUILD_RAID_STAGES,
+  ...EQUIP_STAGES,
 ];
 
 export function getStage(id: string): StageDef | undefined {
