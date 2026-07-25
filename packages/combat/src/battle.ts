@@ -458,6 +458,20 @@ export class Battle {
       );
       return;
     }
+    if (token.id === "element_ward") {
+      const sm = this.summonerOf(unit.team);
+      sm.elementWardElement = unit.element;
+      sm.elementWardCharges = 3;
+      this.amplify = clampAmplify(
+        this.amplify + 0.05,
+        amplifyCapForPhase(this.circle.boardPhase),
+        this.powerGapCap,
+      );
+      this.log.push(
+        `${unit.name} 획득 ${name} (${unit.element} · 동속성 3수 Amp)`,
+      );
+      return;
+    }
     // capture_magnet
     const manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
@@ -614,6 +628,20 @@ export class Battle {
       ) {
         ampDelta += 0.03;
         this.log.push(`이중층 (${unit.element})`);
+      }
+    }
+
+    {
+      const sm = this.summonerOf(unit.team);
+      if (
+        (sm.elementWardCharges ?? 0) > 0 &&
+        sm.elementWardElement === unit.element
+      ) {
+        ampDelta += 0.07;
+        sm.elementWardCharges = (sm.elementWardCharges ?? 0) - 1;
+        this.log.push(
+          `속성의뢰 (${unit.element}) 잔여 ${sm.elementWardCharges}`,
+        );
       }
     }
 

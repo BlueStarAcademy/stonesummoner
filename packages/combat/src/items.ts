@@ -1,11 +1,12 @@
-/** Phase 1 board tokens — 치명·실드·자석·행마·봉인 */
+/** Phase 1 board tokens — 치명·실드·자석·행마·봉인·속성의뢰 */
 
 export type BoardItemId =
   | "crit_charm"
   | "shield_core"
   | "capture_magnet"
   | "stride_sand"
-  | "seal_nail";
+  | "seal_nail"
+  | "element_ward";
 
 export interface BoardItemDef {
   id: BoardItemId;
@@ -18,6 +19,7 @@ export const BOARD_ITEMS: BoardItemDef[] = [
   { id: "capture_magnet", nameKo: "사석자석" },
   { id: "stride_sand", nameKo: "행마모래" },
   { id: "seal_nail", nameKo: "봉인못" },
+  { id: "element_ward", nameKo: "속성의뢰" },
 ];
 
 export interface BoardToken {
@@ -47,17 +49,22 @@ export function weightedItemId(
   rng: () => number,
 ): BoardItemId {
   const roll = rng();
-  const magnetWeight = 0.2 + Math.min(0.18, boardPhase * 0.06);
-  const critWeight = 0.24;
-  const shieldWeight = 0.22;
-  const sandWeight = 0.18;
-  if (roll < magnetWeight) return "capture_magnet";
-  if (roll < magnetWeight + critWeight) return "crit_charm";
-  if (roll < magnetWeight + critWeight + shieldWeight) return "shield_core";
-  if (roll < magnetWeight + critWeight + shieldWeight + sandWeight) {
-    return "stride_sand";
-  }
-  return "seal_nail";
+  const magnetWeight = 0.18 + Math.min(0.16, boardPhase * 0.05);
+  const critWeight = 0.2;
+  const shieldWeight = 0.18;
+  const sandWeight = 0.15;
+  const sealWeight = 0.14;
+  let acc = magnetWeight;
+  if (roll < acc) return "capture_magnet";
+  acc += critWeight;
+  if (roll < acc) return "crit_charm";
+  acc += shieldWeight;
+  if (roll < acc) return "shield_core";
+  acc += sandWeight;
+  if (roll < acc) return "stride_sand";
+  acc += sealWeight;
+  if (roll < acc) return "seal_nail";
+  return "element_ward";
 }
 
 export function shouldSpawnItem(

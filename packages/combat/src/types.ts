@@ -58,6 +58,9 @@ export interface SummonerState {
   declarePowerBonus?: number;
   /** Extra Amplify per stone on 진문청소. */
   cleanAmpBonus?: number;
+  /** 속성의뢰: matching element stone plays consume charges for Amp. */
+  elementWardElement?: Element;
+  elementWardCharges?: number;
 }
 
 export type BattlePhase =

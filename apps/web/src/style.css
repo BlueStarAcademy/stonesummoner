@@ -965,6 +965,9 @@ main {
 .board button.cell.token-seal_nail .token-mark {
   background: #8a7a6a;
 }
+.board button.cell.token-element_ward .token-mark {
+  background: #5bb89a;
+}
 
 .battle-stage-name {
   font-family: Cinzel, "Times New Roman", Georgia, serif;

@@ -907,7 +907,9 @@ function renderBoard(): string {
                 ? "행"
                 : token?.id === "seal_nail"
                   ? "봉"
-                  : "";
+                  : token?.id === "element_ward"
+                    ? "속"
+                    : "";
       const stoneHtml = stone
         ? `<span class="stone ${stone}"></span>`
         : sug

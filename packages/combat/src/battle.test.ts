@@ -411,6 +411,33 @@ describe("Battle flow", () => {
     assert.equal(sealed.remaining, 3);
   });
 
+  it("element ward boosts amplify on matching-element stones", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    b.tokens = [{ id: "element_ward", x: 1, y: 1 }];
+    const amp0 = b.amplify;
+    assert.equal(b.playStone({ x: 1, y: 1 }), true);
+    assert.ok(b.amplify > amp0);
+    assert.equal(b.allySummoner.elementWardElement, "fire");
+    assert.equal(b.allySummoner.elementWardCharges, 3);
+    assert.match(b.log.join("\n"), /속성의뢰/);
+
+    b.phase = "await_stone";
+    b.activeUnitId = "a-m1";
+    const amp1 = b.amplify;
+    const charges = b.allySummoner.elementWardCharges!;
+    assert.equal(b.playStone({ x: 3, y: 3 }), true);
+    assert.ok(b.amplify > amp1);
+    assert.equal(b.allySummoner.elementWardCharges, charges - 1);
+  });
+
   it("blocks skill while on cooldown", () => {
     const b = new Battle({
       boardSize: 5,
