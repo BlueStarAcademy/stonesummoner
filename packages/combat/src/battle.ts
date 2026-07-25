@@ -496,6 +496,18 @@ export class Battle {
       );
       return;
     }
+    if (token.id === "transform_dust") {
+      const flipped = this.applyTransformDust({ x: token.x, y: token.y });
+      this.amplify = clampAmplify(
+        this.amplify + 0.04 + flipped * 0.02,
+        amplifyCapForPhase(this.circle.boardPhase),
+        this.powerGapCap,
+      );
+      this.log.push(
+        `${unit.name} 획득 ${name} (인접 변환 ${flipped})`,
+      );
+      return;
+    }
     // capture_magnet
     const manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
@@ -622,6 +634,24 @@ export class Battle {
       remaining: 4,
     };
     return spot;
+  }
+
+  /** Flip colors of stones orthogonally adjacent to origin. */
+  private applyTransformDust(origin: Point): number {
+    const dirs: Point[] = [
+      { x: origin.x + 1, y: origin.y },
+      { x: origin.x - 1, y: origin.y },
+      { x: origin.x, y: origin.y + 1 },
+      { x: origin.x, y: origin.y - 1 },
+    ];
+    let flipped = 0;
+    for (const p of dirs) {
+      if (this.board.forceFlip(p)) {
+        flipped += 1;
+        this.log.push(`변환 (${p.x},${p.y})`);
+      }
+    }
+    return flipped;
   }
 
   private trySpawnItem(): void {

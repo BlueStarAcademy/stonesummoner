@@ -971,6 +971,9 @@ main {
 .board button.cell.token-bait_stone .token-mark {
   background: #c4785a;
 }
+.board button.cell.token-transform_dust .token-mark {
+  background: #9b8ec4;
+}
 .board button.cell.bait .bait-mark {
   display: flex;
   align-items: center;

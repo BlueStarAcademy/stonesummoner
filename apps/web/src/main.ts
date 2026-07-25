@@ -911,7 +911,9 @@ function renderBoard(): string {
                     ? "속"
                     : token?.id === "bait_stone"
                       ? "미"
-                      : "";
+                      : token?.id === "transform_dust"
+                        ? "변"
+                        : "";
       const bait =
         battle.baitLure &&
         battle.baitLure.x === x &&

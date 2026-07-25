@@ -76,6 +76,16 @@ export class Board {
     return true;
   }
 
+  /** Rare item: flip stone color without capture resolution. */
+  forceFlip(p: Point): boolean {
+    if (!this.inBounds(p)) return false;
+    const c = this.at(p);
+    if (c === null) return false;
+    this.grid[p.y]![p.x] = c === "black" ? "white" : "black";
+    this.koPoint = null;
+    return true;
+  }
+
   private neighbors(p: Point): Point[] {
     return DIRS.map((d) => ({ x: p.x + d.x, y: p.y + d.y })).filter((q) =>
       this.inBounds(q),

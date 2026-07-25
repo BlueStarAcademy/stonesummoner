@@ -461,6 +461,27 @@ describe("Battle flow", () => {
     );
   });
 
+  it("transform dust flips adjacent stone colors", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+    });
+    for (const u of b.units) u.atb = u.id === "e-m1" ? 100 : 0;
+    b.tickUntilReady();
+    assert.equal(b.playStone({ x: 1, y: 2 }), true);
+    assert.equal(b.board.at({ x: 1, y: 2 }), "white");
+
+    b.phase = "await_stone";
+    b.activeUnitId = "a-m1";
+    b.tokens = [{ id: "transform_dust", x: 2, y: 2 }];
+    assert.equal(b.playStone({ x: 2, y: 2 }), true);
+    assert.equal(b.board.at({ x: 1, y: 2 }), "black");
+    assert.match(b.log.join("\n"), /변환가루/);
+  });
+
   it("blocks skill while on cooldown", () => {
     const b = new Battle({
       boardSize: 5,

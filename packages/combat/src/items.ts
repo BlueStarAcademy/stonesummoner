@@ -1,4 +1,4 @@
-/** Phase 1 board tokens — 치명·실드·자석·행마·봉인·속성·미끼 */
+/** Phase 1 board tokens — full Module A set (+ rare transform dust) */
 
 export type BoardItemId =
   | "crit_charm"
@@ -7,7 +7,8 @@ export type BoardItemId =
   | "stride_sand"
   | "seal_nail"
   | "element_ward"
-  | "bait_stone";
+  | "bait_stone"
+  | "transform_dust";
 
 export interface BoardItemDef {
   id: BoardItemId;
@@ -22,6 +23,7 @@ export const BOARD_ITEMS: BoardItemDef[] = [
   { id: "seal_nail", nameKo: "봉인못" },
   { id: "element_ward", nameKo: "속성의뢰" },
   { id: "bait_stone", nameKo: "미끼돌" },
+  { id: "transform_dust", nameKo: "변환가루" },
 ];
 
 export interface BoardToken {
@@ -54,27 +56,28 @@ export function itemDef(id: BoardItemId): BoardItemDef {
 /** Base chance to spawn a token after a stone summon (before phase bonus). */
 export const ITEM_SPAWN_CHANCE = 0.28;
 
-/** Prefer magnet more often on higher empowered phases. */
+/** Prefer magnet more often on higher empowered phases. Transform dust is rare. */
 export function weightedItemId(
   boardPhase: number,
   rng: () => number,
 ): BoardItemId {
   const roll = rng();
   const weights: { id: BoardItemId; w: number }[] = [
-    { id: "capture_magnet", w: 0.16 + Math.min(0.14, boardPhase * 0.05) },
-    { id: "crit_charm", w: 0.18 },
-    { id: "shield_core", w: 0.16 },
-    { id: "stride_sand", w: 0.13 },
-    { id: "seal_nail", w: 0.12 },
-    { id: "element_ward", w: 0.12 },
-    { id: "bait_stone", w: 0.13 },
+    { id: "capture_magnet", w: 0.15 + Math.min(0.12, boardPhase * 0.05) },
+    { id: "crit_charm", w: 0.17 },
+    { id: "shield_core", w: 0.15 },
+    { id: "stride_sand", w: 0.12 },
+    { id: "seal_nail", w: 0.11 },
+    { id: "element_ward", w: 0.11 },
+    { id: "bait_stone", w: 0.12 },
+    { id: "transform_dust", w: 0.07 },
   ];
   let acc = 0;
   for (const { id, w } of weights) {
     acc += w;
     if (roll < acc) return id;
   }
-  return "bait_stone";
+  return "transform_dust";
 }
 
 export function shouldSpawnItem(

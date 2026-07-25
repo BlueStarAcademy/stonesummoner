@@ -31,6 +31,14 @@ describe("Board basics", () => {
     const r = b.play("black", { x: 9, y: 0 });
     assert.deepEqual(r, { ok: false, reason: "out_of_bounds" });
   });
+
+  it("forceFlip swaps stone color", () => {
+    const b = new Board(5);
+    b.play("black", { x: 2, y: 2 });
+    assert.equal(b.forceFlip({ x: 2, y: 2 }), true);
+    assert.equal(b.at({ x: 2, y: 2 }), "white");
+    assert.equal(b.forceFlip({ x: 0, y: 0 }), false);
+  });
 });
 
 describe("Capture", () => {
