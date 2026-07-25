@@ -708,15 +708,17 @@ function autoAllyTurn(): void {
       ? battle.useSkill({ summonerSkill: "open" })
       : battle.canUseSummonerDeclare(unit)
         ? battle.useSkill({ summonerSkill: "declare" })
-        : battle.useSkill({
-            skillIndex: pickAutoSkillIndex(unit, battle.units),
-          });
+        : battle.canUseSummonerDual(unit)
+          ? battle.useSkill({ summonerSkill: "dual" })
+          : battle.useSkill({
+              skillIndex: pickAutoSkillIndex(unit, battle.units),
+            });
     pushDamageFloats(hits);
   }
   afterPlayerAction();
 }
 
-function castSkill(mode: "ult" | "declare" | "smart" | number): void {
+function castSkill(mode: "ult" | "declare" | "dual" | "smart" | number): void {
   if (!battle || battle.phase !== "await_skill" || autoMode) return;
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
@@ -741,6 +743,17 @@ function castSkill(mode: "ult" | "declare" | "smart" | number): void {
       return;
     }
     const hits = battle.useSkill({ summonerSkill: "declare" });
+    pushDamageFloats(hits);
+    afterPlayerAction();
+    return;
+  }
+  if (mode === "dual") {
+    if (!battle.canUseSummonerDual(unit)) {
+      flash("마나 35% 이상 필요합니다.");
+      render();
+      return;
+    }
+    const hits = battle.useSkill({ summonerSkill: "dual" });
     pushDamageFloats(hits);
     afterPlayerAction();
     return;
@@ -2167,7 +2180,7 @@ function renderBattleTicker(): string {
   const lines = battle.log
     .filter(
       (l) =>
-        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|증폭선언|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수|묘수|맞마나|이중층/.test(l),
+        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|증폭선언|쌍착수|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수|묘수|맞마나|이중층/.test(l),
     )
     .slice(-3);
   if (!lines.length) {
@@ -2200,6 +2213,7 @@ function renderBattle(manaPct: number): string {
     battle.phase === "await_skill" && active?.team === "ally" && !autoMode;
   const canUlt = !!active && battle.canUseSummonerSkill(active);
   const canDeclare = !!active && battle.canUseSummonerDeclare(active);
+  const canDual = !!active && battle.canUseSummonerDual(active);
   const mission =
     battle.modules.moduleG && !battle.finishReason
       ? ` · 묘수 ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? "✓" : ""}`
@@ -2236,6 +2250,7 @@ function renderBattle(manaPct: number): string {
       ${renderSkillButtons(active, awaitSkill)}
       <button type="button" id="sk-ult" class="ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>진문개방</button>
       <button type="button" id="sk-declare" class="declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}>증폭선언</button>
+      <button type="button" id="sk-dual" class="dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}>쌍착수</button>
       <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>추천</button>
       ${
         battle.boards.length > 1 &&
@@ -3038,6 +3053,9 @@ function bind(): void {
   app.querySelector("#sk-ult")?.addEventListener("click", () => castSkill("ult"));
   app.querySelector("#sk-declare")?.addEventListener("click", () =>
     castSkill("declare"),
+  );
+  app.querySelector("#sk-dual")?.addEventListener("click", () =>
+    castSkill("dual"),
   );
   app.querySelector("#sk-smart")?.addEventListener("click", () => castSkill("smart"));
 

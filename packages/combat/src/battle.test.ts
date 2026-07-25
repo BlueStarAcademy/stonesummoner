@@ -169,6 +169,31 @@ describe("Battle flow", () => {
     assert.match(b.log.join("\n"), /증폭선언/);
   });
 
+  it("dual stone spends mana and places a second stone", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum", 40),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) {
+      u.atb = u.id === "a-sum" ? 100 : 0;
+    }
+    b.tickUntilReady();
+    b.autoStone();
+    const stonesBefore = b.circle.stoneSummonCount;
+    const unit = b.getUnit("a-sum")!;
+    assert.equal(b.canUseSummonerDual(unit), true);
+    assert.equal(b.canUseSummonerDeclare(unit), false);
+    const hits = b.useSkill({ summonerSkill: "dual" });
+    assert.equal(hits.length, 0);
+    assert.ok(b.allySummoner.mana < 40);
+    assert.ok(b.circle.stoneSummonCount > stonesBefore);
+    assert.match(b.log.join("\n"), /쌍착수/);
+    assert.equal(b.phase, "resolved");
+  });
+
   it("wiping enemy summons wins; summoners are not targets", () => {
     const units = roster();
     const enemyMon = units.find((u) => u.id === "e-m1")!;

@@ -815,6 +815,13 @@ export class Battle {
     return sm.mana >= sm.manaMax * 0.5;
   }
 
+  /** 쌍착수: 35% mana — bonus second stone this turn. */
+  canUseSummonerDual(unit: Unit): boolean {
+    if (unit.kind !== "summoner") return false;
+    const sm = this.summonerOf(unit.team);
+    return sm.mana >= sm.manaMax * 0.35;
+  }
+
   canUseSkill(unit: Unit, skillIndex: number): boolean {
     if (!unit.skills?.[skillIndex]) return skillIndex === 0;
     const cds = ensureSkillCd(unit);
@@ -822,14 +829,14 @@ export class Battle {
   }
 
   /**
-   * Skill phase. Summoner skills: 진문개방 (full mana AoE) or 증폭선언 (half mana Amp).
+   * Skill phase. Summoner skills: 진문개방 / 증폭선언 / 쌍착수.
    * Otherwise cast S1/S2/S3 (or fallback basic) on target.
    */
   useSkill(opts?: {
     targetId?: string;
     useSummonerSkill?: boolean;
-    /** "open" = 진문개방, "declare" = 증폭선언 */
-    summonerSkill?: "open" | "declare";
+    /** "open" = 진문개방, "declare" = 증폭선언, "dual" = 쌍착수 */
+    summonerSkill?: "open" | "declare" | "dual";
     skillIndex?: number;
   }): SkillResult[] {
     if (this.phase !== "await_skill" || !this.activeUnitId) return [];
@@ -858,6 +865,19 @@ export class Battle {
       this.log.push(
         `${unit.name} 증폭선언 (Amp ${this.amplify.toFixed(2)})`,
       );
+    } else if (summonerSkill === "dual" && this.canUseSummonerDual(unit)) {
+      const sm = this.summonerOf(unit.team);
+      const cost = sm.manaMax * 0.35;
+      sm.mana = Math.max(0, sm.mana - cost);
+      this.log.push(`${unit.name} 쌍착수`);
+      this.phase = "await_stone";
+      const placed = this.autoStone();
+      if (!placed) {
+        this.log.push(`쌍착수 착수 공간 없음`);
+      }
+      if (this.phase === "await_capture_shop") {
+        this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
+      }
     } else if (summonerSkill === "open" && this.canUseSummonerSkill(unit)) {
       const sm = this.summonerOf(unit.team);
       sm.mana = 0;
@@ -1128,6 +1148,9 @@ export class Battle {
     }
     if (this.canUseSummonerDeclare(unit)) {
       return this.useSkill({ summonerSkill: "declare" });
+    }
+    if (this.canUseSummonerDual(unit)) {
+      return this.useSkill({ summonerSkill: "dual" });
     }
     return this.useSkill({
       skillIndex: pickAutoSkillIndex(unit, this.units),
