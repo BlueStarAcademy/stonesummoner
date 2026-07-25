@@ -2,6 +2,7 @@ import "./style.css";
 import {
   captureShopOffers,
   pickAutoSkillIndex,
+  starPoints,
   type Battle,
   type CaptureShopChoice,
   type SkillResult,
@@ -75,6 +76,7 @@ import {
   runFusion,
   runGrindSymbol,
   homeCollectCrystal,
+  homeCollect,
   FUSION_MANA_COST,
   runImprintSymbol,
   runJoinGuild,
@@ -662,6 +664,14 @@ function renderBoard(): string {
   const suggestMap = new Map(
     stoneSuggestions.map((s) => [`${s.point.x},${s.point.y}`, s]),
   );
+  const starSet = new Set(
+    (battle.modules.moduleB ? starPoints(size) : []).map((p) => `${p.x},${p.y}`),
+  );
+  const victory =
+    battle.victoryPoint && !battle.victoryPointClaimed
+      ? `${battle.victoryPoint.x},${battle.victoryPoint.y}`
+      : null;
+  const phase = battle.circle.boardPhase;
   const canClick =
     battle.phase === "await_stone" &&
     !!battle.activeUnitId &&
@@ -671,14 +681,17 @@ function renderBoard(): string {
   let cells = "";
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
+      const key = `${x},${y}`;
       const stone = grid[y]![x];
-      const legal = legalSet.has(`${x},${y}`);
-      const sug = suggestMap.get(`${x},${y}`);
+      const legal = legalSet.has(key);
+      const sug = suggestMap.get(key);
       const token = battle.tokenAt(x, y);
       const tokenClass = token ? ` token token-${token.id}` : "";
       const sugClass = sug ? ` suggest suggest-${sug.rank}` : "";
       const forbid = battle.isForbidden({ x, y });
       const forbidClass = forbid && !stone ? " forbid" : "";
+      const starClass = starSet.has(key) && !stone ? " star" : "";
+      const victoryClass = victory === key && !stone ? " victory" : "";
       const tokenLabel =
         token?.id === "crit_charm"
           ? "치"
@@ -695,11 +708,44 @@ function renderBoard(): string {
             ? `<span class="token-mark">${tokenLabel}</span>`
             : forbid
               ? `<span class="forbid-mark">禁</span>`
-              : "";
-      cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}${sugClass}${forbidClass}" data-x="${x}" data-y="${y}" ${canClick && !stone && !forbid ? "" : "disabled"}>${stoneHtml}</button>`;
+              : victory === key
+                ? `<span class="victory-mark">勝</span>`
+                : starSet.has(key)
+                  ? `<span class="star-mark">·</span>`
+                  : "";
+      cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}${sugClass}${forbidClass}${starClass}${victoryClass}" data-x="${x}" data-y="${y}" ${canClick && !stone && !forbid ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
-  return `<div class="board size-${size}" style="grid-template-columns:repeat(${size},auto)">${cells}</div>`;
+  const resetPct = Math.min(
+    100,
+    Math.round(
+      (battle.circle.stoneSummonCount / Math.max(1, battle.circle.resetThreshold)) *
+        100,
+    ),
+  );
+  return `<div class="board-frame phase-${Math.min(phase, 3)}" data-element="${battle.circleElement ?? ""}">
+    <div class="board-phase-meter" aria-hidden="true"><i style="width:${resetPct}%"></i></div>
+    <div class="board size-${size} phase-${Math.min(phase, 3)}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${cells}</div>
+  </div>`;
+}
+
+function renderBoardTabs(): string {
+  if (!battle || battle.boards.length < 2) return "";
+  return `<div class="board-tabs" role="tablist">
+    ${battle.boards
+      .map((_, i) => {
+        const label = i === 0 ? "A국" : "B국";
+        const active = battle!.activeBoardIndex === i;
+        const stones = battle!.boards[i]!
+          .getBoard()
+          .flat()
+          .filter(Boolean).length;
+        return `<button type="button" class="board-tab${active ? " active" : ""}" data-board-tab="${i}" ${active ? "aria-selected=\"true\"" : ""}>
+          ${label}<small>${stones}돌</small>
+        </button>`;
+      })
+      .join("")}
+  </div>`;
 }
 
 function renderSuggestStrip(): string {
@@ -718,37 +764,68 @@ function renderSuggestStrip(): string {
   </div>`;
 }
 
+function authHeroLayer(): string {
+  return `<div class="auth-hero" aria-hidden="true">
+    <img
+      class="auth-hero-img"
+      src="/art/auth/auth-hero-master.webp"
+      srcset="/art/auth/auth-hero-master.webp 1080w, /art/auth/auth-hero-master@2x.webp 1440w"
+      sizes="(max-width: 430px) 100vw, 430px"
+      width="1080"
+      height="1920"
+      alt=""
+      decoding="async"
+      fetchpriority="high"
+    />
+    <div class="auth-hero-veil"></div>
+    <div class="auth-particles">
+      <span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+  </div>`;
+}
+
+function authBrand(): string {
+  return `<img
+    class="auth-brand"
+    src="/art/auth/logo-wordmark.svg"
+    width="720"
+    height="140"
+    alt="StoneSummoner"
+  />`;
+}
+
 function renderAuth(): string {
   const pane = authUi.pane;
   if (pane === "login" || pane === "register") {
     const title = pane === "login" ? "로그인" : "회원가입";
     const pwAuto = pane === "login" ? "current-password" : "new-password";
-    return `<div class="auth-screen">
-      <p class="auth-brand">StoneSummoner</p>
+    return `${authHeroLayer()}
+    <div class="auth-screen auth-screen--form">
+      ${authBrand()}
       <h2 class="auth-title">${title}</h2>
-      <p class="auth-copy">이메일과 비밀번호로 세이브를 클라우드에 보관합니다.</p>
+      <p class="auth-copy">클라우드에 세이브를 보관합니다.</p>
       <form id="auth-form" class="auth-form">
         <label>이메일<input name="email" type="email" autocomplete="username" required /></label>
         <label>비밀번호<input name="password" type="password" autocomplete="${pwAuto}" minlength="6" required /></label>
-        <button type="submit">${title}</button>
+        <button type="submit" class="auth-btn-primary">${title}</button>
       </form>
-      <button type="button" class="secondary full" id="auth-back">뒤로</button>
+      <button type="button" class="secondary full auth-btn-ghost" id="auth-back">뒤로</button>
     </div>`;
   }
-  return `<div class="auth-screen">
-    <p class="auth-brand">StoneSummoner</p>
-    <h2 class="auth-title">상징으로 키우고<br/>마법진에서 싸운다</h2>
-    <p class="auth-copy">수집형 RPG 데모 — 홈에서 소환·강화 후 가렌숲으로 출정하세요.</p>
+  return `${authHeroLayer()}
+  <div class="auth-screen">
+    ${authBrand()}
+    <p class="auth-copy">상징으로 키우고, 마법진에서 싸운다.</p>
     ${
       ephemeralStore
         ? `<p class="auth-warn">서버 DB가 메모리 모드입니다. 배포 환경에서는 Postgres(DATABASE_URL)를 연결하세요.</p>`
         : ""
     }
     <div class="auth-cta">
-      <button type="button" id="auth-demo">데모 플레이 (테스트)</button>
-      <button type="button" class="secondary" id="auth-login">로그인</button>
-      <button type="button" class="secondary" id="auth-register">회원가입</button>
-      <button type="button" class="secondary" id="auth-guest">게스트로 계속</button>
+      <button type="button" class="auth-btn-primary" id="auth-demo">데모 플레이</button>
+      <button type="button" class="secondary auth-btn-ghost" id="auth-login">로그인</button>
+      <button type="button" class="secondary auth-btn-ghost" id="auth-register">회원가입</button>
+      <button type="button" class="secondary auth-btn-ghost" id="auth-guest">게스트로 계속</button>
     </div>
   </div>`;
 }
@@ -784,7 +861,13 @@ function mainContent(manaPct: number): string {
 
 function render(): void {
   if (!bootReady) {
-    app.innerHTML = `<div class="auth-screen"><p class="auth-brand">StoneSummoner</p><p class="muted">불러오는 중…</p></div>`;
+    app.classList.add("auth-mode");
+    app.innerHTML = `<main class="auth-main auth-main--boot">${authHeroLayer()}
+      <div class="auth-screen">
+        ${authBrand()}
+        <p class="auth-copy">불러오는 중…</p>
+      </div>
+    </main>`;
     return;
   }
 
@@ -800,6 +883,7 @@ function render(): void {
   const demoTag = sessionUser?.kind === "demo" ? `<span class="demo-tag">DEMO</span>` : "";
 
   if (view === "auth") {
+    app.classList.add("auth-mode");
     app.innerHTML = `
       <main class="auth-main">${renderAuth()}</main>
       ${toast ? `<p class="toast auth-toast">${toast}</p>` : ""}
@@ -819,6 +903,7 @@ function render(): void {
     return;
   }
 
+  app.classList.remove("auth-mode");
   app.innerHTML = `
     <header class="app-bar">
       <h1>StoneSummoner ${demoTag}</h1>
@@ -864,33 +949,100 @@ function renderHome(): string {
   const pondDef = PHASE1_BUILDINGS.find((b) => b.id === "mana_pond")!;
   const pondLv = pond?.level ?? 1;
   const pondCap = productionStorageCap(pondDef, pondLv);
+  const storedMana = Math.floor(pond?.storedMana ?? 0);
+  const storedCrystal = Math.floor(mine?.storedCrystal ?? 0);
   const exp = Math.floor(save.island.summonerExp ?? 0);
-  const hasWish = save.island.buildings.some((b) => b.id === "wish_temple") || save.island.summonerLevel >= 7;
-  return `<div class="panel">
-    <p class="muted">서머너 Lv.${save.island.summonerLevel} · EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
+  const hasWish =
+    save.island.buildings.some((b) => b.id === "wish_temple") ||
+    save.island.summonerLevel >= 7;
+  const dojoOk =
+    save.island.summonerLevel >= 8 ||
+    save.island.buildings.some((b) => b.id === "practice_dojo");
+  const guildOk =
+    save.island.summonerLevel >= 12 ||
+    save.island.buildings.some((b) => b.id === "guild_hall");
+  const fusionOk =
+    save.island.summonerLevel >= 17 ||
+    save.island.buildings.some((b) => b.id === "fusion_star");
+  const mineOk = Boolean(mine) || save.island.summonerLevel >= 10;
+
+  const tile = (
+    id: string,
+    mark: string,
+    title: string,
+    sub: string,
+    opts?: { disabled?: boolean; bubble?: string; bubbleKind?: "mana" | "crystal" },
+  ) => {
+    const bubble =
+      opts?.bubble && opts.bubbleKind
+        ? `<button type="button" class="res-bubble res-bubble--${opts.bubbleKind}" data-collect="${opts.bubbleKind}" aria-label="${opts.bubble} 수집">${opts.bubble}</button>`
+        : "";
+    return `<div class="building${opts?.disabled ? " is-locked" : ""}">
+      <button type="button" class="building-main" data-b="${id}" ${opts?.disabled ? "disabled" : ""}>
+        <span class="building-mark" aria-hidden="true">${mark}</span>
+        <span class="building-body"><strong>${title}</strong><small>${sub}</small></span>
+      </button>
+      ${bubble}
+    </div>`;
+  };
+
+  return `<div class="home-island">
+    <div class="home-sky" aria-hidden="true">
+      <img
+        class="home-sky-img"
+        src="/art/home/home-island-bg.webp"
+        srcset="/art/home/home-island-bg-720.webp 720w, /art/home/home-island-bg.webp 1080w, /art/home/home-island-bg@2x.webp 1440w"
+        sizes="(max-width: 430px) 100vw, 430px"
+        width="1080"
+        height="1920"
+        alt=""
+        decoding="async"
+      />
+      <div class="home-sky-veil"></div>
+      <div class="home-mist"></div>
+    </div>
+    <div class="home-hud">
+      <p class="home-level">서머너 Lv.${save.island.summonerLevel}</p>
+      <p class="home-meta">EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
+    </div>
     <div class="island-grid">
-      <button type="button" class="building" data-b="summon_hearth"><strong>소환진</strong><small>소환서 ${save.scrolls}장</small></button>
-      <button type="button" class="building" data-b="power_circle"><strong>강화진</strong><small>레벨 · 진화 · 스킬업</small></button>
-      <button type="button" class="building" data-b="shop"><strong>마법상점</strong><small>소환서 · 연마 · 각인</small></button>
-      <button type="button" class="building" data-b="gateway"><strong>출정문</strong><small>시나리오 · 심층 · 아레나</small></button>
-      <button type="button" class="building" data-b="mana_pond"><strong>진액 연못 Lv.${pondLv}</strong><small>대기 ${Math.floor(pond?.storedMana ?? 0)} / ${pondCap}</small></button>
-      <button type="button" class="building" data-b="crystal_mine" ${mine || save.island.summonerLevel >= 10 ? "" : "disabled"}>
-        <strong>수정 광맥</strong><small>${mine ? `대기 ${Math.floor(mine.storedCrystal ?? 0)}` : "Lv.10 해금"}</small>
-      </button>
-      <button type="button" class="building" data-b="wish" ${hasWish ? "" : "disabled"}>
-        <strong>소원의 사당</strong><small>${hasWish ? "일 1회 소원" : "Lv.7 해금"}</small>
-      </button>
-      <button type="button" class="building" data-b="glory"><strong>영광 건물</strong><small>영광 ${save.gloryPoints ?? 0}</small></button>
-      <button type="button" class="building" data-b="dojo" ${save.island.summonerLevel >= 8 || save.island.buildings.some((b) => b.id === "practice_dojo") ? "" : "disabled"}>
-        <strong>마법진 도장</strong><small>${save.island.summonerLevel >= 8 ? `수련 ${save.dojoDrills ?? 0}회` : "Lv.8 해금"}</small>
-      </button>
-      <button type="button" class="building" data-b="guild" ${save.island.summonerLevel >= 12 || save.island.buildings.some((b) => b.id === "guild_hall") ? "" : "disabled"}>
-        <strong>길드 홀</strong><small>${save.guildName ? save.guildName : save.island.summonerLevel >= 12 ? "가입·출석" : "Lv.12 해금"}</small>
-      </button>
-      <button type="button" class="building" data-b="fusion" ${save.island.summonerLevel >= 17 || save.island.buildings.some((b) => b.id === "fusion_star") ? "" : "disabled"}>
-        <strong>융합의 별</strong><small>${save.island.summonerLevel >= 17 ? "동일종 융합" : "Lv.17 해금"}</small>
-      </button>
-      <button type="button" class="building" data-b="party"><strong>파티</strong><small>출전 몬스터 편성</small></button>
+      ${tile("summon_hearth", "召", "소환진", `소환서 ${save.scrolls}장`)}
+      ${tile("power_circle", "强", "강화진", "레벨 · 진화 · 스킬업")}
+      ${tile("shop", "商", "마법상점", "소환서 · 연마 · 각인")}
+      ${tile("gateway", "門", "출정문", "시나리오 · 심층 · 아레나")}
+      ${tile("mana_pond", "池", `진액 연못 Lv.${pondLv}`, `대기 ${storedMana} / ${pondCap}`, {
+        bubble: storedMana > 0 ? String(storedMana) : undefined,
+        bubbleKind: storedMana > 0 ? "mana" : undefined,
+      })}
+      ${tile(
+        "crystal_mine",
+        "晶",
+        "수정 광맥",
+        mine ? `대기 ${storedCrystal}` : "Lv.10 해금",
+        {
+          disabled: !mineOk,
+          bubble: mine && storedCrystal > 0 ? String(storedCrystal) : undefined,
+          bubbleKind: mine && storedCrystal > 0 ? "crystal" : undefined,
+        },
+      )}
+      ${tile("wish", "願", "소원의 사당", hasWish ? "일 1회 소원" : "Lv.7 해금", {
+        disabled: !hasWish,
+      })}
+      ${tile("glory", "榮", "영광 건물", `영광 ${save.gloryPoints ?? 0}`)}
+      ${tile("dojo", "道", "마법진 도장", dojoOk ? `수련 ${save.dojoDrills ?? 0}회` : "Lv.8 해금", {
+        disabled: !dojoOk,
+      })}
+      ${tile(
+        "guild",
+        "會",
+        "길드 홀",
+        save.guildName ? save.guildName : guildOk ? "가입·출석" : "Lv.12 해금",
+        { disabled: !guildOk },
+      )}
+      ${tile("fusion", "融", "융합의 별", fusionOk ? "동일종 융합" : "Lv.17 해금", {
+        disabled: !fusionOk,
+      })}
+      ${tile("party", "伍", "파티", "출전 몬스터 편성")}
     </div>
   </div>`;
 }
@@ -1222,9 +1374,12 @@ function stageButtons(list: StageDef[]): string {
           : s.jinmunReward != null
             ? ` · 진문석 ${s.jinmunReward}`
             : "";
-      return `<button type="button" data-stage="${s.id}" ${locked ? "disabled" : ""}>
-        <strong>${label} · ${s.nameKo}</strong><br/>
-        <small class="muted">${s.boardSize}×${s.boardSize} · 웨이브 ${s.waves} · ${cost}${extra}</small>
+      return `<button type="button" class="stage-card" data-stage="${s.id}" ${locked ? "disabled" : ""}>
+        <span class="stage-card-mark" aria-hidden="true">${s.boardSize}</span>
+        <span class="stage-card-body">
+          <strong>${label} · ${s.nameKo}</strong>
+          <small>${s.boardSize}×${s.boardSize} · 웨이브 ${s.waves} · ${cost}${extra}</small>
+        </span>
       </button>`;
     })
     .join("");
@@ -1245,28 +1400,46 @@ function renderStages(): string {
       </button>`;
     })
     .join("");
-  return `<div class="panel">
-    <p class="muted">출정 허브 · 클리어 ${cleared} · Phase 2 콘텐츠 포함</p>
-    <p class="section-label">시나리오 1 · 가렌숲</p>
-    <div class="stage-list">${stageButtons(CHAPTER1_STAGES)}</div>
-    <p class="section-label">시나리오 2 · 용맹의 탑</p>
-    <div class="stage-list">${stageButtons(CHAPTER2_STAGES)}</div>
-    <p class="section-label">상징 심층</p>
-    <div class="stage-list">${stageButtons(DEPTH_STAGES)}</div>
-    <p class="section-label">아레나</p>
-    <div class="stage-list">${stageButtons(ARENA_STAGES)}</div>
-    <p class="section-label">요일 · 마법진 시련</p>
-    <div class="stage-list">${stageButtons([...WEEKDAY_STAGES, ...TRIAL_STAGES])}</div>
-    <p class="section-label">월드아레나 · 밴픽 (최대 2)</p>
-    <p class="muted">시즌승 ${save.arenaSeasonWins ?? 0} · 보상티어 ${save.seasonRewardsClaimed ?? 0} · 밴 ${bans.length ? bans.join(", ") : "없음"}</p>
-    <button type="button" class="secondary full" id="btn-season-claim" style="margin-bottom:8px">
-      시즌 보상 수령 (승 ${(save.seasonRewardsClaimed ?? 0) + 1}×${SEASON_REWARD_WINS} 필요)
-    </button>
-    <div class="chip-row">${banRow}</div>
-    <div class="stage-list">${stageButtons(WORLD_ARENA_STAGES)}</div>
-    <p class="section-label">길드 레이드 (13×13 · 모듈 E/F · 쌍국)</p>
-    <p class="muted">기여도 ${save.guildContribution ?? 0} · 최고 단회 +${save.guildRaidBest ?? 0}</p>
-    <div class="stage-list">${stageButtons(GUILD_RAID_STAGES)}</div>
+  return `<div class="stages-hub">
+    <div class="stages-sky" aria-hidden="true">
+      <img
+        class="stages-sky-img"
+        src="/art/stages/stages-gateway-bg.webp"
+        srcset="/art/stages/stages-gateway-bg-720.webp 720w, /art/stages/stages-gateway-bg.webp 1080w"
+        sizes="(max-width: 430px) 100vw, 430px"
+        width="1080"
+        height="1920"
+        alt=""
+        decoding="async"
+      />
+      <div class="stages-sky-veil"></div>
+    </div>
+    <div class="stages-content">
+      <header class="stages-hud">
+        <p class="stages-title">출정문</p>
+        <p class="stages-meta">클리어 ${cleared} · 시즌승 ${save.arenaSeasonWins ?? 0}</p>
+      </header>
+      <p class="section-label">시나리오 1 · 가렌숲</p>
+      <div class="stage-list">${stageButtons(CHAPTER1_STAGES)}</div>
+      <p class="section-label">시나리오 2 · 용맹의 탑</p>
+      <div class="stage-list">${stageButtons(CHAPTER2_STAGES)}</div>
+      <p class="section-label">상징 심층</p>
+      <div class="stage-list">${stageButtons(DEPTH_STAGES)}</div>
+      <p class="section-label">아레나</p>
+      <div class="stage-list">${stageButtons(ARENA_STAGES)}</div>
+      <p class="section-label">요일 · 마법진 시련</p>
+      <div class="stage-list">${stageButtons([...WEEKDAY_STAGES, ...TRIAL_STAGES])}</div>
+      <p class="section-label">월드아레나 · 밴픽 (최대 2)</p>
+      <p class="muted stages-note">시즌승 ${save.arenaSeasonWins ?? 0} · 보상티어 ${save.seasonRewardsClaimed ?? 0} · 밴 ${bans.length ? bans.join(", ") : "없음"}</p>
+      <button type="button" class="secondary full stages-claim" id="btn-season-claim">
+        시즌 보상 수령 (승 ${(save.seasonRewardsClaimed ?? 0) + 1}×${SEASON_REWARD_WINS} 필요)
+      </button>
+      <div class="chip-row">${banRow}</div>
+      <div class="stage-list">${stageButtons(WORLD_ARENA_STAGES)}</div>
+      <p class="section-label">길드 레이드 (13×13 · 모듈 E/F · 쌍국)</p>
+      <p class="muted stages-note">기여도 ${save.guildContribution ?? 0} · 최고 단회 +${save.guildRaidBest ?? 0}</p>
+      <div class="stage-list">${stageButtons(GUILD_RAID_STAGES)}</div>
+    </div>
   </div>`;
 }
 
@@ -1346,10 +1519,11 @@ function renderBattle(manaPct: number): string {
       }
     </div>`;
 
-  return `<div class="battle-layout panel">
+  return `<div class="battle-layout panel battle-layout--framed">
     <div class="battle-top">
-      <div class="muted">${currentStage.nameKo} · ${currentStage.boardSize}×${currentStage.boardSize} · 웨이브 ${battle.currentWave}/${battle.totalWaves}</div>
-      <div class="muted">${status}</div>
+      <div class="battle-stage-name">${currentStage.nameKo}</div>
+      <div class="muted">${currentStage.boardSize}×${currentStage.boardSize} · 웨이브 ${battle.currentWave}/${battle.totalWaves}</div>
+      <div class="muted battle-status">${status}</div>
     </div>
     ${renderBattleTicker()}
     <div class="muted item-legend">서머너 후열(무적) · 전열 소환수 전멸 시 승패</div>
@@ -1357,6 +1531,7 @@ function renderBattle(manaPct: number): string {
     ${renderSummonerBack(enemyBack, "enemy")}
     <div class="team-row enemy">${enemyFront.map((u) => renderUnit(u, { targetable: awaitSkill })).join("")}</div>
     <div class="board-wrap">
+      ${renderBoardTabs()}
       <div class="dmg-layer">${renderDmgLayer()}</div>
       ${renderBoard()}
       ${renderSuggestStrip()}
@@ -1500,6 +1675,31 @@ function bind(): void {
       }
       view = nav as View;
       render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-collect]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      const kind = btn.dataset.collect;
+      if (kind === "mana") {
+        const r = homeCollect(save);
+        save = r.save;
+        persist();
+        flash(r.message);
+        view = "home";
+        render();
+        return;
+      }
+      if (kind === "crystal") {
+        const r = homeCollectCrystal(save);
+        save = r.save;
+        persist();
+        flash(r.message);
+        view = "home";
+        render();
+      }
     });
   });
 
@@ -1804,6 +2004,17 @@ function bind(): void {
     if (!battle.switchBoard("수동")) return;
     refreshLegal();
     render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-board-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!battle || battle.boards.length < 2) return;
+      const idx = Number(btn.dataset.boardTab);
+      if (!Number.isFinite(idx) || idx === battle.activeBoardIndex) return;
+      if (!battle.switchBoard("탭")) return;
+      refreshLegal();
+      render();
+    });
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-shop]").forEach((btn) => {

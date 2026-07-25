@@ -7,3 +7,16 @@ dist/
 .env.*
 !.env.example
 apps/web/dev-dist/
+
+# Art generation scratch (keep finals + public exports in git)
+scripts/node_modules_sharp_tmp/
+docs/art/auth/selects/
+docs/art/**/*-raw.png
+
+# Bulky local PNG masters (WebP shipped); keep logo-mark / icons
+docs/art/auth/final/auth-hero-*.png
+docs/art/auth/final/auth-og.png
+docs/art/auth/refs/*.png
+!docs/art/auth/refs/.gitkeep
+apps/web/public/art/auth/auth-hero-*.png
+apps/web/public/art/auth/auth-og.png

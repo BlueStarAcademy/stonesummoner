@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 140" role="img" aria-label="StoneSummoner">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f0e0a0"/>
+      <stop offset="40%" stop-color="#c9a227"/>
+      <stop offset="100%" stop-color="#7a5a10"/>
+    </linearGradient>
+    <filter id="etch" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="1" stdDeviation="0.6" flood-color="#000" flood-opacity="0.65"/>
+    </filter>
+  </defs>
+  <!-- Decorative rule -->
+  <path d="M40 28 H680" stroke="url(#gold)" stroke-width="1.2" opacity="0.55"/>
+  <circle cx="360" cy="28" r="3" fill="#c9a227"/>
+  <text
+    x="360"
+    y="88"
+    text-anchor="middle"
+    font-family="Cinzel, 'Times New Roman', Georgia, serif"
+    font-size="52"
+    font-weight="700"
+    letter-spacing="0.12em"
+    fill="url(#gold)"
+    filter="url(#etch)"
+  >STONESUMMONER</text>
+  <path d="M120 112 H600" stroke="url(#gold)" stroke-width="1" opacity="0.4"/>
+</svg>
