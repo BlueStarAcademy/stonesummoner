@@ -18,6 +18,7 @@ import {
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runEvolve,
   runSetParty,
   runSortie,
   runSummon,
@@ -46,7 +47,7 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | summon | enhance <i> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
+    "명령: collect | summon | enhance <i> | evolve <i> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
@@ -92,6 +93,14 @@ async function interactive(): Promise<void> {
 
     if (cmd === "enhance" || cmd === "enh" || cmd === "e") {
       const r = runEnhance(save, arg ?? "0");
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "evolve" || cmd === "evo") {
+      const r = runEvolve(save, arg ?? "0");
       save = r.save;
       console.log(r.message);
       printStatus(save);
@@ -188,7 +197,7 @@ async function interactive(): Promise<void> {
     }
 
     console.log(
-      "알 수 없는 명령. collect | summon | enhance | gear | enh-gear | symbols | equip | enh-sym | roster | party | stages | go | status | demo | quit",
+      "알 수 없는 명령. collect | summon | enhance | evolve | gear | enh-gear | symbols | equip | enh-sym | roster | party | stages | go | status | demo | quit",
     );
   }
 

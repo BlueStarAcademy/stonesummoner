@@ -38,6 +38,10 @@ import {
   describeOwned,
   emptySymbolSlots,
   enhanceManaCost,
+  evolveCrystalCost,
+  evolveManaCost,
+  evolveMinLevel,
+  MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
   nextUid,
   pickSummonMonster,
@@ -51,6 +55,10 @@ export type { OwnedMonster } from "./roster.js";
 export {
   describeOwned,
   enhanceManaCost,
+  evolveCrystalCost,
+  evolveManaCost,
+  evolveMinLevel,
+  MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
   SUMMON_SCROLL_COST,
 } from "./roster.js";
@@ -141,16 +149,17 @@ function unitFromOwned(
 ): Unit {
   const m = getMonster(owned.monsterId);
   if (!m) throw new Error(`Unknown monster ${owned.monsterId}`);
-  const base = scaledMonsterStats(m, owned.level);
+  const base = scaledMonsterStats(m, owned.level, owned.evolve ?? 0);
   const stats = applySymbolsToStats(base, equippedSymbols(save, owned));
+  const evoTag = (owned.evolve ?? 0) > 0 ? ` E${owned.evolve}` : "";
   return makeUnit({
     id: owned.uid,
-    name: `${m.nameKo} Lv.${owned.level}`,
+    name: `${m.nameKo} Lv.${owned.level}${evoTag}`,
     team,
     kind: "monster",
     element: m.element,
     stats: { ...stats },
-    skillCoeff: m.skillCoeff,
+    skillCoeff: m.skillCoeff + (owned.evolve ?? 0) * 0.05,
   });
 }
 
@@ -162,7 +171,7 @@ function unitFromMonsterId(
 ): Unit {
   const m = getMonster(id);
   if (!m) throw new Error(`Unknown monster ${id}`);
-  const stats = scaledMonsterStats(m, level);
+  const stats = scaledMonsterStats(m, level, 0);
   return makeUnit({
     id: uid,
     name: m.nameKo,
@@ -285,6 +294,7 @@ export function runSummon(
     monsterId: def.id,
     level: 1,
     symbolSlots: emptySymbolSlots(),
+    evolve: 0,
   };
   const roster = [...save.roster, owned];
   let party = [...save.party];
@@ -336,6 +346,67 @@ export function runEnhance(
   return {
     save: { ...save, island, roster },
     message: `강화: ${describeOwned({ ...owned, level: nextLevel })} (−마나 ${cost})`,
+  };
+}
+
+/**
+ * Evolve at 강화진 — raise evolve stage (cap MAX_EVOLVE).
+ * Requires level gate + mana (+ crystal from 2nd evolve).
+ */
+export function runEvolve(
+  save: PlayerSave,
+  uidOrIndex: string,
+): LoopStepResult {
+  const owned = resolveOwned(save, uidOrIndex);
+  if (!owned) {
+    return { save, message: `몬스터를 찾을 수 없음: ${uidOrIndex}` };
+  }
+  const evo = owned.evolve ?? 0;
+  if (evo >= MAX_EVOLVE) {
+    return {
+      save,
+      message: `${describeOwned(owned)} 이미 최대 진화(E${MAX_EVOLVE})`,
+    };
+  }
+  const needLv = evolveMinLevel(evo);
+  if (owned.level < needLv) {
+    return {
+      save,
+      message: `진화 조건 미달 — Lv.${needLv} 필요 (현재 ${owned.level})`,
+    };
+  }
+  const manaCost = evolveManaCost(evo);
+  const crystalCost = evolveCrystalCost(evo);
+  if (save.island.mana < manaCost) {
+    return {
+      save,
+      message: `마나 부족 (필요 ${manaCost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  if (save.island.crystal < crystalCost) {
+    return {
+      save,
+      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${save.island.crystal})`,
+    };
+  }
+
+  const nextEvo = evo + 1;
+  const roster = save.roster.map((m) =>
+    m.uid === owned.uid ? { ...m, evolve: nextEvo } : m,
+  );
+  const island = {
+    ...save.island,
+    mana: save.island.mana - manaCost,
+    crystal: save.island.crystal - crystalCost,
+  };
+  const costNote =
+    crystalCost > 0
+      ? `−마나 ${manaCost} · −크리스탈 ${crystalCost}`
+      : `−마나 ${manaCost}`;
+
+  return {
+    save: { ...save, island, roster },
+    message: `진화: ${describeOwned({ ...owned, evolve: nextEvo })} (${costNote})`,
   };
 }
 

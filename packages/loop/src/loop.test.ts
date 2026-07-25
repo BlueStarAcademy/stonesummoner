@@ -12,6 +12,7 @@ import {
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runEvolve,
   runSetParty,
   runSortie,
   runSummon,
@@ -51,6 +52,32 @@ describe("game loop", () => {
     const r = runSetParty(save, ["3", "0", "1"]);
     assert.equal(r.save.party.length, 3);
     assert.match(r.message, /파티 편성/);
+  });
+
+  it("evolves monster when level and costs met", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      roster: save.roster.map((m, i) =>
+        i === 0 ? { ...m, level: 10, evolve: 0 } : m,
+      ),
+      island: { ...save.island, mana: 5000, crystal: 50 },
+    };
+    const blocked = runEvolve(
+      {
+        ...save,
+        roster: save.roster.map((m, i) =>
+          i === 0 ? { ...m, level: 5 } : m,
+        ),
+      },
+      "0",
+    );
+    assert.match(blocked.message, /조건 미달/);
+
+    const ok = runEvolve(save, "0");
+    assert.match(ok.message, /진화/);
+    assert.equal(ok.save.roster[0]!.evolve, 1);
+    assert.ok(ok.save.island.mana < save.island.mana);
   });
 
   it("summons and enhances monsters", () => {

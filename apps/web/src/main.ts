@@ -18,12 +18,17 @@ import {
   createStageBattle,
   describeOwned,
   enhanceManaCost,
+  evolveCrystalCost,
+  evolveManaCost,
+  evolveMinLevel,
   isStageUnlocked,
+  MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
   runEnhance,
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runEvolve,
   runSetParty,
   runSummon,
   stageUnlockLabel,
@@ -58,6 +63,7 @@ function migrateSave(raw: unknown): PlayerSave | null {
   const base = createNewSave();
   const roster = (p.roster?.length ? p.roster : base.roster).map((m) => ({
     ...m,
+    evolve: m.evolve ?? 0,
     symbolSlots: m.symbolSlots ?? [null, null, null, null, null, null],
   }));
   const island = tickProduction({
@@ -494,7 +500,7 @@ function renderHome(): string {
     <p class="muted">서머너 Lv.${save.island.summonerLevel} · EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
     <div class="island-grid">
       <button type="button" class="building" data-b="summon_hearth"><strong>소환진</strong><small>소환서 ${save.scrolls}장</small></button>
-      <button type="button" class="building" data-b="power_circle"><strong>강화진</strong><small>레벨업 · 최대 Lv.${MAX_MONSTER_LEVEL}</small></button>
+      <button type="button" class="building" data-b="power_circle"><strong>강화진</strong><small>레벨 · 진화 · 장비</small></button>
       <button type="button" class="building" data-b="gateway"><strong>출정문</strong><small>시나리오 진입</small></button>
       <button type="button" class="building" data-b="mana_pond"><strong>진액 연못</strong><small>대기 ${Math.floor(pond?.storedMana ?? 0)} / 4000</small></button>
       <button type="button" class="building" data-b="party"><strong>파티</strong><small>출전 몬스터 편성</small></button>
@@ -553,11 +559,30 @@ function renderEnhance(): string {
         .map((m) => {
           const cost = enhanceManaCost(m.level);
           const maxed = m.level >= MAX_MONSTER_LEVEL;
+          const evo = m.evolve ?? 0;
+          const evoMax = evo >= MAX_EVOLVE;
+          const evoNeed = evolveMinLevel(evo);
+          const evoMana = evolveManaCost(evo);
+          const evoCrystal = evolveCrystalCost(evo);
+          const evoCost =
+            evoCrystal > 0
+              ? `−마나 ${evoMana} · −크리스탈 ${evoCrystal}`
+              : `−마나 ${evoMana}`;
+          const evoHint = evoMax
+            ? "최대 진화"
+            : m.level < evoNeed
+              ? `진화 Lv.${evoNeed}+`
+              : `진화 ${evoCost}`;
           const inParty = save.party.includes(m.uid) ? " · 파티" : "";
-          return `<button type="button" data-enh="${m.uid}" ${maxed ? "disabled" : ""}>
-            <strong>${describeOwned(m)}${inParty}</strong><br/>
-            <small class="muted">${maxed ? "최대 레벨" : `강화 −마나 ${cost}`}</small>
-          </button>`;
+          return `<div class="sym-row">
+            <button type="button" data-enh="${m.uid}" ${maxed ? "disabled" : ""}>
+              <strong>${describeOwned(m)}${inParty}</strong><br/>
+              <small class="muted">${maxed ? "최대 레벨" : `강화 −마나 ${cost}`}</small>
+            </button>
+            <button type="button" class="secondary" data-evo="${m.uid}" ${evoMax ? "disabled" : ""}>
+              ${evoHint}
+            </button>
+          </div>`;
         })
         .join("")}
     </div>
@@ -739,6 +764,17 @@ function bind(): void {
     btn.addEventListener("click", () => {
       const uid = btn.dataset.enh!;
       const r = runEnhance(save, uid);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-evo]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.evo!;
+      const r = runEvolve(save, uid);
       save = r.save;
       persist();
       flash(r.message);
