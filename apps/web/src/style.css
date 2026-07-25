@@ -147,6 +147,11 @@ main {
   gap: 10px;
 }
 
+.stage-list button.picked {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+
 .building {
   min-height: 88px;
   background: #241c36;
@@ -230,6 +235,38 @@ main {
 .unit-card.summoner {
   width: 84px;
   border-color: #7b6cff88;
+}
+
+.unit-card.dead {
+  opacity: 0.35;
+}
+
+.summoner-back {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 12px;
+  margin: 4px auto;
+  max-width: 200px;
+  border-radius: 14px;
+  border: 1px dashed #7b6cff88;
+  background: #1a1528aa;
+  font-size: 0.8rem;
+}
+
+.summoner-back.enemy {
+  border-color: #c45c5c88;
+}
+
+.summoner-back.active {
+  border-style: solid;
+  border-color: var(--gold);
+}
+
+.summoner-back .name {
+  font-weight: 700;
+  color: var(--gold);
 }
 
 .unit-card .name {
@@ -378,9 +415,82 @@ main {
   font-weight: 700;
 }
 
-.board button.cell.legal {
+.board button.cell.suggest-1 {
+  outline: 2px solid #c9a227;
+  outline-offset: -2px;
+}
+.board button.cell.suggest-2 {
   outline: 2px solid #7b6cff;
   outline-offset: -2px;
+}
+.board button.cell.suggest-3 {
+  outline: 2px solid #4a7ec8;
+  outline-offset: -2px;
+}
+
+.board button.cell .suggest-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 78%;
+  height: 78%;
+  margin: 0 auto;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: #c9a227;
+  color: #1a1528;
+}
+
+.board button.cell.suggest-2 .suggest-mark {
+  background: #7b6cff;
+  color: #fff;
+}
+.board button.cell.suggest-3 .suggest-mark {
+  background: #4a7ec8;
+  color: #fff;
+}
+
+.suggest-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.suggest-chip {
+  text-align: left;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #241c36;
+  color: var(--text);
+  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.suggest-chip strong {
+  color: var(--gold);
+}
+
+.suggest-chip small {
+  width: 100%;
+  color: var(--muted);
+}
+
+.unit-card.targeted {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px var(--danger);
+}
+
+button.unit-card {
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
 }
 
 .board button.cell:disabled {

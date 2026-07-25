@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   PHASE1_BUILDINGS,
+  addSummonerExp,
   collectMana,
   createStarterIsland,
   hasBuilding,
@@ -21,7 +22,6 @@ describe("Phase1 island", () => {
   it("produces mana over time and collects", () => {
     const t0 = 0;
     let island = createStarterIsland(t0);
-    // 1 hour later
     island = tickProduction(island, 3_600_000);
     const pond = island.buildings.find((b) => b.id === "mana_pond")!;
     assert.ok(pond.storedMana > 400);
@@ -37,5 +37,22 @@ describe("Phase1 island", () => {
     island = tickProduction(island, 3_600_000 * 100);
     const pond = island.buildings.find((b) => b.id === "mana_pond")!;
     assert.equal(pond.storedMana, 4000);
+  });
+
+  it("regens energy over time up to max", () => {
+    let island = createStarterIsland(0);
+    island = { ...island, energy: 50 };
+    island = tickProduction(island, 3_600_000);
+    assert.ok(island.energy >= 59.9 && island.energy <= 60.1);
+    island = tickProduction(island, 3_600_000 * 20);
+    assert.equal(island.energy, island.energyMax);
+  });
+
+  it("levels summoner from exp", () => {
+    const island = createStarterIsland(0);
+    const r = addSummonerExp(island, 250);
+    assert.equal(r.levelsGained, 2);
+    assert.equal(r.island.summonerLevel, 3);
+    assert.equal(r.island.summonerExp, 50);
   });
 });

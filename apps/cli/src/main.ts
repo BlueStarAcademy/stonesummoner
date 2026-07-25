@@ -18,16 +18,22 @@ import {
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runSetParty,
   runSortie,
   runSummon,
+  stageUnlockLabel,
   type PlayerSave,
 } from "stonesummoner-loop";
+import { tickProduction } from "stonesummoner-home";
 
 function printStatus(save: PlayerSave): void {
   const { island, symbols, clearedStages, scrolls, roster } = save;
   console.log("────────────────────────────────────");
   console.log(
-    `마나 ${Math.floor(island.mana)} · 크리스탈 ${island.crystal} · 에너지 ${island.energy}`,
+    `서머너 Lv.${island.summonerLevel} (${Math.floor(island.summonerExp ?? 0)}/100 EXP)`,
+  );
+  console.log(
+    `마나 ${Math.floor(island.mana)} · 크리스탈 ${island.crystal} · 에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}`,
   );
   console.log(
     `소환서 ${scrolls} · 로스터 ${roster.length} · 상징 ${symbols.length} · 클리어 ${clearedStages.length}/${listStages().length}`,
@@ -40,7 +46,7 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | summon | enhance <i> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | roster | stages | go <id> | status | demo | quit",
+    "명령: collect | summon | enhance <i> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
@@ -55,6 +61,7 @@ async function interactive(): Promise<void> {
     if (cmd === "quit" || cmd === "q" || cmd === "exit") break;
 
     if (cmd === "status") {
+      save = { ...save, island: tickProduction(save.island) };
       printStatus(save);
       continue;
     }
@@ -125,16 +132,29 @@ async function interactive(): Promise<void> {
       continue;
     }
 
-    if (cmd === "roster" || cmd === "r" || cmd === "party") {
+    if (cmd === "roster" || cmd === "r") {
       for (const line of listRoster(save)) console.log(line);
+      continue;
+    }
+
+    if (cmd === "party" || cmd === "p") {
+      const refs = parts.slice(1);
+      if (refs.length === 0) {
+        for (const line of listRoster(save)) console.log(line);
+        console.log(`현재 파티: ${save.party.join(", ")}`);
+        continue;
+      }
+      const r = runSetParty(save, refs);
+      save = r.save;
+      console.log(r.message);
       continue;
     }
 
     if (cmd === "stages" || cmd === "s") {
       for (const st of listStages()) {
-        const cleared = save.clearedStages.includes(st.id) ? "✓" : " ";
+        const label = stageUnlockLabel(save, st);
         console.log(
-          ` [${cleared}] ${st.id}  ${st.nameKo}  ${st.boardSize}×${st.boardSize}  E${st.energyCost}`,
+          ` [${label}] ${st.id}  ${st.nameKo}  ${st.boardSize}×${st.boardSize}  E${st.energyCost}`,
         );
       }
       continue;
@@ -168,7 +188,7 @@ async function interactive(): Promise<void> {
     }
 
     console.log(
-      "알 수 없는 명령. collect | summon | enhance | gear | enh-gear | symbols | equip | enh-sym | roster | stages | go | status | demo | quit",
+      "알 수 없는 명령. collect | summon | enhance | gear | enh-gear | symbols | equip | enh-sym | roster | party | stages | go | status | demo | quit",
     );
   }
 

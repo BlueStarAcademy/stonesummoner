@@ -10,7 +10,13 @@ import {
   type CombatBoardSize,
   type Point,
 } from "stonesummoner-board";
-import { pickAutoStone, pickDefaultTarget, teamStoneColor } from "./ai.js";
+import {
+  aliveSummons,
+  pickDefaultTarget,
+  rankStoneSuggestions,
+  teamStoneColor,
+  type StoneSuggestion,
+} from "./ai.js";
 import { classifyCapture, gainsForBoardEvent } from "./boardEvents.js";
 import { clampAmplify, computeDamage } from "./damage.js";
 import {
@@ -39,6 +45,13 @@ export interface BattleConfig {
   rng?: () => number;
   /** Override empowered reset threshold (default 50 on 9×9). */
   resetThreshold?: number;
+  /** Total waves (default 1). When enemy summons wipe mid-battle, next wave spawns. */
+  totalWaves?: number;
+  /**
+   * Build enemy monster units for wave index (1-based).
+   * Wave 1 is already in `units`; called for wave 2+.
+   */
+  spawnWave?: (wave: number) => Unit[];
 }
 
 export interface SkillResult {
@@ -63,8 +76,12 @@ export class Battle {
   activeUnitId: string | null = null;
   finishReason: FinishReason = null;
   log: string[] = [];
+  /** 1-based current wave. */
+  currentWave: number;
+  readonly totalWaves: number;
   private powerGapCap: number;
   private rng: () => number;
+  private spawnWaveFn?: (wave: number) => Unit[];
 
   constructor(config: BattleConfig) {
     this.board = new Board(config.boardSize);
@@ -77,6 +94,9 @@ export class Battle {
     this.enemySummoner = { ...config.enemySummoner };
     this.powerGapCap = config.powerGapAmplifyCap ?? 1.25;
     this.rng = config.rng ?? Math.random;
+    this.totalWaves = Math.max(1, config.totalWaves ?? 1);
+    this.currentWave = 1;
+    this.spawnWaveFn = config.spawnWave;
   }
 
   getUnit(id: string): Unit | undefined {
@@ -154,14 +174,33 @@ export class Battle {
   }
 
   autoPickStone(unit: Unit): Point | null {
-    const color = teamStoneColor(unit.team);
+    const suggestions = this.suggestStones(unit);
+    return suggestions[0]?.point ?? null;
+  }
+
+  /**
+   * Top stone candidates for the active (or given) unit — semi-auto preview.
+   */
+  suggestStones(unit?: Unit | null): StoneSuggestion[] {
+    const u =
+      unit ??
+      (this.activeUnitId ? this.getUnit(this.activeUnitId) : undefined);
+    if (!u) return [];
+    const color = teamStoneColor(u.team);
     const legal = this.board.legalMoves(color);
-    // Prefer token cells slightly for AI
-    return pickAutoStone(legal, this.board.size, (p) => {
-      const cap = Math.max(0, this.previewCapture(color, p));
-      const tokenBonus = this.tokenAt(p.x, p.y) ? 2 : 0;
-      return cap + tokenBonus;
-    });
+    const manaMul =
+      manaBonusMultiplierForPhase(this.circle.boardPhase) *
+      (1 + this.summonerOf(u.team).boardSense);
+    return rankStoneSuggestions(
+      legal,
+      this.board.size,
+      (p) => ({
+        capturedCount: Math.max(0, this.previewCapture(color, p)),
+        hasToken: !!this.tokenAt(p.x, p.y),
+      }),
+      manaMul,
+      3,
+    );
   }
 
   private applyTokenPickup(unit: Unit, token: BoardToken): void {
@@ -301,7 +340,10 @@ export class Battle {
     const unit = this.getUnit(this.activeUnitId);
     if (!unit) return [];
 
-    const enemies = this.alive(unit.team === "ally" ? "enemy" : "ally");
+    const enemies = aliveSummons(
+      this.units,
+      unit.team === "ally" ? "enemy" : "ally",
+    );
     const results: SkillResult[] = [];
     const wantUlt = opts?.useSummonerSkill ?? this.canUseSummonerSkill(unit);
 
@@ -317,7 +359,18 @@ export class Battle {
     } else {
       let target =
         (opts?.targetId && this.getUnit(opts.targetId)) ||
-        pickDefaultTarget(enemies);
+        pickDefaultTarget(
+          this.units.filter(
+            (u) => u.team === (unit.team === "ally" ? "enemy" : "ally"),
+          ),
+        );
+      if (target?.kind === "summoner") {
+        target = pickDefaultTarget(
+          this.units.filter(
+            (u) => u.team === (unit.team === "ally" ? "enemy" : "ally"),
+          ),
+        );
+      }
       if (!target || !target.alive) {
         this.phase = "resolved";
         this.activeUnitId = null;
@@ -340,6 +393,17 @@ export class Battle {
     coeff: number,
     usedSummonerSkill: boolean,
   ): SkillResult {
+    if (target.kind === "summoner") {
+      this.log.push(`${target.name}는 후열 — 공격 무효`);
+      return {
+        attackerId: attacker.id,
+        targetId: target.id,
+        damage: 0,
+        crit: false,
+        usedSummonerSkill,
+      };
+    }
+
     const critBonus = attacker.critCharm ?? 0;
     if (critBonus > 0) attacker.critCharm = 0;
 
@@ -378,28 +442,47 @@ export class Battle {
   }
 
   private checkFinish(): void {
-    const allySum = this.units.find(
-      (u) => u.team === "ally" && u.kind === "summoner",
-    );
-    const enemySum = this.units.find(
-      (u) => u.team === "enemy" && u.kind === "summoner",
-    );
-    if (allySum && !allySum.alive) {
+    // Defeat = all ally summons fallen.
+    if (aliveSummons(this.units, "ally").length === 0) {
       this.finishReason = "enemy_win";
       this.phase = "finished";
       return;
     }
-    if (enemySum && !enemySum.alive) {
+    // Enemy summons wiped — advance wave or win.
+    if (aliveSummons(this.units, "enemy").length === 0) {
+      if (this.currentWave < this.totalWaves && this.spawnWaveFn) {
+        this.advanceWave();
+        return;
+      }
       this.finishReason = "ally_win";
       this.phase = "finished";
-      return;
     }
-    if (this.alive("ally").length === 0) {
-      this.finishReason = "enemy_win";
-      this.phase = "finished";
-    } else if (this.alive("enemy").length === 0) {
-      this.finishReason = "ally_win";
-      this.phase = "finished";
+  }
+
+  /** Replace fallen enemy summons with the next wave; keep board & summoners. */
+  private advanceWave(): void {
+    const next = this.currentWave + 1;
+    const spawned = this.spawnWaveFn!(next).map((u) => ({
+      ...u,
+      stats: { ...u.stats },
+      alive: true,
+      atb: 0,
+      hp: u.hp ?? u.stats.hp,
+    }));
+    // Drop dead enemy monsters; keep summoners + allies + living (none)
+    this.units = [
+      ...this.units.filter(
+        (u) => !(u.team === "enemy" && u.kind === "monster"),
+      ),
+      ...spawned,
+    ];
+    this.currentWave = next;
+    this.log.push(`웨이브 ${this.currentWave}/${this.totalWaves} 출현`);
+    // Soft reset ATB pressure: nudge ally ATB down slightly so wave isn't insta-cleared
+    for (const u of this.units) {
+      if (u.team === "ally" && u.kind === "monster") {
+        u.atb = Math.min(u.atb, 40);
+      }
     }
   }
 

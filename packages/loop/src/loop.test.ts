@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createNewSave,
   homeCollect,
+  isStageUnlocked,
   listGear,
   listRoster,
   listSymbols,
@@ -11,6 +12,7 @@ import {
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runSetParty,
   runSortie,
   runSummon,
 } from "./loop.js";
@@ -32,7 +34,23 @@ describe("game loop", () => {
     if (r.reward?.victory) {
       assert.ok(r.reward.mana > 0);
       assert.ok(r.save.clearedStages.includes("garen_1_1"));
+      assert.ok((r.reward.summonerExp ?? 0) > 0);
     }
+  });
+
+  it("locks later stages until previous clear", () => {
+    const save = createNewSave(0);
+    assert.equal(isStageUnlocked(save, "garen_1_1"), true);
+    assert.equal(isStageUnlocked(save, "garen_1_2"), false);
+    const locked = runSortie(save, "garen_1_2", { rng: () => 0.1 });
+    assert.match(locked.message, /잠김/);
+  });
+
+  it("sets party from roster indices", () => {
+    const save = createNewSave(0);
+    const r = runSetParty(save, ["3", "0", "1"]);
+    assert.equal(r.save.party.length, 3);
+    assert.match(r.message, /파티 편성/);
   });
 
   it("summons and enhances monsters", () => {

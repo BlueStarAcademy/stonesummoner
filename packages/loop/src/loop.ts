@@ -27,6 +27,7 @@ import {
   type SymbolInstance,
 } from "stonesummoner-data";
 import {
+  addSummonerExp,
   collectMana,
   createStarterIsland,
   tickProduction,
@@ -44,6 +45,7 @@ import {
   SUMMON_SCROLL_COST,
   type OwnedMonster,
 } from "./roster.js";
+import { expForStage, isStageUnlocked, stageUnlockLabel } from "./progress.js";
 
 export type { OwnedMonster } from "./roster.js";
 export {
@@ -52,6 +54,7 @@ export {
   MAX_MONSTER_LEVEL,
   SUMMON_SCROLL_COST,
 } from "./roster.js";
+export { isStageUnlocked, stageUnlockLabel } from "./progress.js";
 
 export interface PlayerSave {
   island: IslandState;
@@ -69,6 +72,8 @@ export interface BattleReward {
   expNote: string;
   symbol?: SymbolInstance;
   victory: boolean;
+  summonerExp?: number;
+  levelsGained?: number;
 }
 
 export interface LoopStepResult {
@@ -229,6 +234,36 @@ export function listSymbols(save: PlayerSave): string[] {
     );
     return `[${i}] ${worn ? "E" : " "} ${describeSymbol(s)}`;
   });
+}
+
+/** Set battle party from roster indices or uids (max 4). */
+export function runSetParty(
+  save: PlayerSave,
+  refs: string[],
+): LoopStepResult {
+  if (refs.length === 0 || refs.length > 4) {
+    return { save, message: "파티는 1~4명을 지정하세요" };
+  }
+  const uids: string[] = [];
+  for (const ref of refs) {
+    const owned = resolveOwned(save, ref);
+    if (!owned) {
+      return { save, message: `몬스터 없음: ${ref}` };
+    }
+    if (uids.includes(owned.uid)) {
+      return { save, message: "같은 몬스터를 중복 편성할 수 없습니다" };
+    }
+    uids.push(owned.uid);
+  }
+  return {
+    save: { ...save, party: uids },
+    message: `파티 편성: ${uids
+      .map((id) => {
+        const m = save.roster.find((x) => x.uid === id)!;
+        return describeOwned(m);
+      })
+      .join(" / ")}`,
+  };
 }
 
 /**
@@ -415,22 +450,27 @@ export function createStageBattle(
     );
   }
 
+  const lvl = save?.island.summonerLevel ?? 1;
   const allySummonerUnit = makeUnit({
     id: "a-sum",
-    name: "서머너",
+    name: `서머너 Lv.${lvl}`,
     team: "ally",
     kind: "summoner",
     element: "light",
     stats: {
-      hp: 520 + gear.accessory.manaMaxBonus * 2,
-      atk: 90,
-      def: 45 + Math.floor(gear.accessory.enhance),
-      spd: 100,
+      hp: 500 + lvl * 20 + gear.accessory.manaMaxBonus * 2,
+      atk: 85 + lvl * 3,
+      def: 42 + Math.floor(gear.accessory.enhance) + Math.floor(lvl / 2),
+      spd: 98 + Math.floor(lvl / 5),
       critRate: 15,
       critDmg: 50,
     },
     skillCoeff: 1,
   });
+
+  const enemyMonsters = stage.enemyMonsterIds.map((id, i) =>
+    unitFromMonsterId(id, "enemy", `e-w1-${i}`, 1 + Math.floor(stage.stage / 2)),
+  );
 
   const enemyUnits: Unit[] = [
     makeUnit({
@@ -442,15 +482,14 @@ export function createStageBattle(
       stats: { hp: 480, atk: 80, def: 42, spd: 88, critRate: 12, critDmg: 50 },
       skillCoeff: 1,
     }),
-    ...stage.enemyMonsterIds.map((id, i) =>
-      unitFromMonsterId(id, "enemy", `e-${i}`, 1 + Math.floor(stage.stage / 2)),
-    ),
+    ...enemyMonsters,
   ];
 
   const allyUnits = [allySummonerUnit, ...allyMonsters];
   const delta =
     estimateCombatPower(allyUnits) - estimateCombatPower(enemyUnits);
   const powerGapCap = amplifyCapFromPowerDelta(delta);
+  const totalWaves = Math.max(1, stage.waves);
 
   return new Battle({
     boardSize: stage.boardSize,
@@ -462,6 +501,16 @@ export function createStageBattle(
       true,
     ),
     powerGapAmplifyCap: powerGapCap,
+    totalWaves,
+    spawnWave: (wave) =>
+      stage.enemyMonsterIds.map((id, i) =>
+        unitFromMonsterId(
+          id,
+          "enemy",
+          `e-w${wave}-${i}`,
+          1 + Math.floor(stage.stage / 2) + (wave - 1),
+        ),
+      ),
   });
 }
 
@@ -495,10 +544,13 @@ export function applyRewards(
   }
 
   const manaGain = 180 + stage.stage * 60;
-  const island = {
+  const expGain = expForStage(stage);
+  let island = {
     ...save.island,
     mana: save.island.mana + manaGain,
   };
+  const leveled = addSummonerExp(island, expGain);
+  island = leveled.island;
 
   const symbols = [...save.symbols];
   let symbol: SymbolInstance | undefined;
@@ -514,13 +566,20 @@ export function applyRewards(
     ? save.clearedStages
     : [...save.clearedStages, stage.id];
 
+  const levelNote =
+    leveled.levelsGained > 0
+      ? ` · 서머너 Lv.${island.summonerLevel}(+${leveled.levelsGained})`
+      : "";
+
   return {
     save: { ...save, island, symbols, clearedStages: cleared, scrolls },
     reward: {
       mana: manaGain,
-      expNote: `${stage.nameKo} 클리어`,
+      expNote: `${stage.nameKo} 클리어 · EXP +${expGain}${levelNote}`,
       symbol,
       victory: true,
+      summonerExp: expGain,
+      levelsGained: leveled.levelsGained,
     },
   };
 }
@@ -537,25 +596,36 @@ export function runSortie(
   if (!stage) {
     return { save, message: `알 수 없는 스테이지: ${stageId}` };
   }
-  if (save.island.energy < stage.energyCost) {
+  const energy = Math.floor(save.island.energy);
+  if (energy < stage.energyCost) {
     return {
       save,
-      message: `에너지 부족 (필요 ${stage.energyCost}, 보유 ${save.island.energy})`,
+      message: `에너지 부족 (필요 ${stage.energyCost}, 보유 ${energy})`,
+    };
+  }
+  if (!isStageUnlocked(save, stageId)) {
+    return {
+      save,
+      message: `스테이지 잠김 — 이전 스테이지를 클리어하세요 (${stageId})`,
     };
   }
 
   const island = {
     ...save.island,
-    energy: save.island.energy - stage.energyCost,
+    energy: energy - stage.energyCost,
+    energyUpdatedAt: Date.now(),
   };
   const mid: PlayerSave = { ...save, island };
 
   const battle = createStageBattle(stage, mid);
-  const { victory, turns } = resolveBattleAuto(battle, opts?.maxTurns ?? 80);
+  const { victory, turns } = resolveBattleAuto(battle, opts?.maxTurns ?? 140);
   const { save: next, reward } = applyRewards(mid, stage, victory, opts?.rng);
 
   const dropLine = reward.symbol
     ? ` · 상징 드롭 ${reward.symbol.setId}(${reward.symbol.slot})`
+    : "";
+  const expLine = reward.summonerExp
+    ? ` · EXP +${reward.summonerExp}`
     : "";
 
   return {
@@ -563,7 +633,7 @@ export function runSortie(
     reward,
     battleLog: battle.log.slice(-12),
     message: victory
-      ? `승리 (${turns}턴) · 마나 +${reward.mana}${dropLine}`
+      ? `승리 (${turns}턴) · 마나 +${reward.mana}${dropLine}${expLine}`
       : `패배 (${turns}턴) · ${battle.finishReason ?? "timeout"}`,
   };
 }

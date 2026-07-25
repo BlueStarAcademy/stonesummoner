@@ -73,7 +73,7 @@ describe("Battle flow", () => {
     assert.ok(hits[0]!.damage > 0);
   });
 
-  it("summoner skill when mana full hits all enemies", () => {
+  it("summoner skill when mana full hits all enemy summons", () => {
     const b = new Battle({
       boardSize: 5,
       units: roster(),
@@ -88,16 +88,16 @@ describe("Battle flow", () => {
     assert.equal(unit?.id, "a-sum");
     b.autoStone();
     const hits = b.useSkill({ useSummonerSkill: true });
-    assert.equal(hits.length, 2);
+    assert.equal(hits.length, 1);
     assert.ok(hits.every((h) => h.usedSummonerSkill));
     assert.equal(b.allySummoner.mana, 0);
   });
 
-  it("enemy summoner death is ally win", () => {
+  it("wiping enemy summons wins; summoners are not targets", () => {
     const units = roster();
-    const enemySum = units.find((u) => u.id === "e-sum")!;
-    enemySum.hp = 1;
-    enemySum.stats.hp = 1;
+    const enemyMon = units.find((u) => u.id === "e-m1")!;
+    enemyMon.hp = 1;
+    enemyMon.stats.hp = 1;
     const b = new Battle({
       boardSize: 5,
       units,
@@ -110,8 +110,57 @@ describe("Battle flow", () => {
     }
     b.tickUntilReady();
     b.autoStone();
-    b.useSkill({ targetId: "e-sum" });
+    b.useSkill({ targetId: "e-m1" });
     assert.equal(b.finishReason, "ally_win");
+    assert.ok(b.getUnit("e-sum")!.alive);
+  });
+
+  it("spawns next wave when enemy summons wipe early", () => {
+    const units = roster();
+    const enemyMon = units.find((u) => u.id === "e-m1")!;
+    enemyMon.hp = 1;
+    enemyMon.stats.hp = 1;
+    let waveCalls = 0;
+    const b = new Battle({
+      boardSize: 5,
+      units,
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+      totalWaves: 2,
+      spawnWave: (wave) => {
+        waveCalls += 1;
+        return [
+          makeUnit({
+            id: `e-w${wave}-0`,
+            name: `Wave${wave}Mon`,
+            team: "enemy",
+            kind: "monster",
+            element: "water",
+            stats: {
+              hp: 200,
+              atk: 80,
+              def: 30,
+              spd: 85,
+              critRate: 10,
+              critDmg: 50,
+            },
+            skillCoeff: 1,
+          }),
+        ];
+      },
+    });
+    for (const u of b.units) {
+      u.atb = u.id === "a-m1" ? 100 : 0;
+    }
+    b.tickUntilReady();
+    b.autoStone();
+    b.useSkill({ targetId: "e-m1" });
+    assert.equal(b.finishReason, null);
+    assert.equal(b.currentWave, 2);
+    assert.equal(waveCalls, 1);
+    assert.ok(b.getUnit("e-w2-0")?.alive);
+    assert.match(b.log.join("\n"), /웨이브 2\/2/);
   });
 
   it("auto turns progress battle", () => {

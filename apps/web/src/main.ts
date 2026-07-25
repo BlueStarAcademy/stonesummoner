@@ -1,5 +1,5 @@
 import "./style.css";
-import type { Battle, SkillResult, Unit } from "stonesummoner-combat";
+import type { Battle, SkillResult, StoneSuggestion, Unit } from "stonesummoner-combat";
 import {
   CHAPTER1_STAGES,
   describeGear,
@@ -18,26 +18,31 @@ import {
   createStageBattle,
   describeOwned,
   enhanceManaCost,
+  isStageUnlocked,
   MAX_MONSTER_LEVEL,
   runEnhance,
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runSetParty,
   runSummon,
+  stageUnlockLabel,
   type PlayerSave,
 } from "stonesummoner-loop";
 import type { Point } from "stonesummoner-board";
 
-type View = "home" | "summon" | "enhance" | "stages" | "battle";
+type View = "home" | "summon" | "enhance" | "party" | "stages" | "battle";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
-const SAVE_KEY = "stonesummoner.save.v4";
+const SAVE_KEY = "stonesummoner.save.v5";
 
 let save: PlayerSave = loadSave();
 let view: View = "home";
 let battle: Battle | null = null;
 let currentStage: StageDef | null = null;
 let legalHints: Point[] = [];
+let stoneSuggestions: StoneSuggestion[] = [];
+let selectedTargetId: string | null = null;
 let lastRewardMsg = "";
 let toast = "";
 let battleSpeed: 1 | 2 | 3 = 1;
@@ -55,9 +60,16 @@ function migrateSave(raw: unknown): PlayerSave | null {
     ...m,
     symbolSlots: m.symbolSlots ?? [null, null, null, null, null, null],
   }));
+  const island = tickProduction({
+    ...base.island,
+    ...p.island,
+    summonerExp: p.island.summonerExp ?? 0,
+    energyMax: p.island.energyMax ?? 100,
+    energyUpdatedAt: p.island.energyUpdatedAt ?? Date.now(),
+  });
   return {
     ...base,
-    island: tickProduction(p.island),
+    island,
     symbols: p.symbols?.length ? p.symbols : base.symbols,
     clearedStages: p.clearedStages ?? [],
     roster,
@@ -71,6 +83,7 @@ function loadSave(): PlayerSave {
   try {
     const raw =
       localStorage.getItem(SAVE_KEY) ??
+      localStorage.getItem("stonesummoner.save.v4") ??
       localStorage.getItem("stonesummoner.save.v3") ??
       localStorage.getItem("stonesummoner.save.v2");
     if (raw) {
@@ -92,7 +105,12 @@ function flash(msg: string): void {
 }
 
 function startBattle(stage: StageDef): void {
-  if (save.island.energy < stage.energyCost) {
+  if (!isStageUnlocked(save, stage.id)) {
+    flash("이전 스테이지를 먼저 클리어하세요.");
+    render();
+    return;
+  }
+  if (Math.floor(save.island.energy) < stage.energyCost) {
     flash("에너지가 부족합니다.");
     render();
     return;
@@ -101,7 +119,8 @@ function startBattle(stage: StageDef): void {
     ...save,
     island: {
       ...save.island,
-      energy: save.island.energy - stage.energyCost,
+      energy: Math.floor(save.island.energy) - stage.energyCost,
+      energyUpdatedAt: Date.now(),
     },
   };
   persist();
@@ -110,20 +129,42 @@ function startBattle(stage: StageDef): void {
   autoMode = false;
   clearAutoTimer();
   dmgFloats = [];
+  selectedTargetId = null;
   battle = createStageBattle(stage, save);
   battle.tickUntilReady();
   refreshLegal();
+  ensureTarget();
   view = "battle";
   render();
 }
 
 function refreshLegal(): void {
   legalHints = [];
+  stoneSuggestions = [];
   if (!battle || battle.phase !== "await_stone" || !battle.activeUnitId) return;
   const unit = battle.getUnit(battle.activeUnitId);
   if (!unit) return;
   const color = unit.team === "ally" ? "black" : "white";
   legalHints = battle.board.legalMoves(color);
+  if (unit.team === "ally") {
+    stoneSuggestions = battle.suggestStones(unit);
+  }
+}
+
+function ensureTarget(): string | undefined {
+  if (!battle) return undefined;
+  if (selectedTargetId) {
+    const t = battle.getUnit(selectedTargetId);
+    if (t?.alive && t.kind === "monster" && t.team === "enemy") {
+      return selectedTargetId;
+    }
+  }
+  const enemies = battle.units.filter(
+    (u) => u.team === "enemy" && u.kind === "monster" && u.alive,
+  );
+  const lowest = enemies.sort((a, b) => a.hp - b.hp)[0];
+  selectedTargetId = lowest?.id ?? null;
+  return selectedTargetId ?? undefined;
 }
 
 function grantRewardIfNeeded(): void {
@@ -137,6 +178,10 @@ function grantRewardIfNeeded(): void {
   const scrollGain = save.scrolls > scrollsBefore ? ` · 소환서 +${save.scrolls - scrollsBefore}` : "";
   lastRewardMsg = victory
     ? `보상: 마나 +${reward.mana}` +
+      (reward.summonerExp ? ` · EXP +${reward.summonerExp}` : "") +
+      (reward.levelsGained
+        ? ` · 서머너 Lv.${save.island.summonerLevel}`
+        : "") +
       (reward.symbol
         ? ` · 상징 ${reward.symbol.setId}(${reward.symbol.slot})`
         : "") +
@@ -186,12 +231,21 @@ function renderDmgLayer(): string {
     .join("");
 }
 
-function orderTeam(units: Unit[]): Unit[] {
-  const mons = units.filter((u) => u.kind === "monster");
-  const sum = units.find((u) => u.kind === "summoner");
-  return [mons[0], mons[1], sum, mons[2], mons[3]].filter(
-    (u): u is Unit => !!u,
-  );
+function frontRow(units: Unit[]): Unit[] {
+  return units.filter((u) => u.kind === "monster");
+}
+
+function backSummoner(units: Unit[]): Unit | undefined {
+  return units.find((u) => u.kind === "summoner");
+}
+
+function renderSummonerBack(u: Unit | undefined, side: "enemy" | "ally"): string {
+  if (!u) return "";
+  const active = battle?.activeUnitId === u.id ? " active" : "";
+  return `<div class="summoner-back ${side}${active}">
+    <div class="name">${u.name}</div>
+    <div class="muted">후열 · 착수/마나</div>
+  </div>`;
 }
 
 function afterPlayerAction(): void {
@@ -284,23 +338,34 @@ function castSkill(mode: "basic" | "ult" | "smart"): void {
     render();
     return;
   }
-  const hits = battle.useSkill({ useSummonerSkill: useUlt });
+  const targetId = useUlt ? undefined : ensureTarget();
+  const hits = battle.useSkill({
+    useSummonerSkill: useUlt,
+    targetId,
+  });
   pushDamageFloats(hits);
   afterPlayerAction();
 }
 
-function renderUnit(u: Unit): string {
+function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
   const active = battle?.activeUnitId === u.id ? " active" : "";
-  const center = u.kind === "summoner" ? " summoner" : "";
+  const targeted =
+    opts?.targetable && selectedTargetId === u.id ? " targeted" : "";
   const hpPct = Math.round((u.hp / u.stats.hp) * 100);
   const atbPct = Math.min(100, Math.round(u.atb));
   const shield = u.shieldHp && u.shieldHp > 0 ? Math.round(u.shieldHp) : 0;
-  return `<div class="unit-card${active}${center}">
+  const dead = !u.alive ? " dead" : "";
+  const tag = opts?.targetable && u.alive ? "button" : "div";
+  const attrs =
+    opts?.targetable && u.alive
+      ? `type="button" data-target="${u.id}"`
+      : "";
+  return `<${tag} class="unit-card${active}${targeted}${dead}" ${attrs}>
     <div class="name">${u.name}</div>
     <div class="hp-num">${Math.max(0, Math.round(u.hp))}${shield ? `+${shield}` : ""}</div>
     <div class="bar hp"><i style="width:${hpPct}%"></i></div>
     <div class="bar atb"><i style="width:${atbPct}%"></i></div>
-  </div>`;
+  </${tag}>`;
 }
 
 function renderBoard(): string {
@@ -308,18 +373,24 @@ function renderBoard(): string {
   const size = battle.board.size;
   const grid = battle.board.getBoard();
   const legalSet = new Set(legalHints.map((p) => `${p.x},${p.y}`));
+  const suggestMap = new Map(
+    stoneSuggestions.map((s) => [`${s.point.x},${s.point.y}`, s]),
+  );
   const canClick =
     battle.phase === "await_stone" &&
     !!battle.activeUnitId &&
-    battle.getUnit(battle.activeUnitId!)?.team === "ally";
+    battle.getUnit(battle.activeUnitId!)?.team === "ally" &&
+    !autoMode;
 
   let cells = "";
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const stone = grid[y]![x];
       const legal = legalSet.has(`${x},${y}`);
+      const sug = suggestMap.get(`${x},${y}`);
       const token = battle.tokenAt(x, y);
       const tokenClass = token ? ` token token-${token.id}` : "";
+      const sugClass = sug ? ` suggest suggest-${sug.rank}` : "";
       const tokenLabel =
         token?.id === "crit_charm"
           ? "치"
@@ -330,13 +401,31 @@ function renderBoard(): string {
               : "";
       const stoneHtml = stone
         ? `<span class="stone ${stone}"></span>`
-        : token
-          ? `<span class="token-mark">${tokenLabel}</span>`
-          : "";
-      cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}" data-x="${x}" data-y="${y}" ${canClick && !stone ? "" : "disabled"}>${stoneHtml}</button>`;
+        : sug
+          ? `<span class="suggest-mark">${sug.rank}</span>`
+          : token
+            ? `<span class="token-mark">${tokenLabel}</span>`
+            : "";
+      cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}${sugClass}" data-x="${x}" data-y="${y}" ${canClick && !stone ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
   return `<div class="board size-${size}" style="grid-template-columns:repeat(${size},auto)">${cells}</div>`;
+}
+
+function renderSuggestStrip(): string {
+  if (!stoneSuggestions.length || battle?.phase !== "await_stone") return "";
+  return `<div class="suggest-strip">
+    ${stoneSuggestions
+      .map(
+        (s) =>
+          `<button type="button" class="suggest-chip" data-sgx="${s.point.x}" data-sgy="${s.point.y}">
+            <strong>${s.rank}위</strong>
+            <span>(${s.point.x},${s.point.y})</span>
+            <small>따냄 ${s.capturedCount} · 마나 +${s.manaGain} · amp +${s.amplifyDelta.toFixed(2)}${s.hasToken ? " · 토큰" : ""}</small>
+          </button>`,
+      )
+      .join("")}
+  </div>`;
 }
 
 function mainContent(manaPct: number): string {
@@ -345,6 +434,8 @@ function mainContent(manaPct: number): string {
       return renderSummon();
     case "enhance":
       return renderEnhance();
+    case "party":
+      return renderParty();
     case "stages":
       return renderStages();
     case "battle":
@@ -367,16 +458,16 @@ function render(): void {
     <header class="app-bar">
       <h1>StoneSummoner</h1>
       <div class="resources">
+        <span>Lv.${island.summonerLevel}</span>
         <span>마나 ${Math.floor(island.mana)}</span>
-        <span>크리스탈 ${island.crystal}</span>
-        <span>에너지 ${island.energy}</span>
+        <span>에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}</span>
         <span>소환서 ${save.scrolls}</span>
       </div>
       ${toast ? `<p class="toast">${toast}</p>` : ""}
     </header>
     <main>${mainContent(manaPct)}</main>
     <nav class="tabs">
-      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" ? "active" : ""}">홈</button>
+      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "party" ? "active" : ""}">홈</button>
       <button type="button" data-nav="stages" class="${tabStages ? "active" : ""}">출정</button>
       <button type="button" data-nav="collect">수집</button>
     </nav>
@@ -398,14 +489,35 @@ function render(): void {
 
 function renderHome(): string {
   const pond = save.island.buildings.find((b) => b.id === "mana_pond");
+  const exp = Math.floor(save.island.summonerExp ?? 0);
   return `<div class="panel">
-    <p class="muted">거점 섬 · 로스터 ${save.roster.length} · 파티 ${save.party.length}/4</p>
+    <p class="muted">서머너 Lv.${save.island.summonerLevel} · EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
     <div class="island-grid">
       <button type="button" class="building" data-b="summon_hearth"><strong>소환진</strong><small>소환서 ${save.scrolls}장</small></button>
       <button type="button" class="building" data-b="power_circle"><strong>강화진</strong><small>레벨업 · 최대 Lv.${MAX_MONSTER_LEVEL}</small></button>
       <button type="button" class="building" data-b="gateway"><strong>출정문</strong><small>시나리오 진입</small></button>
       <button type="button" class="building" data-b="mana_pond"><strong>진액 연못</strong><small>대기 ${Math.floor(pond?.storedMana ?? 0)} / 4000</small></button>
+      <button type="button" class="building" data-b="party"><strong>파티</strong><small>출전 몬스터 편성</small></button>
     </div>
+  </div>`;
+}
+
+function renderParty(): string {
+  const selected = new Set(save.party);
+  return `<div class="panel">
+    <p class="muted">파티 편성 · 탭하여 선택 (최대 4)</p>
+    <div class="stage-list" id="party-pick">
+      ${save.roster
+        .map((m) => {
+          const on = selected.has(m.uid);
+          return `<button type="button" class="${on ? "picked" : ""}" data-party-toggle="${m.uid}">
+            <strong>${on ? "★ " : ""}${describeOwned(m)}</strong>
+          </button>`;
+        })
+        .join("")}
+    </div>
+    <button type="button" class="primary full" id="btn-party-save">편성 저장 (${save.party.length}/4)</button>
+    <button type="button" class="secondary full" data-nav="home">섬으로</button>
   </div>`;
 }
 
@@ -481,11 +593,15 @@ function renderEnhance(): string {
 
 function renderStages(): string {
   return `<div class="panel">
-    <p class="muted">가렌숲 · 5×5→7×7→9×9 · 클리어 ${save.clearedStages.length}/5</p>
+    <p class="muted">가렌숲 · 순차 해금 · 클리어 ${save.clearedStages.length}/5</p>
     <div class="stage-list">
       ${CHAPTER1_STAGES.map((s) => {
-        const done = save.clearedStages.includes(s.id) ? "✓ " : "";
-        return `<button type="button" data-stage="${s.id}"><strong>${done}${s.nameKo}</strong><br/><small class="muted">${s.boardSize}×${s.boardSize} · 에너지 ${s.energyCost}</small></button>`;
+        const label = stageUnlockLabel(save, s);
+        const locked = !isStageUnlocked(save, s.id);
+        return `<button type="button" data-stage="${s.id}" ${locked ? "disabled" : ""}>
+          <strong>${label} · ${s.nameKo}</strong><br/>
+          <small class="muted">${s.boardSize}×${s.boardSize} · 웨이브 ${s.waves} · 에너지 ${s.energyCost}</small>
+        </button>`;
       }).join("")}
     </div>
   </div>`;
@@ -493,8 +609,12 @@ function renderStages(): string {
 
 function renderBattle(manaPct: number): string {
   if (!battle || !currentStage) return "";
-  const allies = orderTeam(battle.units.filter((u) => u.team === "ally"));
-  const enemies = orderTeam(battle.units.filter((u) => u.team === "enemy"));
+  const allyUnits = battle.units.filter((u) => u.team === "ally");
+  const enemyUnits = battle.units.filter((u) => u.team === "enemy");
+  const allyFront = frontRow(allyUnits);
+  const enemyFront = frontRow(enemyUnits);
+  const allyBack = backSummoner(allyUnits);
+  const enemyBack = backSummoner(enemyUnits);
   const phase = battle.circle.boardPhase;
   const phaseLabel =
     phase <= 0 ? "일반 진문" : `강화 진문 ${"I".repeat(Math.min(phase, 3))}`;
@@ -506,30 +626,32 @@ function renderBattle(manaPct: number): string {
   const canUlt = !!active && battle.canUseSummonerSkill(active);
   const status = battle.finishReason
     ? battle.finishReason === "ally_win"
-      ? "승리!"
-      : "패배..."
+      ? "승리! (적 소환수 전멸)"
+      : "패배... (아군 소환수 전멸)"
     : `${battle.phase} · amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} · ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})`;
 
   const skillHint =
     battle.phase === "await_stone" && active?.team === "ally"
-      ? "착수할 칸을 탭하세요"
+      ? "추천 착수(1·2·3) 또는 칸 탭"
       : awaitSkill
-        ? "스킬을 선택하세요"
+        ? "적 소환수를 탭해 대상 지정 후 스킬"
         : autoMode
           ? `AUTO x${battleSpeed}`
           : "";
 
   return `<div class="battle-layout panel">
     <div class="battle-top">
-      <div class="muted">${currentStage.nameKo} · ${currentStage.boardSize}×${currentStage.boardSize}</div>
+      <div class="muted">${currentStage.nameKo} · ${currentStage.boardSize}×${currentStage.boardSize} · 웨이브 ${battle.currentWave}/${battle.totalWaves}</div>
       <div class="muted">${status}</div>
     </div>
-    <div class="muted item-legend">토큰: 치=치명 · 실=실드 · 자=자석</div>
+    <div class="muted item-legend">서머너 후열(무적) · 전열 소환수 전멸 시 승패</div>
     ${lastRewardMsg ? `<div class="muted">${lastRewardMsg}</div>` : ""}
-    <div class="team-row enemy">${enemies.map(renderUnit).join("")}</div>
+    ${renderSummonerBack(enemyBack, "enemy")}
+    <div class="team-row enemy">${enemyFront.map((u) => renderUnit(u, { targetable: awaitSkill })).join("")}</div>
     <div class="board-wrap">
       <div class="dmg-layer">${renderDmgLayer()}</div>
       ${renderBoard()}
+      ${renderSuggestStrip()}
       <div style="width:100%">
         <div class="muted">서머너 마나 ${Math.floor(battle.allySummoner.mana)}/${battle.allySummoner.manaMax}</div>
         <div class="bar mana mana-lg"><i style="width:${manaPct}%"></i></div>
@@ -541,7 +663,8 @@ function renderBattle(manaPct: number): string {
       <button type="button" id="sk-smart" ${awaitSkill ? "" : "disabled"}>추천</button>
     </div>
     ${skillHint ? `<p class="muted skill-hint">${skillHint}</p>` : ""}
-    <div class="team-row ally">${allies.map(renderUnit).join("")}</div>
+    <div class="team-row ally">${allyFront.map((u) => renderUnit(u)).join("")}</div>
+    ${renderSummonerBack(allyBack, "ally")}
     <div class="battle-hud">
       <button type="button" class="secondary" id="btn-back">나가기</button>
       <button type="button" class="secondary" id="btn-speed">x${battleSpeed}</button>
@@ -596,6 +719,9 @@ function bind(): void {
         render();
       } else if (id === "power_circle") {
         view = "enhance";
+        render();
+      } else if (id === "party") {
+        view = "party";
         render();
       }
     });
@@ -654,6 +780,37 @@ function bind(): void {
     });
   });
 
+  const partyDraft = new Set(save.party);
+  app.querySelectorAll<HTMLButtonElement>("[data-party-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.partyToggle!;
+      if (partyDraft.has(uid)) partyDraft.delete(uid);
+      else if (partyDraft.size < 4) partyDraft.add(uid);
+      else flash("파티는 최대 4명입니다.");
+      btn.classList.toggle("picked", partyDraft.has(uid));
+      const label = btn.querySelector("strong");
+      if (label) {
+        const text = label.textContent?.replace(/^★\s*/, "") ?? "";
+        label.textContent = (partyDraft.has(uid) ? "★ " : "") + text;
+      }
+      const saveBtn = app.querySelector("#btn-party-save");
+      if (saveBtn) saveBtn.textContent = `편성 저장 (${partyDraft.size}/4)`;
+    });
+  });
+
+  app.querySelector("#btn-party-save")?.addEventListener("click", () => {
+    if (partyDraft.size === 0) {
+      flash("최소 1명을 선택하세요.");
+      return;
+    }
+    const r = runSetParty(save, [...partyDraft]);
+    save = r.save;
+    persist();
+    flash(r.message);
+    view = "home";
+    render();
+  });
+
   app.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const stage = CHAPTER1_STAGES.find((s) => s.id === btn.dataset.stage);
@@ -664,6 +821,19 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>(".board .cell").forEach((btn) => {
     btn.addEventListener("click", () => {
       onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>(".suggest-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      onCellClick(Number(btn.dataset.sgx), Number(btn.dataset.sgy));
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-target]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedTargetId = btn.dataset.target ?? null;
+      render();
     });
   });
 

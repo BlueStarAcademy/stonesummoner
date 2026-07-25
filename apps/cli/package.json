@@ -11,6 +11,7 @@
     "demo": "tsx src/main.ts --demo"
   },
   "dependencies": {
+    "stonesummoner-home": "*",
     "stonesummoner-loop": "*"
   },
   "devDependencies": {

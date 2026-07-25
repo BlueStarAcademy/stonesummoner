@@ -67,7 +67,7 @@ flowchart LR
 - 전장: 적 상단 / **중앙 마법진(5×5→7×7→9×9)** / 아군 하단
 - 행동: **착수 → 국면 판정(Amplify·마나) → 스킬**
 - 장기전: 9×9 **50수** 후 보드 리셋 → **강화 진문** 재개 ([board-progression.md](board-progression.md))
-- 승패: 유닛 HP (**서머너 HP 0 = 패배**)
+- 승패: **적 소환수 전멸 = 승리** / **아군 소환수 전멸 = 패배** (서머너는 후열·비대상)
 - 집 계산 없음
 
 상세: [combat-formula.md](combat-formula.md), [battle-ui.md](battle-ui.md), [magic-circle.md](magic-circle.md), [board-progression.md](board-progression.md)

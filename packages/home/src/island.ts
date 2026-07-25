@@ -52,20 +52,33 @@ export interface BuildingInstance {
   lastUpdatedAt: number;
 }
 
+export const ENERGY_MAX = 100;
+/** Energy restored per hour (offline-friendly). */
+export const ENERGY_PER_HOUR = 10;
+export const SUMMONER_EXP_PER_LEVEL = 100;
+
 export interface IslandState {
   summonerLevel: number;
+  /** Progress toward next summoner level. */
+  summonerExp: number;
   mana: number;
   crystal: number;
   energy: number;
+  energyMax: number;
+  /** Epoch ms of last energy regen tick. */
+  energyUpdatedAt: number;
   buildings: BuildingInstance[];
 }
 
 export function createStarterIsland(now = Date.now()): IslandState {
   return {
     summonerLevel: 1,
+    summonerExp: 0,
     mana: 3000,
     crystal: 50,
     energy: 80,
+    energyMax: ENERGY_MAX,
+    energyUpdatedAt: now,
     buildings: PHASE1_BUILDINGS.map((b) => ({
       id: b.id,
       level: 1,
@@ -81,9 +94,27 @@ function defOf(id: BuildingId): BuildingDef {
   return d;
 }
 
-/** Accrue production based on elapsed time. */
+function tickEnergy(island: IslandState, now: number): IslandState {
+  const max = island.energyMax ?? ENERGY_MAX;
+  const updatedAt = island.energyUpdatedAt ?? now;
+  if (island.energy >= max) {
+    return { ...island, energyMax: max, energyUpdatedAt: now };
+  }
+  const hours = Math.max(0, (now - updatedAt) / 3_600_000);
+  const gained = ENERGY_PER_HOUR * hours;
+  const energy = Math.min(max, island.energy + gained);
+  return {
+    ...island,
+    energyMax: max,
+    energy,
+    energyUpdatedAt: now,
+  };
+}
+
+/** Accrue mana production + energy regen based on elapsed time. */
 export function tickProduction(island: IslandState, now = Date.now()): IslandState {
-  const buildings = island.buildings.map((inst) => {
+  let next = tickEnergy(island, now);
+  const buildings = next.buildings.map((inst) => {
     const def = defOf(inst.id);
     if (def.kind !== "production" || !def.manaPerHour || !def.storageCap) {
       return { ...inst, lastUpdatedAt: now };
@@ -93,7 +124,7 @@ export function tickProduction(island: IslandState, now = Date.now()): IslandSta
     const storedMana = Math.min(def.storageCap, inst.storedMana + gained);
     return { ...inst, storedMana, lastUpdatedAt: now };
   });
-  return { ...island, buildings };
+  return { ...next, buildings };
 }
 
 export function collectMana(
@@ -112,4 +143,23 @@ export function collectMana(
 
 export function hasBuilding(island: IslandState, id: BuildingId): boolean {
   return island.buildings.some((b) => b.id === id);
+}
+
+/** Add summoner EXP; returns leveled island + levels gained. */
+export function addSummonerExp(
+  island: IslandState,
+  amount: number,
+): { island: IslandState; levelsGained: number } {
+  let exp = (island.summonerExp ?? 0) + amount;
+  let level = island.summonerLevel;
+  let gained = 0;
+  while (exp >= SUMMONER_EXP_PER_LEVEL) {
+    exp -= SUMMONER_EXP_PER_LEVEL;
+    level += 1;
+    gained += 1;
+  }
+  return {
+    island: { ...island, summonerLevel: level, summonerExp: exp },
+    levelsGained: gained,
+  };
 }

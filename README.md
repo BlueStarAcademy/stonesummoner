@@ -26,7 +26,8 @@ npm run build && npm start
 | `gear` / `enh-gear acc\|orb` | 서머너 장비 현황·강화 |
 | `symbols` / `equip m s` / `enh-sym i` | 상징 목록·장착·강화 |
 | `roster` | 보유 몬스터 |
-| `stages` | 스테이지 목록 |
+| `party 0 1 2 3` | 파티 편성 |
+| `stages` | 스테이지 목록 (순차 해금) |
 | `go garen_1_1` | 출정·자동전투·보상 |
 | `status` | 재화·클리어 현황 |
 | `demo` | 데모 루프 |

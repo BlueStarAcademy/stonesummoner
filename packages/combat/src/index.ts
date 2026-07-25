@@ -13,7 +13,14 @@ export {
   weightedItemId,
 } from "./items.js";
 export type { BoardItemDef, BoardItemId, BoardToken } from "./items.js";
-export { pickAutoStone, pickDefaultTarget, teamStoneColor } from "./ai.js";
+export {
+  aliveSummons,
+  pickAutoStone,
+  pickDefaultTarget,
+  rankStoneSuggestions,
+  teamStoneColor,
+} from "./ai.js";
+export type { StoneEval, StoneSuggestion } from "./ai.js";
 export type {
   BattlePhase,
   Element,

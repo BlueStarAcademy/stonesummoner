@@ -5,6 +5,7 @@ export {
   describeOwned,
   enhanceManaCost,
   homeCollect,
+  isStageUnlocked,
   listGear,
   listRoster,
   listStages,
@@ -16,8 +17,10 @@ export {
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
+  runSetParty,
   runSortie,
   runSummon,
+  stageUnlockLabel,
   SUMMON_SCROLL_COST,
 } from "./loop.js";
 export type { BattleReward, LoopStepResult, OwnedMonster, PlayerSave } from "./loop.js";
