@@ -23,6 +23,11 @@ export {
 } from "./captureShop.js";
 export type { CaptureShopChoice, CaptureShopOffer } from "./captureShop.js";
 export {
+  bossVictoryPoint,
+  pickCircleElement,
+} from "./modules.js";
+export type { BattleModules } from "./modules.js";
+export {
   BOARD_ITEMS,
   itemDef,
   ITEM_SPAWN_CHANCE,

@@ -31,6 +31,7 @@ import {
   runImprintSymbol,
   runPracticeDojo,
   runSellSymbol,
+  runSetArenaBans,
   runSetParty,
   runSkillUp,
   runSortie,
@@ -55,8 +56,11 @@ function printStatus(save: PlayerSave): void {
     `마나 ${Math.floor(island.mana)} · 크리스탈 ${island.crystal} · 에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}`,
   );
   console.log(
-    `영광 ${save.gloryPoints ?? 0} · 진문석 ${save.jinmunStones ?? 0} · 소환서 ${scrolls} · 로스터 ${roster.length} · 상징 ${symbols.length} · 클리어 ${clearedStages.length}`,
+    `영광 ${save.gloryPoints ?? 0} · 진문석 ${save.jinmunStones ?? 0} · 기여 ${save.guildContribution ?? 0} · 시즌승 ${save.arenaSeasonWins ?? 0} · 소환서 ${scrolls} · 로스터 ${roster.length} · 상징 ${symbols.length} · 클리어 ${clearedStages.length}`,
   );
+  if ((save.arenaBanIds ?? []).length) {
+    console.log(`월드아레나 밴: ${(save.arenaBanIds ?? []).join(", ")}`);
+  }
   console.log("────────────────────────────────────");
 }
 
@@ -312,6 +316,15 @@ async function interactive(): Promise<void> {
       continue;
     }
 
+    if (cmd === "ban") {
+      const ids = parts.slice(1);
+      const r = runSetArenaBans(save, ids);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
     if (cmd === "go" || cmd === "g") {
       const id = arg ?? "garen_1_1";
       console.log(`출정: ${id} …`);
@@ -340,7 +353,7 @@ async function interactive(): Promise<void> {
     }
 
     console.log(
-      "알 수 없는 명령. collect | crystal | wish | upgrade | glory | fuse | summon | buy-scroll | enhance | evolve | skillup | gear | enh-gear | symbols | equip | enh-sym | grind | imprint | roster | party | stages | go | status | demo | quit",
+      "알 수 없는 명령. collect | crystal | wish | upgrade | glory | fuse | summon | buy-scroll | enhance | evolve | skillup | gear | enh-gear | symbols | equip | enh-sym | grind | imprint | roster | party | stages | ban | go | status | demo | quit",
     );
   }
 

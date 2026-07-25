@@ -77,6 +77,7 @@ import {
   runImprintSymbol,
   runPracticeDojo,
   runSellSymbol,
+  runSetArenaBans,
   runSetParty,
   runSkillUp,
   runSummon,
@@ -180,6 +181,11 @@ function migrateSave(raw: unknown): PlayerSave | null {
     gloryPoints: typeof p.gloryPoints === "number" ? p.gloryPoints : 0,
     jinmunStones: typeof p.jinmunStones === "number" ? p.jinmunStones : 0,
     gloryLevels: p.gloryLevels ?? {},
+    arenaBanIds: Array.isArray(p.arenaBanIds) ? p.arenaBanIds.slice(0, 2) : [],
+    arenaSeasonWins:
+      typeof p.arenaSeasonWins === "number" ? p.arenaSeasonWins : 0,
+    guildContribution:
+      typeof p.guildContribution === "number" ? p.guildContribution : 0,
   };
 }
 
@@ -308,7 +314,10 @@ function startBattle(stage: StageDef): void {
   clearAutoTimer();
   dmgFloats = [];
   selectedTargetId = null;
-  battle = createStageBattle(stage, save);
+  battle = createStageBattle(stage, save, {
+    banEnemyIds:
+      stage.mode === "world_arena" ? save.arenaBanIds ?? [] : undefined,
+  });
   battle.tickUntilReady();
   refreshLegal();
   ensureTarget();
@@ -359,6 +368,7 @@ function grantRewardIfNeeded(): void {
       (reward.crystal ? ` · 크리스탈 +${reward.crystal}` : "") +
       (reward.glory ? ` · 영광 +${reward.glory}` : "") +
       (reward.jinmun ? ` · 진문석 +${reward.jinmun}` : "") +
+      (reward.contribution ? ` · 기여도 +${reward.contribution}` : "") +
       (reward.summonerExp ? ` · EXP +${reward.summonerExp}` : "") +
       (reward.levelsGained
         ? ` · 서머너 Lv.${save.island.summonerLevel}`
@@ -750,6 +760,8 @@ function render(): void {
         <span>크리스탈 ${island.crystal}</span>
         <span>영광 ${save.gloryPoints ?? 0}</span>
         <span>진문석 ${save.jinmunStones ?? 0}</span>
+        <span>기여 ${save.guildContribution ?? 0}</span>
+        <span>시즌승 ${save.arenaSeasonWins ?? 0}</span>
         <span>에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}</span>
         <span>소환서 ${save.scrolls}</span>
         <button type="button" class="linkish" id="btn-logout">나가기</button>
@@ -1106,6 +1118,19 @@ function stageButtons(list: StageDef[]): string {
 
 function renderStages(): string {
   const cleared = save.clearedStages.length;
+  const bans = save.arenaBanIds ?? [];
+  const banPool = [
+    ...new Set(WORLD_ARENA_STAGES.flatMap((s) => s.enemyMonsterIds)),
+  ];
+  const banRow = banPool
+    .map((id) => {
+      const m = getMonster(id);
+      const on = bans.includes(id);
+      return `<button type="button" class="chip ${on ? "active" : ""}" data-ban-toggle="${id}">
+        ${on ? "밴 " : ""}${m?.nameKo ?? id}
+      </button>`;
+    })
+    .join("");
   return `<div class="panel">
     <p class="muted">출정 허브 · 클리어 ${cleared} · Phase 2 콘텐츠 포함</p>
     <p class="section-label">시나리오 1 · 가렌숲</p>
@@ -1118,9 +1143,12 @@ function renderStages(): string {
     <div class="stage-list">${stageButtons(ARENA_STAGES)}</div>
     <p class="section-label">요일 · 마법진 시련</p>
     <div class="stage-list">${stageButtons([...WEEKDAY_STAGES, ...TRIAL_STAGES])}</div>
-    <p class="section-label">월드아레나</p>
+    <p class="section-label">월드아레나 · 밴픽 (최대 2)</p>
+    <p class="muted">시즌승 ${save.arenaSeasonWins ?? 0} · 밴 ${bans.length ? bans.join(", ") : "없음"}</p>
+    <div class="chip-row">${banRow}</div>
     <div class="stage-list">${stageButtons(WORLD_ARENA_STAGES)}</div>
-    <p class="section-label">길드 레이드 (13×13)</p>
+    <p class="section-label">길드 레이드 (13×13 · 모듈 E/F)</p>
+    <p class="muted">기여도 ${save.guildContribution ?? 0}</p>
     <div class="stage-list">${stageButtons(GUILD_RAID_STAGES)}</div>
   </div>`;
 }
@@ -1130,7 +1158,7 @@ function renderBattleTicker(): string {
   const lines = battle.log
     .filter(
       (l) =>
-        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|형상|이벤트|사석상점/.test(l),
+        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수/.test(l),
     )
     .slice(-3);
   if (!lines.length) {
@@ -1597,6 +1625,25 @@ function bind(): void {
     flash(r.message);
     view = "home";
     render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-ban-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.banToggle!;
+      const cur = [...(save.arenaBanIds ?? [])];
+      const idx = cur.indexOf(id);
+      if (idx >= 0) cur.splice(idx, 1);
+      else if (cur.length < 2) cur.push(id);
+      else {
+        flash("밴은 최대 2마리입니다.");
+        return;
+      }
+      const r = runSetArenaBans(save, cur);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {

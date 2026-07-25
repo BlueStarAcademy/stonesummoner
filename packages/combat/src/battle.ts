@@ -40,11 +40,17 @@ import {
 import type { SkillDef } from "stonesummoner-data";
 import type {
   BattlePhase,
+  Element,
   FinishReason,
   SummonerState,
   TeamId,
   Unit,
 } from "./types.js";
+import {
+  bossVictoryPoint,
+  pickCircleElement,
+  type BattleModules,
+} from "./modules.js";
 
 const ATB_THRESHOLD = 100;
 
@@ -108,6 +114,10 @@ export interface BattleConfig {
    * Wave 1 is already in `units`; called for wave 2+.
    */
   spawnWave?: (wave: number) => Unit[];
+  /** Magic-circle modules E/F stubs. */
+  modules?: BattleModules;
+  /** Module E: affinity element for this battle. */
+  circleElement?: Element;
 }
 
 export interface SkillResult {
@@ -134,6 +144,12 @@ export class Battle {
   log: string[] = [];
   /** Module C: fog reduces stone suggestion count. */
   fogTurns = 0;
+  /** Module E/F. */
+  modules: BattleModules;
+  circleElement: Element | null;
+  victoryPoint: Point | null;
+  manaSealed: boolean;
+  victoryPointClaimed: boolean;
   /** 1-based current wave. */
   currentWave: number;
   readonly totalWaves: number;
@@ -160,9 +176,26 @@ export class Battle {
     this.enemySummoner = { ...config.enemySummoner };
     this.powerGapCap = config.powerGapAmplifyCap ?? 1.25;
     this.rng = config.rng ?? Math.random;
+    this.modules = config.modules ?? {};
+    this.circleElement =
+      config.circleElement ??
+      (this.modules.moduleE ? pickCircleElement(this.rng) : null);
+    this.victoryPoint = this.modules.moduleF
+      ? bossVictoryPoint(config.boardSize)
+      : null;
+    this.manaSealed = !!this.modules.moduleF;
+    this.victoryPointClaimed = false;
     this.totalWaves = Math.max(1, config.totalWaves ?? 1);
     this.currentWave = 1;
     this.spawnWaveFn = config.spawnWave;
+    if (this.modules.moduleE && this.circleElement) {
+      this.log.push(`속성진: ${this.circleElement} 테두리`);
+    }
+    if (this.modules.moduleF && this.victoryPoint) {
+      this.log.push(
+        `보스보드: 필승점 (${this.victoryPoint.x},${this.victoryPoint.y}) · 마나봉인`,
+      );
+    }
   }
 
   getUnit(id: string): Unit | undefined {
@@ -217,9 +250,12 @@ export class Battle {
   }
 
   private regenMana(): void {
+    const allyRegen = this.manaSealed
+      ? this.allySummoner.manaRegenPerTick * 0.1
+      : this.allySummoner.manaRegenPerTick;
     this.allySummoner.mana = Math.min(
       this.allySummoner.manaMax,
-      this.allySummoner.mana + this.allySummoner.manaRegenPerTick,
+      this.allySummoner.mana + allyRegen,
     );
     this.enemySummoner.mana = Math.min(
       this.enemySummoner.manaMax,
@@ -365,12 +401,55 @@ export class Battle {
     const gains = gainsForBoardEvent(kind, result.capturedCount, manaMul);
 
     let ampDelta = gains.amplifyDelta;
+    let manaGain = gains.mana;
     if (unit.stonePassive === "capture_amp" && result.capturedCount > 0) {
       ampDelta += 0.04;
     }
     if (unit.stonePassive === "stone_amp_proc" && this.rng() < 0.15) {
       ampDelta += 0.06;
       this.log.push(`스톤패시브: ${unit.name} 연타착수`);
+    }
+
+    if (this.modules.moduleE) {
+      if (unit.kind === "summoner") {
+        manaGain += 12;
+        ampDelta += 0.02;
+        this.log.push(`서머너 착수 보너스`);
+      }
+      if (this.circleElement && unit.element === this.circleElement) {
+        ampDelta += 0.04;
+        this.log.push(`속성 테두리 (${unit.element})`);
+      }
+    }
+
+    if (
+      this.modules.moduleF &&
+      this.victoryPoint &&
+      point.x === this.victoryPoint.x &&
+      point.y === this.victoryPoint.y &&
+      !this.victoryPointClaimed
+    ) {
+      this.victoryPointClaimed = true;
+      this.manaSealed = false;
+      ampDelta += 0.12;
+      manaGain += 30;
+      this.log.push(`필승점 해금 — 마나봉인 해제`);
+    }
+
+    if (this.modules.moduleF && this.manaSealed && unit.team === "ally") {
+      manaGain = Math.floor(manaGain * 0.15);
+    }
+
+    if (
+      this.modules.moduleF &&
+      kind === "capture_large" &&
+      unit.team === "enemy"
+    ) {
+      this.enemySummoner.mana = Math.min(
+        this.enemySummoner.manaMax,
+        this.enemySummoner.mana + 25,
+      );
+      this.log.push(`돌흡수: 적 마나 +25`);
     }
 
     this.amplify = clampAmplify(
@@ -381,7 +460,7 @@ export class Battle {
     this.skillAmplifyBonus = gains.skillAmplifyBonus;
 
     const sm = this.summonerOf(unit.team);
-    sm.mana = Math.min(sm.manaMax, sm.mana + gains.mana);
+    sm.mana = Math.min(sm.manaMax, sm.mana + manaGain);
 
     const shapes = detectShapeBonuses(this.board, color, point);
     for (const sh of shapes) {
@@ -448,6 +527,9 @@ export class Battle {
       this.log.push(
         `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${amplifyCapForPhase(this.circle.boardPhase)})`,
       );
+      if (this.modules.moduleF) {
+        this.log.push(`진형파괴 — 보스 페이즈 보드 재건`);
+      }
     } else {
       this.trySpawnItem();
       if (shouldRollCircleEvent(this.circle.stoneSummonCount)) {

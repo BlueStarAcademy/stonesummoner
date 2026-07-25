@@ -37,6 +37,7 @@ export {
   runImprintSymbol,
   runPracticeDojo,
   runSellSymbol,
+  runSetArenaBans,
   runSetParty,
   runSkillUp,
   runSortie,

@@ -105,6 +105,12 @@ export interface PlayerSave {
   jinmunStones: number;
   /** Phase 2: glory building levels. */
   gloryLevels: Partial<Record<GloryBuildingId, number>>;
+  /** Phase 2+: world arena ban list (monster ids, max 2). */
+  arenaBanIds: string[];
+  /** Phase 2+: world arena season wins. */
+  arenaSeasonWins: number;
+  /** Phase 2+: guild raid contribution points. */
+  guildContribution: number;
 }
 
 export interface BattleReward {
@@ -112,6 +118,7 @@ export interface BattleReward {
   crystal?: number;
   glory?: number;
   jinmun?: number;
+  contribution?: number;
   expNote: string;
   symbol?: SymbolInstance;
   victory: boolean;
@@ -277,6 +284,9 @@ export function createNewSave(now = Date.now()): PlayerSave {
     gloryPoints: 0,
     jinmunStones: 0,
     gloryLevels: {},
+    arenaBanIds: [],
+    arenaSeasonWins: 0,
+    guildContribution: 0,
   };
 }
 
@@ -1093,6 +1103,7 @@ export function runEquipSymbol(
 export function createStageBattle(
   stage: StageDef,
   save?: PlayerSave,
+  opts?: { banEnemyIds?: string[]; rng?: () => number },
 ): Battle {
   const gear = save?.gear ?? createStarterGear();
   const allyMonsters: Unit[] = [];
@@ -1127,7 +1138,16 @@ export function createStageBattle(
     skillCoeff: 1,
   });
 
-  const enemyMonsters = stage.enemyMonsterIds.map((id, i) =>
+  const banSet = new Set(
+    (opts?.banEnemyIds ?? save?.arenaBanIds ?? []).filter(Boolean),
+  );
+  let enemyIds = stage.enemyMonsterIds;
+  if (stage.mode === "world_arena" && banSet.size > 0) {
+    const filtered = enemyIds.filter((id) => !banSet.has(id));
+    enemyIds = filtered.length > 0 ? filtered : enemyIds.slice(0, 1);
+  }
+
+  const enemyMonsters = enemyIds.map((id, i) =>
     unitFromMonsterId(id, "enemy", `e-w1-${i}`, 1 + Math.floor(stage.stage / 2)),
   );
 
@@ -1150,6 +1170,14 @@ export function createStageBattle(
   const powerGapCap = amplifyCapFromPowerDelta(delta);
   const totalWaves = Math.max(1, stage.waves);
 
+  const modules = {
+    moduleE:
+      stage.mode === "guild_raid" ||
+      stage.mode === "world_arena" ||
+      stage.mode === "trial",
+    moduleF: stage.mode === "guild_raid",
+  };
+
   return new Battle({
     boardSize: stage.boardSize,
     units: [...allyUnits, ...enemyUnits],
@@ -1161,8 +1189,10 @@ export function createStageBattle(
     ),
     powerGapAmplifyCap: powerGapCap,
     totalWaves,
+    modules,
+    rng: opts?.rng,
     spawnWave: (wave) =>
-      stage.enemyMonsterIds.map((id, i) =>
+      enemyIds.map((id, i) =>
         unitFromMonsterId(
           id,
           "enemy",
@@ -1250,12 +1280,26 @@ export function applyRewards(
   const gloryPoints = (save.gloryPoints ?? 0) + gloryGain;
   const jinmunStones = (save.jinmunStones ?? 0) + jinmunGain;
 
+  let contributionGain = 0;
+  let guildContribution = save.guildContribution ?? 0;
+  if (stage.mode === "guild_raid") {
+    contributionGain = 40 + jinmunGain * 5 + gloryGain * 2;
+    guildContribution += contributionGain;
+  }
+
+  let arenaSeasonWins = save.arenaSeasonWins ?? 0;
+  if (stage.mode === "world_arena") {
+    arenaSeasonWins += 1;
+  }
+
   const extras: string[] = [
     `EXP +${expGain}`,
     `크리스탈 +${crystalGain}`,
   ];
   if (gloryGain > 0) extras.push(`영광 +${gloryGain}`);
   if (jinmunGain > 0) extras.push(`진문석 +${jinmunGain}`);
+  if (contributionGain > 0) extras.push(`기여도 +${contributionGain}`);
+  if (stage.mode === "world_arena") extras.push(`시즌승 ${arenaSeasonWins}`);
   const levelNote =
     leveled.levelsGained > 0
       ? ` · 서머너 Lv.${island.summonerLevel}(+${leveled.levelsGained})`
@@ -1271,12 +1315,16 @@ export function applyRewards(
       gloryPoints,
       jinmunStones,
       gloryLevels: save.gloryLevels ?? {},
+      arenaBanIds: save.arenaBanIds ?? [],
+      arenaSeasonWins,
+      guildContribution,
     },
     reward: {
       mana: manaGain,
       crystal: crystalGain,
       glory: gloryGain || undefined,
       jinmun: jinmunGain || undefined,
+      contribution: contributionGain || undefined,
       expNote: `${stage.nameKo} 클리어 · ${extras.join(" · ")}${levelNote}`,
       symbol,
       victory: true,
@@ -1292,7 +1340,7 @@ export function applyRewards(
 export function runSortie(
   save: PlayerSave,
   stageId: string,
-  opts?: { maxTurns?: number; rng?: () => number },
+  opts?: { maxTurns?: number; rng?: () => number; banEnemyIds?: string[] },
 ): LoopStepResult {
   const stage = getStage(stageId);
   if (!stage) {
@@ -1322,8 +1370,14 @@ export function runSortie(
     gloryPoints: save.gloryPoints ?? 0,
     jinmunStones: save.jinmunStones ?? 0,
     gloryLevels: save.gloryLevels ?? {},
+    arenaBanIds: save.arenaBanIds ?? [],
+    arenaSeasonWins: save.arenaSeasonWins ?? 0,
+    guildContribution: save.guildContribution ?? 0,
   };
-  const battle = createStageBattle(stage, mid);
+  const battle = createStageBattle(stage, mid, {
+    banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,
+    rng: opts?.rng,
+  });
   const { victory, turns } = resolveBattleAuto(battle, opts?.maxTurns ?? 80);
   const { save: next, reward } = applyRewards(mid, stage, victory, opts?.rng);
   return {
@@ -1333,6 +1387,23 @@ export function runSortie(
       : `출정 패배 (${turns}턴)`,
     reward,
     battleLog: [`turns=${turns}`, `finish=${battle.finishReason}`],
+  };
+}
+
+/** World arena: ban up to 2 enemy monster ids before sortie. */
+export function runSetArenaBans(
+  save: PlayerSave,
+  monsterIds: string[],
+): LoopStepResult {
+  const unique = [...new Set(monsterIds.map((id) => id.trim()).filter(Boolean))].slice(
+    0,
+    2,
+  );
+  return {
+    save: { ...save, arenaBanIds: unique },
+    message: unique.length
+      ? `월드아레나 밴: ${unique.join(", ")}`
+      : `월드아레나 밴 해제`,
   };
 }
 

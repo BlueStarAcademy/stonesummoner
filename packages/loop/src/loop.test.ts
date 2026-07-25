@@ -1,8 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createSymbol } from "stonesummoner-data";
+import { createSymbol, getStage } from "stonesummoner-data";
 import {
   createNewSave,
+  createStageBattle,
   homeCollect,
   isStageUnlocked,
   listGear,
@@ -24,6 +25,7 @@ import {
   runImprintSymbol,
   runPracticeDojo,
   runSellSymbol,
+  runSetArenaBans,
   runSetParty,
   runSkillUp,
   runSortie,
@@ -143,6 +145,26 @@ describe("game loop", () => {
       { rng: () => 0.1, maxTurns: 120 },
     );
     assert.ok(raid.reward || /승리|패배|출정/.test(raid.message));
+    if (raid.reward?.victory) {
+      assert.ok((raid.save.guildContribution ?? 0) > 0);
+      assert.ok((raid.reward.contribution ?? 0) > 0);
+    }
+
+    const banned = runSetArenaBans(raid.save, ["thunder_lancer", "mist_shaman"]);
+    assert.deepEqual(banned.save.arenaBanIds, [
+      "thunder_lancer",
+      "mist_shaman",
+    ]);
+    const battle = createStageBattle(
+      getStage("warena_qual")!,
+      banned.save,
+      { banEnemyIds: banned.save.arenaBanIds },
+    );
+    const enemyMons = battle.units.filter(
+      (u) => u.team === "enemy" && u.kind === "monster",
+    );
+    assert.equal(enemyMons.length, 2);
+    assert.ok(!enemyMons.some((u) => /천둥창병|안개무녀/.test(u.name)));
   });
 
   it("crafts scroll/essence and buys energy", () => {
