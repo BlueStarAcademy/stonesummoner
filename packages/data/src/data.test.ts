@@ -8,6 +8,7 @@ import {
   createStarterGear,
   createStarterHwalro,
   createSymbol,
+  gearEnhanceCrystalCost,
   gearEnhanceManaCost,
   gearSetBonuses,
   getMonster,
@@ -103,6 +104,9 @@ describe("phase1 data", () => {
     assert.ok(gearEnhanceManaCost(0) > 0);
     assert.ok(gearEnhanceManaCost(14) > gearEnhanceManaCost(9));
     assert.equal(MAX_GEAR_ENHANCE, 15);
+    assert.equal(gearEnhanceCrystalCost(11), 0);
+    assert.equal(gearEnhanceCrystalCost(12), 1);
+    assert.equal(gearEnhanceCrystalCost(14), 3);
     const sets = summarizeGearSets(g);
     assert.ok(sets.find((s) => s.setId === "assault")?.active2);
     assert.ok(sets.find((s) => s.setId === "guardian")?.active2);

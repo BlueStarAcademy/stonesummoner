@@ -363,6 +363,12 @@ export function gearEnhanceManaCost(enhance: number): number {
   return base + late;
 }
 
+/** Crystal cost from +12 onward (0 below). */
+export function gearEnhanceCrystalCost(enhance: number): number {
+  if (enhance < 12) return 0;
+  return 1 + (enhance - 12);
+}
+
 /** Mana cost to re-affix a piece to another gear set. */
 export const GEAR_SET_AFFIX_MANA = 180;
 

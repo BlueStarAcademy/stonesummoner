@@ -32,6 +32,7 @@ export {
   createStarterGear,
   describeGear,
   gearEnhanceManaCost,
+  gearEnhanceCrystalCost,
   gearLeaderAtkPct,
   gearPieces,
   gearSellMana,

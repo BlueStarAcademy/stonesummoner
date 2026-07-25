@@ -15,6 +15,7 @@ import {
   createStarterHwalro,
   describeGear,
   describeSymbol,
+  gearEnhanceCrystalCost,
   gearEnhanceManaCost,
   gearLeaderAtkPct,
   gearSellMana,
@@ -1177,18 +1178,33 @@ export function runEnhanceGear(
     };
   }
   const cost = gearEnhanceManaCost(piece.enhance);
+  const crystalCost = gearEnhanceCrystalCost(piece.enhance);
   if (save.island.mana < cost) {
     return {
       save: { ...save, gear: gearNorm },
       message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
+  if ((save.island.crystal ?? 0) < crystalCost) {
+    return {
+      save: { ...save, gear: gearNorm },
+      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${save.island.crystal ?? 0})`,
+    };
+  }
   const next = bumpGearEnhance(piece);
   const gear = { ...gearNorm, [slot]: next };
-  const island = { ...save.island, mana: save.island.mana - cost };
+  const island = {
+    ...save.island,
+    mana: save.island.mana - cost,
+    crystal: (save.island.crystal ?? 0) - crystalCost,
+  };
+  const costNote =
+    crystalCost > 0
+      ? `−마나 ${cost} · −크리스탈 ${crystalCost}`
+      : `−마나 ${cost}`;
   return {
     save: { ...save, island, gear },
-    message: `장비 강화: ${describeGear(next)} (−마나 ${cost})`,
+    message: `장비 강화: ${describeGear(next)} (${costNote})`,
   };
 }
 

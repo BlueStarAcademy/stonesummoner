@@ -434,8 +434,31 @@ describe("game loop", () => {
     const ring = runEnhanceGear(save, "ring");
     assert.match(ring.message, /장비 강화/);
     assert.equal(ring.save.gear.ring.enhance, 1);
-    assert.ok(ring.save.gear.ring.leaderAtkBonus > save.gear.ring.leaderAtkBonus);
+    assert.ok(
+      ring.save.gear.ring.leaderAtkBonus > save.gear.ring.leaderAtkBonus,
+    );
     save = ring.save;
+
+    // Late enhance (+12) needs crystals
+    save = {
+      ...save,
+      gear: {
+        ...save.gear,
+        weapon: { ...save.gear.weapon, enhance: 12 },
+      },
+      island: { ...save.island, mana: 50_000, crystal: 0 },
+    };
+    const needCrystal = runEnhanceGear(save, "weapon");
+    assert.match(needCrystal.message, /크리스탈/);
+    save = {
+      ...save,
+      island: { ...save.island, crystal: 5 },
+    };
+    const late = runEnhanceGear(save, "weapon");
+    assert.match(late.message, /크리스탈/);
+    assert.equal(late.save.gear.weapon.enhance, 13);
+    assert.equal(late.save.island.crystal, 4);
+    save = late.save;
 
     const affix = runAffixGearSet(save, "orb", "mana");
     assert.match(affix.message, /세트 부여/);

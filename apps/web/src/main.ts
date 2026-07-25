@@ -24,6 +24,7 @@ import {
   canImprintSymbol,
   describeGear,
   describeSymbol,
+  gearEnhanceCrystalCost,
   gearEnhanceManaCost,
   gearSellMana,
   GEAR_SET_AFFIX_MANA,
@@ -1702,6 +1703,13 @@ function renderSymbolLoadout(uid: string): string {
 }
 
 function renderEnhance(): string {
+  const gearEnhanceCostLabel = (enhance: number): string => {
+    const mana = gearEnhanceManaCost(enhance);
+    const crystal = gearEnhanceCrystalCost(enhance);
+    return crystal > 0
+      ? `강화 −마나 ${mana} · −크리스탈 ${crystal}`
+      : `강화 −마나 ${mana}`;
+  };
   const gear = normalizeSummonerGear(save.gear);
   const weapon = gear.weapon;
   const robe = gear.robe;
@@ -1828,42 +1836,42 @@ function renderEnhance(): string {
         <span class="stage-card-mark" aria-hidden="true">劍</span>
         <span class="stage-card-body">
           <strong>${describeGear(weapon)}</strong>
-          <small>스킬+${(weapon.skillPowerBonus * 100).toFixed(0)}% · ${weapon.enhance >= MAX_GEAR_ENHANCE ? "MAX" : `강화 −마나 ${gearEnhanceManaCost(weapon.enhance)}`}</small>
+          <small>스킬+${(weapon.skillPowerBonus * 100).toFixed(0)}% · ${weapon.enhance >= MAX_GEAR_ENHANCE ? "MAX" : gearEnhanceCostLabel(weapon.enhance)}</small>
         </span>
       </button>
       <button type="button" class="stage-card" data-gear="robe" ${robe.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
         <span class="stage-card-mark" aria-hidden="true">袍</span>
         <span class="stage-card-body">
           <strong>${describeGear(robe)}</strong>
-          <small>HP+${robe.summonerHpBonus} DEF+${robe.summonerDefBonus} · ${robe.enhance >= MAX_GEAR_ENHANCE ? "MAX" : `강화 −마나 ${gearEnhanceManaCost(robe.enhance)}`}</small>
+          <small>HP+${robe.summonerHpBonus} DEF+${robe.summonerDefBonus} · ${robe.enhance >= MAX_GEAR_ENHANCE ? "MAX" : gearEnhanceCostLabel(robe.enhance)}</small>
         </span>
       </button>
       <button type="button" class="stage-card" data-gear="accessory" ${acc.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
         <span class="stage-card-mark" aria-hidden="true">飾</span>
         <span class="stage-card-body">
           <strong>${describeGear(acc)}</strong>
-          <small>${acc.enhance >= MAX_GEAR_ENHANCE ? "최대" : `강화 −마나 ${gearEnhanceManaCost(acc.enhance)}`}</small>
+          <small>${acc.enhance >= MAX_GEAR_ENHANCE ? "최대" : gearEnhanceCostLabel(acc.enhance)}</small>
         </span>
       </button>
       <button type="button" class="stage-card" data-gear="orb" ${orb.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
         <span class="stage-card-mark" aria-hidden="true">球</span>
         <span class="stage-card-body">
           <strong>${describeGear(orb)}</strong>
-          <small>${orb.enhance >= MAX_GEAR_ENHANCE ? "최대" : `강화 −마나 ${gearEnhanceManaCost(orb.enhance)}`}</small>
+          <small>${orb.enhance >= MAX_GEAR_ENHANCE ? "최대" : gearEnhanceCostLabel(orb.enhance)}</small>
         </span>
       </button>
       <button type="button" class="stage-card" data-gear="cloak" ${cloak.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
         <span class="stage-card-mark" aria-hidden="true">氅</span>
         <span class="stage-card-body">
           <strong>${describeGear(cloak)}</strong>
-          <small>HP+${cloak.summonerHpBonus} 리더+${(cloak.leaderAtkBonus * 100).toFixed(1)}% · ${cloak.enhance >= MAX_GEAR_ENHANCE ? "MAX" : `강화 −마나 ${gearEnhanceManaCost(cloak.enhance)}`}</small>
+          <small>HP+${cloak.summonerHpBonus} 리더+${(cloak.leaderAtkBonus * 100).toFixed(1)}% · ${cloak.enhance >= MAX_GEAR_ENHANCE ? "MAX" : gearEnhanceCostLabel(cloak.enhance)}</small>
         </span>
       </button>
       <button type="button" class="stage-card" data-gear="ring" ${ring.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
         <span class="stage-card-mark" aria-hidden="true">環</span>
         <span class="stage-card-body">
           <strong>${describeGear(ring)}</strong>
-          <small>스킬+${(ring.skillPowerBonus * 100).toFixed(0)}% 리더+${(ring.leaderAtkBonus * 100).toFixed(1)}% · ${ring.enhance >= MAX_GEAR_ENHANCE ? "MAX" : `강화 −마나 ${gearEnhanceManaCost(ring.enhance)}`}</small>
+          <small>스킬+${(ring.skillPowerBonus * 100).toFixed(0)}% 리더+${(ring.leaderAtkBonus * 100).toFixed(1)}% · ${ring.enhance >= MAX_GEAR_ENHANCE ? "MAX" : gearEnhanceCostLabel(ring.enhance)}</small>
         </span>
       </button>
     </div>
