@@ -37,7 +37,13 @@ export {
   ITEM_SPAWN_CHANCE,
   weightedItemId,
 } from "./items.js";
-export type { BoardItemDef, BoardItemId, BoardToken, TempSeal } from "./items.js";
+export type {
+  BoardItemDef,
+  BoardItemId,
+  BoardToken,
+  BaitLure,
+  TempSeal,
+} from "./items.js";
 export {
   aliveSummons,
   pickAutoStone,

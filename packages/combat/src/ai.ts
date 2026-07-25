@@ -9,6 +9,8 @@ export function teamStoneColor(team: TeamId): "black" | "white" {
 export interface StoneEval {
   capturedCount: number;
   hasToken: boolean;
+  /** Opposite-team AI lure from 미끼돌. */
+  baitLure?: boolean;
 }
 
 export interface StoneSuggestion {
@@ -55,7 +57,8 @@ export function rankStoneSuggestions(
     const cap = Math.max(0, ev.capturedCount);
     const dist = Math.abs(p.x - cx) + Math.abs(p.y - cy);
     const tokenBonus = ev.hasToken ? 2.5 : 0;
-    const score = cap * 100 + tokenBonus * 10 - dist;
+    const baitBonus = ev.baitLure ? 45 : 0;
+    const score = cap * 100 + tokenBonus * 10 + baitBonus - dist;
     const kind = classifyCapture(cap);
     const gains = gainsForBoardEvent(kind, cap, manaMul);
     const magnet = ev.hasToken

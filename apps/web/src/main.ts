@@ -909,7 +909,15 @@ function renderBoard(): string {
                   ? "봉"
                   : token?.id === "element_ward"
                     ? "속"
-                    : "";
+                    : token?.id === "bait_stone"
+                      ? "미"
+                      : "";
+      const bait =
+        battle.baitLure &&
+        battle.baitLure.x === x &&
+        battle.baitLure.y === y &&
+        !stone;
+      const baitClass = bait ? " bait" : "";
       const stoneHtml = stone
         ? `<span class="stone ${stone}"></span>`
         : sug
@@ -918,12 +926,14 @@ function renderBoard(): string {
             ? `<span class="token-mark">${tokenLabel}</span>`
             : forbid
               ? `<span class="forbid-mark">禁</span>`
-              : victory === key
-                ? `<span class="victory-mark">勝</span>`
-                : starSet.has(key)
-                  ? `<span class="star-mark">·</span>`
-                  : "";
-      cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}${sugClass}${forbidClass}${starClass}${victoryClass}" data-x="${x}" data-y="${y}" ${canClick && !stone && !forbid ? "" : "disabled"}>${stoneHtml}</button>`;
+              : bait
+                ? `<span class="bait-mark">誘</span>`
+                : victory === key
+                  ? `<span class="victory-mark">勝</span>`
+                  : starSet.has(key)
+                    ? `<span class="star-mark">·</span>`
+                    : "";
+      cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}${sugClass}${forbidClass}${baitClass}${starClass}${victoryClass}" data-x="${x}" data-y="${y}" ${canClick && !stone && !forbid ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
   const resetPct = Math.min(

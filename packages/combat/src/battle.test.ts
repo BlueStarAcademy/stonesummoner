@@ -438,6 +438,29 @@ describe("Battle flow", () => {
     assert.equal(b.allySummoner.elementWardCharges, charges - 1);
   });
 
+  it("bait stone buffs picker and lures enemy AI", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.1,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    b.tokens = [{ id: "bait_stone", x: 2, y: 2 }];
+    assert.equal(b.playStone({ x: 2, y: 2 }), true);
+    const mon = b.getUnit("a-m1")!;
+    assert.ok((mon.shieldHp ?? 0) > 0);
+    assert.ok(b.baitLure);
+    assert.equal(b.baitLure!.targetTeam, "enemy");
+    assert.match(b.log.join("\n"), /미끼돌/);
+    assert.equal(
+      b.isBaitLureFor("enemy", { x: b.baitLure!.x, y: b.baitLure!.y }),
+      true,
+    );
+  });
+
   it("blocks skill while on cooldown", () => {
     const b = new Battle({
       boardSize: 5,

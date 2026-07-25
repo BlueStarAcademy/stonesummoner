@@ -968,6 +968,23 @@ main {
 .board button.cell.token-element_ward .token-mark {
   background: #5bb89a;
 }
+.board button.cell.token-bait_stone .token-mark {
+  background: #c4785a;
+}
+.board button.cell.bait .bait-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 78%;
+  height: 78%;
+  margin: 0 auto;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #1a1528;
+  background: #e8b86d;
+  opacity: 0.85;
+}
 
 .battle-stage-name {
   font-family: Cinzel, "Times New Roman", Georgia, serif;

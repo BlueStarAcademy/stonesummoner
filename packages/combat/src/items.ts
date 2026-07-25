@@ -1,4 +1,4 @@
-/** Phase 1 board tokens — 치명·실드·자석·행마·봉인·속성의뢰 */
+/** Phase 1 board tokens — 치명·실드·자석·행마·봉인·속성·미끼 */
 
 export type BoardItemId =
   | "crit_charm"
@@ -6,7 +6,8 @@ export type BoardItemId =
   | "capture_magnet"
   | "stride_sand"
   | "seal_nail"
-  | "element_ward";
+  | "element_ward"
+  | "bait_stone";
 
 export interface BoardItemDef {
   id: BoardItemId;
@@ -20,6 +21,7 @@ export const BOARD_ITEMS: BoardItemDef[] = [
   { id: "stride_sand", nameKo: "행마모래" },
   { id: "seal_nail", nameKo: "봉인못" },
   { id: "element_ward", nameKo: "속성의뢰" },
+  { id: "bait_stone", nameKo: "미끼돌" },
 ];
 
 export interface BoardToken {
@@ -36,6 +38,15 @@ export interface TempSeal {
   remaining: number;
 }
 
+/** AI lure point from 미끼돌 — opposite team prefers this play. */
+export interface BaitLure {
+  x: number;
+  y: number;
+  /** Team that is lured toward the point. */
+  targetTeam: "ally" | "enemy";
+  remaining: number;
+}
+
 export function itemDef(id: BoardItemId): BoardItemDef {
   return BOARD_ITEMS.find((i) => i.id === id)!;
 }
@@ -49,22 +60,21 @@ export function weightedItemId(
   rng: () => number,
 ): BoardItemId {
   const roll = rng();
-  const magnetWeight = 0.18 + Math.min(0.16, boardPhase * 0.05);
-  const critWeight = 0.2;
-  const shieldWeight = 0.18;
-  const sandWeight = 0.15;
-  const sealWeight = 0.14;
-  let acc = magnetWeight;
-  if (roll < acc) return "capture_magnet";
-  acc += critWeight;
-  if (roll < acc) return "crit_charm";
-  acc += shieldWeight;
-  if (roll < acc) return "shield_core";
-  acc += sandWeight;
-  if (roll < acc) return "stride_sand";
-  acc += sealWeight;
-  if (roll < acc) return "seal_nail";
-  return "element_ward";
+  const weights: { id: BoardItemId; w: number }[] = [
+    { id: "capture_magnet", w: 0.16 + Math.min(0.14, boardPhase * 0.05) },
+    { id: "crit_charm", w: 0.18 },
+    { id: "shield_core", w: 0.16 },
+    { id: "stride_sand", w: 0.13 },
+    { id: "seal_nail", w: 0.12 },
+    { id: "element_ward", w: 0.12 },
+    { id: "bait_stone", w: 0.13 },
+  ];
+  let acc = 0;
+  for (const { id, w } of weights) {
+    acc += w;
+    if (roll < acc) return id;
+  }
+  return "bait_stone";
 }
 
 export function shouldSpawnItem(

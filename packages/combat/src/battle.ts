@@ -36,6 +36,7 @@ import {
   shouldSpawnItem,
   weightedItemId,
   type BoardToken,
+  type BaitLure,
   type TempSeal,
 } from "./items.js";
 import type { SkillDef } from "stonesummoner-data";
@@ -166,6 +167,8 @@ export class Battle {
   forbiddenZone: Point[] = [];
   /** Per-board temporary seals (봉인못). */
   private sealsByBoard: TempSeal[][] = [];
+  /** Active AI lure from 미끼돌 (shared; cleared on empowered reset). */
+  baitLure: BaitLure | null = null;
   /** Ally large-capture shop waiting for choice. */
   pendingCaptureShop: { unitId: string } | null = null;
   /** 1-based current wave. */
@@ -275,6 +278,12 @@ export class Battle {
   isForbidden(p: Point): boolean {
     if (this.forbiddenZone.some((z) => z.x === p.x && z.y === p.y)) return true;
     return this.tempSeals.some((z) => z.x === p.x && z.y === p.y);
+  }
+
+  isBaitLureFor(team: TeamId, p: Point): boolean {
+    const bait = this.baitLure;
+    if (!bait || bait.targetTeam !== team) return false;
+    return bait.x === p.x && bait.y === p.y;
   }
 
   getUnit(id: string): Unit | undefined {
@@ -408,6 +417,7 @@ export class Battle {
       (p) => ({
         capturedCount: Math.max(0, this.previewCapture(color, p)),
         hasToken: !!this.tokenAt(p.x, p.y),
+        baitLure: this.isBaitLureFor(u.team, p),
       }),
       manaMul,
       topN,
@@ -469,6 +479,20 @@ export class Battle {
       );
       this.log.push(
         `${unit.name} 획득 ${name} (${unit.element} · 동속성 3수 Amp)`,
+      );
+      return;
+    }
+    if (token.id === "bait_stone") {
+      const shield = Math.round(unit.stats.hp * 0.1);
+      unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+      this.amplify = clampAmplify(
+        this.amplify + 0.03,
+        amplifyCapForPhase(this.circle.boardPhase),
+        this.powerGapCap,
+      );
+      const lure = this.placeBaitLure({ x: token.x, y: token.y }, unit.team);
+      this.log.push(
+        `${unit.name} 획득 ${name} (실드 +${shield}${lure ? ` · 미끼 (${lure.x},${lure.y})` : ""})`,
       );
       return;
     }
@@ -545,6 +569,59 @@ export class Battle {
         .map((s) => ({ ...s, remaining: s.remaining - 1 }))
         .filter((s) => s.remaining > 0),
     );
+    if (this.baitLure) {
+      this.baitLure = {
+        ...this.baitLure,
+        remaining: this.baitLure.remaining - 1,
+      };
+      if (this.baitLure.remaining <= 0) this.baitLure = null;
+    }
+  }
+
+  /** Place lure on an empty adjacent (or nearby) point for the opposing team. */
+  private placeBaitLure(
+    origin: Point,
+    ownerTeam: TeamId,
+  ): Point | null {
+    const size = this.board.size;
+    const grid = this.board.getBoard();
+    const dirs: Point[] = [
+      { x: origin.x + 1, y: origin.y },
+      { x: origin.x - 1, y: origin.y },
+      { x: origin.x, y: origin.y + 1 },
+      { x: origin.x, y: origin.y - 1 },
+    ];
+    const candidates = dirs.filter((p) => {
+      if (p.x < 0 || p.y < 0 || p.x >= size || p.y >= size) return false;
+      if (grid[p.y]![p.x] !== null) return false;
+      if (this.isForbidden(p)) return false;
+      return true;
+    });
+    let spot: Point | null = null;
+    if (candidates.length > 0) {
+      spot = candidates[Math.floor(this.rng() * candidates.length)]!;
+    } else {
+      const empty: Point[] = [];
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          if (grid[y]![x] !== null) continue;
+          if (x === origin.x && y === origin.y) continue;
+          if (this.isForbidden({ x, y })) continue;
+          empty.push({ x, y });
+        }
+      }
+      if (empty.length > 0) {
+        spot = empty[Math.floor(this.rng() * empty.length)]!;
+      }
+    }
+    if (!spot) return null;
+    this.baitLure = {
+      x: spot.x,
+      y: spot.y,
+      targetTeam: ownerTeam === "ally" ? "enemy" : "ally",
+      remaining: 4,
+    };
+    return spot;
   }
 
   private trySpawnItem(): void {
@@ -779,6 +856,7 @@ export class Battle {
       for (const b of this.boards) resetBoardInPlace(b);
       this.tokensByBoard = this.boards.map(() => []);
       this.sealsByBoard = this.boards.map(() => []);
+      this.baitLure = null;
       this.log.push(
         `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${amplifyCapForPhase(this.circle.boardPhase)})`,
       );

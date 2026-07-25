@@ -21,6 +21,20 @@ describe("ai helpers", () => {
     assert.ok(ranked[0]!.manaGain > 0);
   });
 
+  it("ranks bait lure above empty center when no capture", () => {
+    const legal = [
+      { x: 0, y: 0 },
+      { x: 2, y: 2 },
+      { x: 4, y: 0 },
+    ];
+    const ranked = rankStoneSuggestions(legal, 5, (p) => ({
+      capturedCount: 0,
+      hasToken: false,
+      baitLure: p.x === 4 && p.y === 0,
+    }));
+    assert.equal(ranked[0]!.point.x, 4);
+  });
+
   it("never targets summoners", () => {
     const units = [
       makeUnit({
