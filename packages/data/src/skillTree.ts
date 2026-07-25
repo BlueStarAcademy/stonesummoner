@@ -12,6 +12,7 @@ export type SkillTreeNodeId =
   | "clean_mastery"
   | "declare_mastery"
   | "abyss_well"
+  | "sense_tide"
   | "war_chorus";
 
 export interface SkillTreeBonus {
@@ -167,6 +168,21 @@ export const SKILL_TREE_NODES: SkillTreeNode[] = [
     minLevel: 10,
     requires: ["mana_pool"],
     bonus: { manaMaxBonus: 20, manaRegenBonus: 0.06 },
+  },
+  {
+    id: "sense_tide",
+    nameKo: "국면 조류",
+    branch: "sense",
+    descKo: "감응 +0.06 · 시작 마나 +3% · 재생 +0.04",
+    manaCost: 550,
+    crystalCost: 2,
+    minLevel: 10,
+    requires: ["sense_start"],
+    bonus: {
+      boardSenseBonus: 0.06,
+      startManaPct: 0.03,
+      manaRegenBonus: 0.04,
+    },
   },
   {
     id: "war_chorus",
