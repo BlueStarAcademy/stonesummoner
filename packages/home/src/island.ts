@@ -4,7 +4,8 @@ export type BuildingId =
   | "gateway"
   | "mana_pond"
   | "crystal_mine"
-  | "wish_temple";
+  | "wish_temple"
+  | "fusion_star";
 
 export interface BuildingDef {
   id: BuildingId;
@@ -68,6 +69,13 @@ export const PHASE_BUILDINGS: BuildingDef[] = [
     crystalPerHour: 2.5,
     crystalCap: 30,
     unlockLevel: 10,
+  },
+  {
+    id: "fusion_star",
+    nameKo: "융합의 별",
+    swName: "Fusion Hexagram",
+    kind: "function",
+    unlockLevel: 17,
   },
 ];
 

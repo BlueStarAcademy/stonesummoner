@@ -42,6 +42,8 @@ describe("phase1 data", () => {
     assert.equal(getStage("garen_1_5")?.boardSize, 9);
     assert.equal(getStage("depth_hwalro")?.mode, "depth");
     assert.equal(getStage("arena_rookie")?.mode, "arena");
+    assert.equal(getStage("guild_raid_boss")?.boardSize, 13);
+    assert.equal(getStage("warena_qual")?.mode, "world_arena");
   });
 
   it("creates starter symbol", () => {

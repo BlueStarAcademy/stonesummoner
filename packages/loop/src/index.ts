@@ -29,6 +29,7 @@ export {
   runEnhanceSymbol,
   runEquipSymbol,
   runEvolve,
+  runFusion,
   runGrindSymbol,
   runImprintSymbol,
   runSetParty,
@@ -39,6 +40,7 @@ export {
   skillUpManaCost,
   skillUpMinMonsterLevel,
   SCROLL_BUY_MANA_COST,
+  FUSION_MANA_COST,
   stageUnlockLabel,
   SUMMON_SCROLL_COST,
 } from "./loop.js";

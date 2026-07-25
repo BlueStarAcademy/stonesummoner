@@ -16,6 +16,7 @@ import {
   runEnhanceSymbol,
   runEquipSymbol,
   runEvolve,
+  runFusion,
   runGrindSymbol,
   runImprintSymbol,
   runSetParty,
@@ -93,6 +94,50 @@ describe("game loop", () => {
     assert.equal(isStageUnlocked(save, "garen_1_2"), false);
     const locked = runSortie(save, "garen_1_2", { rng: () => 0.1 });
     assert.match(locked.message, /잠김/);
+  });
+
+  it("fuses same-species and unlocks guild raid 13x13", () => {
+    let save = createNewSave(0);
+    const id = save.roster[0]!.monsterId;
+    save = {
+      ...save,
+      island: { ...save.island, mana: 5000, summonerLevel: 17 },
+      roster: [
+        ...save.roster,
+        {
+          ...save.roster[0]!,
+          uid: "fuse_donor",
+          monsterId: id,
+          level: 8,
+          evolve: 0,
+        },
+      ],
+      clearedStages: [
+        "garen_1_1",
+        "garen_1_2",
+        "garen_1_3",
+        "garen_1_4",
+        "garen_1_5",
+        "tower_2_1",
+        "tower_2_2",
+        "tower_2_3",
+      ],
+    };
+    assert.equal(isStageUnlocked(save, "guild_raid_boss"), true);
+    assert.equal(isStageUnlocked(save, "warena_qual"), true);
+
+    const before = save.roster.length;
+    const fuse = runFusion(save, "0", "fuse_donor");
+    assert.match(fuse.message, /융합/);
+    assert.equal(fuse.save.roster.length, before - 1);
+    assert.equal(fuse.save.roster[0]!.evolve, 1);
+
+    const raid = runSortie(
+      { ...fuse.save, island: { ...fuse.save.island, energy: 20 } },
+      "guild_raid_boss",
+      { rng: () => 0.1, maxTurns: 120 },
+    );
+    assert.ok(raid.reward || /승리|패배|출정/.test(raid.message));
   });
 
   it("sets party from roster indices", () => {

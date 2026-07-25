@@ -12,8 +12,10 @@ import {
   CHAPTER2_STAGES,
   DEPTH_STAGES,
   GLORY_BUILDINGS,
+  GUILD_RAID_STAGES,
   TRIAL_STAGES,
   WEEKDAY_STAGES,
+  WORLD_ARENA_STAGES,
   canGrindSymbol,
   canImprintSymbol,
   describeGear,
@@ -59,8 +61,10 @@ import {
   runEnhanceSymbol,
   runEquipSymbol,
   runEvolve,
+  runFusion,
   runGrindSymbol,
   homeCollectCrystal,
+  FUSION_MANA_COST,
   runImprintSymbol,
   runSetParty,
   runSkillUp,
@@ -82,6 +86,7 @@ type View =
   | "shop"
   | "pond"
   | "glory"
+  | "fusion"
   | "party"
   | "stages"
   | "battle";
@@ -674,6 +679,8 @@ function mainContent(manaPct: number): string {
       return renderPond();
     case "glory":
       return renderGlory();
+    case "fusion":
+      return renderFusion();
     case "party":
       return renderParty();
     case "stages":
@@ -739,7 +746,7 @@ function render(): void {
     </header>
     <main>${mainContent(manaPct)}</main>
     <nav class="tabs">
-      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "shop" || view === "pond" || view === "glory" || view === "party" ? "active" : ""}">홈</button>
+      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "shop" || view === "pond" || view === "glory" || view === "fusion" || view === "party" ? "active" : ""}">홈</button>
       <button type="button" data-nav="stages" class="${tabStages ? "active" : ""}">출정</button>
       <button type="button" data-nav="collect">수집</button>
     </nav>
@@ -782,6 +789,9 @@ function renderHome(): string {
         <strong>소원의 사당</strong><small>${hasWish ? "일 1회 소원" : "Lv.7 해금"}</small>
       </button>
       <button type="button" class="building" data-b="glory"><strong>영광 건물</strong><small>영광 ${save.gloryPoints ?? 0}</small></button>
+      <button type="button" class="building" data-b="fusion" ${save.island.summonerLevel >= 17 || save.island.buildings.some((b) => b.id === "fusion_star") ? "" : "disabled"}>
+        <strong>융합의 별</strong><small>${save.island.summonerLevel >= 17 ? "동일종 융합" : "Lv.17 해금"}</small>
+      </button>
       <button type="button" class="building" data-b="party"><strong>파티</strong><small>출전 몬스터 편성</small></button>
     </div>
   </div>`;
@@ -1012,6 +1022,36 @@ function renderGlory(): string {
   </div>`;
 }
 
+function renderFusion(): string {
+  const pairs: string[] = [];
+  for (let i = 0; i < save.roster.length; i++) {
+    for (let j = i + 1; j < save.roster.length; j++) {
+      if (save.roster[i]!.monsterId === save.roster[j]!.monsterId) {
+        pairs.push(`${i}:${j}`);
+      }
+    }
+  }
+  return `<div class="panel">
+    <p class="muted">융합의 별 · 동일 종 2마리 → 진화 +1 · −마나 ${FUSION_MANA_COST}</p>
+    <div class="stage-list">
+      ${pairs.length
+        ? pairs
+            .map((p) => {
+              const [a, b] = p.split(":");
+              const ma = save.roster[Number(a)]!;
+              const mb = save.roster[Number(b)]!;
+              return `<button type="button" data-fuse-a="${a}" data-fuse-b="${b}">
+                <strong>${describeOwned(ma)} + ${describeOwned(mb)}</strong><br/>
+                <small class="muted">융합 −마나 ${FUSION_MANA_COST}</small>
+              </button>`;
+            })
+            .join("")
+        : `<p class="muted">동일 종 몬스터 2마리가 필요합니다</p>`}
+    </div>
+    <button type="button" class="secondary full" data-nav="home" style="margin-top:10px">섬으로</button>
+  </div>`;
+}
+
 function stageButtons(list: StageDef[]): string {
   return list
     .map((s) => {
@@ -1047,6 +1087,10 @@ function renderStages(): string {
     <div class="stage-list">${stageButtons(ARENA_STAGES)}</div>
     <p class="section-label">요일 · 마법진 시련</p>
     <div class="stage-list">${stageButtons([...WEEKDAY_STAGES, ...TRIAL_STAGES])}</div>
+    <p class="section-label">월드아레나</p>
+    <div class="stage-list">${stageButtons(WORLD_ARENA_STAGES)}</div>
+    <p class="section-label">길드 레이드 (13×13)</p>
+    <div class="stage-list">${stageButtons(GUILD_RAID_STAGES)}</div>
   </div>`;
 }
 
@@ -1282,6 +1326,9 @@ function bind(): void {
       } else if (id === "glory") {
         view = "glory";
         render();
+      } else if (id === "fusion") {
+        view = "fusion";
+        render();
       } else if (id === "summon_hearth") {
         view = "summon";
         render();
@@ -1397,6 +1444,16 @@ function bind(): void {
     persist();
     flash(r.message);
     render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-fuse-a]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const r = runFusion(save, btn.dataset.fuseA!, btn.dataset.fuseB!);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-glory]").forEach((btn) => {

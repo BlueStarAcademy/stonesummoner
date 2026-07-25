@@ -10,11 +10,12 @@ import {
 } from "./progression.js";
 
 describe("Board sizes", () => {
-  it("supports 5, 7, 9", () => {
-    assert.deepEqual([...COMBAT_BOARD_SIZES], [5, 7, 9]);
+  it("supports 5, 7, 9, 13", () => {
+    assert.deepEqual([...COMBAT_BOARD_SIZES], [5, 7, 9, 13]);
     assert.equal(new Board(5).emptyPoints().length, 25);
     assert.equal(new Board(7).emptyPoints().length, 49);
     assert.equal(new Board(9).emptyPoints().length, 81);
+    assert.equal(new Board(13).emptyPoints().length, 169);
   });
 });
 

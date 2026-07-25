@@ -23,6 +23,7 @@ import {
   runEnhanceSymbol,
   runEquipSymbol,
   runEvolve,
+  runFusion,
   runGrindSymbol,
   runImprintSymbol,
   runSetParty,
@@ -31,6 +32,7 @@ import {
   runSummon,
   runUpgradeBuilding,
   SCROLL_BUY_MANA_COST,
+  FUSION_MANA_COST,
   stageUnlockLabel,
   type PlayerSave,
 } from "stonesummoner-loop";
@@ -57,7 +59,7 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | crystal | wish | upgrade | glory [id] | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
+    "명령: collect | crystal | wish | upgrade | glory [id] | fuse <a> <b> | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
@@ -129,6 +131,14 @@ async function interactive(): Promise<void> {
         continue;
       }
       const r = runBuyGlory(save, arg as GloryBuildingId);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "fuse" || cmd === "fusion") {
+      const r = runFusion(save, arg ?? "0", arg2 ?? "1");
       save = r.save;
       console.log(r.message);
       printStatus(save);
@@ -283,7 +293,7 @@ async function interactive(): Promise<void> {
     }
 
     console.log(
-      "알 수 없는 명령. collect | crystal | wish | upgrade | glory | summon | buy-scroll | enhance | evolve | skillup | gear | enh-gear | symbols | equip | enh-sym | grind | imprint | roster | party | stages | go | status | demo | quit",
+      "알 수 없는 명령. collect | crystal | wish | upgrade | glory | fuse | summon | buy-scroll | enhance | evolve | skillup | gear | enh-gear | symbols | equip | enh-sym | grind | imprint | roster | party | stages | go | status | demo | quit",
     );
   }
 

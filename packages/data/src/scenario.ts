@@ -6,7 +6,9 @@ export type ContentMode =
   | "depth"
   | "arena"
   | "weekday"
-  | "trial";
+  | "trial"
+  | "world_arena"
+  | "guild_raid";
 
 export interface StageDef {
   id: string;
@@ -288,6 +290,72 @@ export const TRIAL_STAGES: StageDef[] = [
   },
 ];
 
+/** 월드아레나 stub — higher glory, ban-pick feel via tougher foe. */
+export const WORLD_ARENA_STAGES: StageDef[] = [
+  {
+    id: "warena_qual",
+    nameKo: "월드아레나 · 예선",
+    map: 85,
+    stage: 1,
+    boardSize: 9,
+    energyCost: 0,
+    enemyMonsterIds: [
+      "thunder_lancer",
+      "mist_shaman",
+      "ash_archer",
+      "abyss_priest",
+    ],
+    dropSetId: "mussang",
+    waves: 1,
+    mode: "world_arena",
+    dropChance: 0.25,
+    gloryReward: 80,
+  },
+  {
+    id: "warena_final",
+    nameKo: "월드아레나 · 결승",
+    map: 85,
+    stage: 2,
+    boardSize: 9,
+    energyCost: 0,
+    enemyMonsterIds: [
+      "abyss_priest",
+      "mist_shaman",
+      "thunder_lancer",
+      "capture_hound",
+    ],
+    dropSetId: "chimtu",
+    waves: 1,
+    mode: "world_arena",
+    dropChance: 0.3,
+    gloryReward: 120,
+  },
+];
+
+/** 길드 레이드 stub — 13×13 boss board. */
+export const GUILD_RAID_STAGES: StageDef[] = [
+  {
+    id: "guild_raid_boss",
+    nameKo: "길드 레이드 · 거대 진문",
+    map: 95,
+    stage: 1,
+    boardSize: 13,
+    energyCost: 10,
+    enemyMonsterIds: [
+      "abyss_priest",
+      "mist_shaman",
+      "thunder_lancer",
+      "shield_tortoise",
+    ],
+    dropSetId: "bogang",
+    waves: 3,
+    mode: "guild_raid",
+    dropChance: 0.55,
+    jinmunReward: 8,
+    gloryReward: 30,
+  },
+];
+
 export const ALL_STAGES: StageDef[] = [
   ...CHAPTER1_STAGES,
   ...CHAPTER2_STAGES,
@@ -295,6 +363,8 @@ export const ALL_STAGES: StageDef[] = [
   ...ARENA_STAGES,
   ...WEEKDAY_STAGES,
   ...TRIAL_STAGES,
+  ...WORLD_ARENA_STAGES,
+  ...GUILD_RAID_STAGES,
 ];
 
 export function getStage(id: string): StageDef | undefined {

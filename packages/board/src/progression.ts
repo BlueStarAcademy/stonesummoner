@@ -1,7 +1,7 @@
 import type { Board } from "./board.js";
 
-/** Progressive combat board sizes. */
-export const COMBAT_BOARD_SIZES = [5, 7, 9] as const;
+/** Progressive combat board sizes (13 = guild raid / world boss). */
+export const COMBAT_BOARD_SIZES = [5, 7, 9, 13] as const;
 export type CombatBoardSize = (typeof COMBAT_BOARD_SIZES)[number];
 
 export const EMPOWERED_RESET_THRESHOLD = 50;
@@ -58,7 +58,10 @@ export function registerStoneSummon(
     stoneSummonCount: state.stoneSummonCount + 1,
   };
 
-  if (next.size === 9 && next.stoneSummonCount >= next.resetThreshold) {
+  if (
+    (next.size === 9 || next.size === 13) &&
+    next.stoneSummonCount >= next.resetThreshold
+  ) {
     return {
       shouldReset: true,
       state: {

@@ -40,8 +40,10 @@ export {
   CHAPTER1_STAGES,
   CHAPTER2_STAGES,
   DEPTH_STAGES,
+  GUILD_RAID_STAGES,
   TRIAL_STAGES,
   WEEKDAY_STAGES,
+  WORLD_ARENA_STAGES,
   getStage,
   stagesByMode,
 } from "./scenario.js";

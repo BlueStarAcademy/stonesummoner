@@ -401,6 +401,88 @@ export function runBuyGlory(
   };
 }
 
+export const FUSION_MANA_COST = 800;
+
+/**
+ * Fusion stub: sacrifice two same-species monsters → keep one with +1 evolve (cap MAX_EVOLVE).
+ * Unlocks with 융합의 별 (summoner Lv.17) or allow earlier for testing if building present.
+ */
+export function runFusion(
+  save: PlayerSave,
+  refA: string,
+  refB: string,
+): LoopStepResult {
+  const island = syncBuildingUnlocks(tickProduction(save.island));
+  if (
+    !island.buildings.some((b) => b.id === "fusion_star") &&
+    island.summonerLevel < 17
+  ) {
+    return {
+      save: { ...save, island },
+      message: "융합의 별 해금 필요 (서머너 Lv.17)",
+    };
+  }
+  const a = resolveOwned(save, refA);
+  const b = resolveOwned(save, refB);
+  if (!a || !b) return { save, message: "융합 재료 몬스터를 찾을 수 없음" };
+  if (a.uid === b.uid) return { save, message: "같은 몬스터는 융합할 수 없음" };
+  if (a.monsterId !== b.monsterId) {
+    return { save, message: "동일 종만 융합 가능 (스텁)" };
+  }
+  if (island.mana < FUSION_MANA_COST) {
+    return {
+      save: { ...save, island },
+      message: `마나 부족 (필요 ${FUSION_MANA_COST}, 보유 ${Math.floor(island.mana)})`,
+    };
+  }
+  const keepEvolve = Math.min(
+    MAX_EVOLVE,
+    Math.max(a.evolve ?? 0, b.evolve ?? 0) + 1,
+  );
+  const keepLevel = Math.max(a.level, b.level);
+  const keepSkills: [number, number, number] = [
+    Math.max(
+      normalizeSkillLevels(a.skillLevels)[0]!,
+      normalizeSkillLevels(b.skillLevels)[0]!,
+    ),
+    Math.max(
+      normalizeSkillLevels(a.skillLevels)[1]!,
+      normalizeSkillLevels(b.skillLevels)[1]!,
+    ),
+    Math.max(
+      normalizeSkillLevels(a.skillLevels)[2]!,
+      normalizeSkillLevels(b.skillLevels)[2]!,
+    ),
+  ];
+  const keepSlots = [...(a.symbolSlots ?? emptySymbolSlots())];
+  const dropSlots = b.symbolSlots ?? emptySymbolSlots();
+  // Prefer keeper's symbols; fill empty from donor
+  for (let i = 0; i < 6; i++) {
+    if (!keepSlots[i] && dropSlots[i]) keepSlots[i] = dropSlots[i]!;
+  }
+
+  const kept = {
+    ...a,
+    level: keepLevel,
+    evolve: keepEvolve,
+    skillLevels: keepSkills,
+    symbolSlots: keepSlots,
+  };
+  const roster = save.roster
+    .filter((m) => m.uid !== b.uid)
+    .map((m) => (m.uid === a.uid ? kept : m));
+  const party = save.party.filter((uid) => uid !== b.uid);
+  return {
+    save: {
+      ...save,
+      island: { ...island, mana: island.mana - FUSION_MANA_COST },
+      roster,
+      party,
+    },
+    message: `융합: ${describeOwned(kept)} (−마나 ${FUSION_MANA_COST}, 재료 1소모)`,
+  };
+}
+
 export function listStages(): StageDef[] {
   return ALL_STAGES;
 }
@@ -960,7 +1042,15 @@ export function applyRewards(
   }
 
   const modeMul =
-    stage.mode === "depth" ? 1.2 : stage.mode === "arena" ? 0.6 : 1;
+    stage.mode === "depth"
+      ? 1.2
+      : stage.mode === "arena"
+        ? 0.6
+        : stage.mode === "world_arena"
+          ? 0.7
+          : stage.mode === "guild_raid"
+            ? 1.5
+            : 1;
   const manaGain = Math.round((180 + stage.stage * 60) * modeMul);
   let crystalGain = 1 + Math.floor(stage.stage / 2);
   if (stage.mode === "weekday") crystalGain += 3;
