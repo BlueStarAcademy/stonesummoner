@@ -2018,6 +2018,13 @@ button.unit-card {
   box-shadow: 0 0 12px #4a7a8c33;
 }
 
+.skill-row button.clean.ready {
+  background: linear-gradient(180deg, #6b5a4a, #3a2e24);
+  border-color: #c4a882;
+  color: #f5ebe0;
+  box-shadow: 0 0 12px #6b5a4a33;
+}
+
 .skill-row button.smart {
   border-color: #c9a22766;
   color: #f5e6b8;

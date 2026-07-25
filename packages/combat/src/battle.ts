@@ -822,6 +822,74 @@ export class Battle {
     return sm.mana >= sm.manaMax * 0.35;
   }
 
+  /** 진문청소: 45% mana — clear 3×3 stones/tokens. */
+  canUseSummonerClean(unit: Unit): boolean {
+    if (unit.kind !== "summoner") return false;
+    const sm = this.summonerOf(unit.team);
+    return sm.mana >= sm.manaMax * 0.45;
+  }
+
+  /** Enemy stone count on the active board (for AUTO clean gating). */
+  countEnemyStones(team: TeamId): number {
+    const enemy = teamStoneColor(team === "ally" ? "enemy" : "ally");
+    const size = this.board.size;
+    let n = 0;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (this.board.at({ x, y }) === enemy) n += 1;
+      }
+    }
+    return n;
+  }
+
+  /** Pick 3×3 center that hits the most enemy stones (then tokens). */
+  private pickCleanCenter(team: TeamId): Point {
+    const enemy = teamStoneColor(team === "ally" ? "enemy" : "ally");
+    const size = this.board.size;
+    const mid = Math.floor(size / 2);
+    let best: Point = { x: mid, y: mid };
+    let bestScore = -1;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        let score = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const p = { x: x + dx, y: y + dy };
+            if (p.x < 0 || p.y < 0 || p.x >= size || p.y >= size) continue;
+            const cell = this.board.at(p);
+            if (cell === enemy) score += 3;
+            else if (cell) score += 1;
+            if (this.tokenAt(p.x, p.y)) score += 2;
+          }
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          best = { x, y };
+        }
+      }
+    }
+    return best;
+  }
+
+  /** Clear stones and tokens in a 3×3 around center. Returns removed stone count. */
+  private clearNeighborhood(center: Point): number {
+    const size = this.board.size;
+    let removed = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const p = { x: center.x + dx, y: center.y + dy };
+        if (p.x < 0 || p.y < 0 || p.x >= size || p.y >= size) continue;
+        if (this.board.forceClear(p)) removed += 1;
+        if (this.tokenAt(p.x, p.y)) {
+          this.tokens = this.tokens.filter(
+            (t) => !(t.x === p.x && t.y === p.y),
+          );
+        }
+      }
+    }
+    return removed;
+  }
+
   canUseSkill(unit: Unit, skillIndex: number): boolean {
     if (!unit.skills?.[skillIndex]) return skillIndex === 0;
     const cds = ensureSkillCd(unit);
@@ -829,14 +897,14 @@ export class Battle {
   }
 
   /**
-   * Skill phase. Summoner skills: 진문개방 / 증폭선언 / 쌍착수.
+   * Skill phase. Summoner skills: 진문개방 / 증폭선언 / 쌍착수 / 진문청소.
    * Otherwise cast S1/S2/S3 (or fallback basic) on target.
    */
   useSkill(opts?: {
     targetId?: string;
     useSummonerSkill?: boolean;
-    /** "open" = 진문개방, "declare" = 증폭선언, "dual" = 쌍착수 */
-    summonerSkill?: "open" | "declare" | "dual";
+    /** open / declare / dual / clean */
+    summonerSkill?: "open" | "declare" | "dual" | "clean";
     skillIndex?: number;
   }): SkillResult[] {
     if (this.phase !== "await_skill" || !this.activeUnitId) return [];
@@ -878,6 +946,23 @@ export class Battle {
       if (this.phase === "await_capture_shop") {
         this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
       }
+    } else if (summonerSkill === "clean" && this.canUseSummonerClean(unit)) {
+      const sm = this.summonerOf(unit.team);
+      const cost = sm.manaMax * 0.45;
+      sm.mana = Math.max(0, sm.mana - cost);
+      const center = this.pickCleanCenter(unit.team);
+      const removed = this.clearNeighborhood(center);
+      const ampGain = Math.min(0.08, removed * 0.015);
+      if (ampGain > 0) {
+        this.amplify = clampAmplify(
+          this.amplify + ampGain,
+          amplifyCapForPhase(this.circle.boardPhase),
+          this.powerGapCap,
+        );
+      }
+      this.log.push(
+        `${unit.name} 진문청소 (${center.x},${center.y}) 제거 ${removed}`,
+      );
     } else if (summonerSkill === "open" && this.canUseSummonerSkill(unit)) {
       const sm = this.summonerOf(unit.team);
       sm.mana = 0;
@@ -1145,6 +1230,12 @@ export class Battle {
     }
     if (this.canUseSummonerSkill(unit)) {
       return this.useSkill({ summonerSkill: "open" });
+    }
+    if (
+      this.canUseSummonerClean(unit) &&
+      this.countEnemyStones(unit.team) >= 4
+    ) {
+      return this.useSkill({ summonerSkill: "clean" });
     }
     if (this.canUseSummonerDeclare(unit)) {
       return this.useSkill({ summonerSkill: "declare" });

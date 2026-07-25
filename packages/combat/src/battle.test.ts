@@ -194,6 +194,44 @@ describe("Battle flow", () => {
     assert.equal(b.phase, "resolved");
   });
 
+  it("circle clean clears a 3x3 neighborhood of stones", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum", 50),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    // Seed enemy (white) cluster around center without capturing.
+    for (const p of [
+      { x: 1, y: 1 },
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+      { x: 1, y: 2 },
+      { x: 3, y: 2 },
+      { x: 1, y: 3 },
+      { x: 2, y: 3 },
+      { x: 3, y: 3 },
+    ]) {
+      assert.equal(b.board.play("white", p).ok, true);
+    }
+    assert.ok(b.countEnemyStones("ally") >= 4);
+    for (const u of b.units) {
+      u.atb = u.id === "a-sum" ? 100 : 0;
+    }
+    b.tickUntilReady();
+    b.autoStone();
+    const unit = b.getUnit("a-sum")!;
+    assert.equal(b.canUseSummonerClean(unit), true);
+    const before = b.countEnemyStones("ally");
+    const hits = b.useSkill({ summonerSkill: "clean" });
+    assert.equal(hits.length, 0);
+    assert.ok(b.countEnemyStones("ally") < before);
+    assert.ok(b.allySummoner.mana < 50);
+    assert.match(b.log.join("\n"), /진문청소/);
+    assert.equal(b.phase, "resolved");
+  });
+
   it("wiping enemy summons wins; summoners are not targets", () => {
     const units = roster();
     const enemyMon = units.find((u) => u.id === "e-m1")!;
