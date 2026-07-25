@@ -905,7 +905,9 @@ function renderBoard(): string {
               ? "자"
               : token?.id === "stride_sand"
                 ? "행"
-                : "";
+                : token?.id === "seal_nail"
+                  ? "봉"
+                  : "";
       const stoneHtml = stone
         ? `<span class="stone ${stone}"></span>`
         : sug

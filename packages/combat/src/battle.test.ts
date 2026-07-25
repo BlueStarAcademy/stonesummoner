@@ -391,6 +391,26 @@ describe("Battle flow", () => {
     assert.match(b.log.join("\n"), /행마모래/);
   });
 
+  it("seal nail forbids adjacent empty points for a few plays", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.1,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    b.tokens = [{ id: "seal_nail", x: 2, y: 2 }];
+    assert.equal(b.playStone({ x: 2, y: 2 }), true);
+    assert.ok(b.tempSeals.length >= 1);
+    assert.match(b.log.join("\n"), /봉인못/);
+    const sealed = b.tempSeals[0]!;
+    assert.equal(b.isForbidden({ x: sealed.x, y: sealed.y }), true);
+    // After tick on pickup play, remaining should be 3
+    assert.equal(sealed.remaining, 3);
+  });
+
   it("blocks skill while on cooldown", () => {
     const b = new Battle({
       boardSize: 5,

@@ -36,6 +36,7 @@ import {
   shouldSpawnItem,
   weightedItemId,
   type BoardToken,
+  type TempSeal,
 } from "./items.js";
 import type { SkillDef } from "stonesummoner-data";
 import type {
@@ -163,6 +164,8 @@ export class Battle {
   manaRaceWinner: TeamId | null = null;
   /** 금기구역 points. */
   forbiddenZone: Point[] = [];
+  /** Per-board temporary seals (봉인못). */
+  private sealsByBoard: TempSeal[][] = [];
   /** Ally large-capture shop waiting for choice. */
   pendingCaptureShop: { unitId: string } | null = null;
   /** 1-based current wave. */
@@ -184,12 +187,21 @@ export class Battle {
     this.tokensByBoard[this.activeBoardIndex] = next;
   }
 
+  get tempSeals(): TempSeal[] {
+    return this.sealsByBoard[this.activeBoardIndex]!;
+  }
+
+  set tempSeals(next: TempSeal[]) {
+    this.sealsByBoard[this.activeBoardIndex] = next;
+  }
+
   constructor(config: BattleConfig) {
     const dual = !!config.modules?.dualBoard;
     this.boards = dual
       ? [new Board(config.boardSize), new Board(config.boardSize)]
       : [new Board(config.boardSize)];
     this.tokensByBoard = this.boards.map(() => []);
+    this.sealsByBoard = this.boards.map(() => []);
     this.circle = createCirclePhaseState(
       config.boardSize,
       config.resetThreshold,
@@ -261,7 +273,8 @@ export class Battle {
   }
 
   isForbidden(p: Point): boolean {
-    return this.forbiddenZone.some((z) => z.x === p.x && z.y === p.y);
+    if (this.forbiddenZone.some((z) => z.x === p.x && z.y === p.y)) return true;
+    return this.tempSeals.some((z) => z.x === p.x && z.y === p.y);
   }
 
   getUnit(id: string): Unit | undefined {
@@ -438,6 +451,13 @@ export class Battle {
       );
       return;
     }
+    if (token.id === "seal_nail") {
+      const sealed = this.applySealNail({ x: token.x, y: token.y });
+      this.log.push(
+        `${unit.name} 획득 ${name} (금수 ${sealed}점 · 3수)`,
+      );
+      return;
+    }
     // capture_magnet
     const manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
@@ -456,6 +476,63 @@ export class Battle {
     );
   }
 
+  /** Seal up to 2 adjacent empty points for ~3 stone plays. */
+  private applySealNail(origin: Point): number {
+    const size = this.board.size;
+    const grid = this.board.getBoard();
+    const dirs: Point[] = [
+      { x: origin.x + 1, y: origin.y },
+      { x: origin.x - 1, y: origin.y },
+      { x: origin.x, y: origin.y + 1 },
+      { x: origin.x, y: origin.y - 1 },
+    ];
+    const candidates = dirs.filter((p) => {
+      if (p.x < 0 || p.y < 0 || p.x >= size || p.y >= size) return false;
+      if (grid[p.y]![p.x] !== null) return false;
+      if (this.isForbidden(p)) return false;
+      if (this.tokenAt(p.x, p.y)) return false;
+      return true;
+    });
+    // Shuffle lightly via rng picks
+    const picked: Point[] = [];
+    const pool = [...candidates];
+    while (picked.length < 2 && pool.length > 0) {
+      const i = Math.floor(this.rng() * pool.length);
+      picked.push(pool.splice(i, 1)[0]!);
+    }
+    if (picked.length === 0) {
+      const empty: Point[] = [];
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          if (grid[y]![x] !== null) continue;
+          if (x === origin.x && y === origin.y) continue;
+          if (this.isForbidden({ x, y })) continue;
+          empty.push({ x, y });
+        }
+      }
+      if (empty.length > 0) {
+        const i = Math.floor(this.rng() * empty.length);
+        picked.push(empty[i]!);
+      }
+    }
+    // remaining=4 so end-of-play tick leaves 3 plays of seal
+    const next = [...this.tempSeals];
+    for (const p of picked) {
+      next.push({ x: p.x, y: p.y, remaining: 4 });
+      this.log.push(`봉인 (${p.x},${p.y})`);
+    }
+    this.tempSeals = next;
+    return picked.length;
+  }
+
+  private tickTempSeals(): void {
+    this.sealsByBoard = this.sealsByBoard.map((board) =>
+      board
+        .map((s) => ({ ...s, remaining: s.remaining - 1 }))
+        .filter((s) => s.remaining > 0),
+    );
+  }
+
   private trySpawnItem(): void {
     const bonus = itemSpawnBonusForPhase(this.circle.boardPhase);
     if (!shouldSpawnItem(bonus, this.rng)) return;
@@ -467,6 +544,7 @@ export class Battle {
       for (let x = 0; x < size; x++) {
         if (grid[y]![x] !== null) continue;
         if (this.tokenAt(x, y)) continue;
+        if (this.isForbidden({ x, y })) continue;
         empty.push({ x, y });
       }
     }
@@ -672,6 +750,7 @@ export class Battle {
     if (prog.shouldReset) {
       for (const b of this.boards) resetBoardInPlace(b);
       this.tokensByBoard = this.boards.map(() => []);
+      this.sealsByBoard = this.boards.map(() => []);
       this.log.push(
         `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${amplifyCapForPhase(this.circle.boardPhase)})`,
       );
@@ -687,6 +766,8 @@ export class Battle {
         this.applyCircleEvent(rollCircleEvent(this.rng), unit);
       }
     }
+
+    this.tickTempSeals();
 
     if (
       this.boards.length > 1 &&
