@@ -411,6 +411,10 @@ export const CRAFT_SCROLL_MANA = 300;
 export const ESSENCE_JINMUN_COST = 1;
 export const ESSENCE_CRYSTAL_GAIN = 4;
 
+export function symbolSellMana(enhance: number): number {
+  return 40 + enhance * 18;
+}
+
 /**
  * Fusion stub: sacrifice two same-species monsters → keep one with +1 evolve (cap MAX_EVOLVE).
  */
@@ -582,6 +586,61 @@ export function runCraftEssence(save: PlayerSave): LoopStepResult {
       jinmunStones: (save.jinmunStones ?? 0) - ESSENCE_JINMUN_COST,
     },
     message: `정수: 크리스탈 +${ESSENCE_CRYSTAL_GAIN} (−진문석 ${ESSENCE_JINMUN_COST})`,
+  };
+}
+
+/** Sell inventory symbol for mana (unequips first). */
+export function runSellSymbol(
+  save: PlayerSave,
+  idOrIndex: string,
+): LoopStepResult {
+  const sym = resolveSymbol(save, idOrIndex);
+  if (!sym) return { save, message: `상징 없음: ${idOrIndex}` };
+  const gain = symbolSellMana(sym.enhance);
+  const roster = save.roster.map((m) => {
+    const slots = [...(m.symbolSlots ?? emptySymbolSlots())];
+    return {
+      ...m,
+      symbolSlots: slots.map((id) => (id === sym.id ? null : id)),
+    };
+  });
+  const symbols = save.symbols.filter((s) => s.id !== sym.id);
+  return {
+    save: {
+      ...save,
+      roster,
+      symbols,
+      island: { ...save.island, mana: save.island.mana + gain },
+    },
+    message: `상징 판매: ${describeSymbol(sym)} · 마나 +${gain}`,
+  };
+}
+
+/** Practice dojo: free drill → mana (and small exp). */
+export function runPracticeDojo(
+  save: PlayerSave,
+  now = Date.now(),
+): LoopStepResult {
+  let island = syncBuildingUnlocks(tickProduction(save.island, now), now);
+  if (
+    !island.buildings.some((b) => b.id === "practice_dojo") &&
+    island.summonerLevel < 8
+  ) {
+    return {
+      save: { ...save, island },
+      message: "마법진 도장 해금 필요 (서머너 Lv.8)",
+    };
+  }
+  const manaGain = 120 + island.summonerLevel * 8;
+  island = { ...island, mana: island.mana + manaGain };
+  const leveled = addSummonerExp(island, 15);
+  return {
+    save: { ...save, island: leveled.island },
+    message: `도장 수련: 마나 +${manaGain} · EXP +15${
+      leveled.levelsGained > 0
+        ? ` · 서머너 Lv.${leveled.island.summonerLevel}`
+        : ""
+    }`,
   };
 }
 

@@ -22,6 +22,8 @@ import {
   runFusion,
   runGrindSymbol,
   runImprintSymbol,
+  runPracticeDojo,
+  runSellSymbol,
   runSetParty,
   runSkillUp,
   runSortie,
@@ -169,6 +171,23 @@ describe("game loop", () => {
     const craft = runCraftScroll(save);
     assert.match(craft.message, /제작/);
     assert.equal(craft.save.scrolls, save.scrolls + 1);
+  });
+
+  it("sells symbols and runs practice dojo", () => {
+    let save = createNewSave(0);
+    const before = save.symbols.length;
+    const sell = runSellSymbol(save, "0");
+    assert.match(sell.message, /판매/);
+    assert.equal(sell.save.symbols.length, before - 1);
+    assert.ok(sell.save.island.mana > save.island.mana);
+
+    save = {
+      ...sell.save,
+      island: { ...sell.save.island, summonerLevel: 8 },
+    };
+    const drill = runPracticeDojo(save);
+    assert.match(drill.message, /도장/);
+    assert.ok(drill.save.island.mana > save.island.mana);
   });
 
   it("sets party from roster indices", () => {

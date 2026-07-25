@@ -410,7 +410,7 @@ main {
 }
 
 .sym-row-actions {
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: 1fr auto auto auto auto;
 }
 
 .sym-row > button:first-child {

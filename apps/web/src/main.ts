@@ -75,11 +75,14 @@ import {
   homeCollectCrystal,
   FUSION_MANA_COST,
   runImprintSymbol,
+  runPracticeDojo,
+  runSellSymbol,
   runSetParty,
   runSkillUp,
   runSummon,
   runUpgradeBuilding,
   SCROLL_BUY_MANA_COST,
+  symbolSellMana,
   skillUpManaCost,
   skillUpMinMonsterLevel,
   stageUnlockLabel,
@@ -798,6 +801,9 @@ function renderHome(): string {
         <strong>소원의 사당</strong><small>${hasWish ? "일 1회 소원" : "Lv.7 해금"}</small>
       </button>
       <button type="button" class="building" data-b="glory"><strong>영광 건물</strong><small>영광 ${save.gloryPoints ?? 0}</small></button>
+      <button type="button" class="building" data-b="dojo" ${save.island.summonerLevel >= 8 || save.island.buildings.some((b) => b.id === "practice_dojo") ? "" : "disabled"}>
+        <strong>마법진 도장</strong><small>${save.island.summonerLevel >= 8 ? "수련" : "Lv.8 해금"}</small>
+      </button>
       <button type="button" class="building" data-b="fusion" ${save.island.summonerLevel >= 17 || save.island.buildings.some((b) => b.id === "fusion_star") ? "" : "disabled"}>
         <strong>융합의 별</strong><small>${save.island.summonerLevel >= 17 ? "동일종 융합" : "Lv.17 해금"}</small>
       </button>
@@ -964,6 +970,7 @@ function renderEnhance(): string {
               ${imprintable ? `각인 −${SYMBOL_IMPRINT_CRYSTAL_COST}크` : "각인×"}
             </button>
             <button type="button" class="secondary sym-eq" data-equip-sym="${i}">장착</button>
+            <button type="button" class="secondary" data-sell-sym="${i}">판매 +${symbolSellMana(s.enhance)}</button>
           </div>`;
         })
         .join("")}
@@ -1123,7 +1130,7 @@ function renderBattleTicker(): string {
   const lines = battle.log
     .filter(
       (l) =>
-        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|형상/.test(l),
+        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|형상|이벤트|사석상점/.test(l),
     )
     .slice(-3);
   if (!lines.length) {
@@ -1350,6 +1357,12 @@ function bind(): void {
       } else if (id === "glory") {
         view = "glory";
         render();
+      } else if (id === "dojo") {
+        const r = runPracticeDojo(save);
+        save = r.save;
+        persist();
+        flash(r.message);
+        render();
       } else if (id === "fusion") {
         view = "fusion";
         render();
@@ -1437,6 +1450,16 @@ function bind(): void {
     btn.addEventListener("click", () => {
       const idx = btn.dataset.grind!;
       const r = runGrindSymbol(save, idx);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-sell-sym]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const r = runSellSymbol(save, btn.dataset.sellSym!);
       save = r.save;
       persist();
       flash(r.message);

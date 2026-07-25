@@ -19,6 +19,17 @@ import {
 } from "./ai.js";
 import { classifyCapture, gainsForBoardEvent } from "./boardEvents.js";
 import { detectShapeBonuses } from "./shapes.js";
+import {
+  circleEventName,
+  rollCircleEvent,
+  shouldRollCircleEvent,
+  type CircleEventId,
+} from "./circleEvents.js";
+import {
+  CAPTURE_SHOP_THRESHOLD,
+  pickCaptureShopChoice,
+  type CaptureShopChoice,
+} from "./captureShop.js";
 import { clampAmplify, computeDamage } from "./damage.js";
 import {
   itemDef,
@@ -121,6 +132,8 @@ export class Battle {
   activeUnitId: string | null = null;
   finishReason: FinishReason = null;
   log: string[] = [];
+  /** Module C: fog reduces stone suggestion count. */
+  fogTurns = 0;
   /** 1-based current wave. */
   currentWave: number;
   readonly totalWaves: number;
@@ -245,7 +258,12 @@ export class Battle {
     const manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
       (1 + this.summonerOf(u.team).boardSense);
-    const topN = u.stonePassive === "suggest_plus" ? 4 : 3;
+    const topN =
+      this.fogTurns > 0
+        ? 1
+        : u.stonePassive === "suggest_plus"
+          ? 4
+          : 3;
     return rankStoneSuggestions(
       legal,
       this.board.size,
@@ -418,6 +436,10 @@ export class Battle {
     const picked = this.tokenAt(point.x, point.y);
     if (picked) this.applyTokenPickup(unit, picked);
 
+    if (result.capturedCount >= CAPTURE_SHOP_THRESHOLD) {
+      this.resolveCaptureShop(unit, pickCaptureShopChoice(this.rng));
+    }
+
     const prog = registerStoneSummon(this.circle);
     this.circle = prog.state;
     if (prog.shouldReset) {
@@ -428,13 +450,100 @@ export class Battle {
       );
     } else {
       this.trySpawnItem();
+      if (shouldRollCircleEvent(this.circle.stoneSummonCount)) {
+        this.applyCircleEvent(rollCircleEvent(this.rng), unit);
+      }
     }
+
+    if (this.fogTurns > 0) this.fogTurns -= 1;
 
     this.log.push(
       `${unit.name} stone (${point.x},${point.y}) cap=${result.capturedCount} amp=${this.currentAmplify().toFixed(2)}`,
     );
     this.phase = "await_skill";
     return true;
+  }
+
+  /** Module D: auto-resolve capture shop after large capture. */
+  resolveCaptureShop(unit: Unit, choice: CaptureShopChoice): void {
+    const sm = this.summonerOf(unit.team);
+    if (choice === "mana") {
+      sm.mana = Math.min(sm.manaMax, sm.mana + 40);
+      this.log.push(`사석상점: 마나 충전 (+40)`);
+    } else if (choice === "amplify") {
+      this.amplify = clampAmplify(
+        this.amplify + 0.08,
+        amplifyCapForPhase(this.circle.boardPhase),
+        this.powerGapCap,
+      );
+      this.log.push(`사석상점: Amplify 강화`);
+    } else {
+      const shield = Math.round(unit.stats.hp * 0.12);
+      unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+      sm.mana = Math.min(sm.manaMax, sm.mana + 10);
+      this.log.push(`사석상점: 청소 실드 +${shield}`);
+    }
+  }
+
+  /** Module C: apply a circle event. */
+  applyCircleEvent(eventId: CircleEventId, unit: Unit): void {
+    const name = circleEventName(eventId);
+    this.log.push(`이벤트: ${name}`);
+    if (eventId === "meteor") {
+      const stones: Point[] = [];
+      for (let y = 0; y < this.board.size; y++) {
+        for (let x = 0; x < this.board.size; x++) {
+          if (this.board.at({ x, y })) stones.push({ x, y });
+        }
+      }
+      for (let i = 0; i < 3 && stones.length; i++) {
+        const idx = Math.floor(this.rng() * stones.length);
+        const p = stones.splice(idx, 1)[0]!;
+        this.board.forceClear(p);
+      }
+      this.trySpawnItem();
+      this.log.push(`운석: 돌 최대 3개 제거`);
+      return;
+    }
+    if (eventId === "fog") {
+      this.fogTurns = Math.max(this.fogTurns, 3);
+      this.log.push(`안개: 착수 미리보기 축소 (3턴)`);
+      return;
+    }
+    if (eventId === "bag_full") {
+      this.trySpawnItem();
+      this.trySpawnItem();
+      this.log.push(`배낭만땅: 아이템 추가 스폰`);
+      return;
+    }
+    if (eventId === "attr_tune") {
+      this.amplify = clampAmplify(
+        this.amplify + 0.06,
+        amplifyCapForPhase(this.circle.boardPhase),
+        this.powerGapCap,
+      );
+      this.log.push(`속성조율: Amplify +0.06`);
+      return;
+    }
+    if (eventId === "ko_bonus") {
+      if (this.board.getKoPoint()) {
+        this.amplify = clampAmplify(
+          this.amplify + 0.05,
+          amplifyCapForPhase(this.circle.boardPhase),
+          this.powerGapCap,
+        );
+        this.log.push(`패왕전: 패점 보너스 Amp`);
+      } else {
+        const sm = this.summonerOf(unit.team);
+        sm.mana = Math.min(sm.manaMax, sm.mana + 15);
+        this.log.push(`패왕전: 마나 +15`);
+      }
+      return;
+    }
+    // tide
+    const sm = this.summonerOf(unit.team);
+    sm.mana = Math.min(sm.manaMax, sm.mana + 20);
+    this.log.push(`조수: 마나 +20`);
   }
 
   /** Auto stone then ready for skill. */

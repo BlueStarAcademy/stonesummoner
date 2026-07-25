@@ -29,6 +29,8 @@ import {
   runFusion,
   runGrindSymbol,
   runImprintSymbol,
+  runPracticeDojo,
+  runSellSymbol,
   runSetParty,
   runSkillUp,
   runSortie,
@@ -63,7 +65,7 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | crystal | wish | upgrade | glory [id] | fuse <a> <b> | energy [n] | essence | craft | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
+    "명령: collect | crystal | wish | upgrade | glory [id] | fuse <a> <b> | energy [n] | essence | craft | dojo | sell-sym <i> | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
@@ -168,6 +170,22 @@ async function interactive(): Promise<void> {
 
     if (cmd === "craft" || cmd === "cf") {
       const r = runCraftScroll(save);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "dojo" || cmd === "drill") {
+      const r = runPracticeDojo(save);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "sell-sym" || cmd === "ss") {
+      const r = runSellSymbol(save, arg ?? "0");
       save = r.save;
       console.log(r.message);
       printStatus(save);

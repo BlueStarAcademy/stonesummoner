@@ -68,6 +68,14 @@ export class Board {
     return this.grid[p.y]![p.x]!;
   }
 
+  /** Module C / effects: clear a stone without capture rules (event wipe). */
+  forceClear(p: Point): boolean {
+    if (!this.inBounds(p) || this.at(p) === null) return false;
+    this.grid[p.y]![p.x] = null;
+    this.koPoint = null;
+    return true;
+  }
+
   private neighbors(p: Point): Point[] {
     return DIRS.map((d) => ({ x: p.x + d.x, y: p.y + d.y })).filter((q) =>
       this.inBounds(q),

@@ -9,6 +9,20 @@ export { gainsForBoardEvent, classifyCapture } from "./boardEvents.js";
 export { detectShapeBonuses, starPoints } from "./shapes.js";
 export type { ShapeBonus, ShapeBonusId } from "./shapes.js";
 export {
+  CIRCLE_EVENTS,
+  CIRCLE_EVENT_INTERVAL,
+  circleEventName,
+  rollCircleEvent,
+  shouldRollCircleEvent,
+} from "./circleEvents.js";
+export type { CircleEventId } from "./circleEvents.js";
+export {
+  CAPTURE_SHOP_THRESHOLD,
+  captureShopOffers,
+  pickCaptureShopChoice,
+} from "./captureShop.js";
+export type { CaptureShopChoice, CaptureShopOffer } from "./captureShop.js";
+export {
   BOARD_ITEMS,
   itemDef,
   ITEM_SPAWN_CHANCE,
