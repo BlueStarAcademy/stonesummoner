@@ -38,9 +38,13 @@ import {
   collectMana,
   MAX_BUILDING_LEVEL,
   PHASE1_BUILDINGS,
+  PHASE_BUILDINGS,
+  productionCrystalCap,
+  productionCrystalPerHour,
   productionManaPerHour,
   productionStorageCap,
   tickProduction,
+  todayKey,
 } from "stonesummoner-home";
 import {
   applyRewards,
@@ -110,6 +114,8 @@ type View =
   | "enhance"
   | "shop"
   | "pond"
+  | "mine"
+  | "wish"
   | "glory"
   | "fusion"
   | "party"
@@ -123,6 +129,12 @@ type ForgeReveal = {
   kind: "grind" | "imprint";
   before: string;
   after: string;
+  cost: string;
+};
+
+type FusionReveal = {
+  materials: string;
+  result: string;
   cost: string;
 };
 
@@ -158,6 +170,10 @@ let equipPickSymIndex: number | null = null;
 let slotEquipPick: { uid: string; slot: number } | null = null;
 /** Grind/imprint before→after reveal card. */
 let forgeReveal: ForgeReveal | null = null;
+/** Fusion success reveal card. */
+let fusionReveal: FusionReveal | null = null;
+/** Daily wish result card. */
+let wishReveal: string | null = null;
 /** Party editor draft (uid set); null means mirror save.party. */
 let partyDraft: Set<string> | null = null;
 let toast = "";
@@ -447,8 +463,22 @@ function renderResult(): string {
   const stage = currentStage;
   const reward = lastReward;
   if (!stage || !reward) {
-    return `<div class="panel"><p class="muted">결과 없음</p>
-      <button type="button" class="secondary full" data-nav="stages">출정문으로</button></div>`;
+    return `<div class="result-wrap">
+      <div class="battle-sky" aria-hidden="true">
+        <img class="battle-sky-img" src="/art/battle/battle-arena-bg.webp" alt="" decoding="async" />
+        <div class="battle-sky-veil"></div>
+      </div>
+      <div class="result-screen is-lose">
+        <div class="result-banner">
+          <p class="result-kicker">출정</p>
+          <h2 class="result-title">결과 없음</h2>
+          <p class="result-sub">출정문으로 돌아가 다시 도전하세요</p>
+        </div>
+        <div class="result-cta">
+          <button type="button" class="secondary full" data-nav="stages">출정문으로</button>
+        </div>
+      </div>
+    </div>`;
   }
   const win = reward.victory;
   const rows: string[] = [];
@@ -481,6 +511,10 @@ function renderResult(): string {
     ? `<div class="result-drop">
         <p class="section-label">상징 드롭</p>
         <p class="result-drop-card">${describeSymbol(reward.symbol)}</p>
+        <div class="result-drop-cta">
+          <button type="button" class="auth-btn-primary" data-nav="enhance">강화진에서 장착</button>
+          <button type="button" class="secondary" data-nav="shop">연마·각인</button>
+        </div>
       </div>`
     : "";
   return `<div class="result-wrap">
@@ -502,6 +536,11 @@ function renderResult(): string {
     <div class="result-cta">
       <button type="button" class="auth-btn-primary" id="btn-result-again">다시 도전</button>
       <button type="button" class="secondary auth-btn-ghost" data-nav="stages">출정문</button>
+      ${
+        win
+          ? `<button type="button" class="secondary auth-btn-ghost" data-nav="party">파티</button>`
+          : ""
+      }
       <button type="button" class="secondary auth-btn-ghost" data-nav="home">홈으로</button>
     </div>
   </div>
@@ -726,7 +765,7 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
     opts?.targetable && u.alive
       ? `type="button" data-target="${u.id}"`
       : "";
-  return `<${tag} class="unit-card${active}${targeted}${dead}" ${attrs}>
+  return `<${tag} class="unit-card el-${u.element}${active}${targeted}${dead}" ${attrs}>
     <div class="name">${u.name}</div>
     <div class="hp-num">${Math.max(0, Math.round(u.hp))}${shield ? `+${shield}` : ""}</div>
     <div class="bar hp"><i style="width:${hpPct}%"></i></div>
@@ -923,6 +962,10 @@ function mainContent(manaPct: number): string {
       return renderShop();
     case "pond":
       return renderPond();
+    case "mine":
+      return renderMine();
+    case "wish":
+      return renderWish();
     case "glory":
       return renderGlory();
     case "fusion":
@@ -1011,7 +1054,7 @@ function render(): void {
     </header>
     <main>${mainContent(manaPct)}</main>
     <nav class="tabs">
-      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "shop" || view === "pond" || view === "glory" || view === "fusion" || view === "party" || view === "guild" || view === "dojo" ? "active" : ""}"><span class="tab-ico" aria-hidden="true">島</span>홈</button>
+      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "shop" || view === "pond" || view === "mine" || view === "wish" || view === "glory" || view === "fusion" || view === "party" || view === "guild" || view === "dojo" ? "active" : ""}"><span class="tab-ico" aria-hidden="true">島</span>홈</button>
       <button type="button" data-nav="stages" class="${tabStages ? "active" : ""}"><span class="tab-ico" aria-hidden="true">門</span>출정</button>
       <button type="button" data-nav="collect"><span class="tab-ico" aria-hidden="true">池</span>수집</button>
     </nav>
@@ -1091,6 +1134,9 @@ function renderHome(): string {
     </div>
     <div class="home-hud">
       <p class="home-level">서머너 Lv.${save.island.summonerLevel}</p>
+      <div class="home-exp" role="progressbar" aria-valuenow="${exp}" aria-valuemin="0" aria-valuemax="100">
+        <div class="home-exp-fill" style="width:${Math.min(100, exp)}%"></div>
+      </div>
       <p class="home-meta">EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
     </div>
     <div class="island-grid">
@@ -1176,6 +1222,20 @@ function renderForgeReveal(): string {
   </div>`;
 }
 
+function renderFusionReveal(): string {
+  if (!fusionReveal) return "";
+  return `<div class="forge-reveal forge-reveal--fusion" aria-live="polite">
+    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">融</span>융합 완료</p>
+    <div class="forge-reveal-diff">
+      <p class="forge-before">${fusionReveal.materials}</p>
+      <p class="forge-arrow" aria-hidden="true">↓</p>
+      <p class="forge-after">${fusionReveal.result}</p>
+    </div>
+    <p class="forge-reveal-cost muted">${fusionReveal.cost}</p>
+    <button type="button" class="secondary full auth-btn-ghost" id="btn-fusion-dismiss">확인</button>
+  </div>`;
+}
+
 function renderDojo(): string {
   const drills = save.dojoDrills ?? 0;
   const rem = drills % 3;
@@ -1249,6 +1309,84 @@ function renderPond(): string {
           </span>
         </button>
       </div>
+      <button type="button" class="secondary full auth-btn-ghost" data-nav="home" style="margin-top:10px">섬으로</button>
+    </div>`,
+  );
+}
+
+function renderMine(): string {
+  const mine = save.island.buildings.find((b) => b.id === "crystal_mine");
+  const def = PHASE_BUILDINGS.find((b) => b.id === "crystal_mine")!;
+  const lv = mine?.level ?? 1;
+  const cap = productionCrystalCap(def, lv);
+  const rate = productionCrystalPerHour(def, lv);
+  const maxed = lv >= MAX_BUILDING_LEVEL;
+  const cost = buildingUpgradeManaCost(lv);
+  const stored = Math.floor(mine?.storedCrystal ?? 0);
+  const fillPct = cap > 0 ? Math.min(100, Math.round((stored / cap) * 100)) : 0;
+  return hubShell(
+    "수정 광맥",
+    `Lv.${lv} · ${rate}/hr · 저장 ${stored}/${cap}`,
+    `<div class="hub-panel">
+      <div class="pond-panel mine-panel">
+        <p class="pond-panel-title">크리스탈 저장</p>
+        <div class="pond-bar mine-bar" role="progressbar" aria-valuenow="${stored}" aria-valuemin="0" aria-valuemax="${cap}">
+          <div class="pond-bar-fill mine-bar-fill" style="width:${fillPct}%"></div>
+        </div>
+        <div class="pond-meta">
+          <span>${stored} / ${cap}</span>
+          <span>${rate}/hr</span>
+        </div>
+      </div>
+      <div class="stage-list">
+        <button type="button" class="stage-card" id="btn-mine-collect">
+          <span class="stage-card-mark" aria-hidden="true">晶</span>
+          <span class="stage-card-body">
+            <strong>크리스탈 수집</strong>
+            <small>${stored > 0 ? `대기 ${stored}` : "대기 없음"}</small>
+          </span>
+        </button>
+        <button type="button" class="stage-card" id="btn-mine-upgrade" ${maxed ? "disabled" : ""}>
+          <span class="stage-card-mark" aria-hidden="true">↑</span>
+          <span class="stage-card-body">
+            <strong>${maxed ? "최대 레벨" : `레벨업 → Lv.${lv + 1}`}</strong>
+            <small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `−마나 ${cost}`}</small>
+          </span>
+        </button>
+      </div>
+      <button type="button" class="secondary full auth-btn-ghost" data-nav="home" style="margin-top:10px">섬으로</button>
+    </div>`,
+  );
+}
+
+function renderWish(): string {
+  const day = todayKey();
+  const last = save.island.lastWishDay ?? null;
+  const used = last === day;
+  const reveal = wishReveal
+    ? `<div class="forge-reveal forge-reveal--wish" aria-live="polite">
+        <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">願</span>소원 결과</p>
+        <p class="forge-after">${wishReveal}</p>
+        <button type="button" class="secondary full auth-btn-ghost" id="btn-wish-dismiss" style="margin-top:12px">확인</button>
+      </div>`
+    : "";
+  return hubShell(
+    "소원의 사당",
+    used ? `오늘 완료 · ${last}` : "일 1회 기원",
+    `<div class="hub-panel">
+      ${reveal}
+      <div class="guild-panel wish-panel">
+        <p class="guild-panel-title">기원 현황</p>
+        <div class="guild-stats">
+          <div class="guild-stat"><span>오늘</span><strong>${used ? "완료" : "가능"}</strong></div>
+          <div class="guild-stat"><span>최근</span><strong>${last ?? "—"}</strong></div>
+          <div class="guild-stat"><span>소환서</span><strong>${save.scrolls}</strong></div>
+        </div>
+        <p class="muted dojo-hint">마나 · 크리스탈 · 소환서 중 하나가 무작위로 내려옵니다.</p>
+      </div>
+      <button type="button" class="auth-btn-primary full" id="btn-wish-cast" ${used ? "disabled" : ""}>
+        ${used ? "오늘은 이미 빌었습니다" : "소원 빌기"}
+      </button>
       <button type="button" class="secondary full auth-btn-ghost" data-nav="home" style="margin-top:10px">섬으로</button>
     </div>`,
   );
@@ -1345,17 +1483,25 @@ function renderSummon(): string {
         <button type="button" class="auth-btn-primary full" id="btn-summon" ${save.scrolls < 1 ? "disabled" : ""}>소환하기 (${save.scrolls})</button>
         ${reveal}
         <p class="section-label">최근 보유</p>
-        <ul class="roster-list">
+        <div class="stage-list summon-roster">
           ${save.roster
             .slice(-6)
             .reverse()
             .map((m) => {
               const def = getMonster(m.monsterId);
-              const fresh = m.uid === lastSummonUid ? " class=\"is-fresh\"" : "";
-              return `<li${fresh}>${describeOwned(m)}${def ? ` · ${def.element}` : ""}</li>`;
+              const fresh = m.uid === lastSummonUid;
+              const preview = previewOwnedCombatStats(save, m.uid);
+              const inParty = save.party.includes(m.uid);
+              return `<div class="stage-card summon-roster-card el-${def?.element ?? "dark"}${fresh ? " is-fresh" : ""}">
+                <span class="stage-card-mark" aria-hidden="true">${def?.element?.[0]?.toUpperCase() ?? "·"}</span>
+                <span class="stage-card-body">
+                  <strong>${describeOwned(m)}${inParty ? " · 파티" : ""}${fresh ? " · NEW" : ""}</strong>
+                  <small>${preview ? `HP ${preview.final.hp} · ATK ${preview.final.atk} · DEF ${preview.final.def}` : (def?.element ?? "")}</small>
+                </span>
+              </div>`;
             })
             .join("")}
-        </ul>
+        </div>
         <button type="button" class="secondary full auth-btn-ghost" data-nav="home">섬으로</button>
       </div>`,
     )}
@@ -1383,9 +1529,12 @@ function renderSlotSymbolPicker(uid: string, slot: number): string {
           ? candidates
               .map(({ s, i }) => {
                 const worn = symbolWearer(s.id);
-                return `<button type="button" data-slot-equip-sym="${i}">
-                  <strong>${describeSymbol(s)}</strong><br/>
-                  <small class="muted">${worn ? `착용중 ${worn} · 이동` : "미장착"}</small>
+                return `<button type="button" class="stage-card" data-slot-equip-sym="${i}">
+                  <span class="stage-card-mark" aria-hidden="true">${s.slot}</span>
+                  <span class="stage-card-body">
+                    <strong>${describeSymbol(s)}</strong>
+                    <small>${worn ? `착용중 ${worn} · 이동` : "미장착"}</small>
+                  </span>
                 </button>`;
               })
               .join("")
@@ -1493,14 +1642,18 @@ function renderEnhance(): string {
               return `<button type="button" class="secondary sk-up" data-skup="${m.uid}" data-skslot="${si}" ${maxSk ? "disabled" : ""}>${hint}</button>`;
             })
             .join("");
-          const inParty = save.party.includes(m.uid) ? " · 파티" : "";
-          return `<div class="enhance-mon">
-            <div class="sym-row">
-              <button type="button" data-enh="${m.uid}" ${maxed ? "disabled" : ""}>
-                <strong>${describeOwned(m)}${inParty}</strong><br/>
-                <small class="muted">${maxed ? "최대 레벨" : `강화 −마나 ${cost}`}</small>
+          const inParty = save.party.includes(m.uid);
+          const preview = previewOwnedCombatStats(save, m.uid);
+          return `<div class="enhance-mon el-${def?.element ?? "dark"}">
+            <div class="enhance-mon-head">
+              <button type="button" class="stage-card enhance-main" data-enh="${m.uid}" ${maxed ? "disabled" : ""}>
+                <span class="stage-card-mark" aria-hidden="true">${def?.element?.[0]?.toUpperCase() ?? "·"}</span>
+                <span class="stage-card-body">
+                  <strong>${describeOwned(m)}${inParty ? " · 파티" : ""}</strong>
+                  <small>${preview ? `HP ${preview.final.hp} · ATK ${preview.final.atk}` : ""}${maxed ? " · 최대" : ` · 강화 −마나 ${cost}`}</small>
+                </span>
               </button>
-              <button type="button" class="secondary" data-evo="${m.uid}" ${evoMax ? "disabled" : ""}>
+              <button type="button" class="secondary enhance-evo" data-evo="${m.uid}" ${evoMax ? "disabled" : ""}>
                 ${evoHint}
               </button>
             </div>
@@ -1669,15 +1822,29 @@ function renderShop(): string {
 }
 
 function renderGlory(): string {
+  const glory = save.gloryPoints ?? 0;
+  const levels = GLORY_BUILDINGS.reduce(
+    (n, g) => n + (save.gloryLevels?.[g.id] ?? 0),
+    0,
+  );
+  const maxTotal = GLORY_BUILDINGS.reduce((n, g) => n + g.maxLevel, 0);
   return hubShell(
     "영광 건물",
-    `보유 영광 ${save.gloryPoints ?? 0}`,
+    `보유 영광 ${glory}`,
     `<div class="hub-panel">
+    <div class="guild-panel glory-panel">
+      <p class="guild-panel-title">영광 현황</p>
+      <div class="guild-stats">
+        <div class="guild-stat"><span>보유</span><strong>${glory}</strong></div>
+        <div class="guild-stat"><span>건물 합산</span><strong>${levels}/${maxTotal}</strong></div>
+        <div class="guild-stat"><span>종류</span><strong>${GLORY_BUILDINGS.length}</strong></div>
+      </div>
+    </div>
     <div class="stage-list">
       ${GLORY_BUILDINGS.map((g) => {
         const lv = save.gloryLevels?.[g.id] ?? 0;
         const maxed = lv >= g.maxLevel;
-        return `<button type="button" class="stage-card" data-glory="${g.id}" ${maxed ? "disabled" : ""}>
+        return `<button type="button" class="stage-card${maxed ? " is-maxed" : ""}" data-glory="${g.id}" ${maxed ? "disabled" : ""}>
           <span class="stage-card-mark" aria-hidden="true">${lv}</span>
           <span class="stage-card-body">
             <strong>${g.nameKo} Lv.${lv}/${g.maxLevel}</strong>
@@ -1694,14 +1861,28 @@ function renderGlory(): string {
 function renderCaptureShop(): string {
   if (!battle || battle.phase !== "await_capture_shop" || autoMode) return "";
   const offers = captureShopOffers();
+  const markFor = (choice: string) =>
+    choice === "mana" ? "魔" : choice === "amplify" ? "增" : "盾";
+  const hintFor = (choice: string) =>
+    choice === "mana"
+      ? "서머너 마나 충전"
+      : choice === "amplify"
+        ? "이번 국면 Amplify"
+        : "아군 실드·정리";
   return `<div class="capture-shop">
     <p class="capture-shop-title">사석상점</p>
-    <p class="muted">대량 따냄 보상</p>
-    <div class="chip-row">
+    <p class="muted capture-shop-sub">대량 따냄 보상 — 하나 선택</p>
+    <div class="stage-list capture-shop-list">
       ${offers
         .map(
           (o) =>
-            `<button type="button" class="chip chip-offer" data-shop="${o.choice}">${o.labelKo}</button>`,
+            `<button type="button" class="stage-card shop-offer chip-offer" data-shop="${o.choice}">
+              <span class="stage-card-mark" aria-hidden="true">${markFor(o.choice)}</span>
+              <span class="stage-card-body">
+                <strong>${o.labelKo}</strong>
+                <small>${hintFor(o.choice)}</small>
+              </span>
+            </button>`,
         )
         .join("")}
     </div>
@@ -1777,6 +1958,11 @@ function renderFusion(): string {
     "융합의 별",
     `동일 종 2마리 → 진화 +1 · −마나 ${FUSION_MANA_COST}`,
     `<div class="hub-panel">
+    ${renderFusionReveal()}
+    <div class="guild-panel fusion-panel">
+      <p class="guild-panel-title">융합 규칙</p>
+      <p class="muted dojo-hint">같은 종의 두 마리를 합치면 진화 +1 · 높은 레벨·스킬·상징을 유지합니다.</p>
+    </div>
     <div class="stage-list">
       ${pairs.length
         ? pairs
@@ -1784,11 +1970,15 @@ function renderFusion(): string {
               const [a, b] = p.split(":");
               const ma = save.roster[Number(a)]!;
               const mb = save.roster[Number(b)]!;
+              const evo = Math.min(
+                MAX_EVOLVE,
+                Math.max(ma.evolve ?? 0, mb.evolve ?? 0) + 1,
+              );
               return `<button type="button" class="stage-card" data-fuse-a="${a}" data-fuse-b="${b}">
                 <span class="stage-card-mark" aria-hidden="true">融</span>
                 <span class="stage-card-body">
                   <strong>${describeOwned(ma)} + ${describeOwned(mb)}</strong>
-                  <small>융합 −마나 ${FUSION_MANA_COST}</small>
+                  <small>결과 진화 ${evo} · −마나 ${FUSION_MANA_COST}</small>
                 </span>
               </button>`;
             })
@@ -1827,6 +2017,9 @@ function stageButtons(list: StageDef[]): string {
 function renderStages(): string {
   const cleared = save.clearedStages.length;
   const bans = save.arenaBanIds ?? [];
+  const seasonWins = save.arenaSeasonWins ?? 0;
+  const claimed = save.seasonRewardsClaimed ?? 0;
+  const nextTierAt = (claimed + 1) * SEASON_REWARD_WINS;
   const banPool = [
     ...new Set(WORLD_ARENA_STAGES.flatMap((s) => s.enemyMonsterIds)),
   ];
@@ -1834,11 +2027,21 @@ function renderStages(): string {
     .map((id) => {
       const m = getMonster(id);
       const on = bans.includes(id);
-      return `<button type="button" class="chip ${on ? "active" : ""}" data-ban-toggle="${id}">
-        ${on ? "밴 " : ""}${m?.nameKo ?? id}
+      return `<button type="button" class="ban-chip${on ? " active" : ""}" data-ban-toggle="${id}">
+        <span class="ban-chip-mark" aria-hidden="true">${on ? "禁" : "可"}</span>
+        <span class="ban-chip-body">
+          <strong>${m?.nameKo ?? id}</strong>
+          <small>${on ? "밴 해제" : "밴 지정"}</small>
+        </span>
       </button>`;
     })
     .join("");
+  const section = (title: string, body: string, note?: string) =>
+    `<section class="stage-section">
+      <p class="section-label">${title}</p>
+      ${note ? `<p class="muted stages-note">${note}</p>` : ""}
+      ${body}
+    </section>`;
   return `<div class="stages-hub">
     <div class="stages-sky" aria-hidden="true">
       <img
@@ -1856,28 +2059,37 @@ function renderStages(): string {
     <div class="stages-content">
       <header class="stages-hud">
         <p class="stages-title">출정문</p>
-        <p class="stages-meta">클리어 ${cleared} · 시즌승 ${save.arenaSeasonWins ?? 0}</p>
+        <p class="stages-meta">클리어 ${cleared} · 시즌승 ${seasonWins}</p>
       </header>
-      <p class="section-label">시나리오 1 · 가렌숲</p>
-      <div class="stage-list">${stageButtons(CHAPTER1_STAGES)}</div>
-      <p class="section-label">시나리오 2 · 용맹의 탑</p>
-      <div class="stage-list">${stageButtons(CHAPTER2_STAGES)}</div>
-      <p class="section-label">상징 심층</p>
-      <div class="stage-list">${stageButtons(DEPTH_STAGES)}</div>
-      <p class="section-label">아레나</p>
-      <div class="stage-list">${stageButtons(ARENA_STAGES)}</div>
-      <p class="section-label">요일 · 마법진 시련</p>
-      <div class="stage-list">${stageButtons([...WEEKDAY_STAGES, ...TRIAL_STAGES])}</div>
-      <p class="section-label">월드아레나 · 밴픽 (최대 2)</p>
-      <p class="muted stages-note">시즌승 ${save.arenaSeasonWins ?? 0} · 보상티어 ${save.seasonRewardsClaimed ?? 0} · 밴 ${bans.length ? bans.join(", ") : "없음"}</p>
-      <button type="button" class="secondary full stages-claim" id="btn-season-claim">
-        시즌 보상 수령 (승 ${(save.seasonRewardsClaimed ?? 0) + 1}×${SEASON_REWARD_WINS} 필요)
-      </button>
-      <div class="chip-row">${banRow}</div>
-      <div class="stage-list">${stageButtons(WORLD_ARENA_STAGES)}</div>
-      <p class="section-label">길드 레이드 (13×13 · 모듈 E/F · 쌍국)</p>
-      <p class="muted stages-note">기여도 ${save.guildContribution ?? 0} · 최고 단회 +${save.guildRaidBest ?? 0}</p>
-      <div class="stage-list">${stageButtons(GUILD_RAID_STAGES)}</div>
+      <div class="stages-summary">
+        <div class="stages-stat"><span>클리어</span><strong>${cleared}</strong></div>
+        <div class="stages-stat"><span>시즌승</span><strong>${seasonWins}</strong></div>
+        <div class="stages-stat"><span>밴</span><strong>${bans.length}/2</strong></div>
+      </div>
+      ${section("시나리오 1 · 가렌숲", `<div class="stage-list">${stageButtons(CHAPTER1_STAGES)}</div>`)}
+      ${section("시나리오 2 · 용맹의 탑", `<div class="stage-list">${stageButtons(CHAPTER2_STAGES)}</div>`)}
+      ${section("상징 심층", `<div class="stage-list">${stageButtons(DEPTH_STAGES)}</div>`)}
+      ${section("아레나", `<div class="stage-list">${stageButtons(ARENA_STAGES)}</div>`)}
+      ${section(
+        "요일 · 마법진 시련",
+        `<div class="stage-list">${stageButtons([...WEEKDAY_STAGES, ...TRIAL_STAGES])}</div>`,
+      )}
+      ${section(
+        "월드아레나 · 밴픽",
+        `<div class="season-panel">
+          <p class="season-panel-title">시즌 보상</p>
+          <p class="muted stages-note">다음 티어 ${nextTierAt}승 · 현재 티어 ${claimed}</p>
+          <button type="button" class="auth-btn-primary full" id="btn-season-claim">시즌 보상 수령</button>
+        </div>
+        <div class="ban-row">${banRow}</div>
+        <div class="stage-list">${stageButtons(WORLD_ARENA_STAGES)}</div>`,
+        `밴 ${bans.length ? bans.map((id) => getMonster(id)?.nameKo ?? id).join(", ") : "없음"} · 최대 2`,
+      )}
+      ${section(
+        "길드 레이드",
+        `<div class="stage-list">${stageButtons(GUILD_RAID_STAGES)}</div>`,
+        `13×13 · 기여 ${save.guildContribution ?? 0} · 최고 +${save.guildRaidBest ?? 0}`,
+      )}
     </div>
   </div>`;
 }
@@ -2118,13 +2330,15 @@ function bind(): void {
       if (view === "result" || view === "battle") {
         autoMode = false;
         clearAutoTimer();
-        if (nav === "home" || nav === "stages" || nav === "collect") {
+        if (nav !== "battle" && nav !== "result") {
           battle = null;
           dmgFloats = [];
-          if (nav === "home") {
-            currentStage = null;
-            lastReward = null;
-            lastScrollGain = 0;
+          if (nav === "home" || nav === "enhance" || nav === "shop" || nav === "party") {
+            if (nav === "home") {
+              currentStage = null;
+              lastReward = null;
+              lastScrollGain = 0;
+            }
           }
         }
       }
@@ -2192,16 +2406,11 @@ function bind(): void {
         view = "pond";
         render();
       } else if (id === "crystal_mine") {
-        const r = homeCollectCrystal(save);
-        save = r.save;
-        persist();
-        flash(r.message);
+        view = "mine";
         render();
       } else if (id === "wish") {
-        const r = runDailyWish(save);
-        save = r.save;
-        persist();
-        flash(r.message);
+        wishReveal = null;
+        view = "wish";
         render();
       } else if (id === "glory") {
         view = "glory";
@@ -2430,12 +2639,32 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-fuse-a]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      const a = save.roster[Number(btn.dataset.fuseA!)];
+      const b = save.roster[Number(btn.dataset.fuseB!)];
+      const materials =
+        a && b ? `${describeOwned(a)} + ${describeOwned(b)}` : "";
+      const keepUid = a?.uid;
       const r = runFusion(save, btn.dataset.fuseA!, btn.dataset.fuseB!);
       save = r.save;
       persist();
+      if (r.message.startsWith("융합:") && keepUid) {
+        const kept = save.roster.find((m) => m.uid === keepUid);
+        if (kept && materials) {
+          fusionReveal = {
+            materials,
+            result: describeOwned(kept),
+            cost: `−마나 ${FUSION_MANA_COST}`,
+          };
+        }
+      }
       flash(r.message);
       render();
     });
+  });
+
+  app.querySelector("#btn-fusion-dismiss")?.addEventListener("click", () => {
+    fusionReveal = null;
+    render();
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-glory]").forEach((btn) => {
@@ -2467,6 +2696,36 @@ function bind(): void {
     save = r.save;
     persist();
     flash(r.message);
+    render();
+  });
+
+  app.querySelector("#btn-mine-collect")?.addEventListener("click", () => {
+    const r = homeCollectCrystal(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+  app.querySelector("#btn-mine-upgrade")?.addEventListener("click", () => {
+    const r = runUpgradeBuilding(save, "crystal_mine");
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+
+  app.querySelector("#btn-wish-cast")?.addEventListener("click", () => {
+    const r = runDailyWish(save);
+    save = r.save;
+    persist();
+    if (r.message.startsWith("소원:")) {
+      wishReveal = r.message.replace(/^소원:\s*/, "");
+    }
+    flash(r.message);
+    render();
+  });
+  app.querySelector("#btn-wish-dismiss")?.addEventListener("click", () => {
+    wishReveal = null;
     render();
   });
 
