@@ -79,6 +79,9 @@ import {
   runImprintSymbol,
   runJoinGuild,
   runGuildCheckIn,
+  guildLeaderboard,
+  runClaimSeasonReward,
+  SEASON_REWARD_WINS,
   runPracticeDojo,
   runSellSymbol,
   runSetArenaBans,
@@ -226,6 +229,9 @@ function migrateSave(raw: unknown): PlayerSave | null {
     guildName: typeof p.guildName === "string" ? p.guildName : null,
     guildCheckInDay:
       typeof p.guildCheckInDay === "string" ? p.guildCheckInDay : null,
+    guildRaidBest: typeof p.guildRaidBest === "number" ? p.guildRaidBest : 0,
+    seasonRewardsClaimed:
+      typeof p.seasonRewardsClaimed === "number" ? p.seasonRewardsClaimed : 0,
   };
 }
 
@@ -1148,10 +1154,16 @@ function renderCaptureShop(): string {
 
 function renderGuild(): string {
   const name = save.guildName;
+  const board = guildLeaderboard(save)
+    .map(
+      (r, i) =>
+        `<div class="${r.self ? "self-rank" : ""}">${i + 1}. ${r.name} · 기여 ${r.contribution}${r.self ? " (나)" : ""}</div>`,
+    )
+    .join("");
   return `<div class="panel">
-    <p class="muted">길드 홀 · 실시간 전투는 후순위 · 출석/기여 스텁</p>
+    <p class="muted">길드 홀 · 비동기 순위 스텁 (실시간 후순위)</p>
     <p>길드: <strong>${name ?? "미가입"}</strong></p>
-    <p class="muted">기여도 ${save.guildContribution ?? 0} · 출석 ${save.guildCheckInDay ?? "—"}</p>
+    <p class="muted">기여 ${save.guildContribution ?? 0} · 레이드 최고 +${save.guildRaidBest ?? 0} · 출석 ${save.guildCheckInDay ?? "—"}</p>
     ${
       name
         ? `<button type="button" id="btn-guild-checkin">일일 출석</button>
@@ -1161,6 +1173,8 @@ function renderGuild(): string {
            </label>
            <button type="button" id="btn-guild-join">가입</button>`
     }
+    <p class="section-label">레이드 기여 순위</p>
+    <div class="guild-board muted">${board}</div>
     <button type="button" class="secondary full" data-nav="home" style="margin-top:10px">섬으로</button>
   </div>`;
 }
@@ -1244,11 +1258,14 @@ function renderStages(): string {
     <p class="section-label">요일 · 마법진 시련</p>
     <div class="stage-list">${stageButtons([...WEEKDAY_STAGES, ...TRIAL_STAGES])}</div>
     <p class="section-label">월드아레나 · 밴픽 (최대 2)</p>
-    <p class="muted">시즌승 ${save.arenaSeasonWins ?? 0} · 밴 ${bans.length ? bans.join(", ") : "없음"}</p>
+    <p class="muted">시즌승 ${save.arenaSeasonWins ?? 0} · 보상티어 ${save.seasonRewardsClaimed ?? 0} · 밴 ${bans.length ? bans.join(", ") : "없음"}</p>
+    <button type="button" class="secondary full" id="btn-season-claim" style="margin-bottom:8px">
+      시즌 보상 수령 (승 ${(save.seasonRewardsClaimed ?? 0) + 1}×${SEASON_REWARD_WINS} 필요)
+    </button>
     <div class="chip-row">${banRow}</div>
     <div class="stage-list">${stageButtons(WORLD_ARENA_STAGES)}</div>
-    <p class="section-label">길드 레이드 (13×13 · 모듈 E/F)</p>
-    <p class="muted">기여도 ${save.guildContribution ?? 0}</p>
+    <p class="section-label">길드 레이드 (13×13 · 모듈 E/F · 쌍국)</p>
+    <p class="muted">기여도 ${save.guildContribution ?? 0} · 최고 단회 +${save.guildRaidBest ?? 0}</p>
     <div class="stage-list">${stageButtons(GUILD_RAID_STAGES)}</div>
   </div>`;
 }
@@ -1294,11 +1311,13 @@ function renderBattle(manaPct: number): string {
     battle.modules.moduleG && !battle.finishReason
       ? ` · 묘수 ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? "✓" : ""}`
       : "";
+  const boardTag =
+    battle.boards.length > 1 ? ` · ${battle.boardLabel}` : "";
   const status = battle.finishReason
     ? battle.finishReason === "ally_win"
       ? "승리! (적 소환수 전멸)"
       : "패배... (아군 소환수 전멸)"
-    : `${battle.phase} · amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} · ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}`;
+    : `${battle.phase} · amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} · ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}${boardTag}`;
 
   const skillHint =
     battle.phase === "await_stone" && active?.team === "ally"
@@ -1317,6 +1336,14 @@ function renderBattle(manaPct: number): string {
       ${renderSkillButtons(active, awaitSkill)}
       <button type="button" id="sk-ult" class="ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>진문개방</button>
       <button type="button" id="sk-smart" ${awaitSkill ? "" : "disabled"}>추천</button>
+      ${
+        battle.boards.length > 1 &&
+        battle.phase === "await_stone" &&
+        active?.team === "ally" &&
+        !autoMode
+          ? `<button type="button" class="secondary" id="btn-board-switch">쌍국 ${battle.boardLabel === "A국" ? "→B" : "→A"}</button>`
+          : ""
+      }
     </div>`;
 
   return `<div class="battle-layout panel">
@@ -1762,6 +1789,21 @@ function bind(): void {
       flash(r.message);
       render();
     });
+  });
+
+  app.querySelector("#btn-season-claim")?.addEventListener("click", () => {
+    const r = runClaimSeasonReward(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+
+  app.querySelector("#btn-board-switch")?.addEventListener("click", () => {
+    if (!battle) return;
+    if (!battle.switchBoard("수동")) return;
+    refreshLegal();
+    render();
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-shop]").forEach((btn) => {

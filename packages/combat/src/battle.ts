@@ -49,6 +49,7 @@ import type {
 import {
   bossVictoryPoint,
   BRILLIANT_MISSION_GOAL,
+  DUAL_BOARD_SWITCH_INTERVAL,
   forbiddenZonePoints,
   pickCircleElement,
   type BattleModules,
@@ -131,13 +132,15 @@ export interface SkillResult {
 }
 
 export class Battle {
-  readonly board: Board;
+  /** One or two boards (쌍국). Prefer `board` getter for the active one. */
+  readonly boards: Board[];
+  activeBoardIndex = 0;
+  /** Tokens per board index. */
+  private tokensByBoard: BoardToken[][] = [];
   circle: CirclePhaseState;
   units: Unit[];
   allySummoner: SummonerState;
   enemySummoner: SummonerState;
-  /** Tokens sitting on empty intersections. */
-  tokens: BoardToken[] = [];
   amplify = 1;
   skillAmplifyBonus = 0;
   phase: BattlePhase = "idle";
@@ -169,8 +172,24 @@ export class Battle {
   private rng: () => number;
   private spawnWaveFn?: (wave: number) => Unit[];
 
+  get board(): Board {
+    return this.boards[this.activeBoardIndex]!;
+  }
+
+  get tokens(): BoardToken[] {
+    return this.tokensByBoard[this.activeBoardIndex]!;
+  }
+
+  set tokens(next: BoardToken[]) {
+    this.tokensByBoard[this.activeBoardIndex] = next;
+  }
+
   constructor(config: BattleConfig) {
-    this.board = new Board(config.boardSize);
+    const dual = !!config.modules?.dualBoard;
+    this.boards = dual
+      ? [new Board(config.boardSize), new Board(config.boardSize)]
+      : [new Board(config.boardSize)];
+    this.tokensByBoard = this.boards.map(() => []);
     this.circle = createCirclePhaseState(
       config.boardSize,
       config.resetThreshold,
@@ -223,6 +242,26 @@ export class Battle {
     if (this.forbiddenZone.length) {
       this.log.push(`금기구역: 중앙 ${this.forbiddenZone.length}점 착수 금지`);
     }
+    if (this.boards.length > 1) {
+      this.log.push(`쌍국: A국·B국 — ${DUAL_BOARD_SWITCH_INTERVAL}수마다 전환`);
+    }
+  }
+
+  get boardLabel(): string {
+    if (this.boards.length < 2) return "";
+    return this.activeBoardIndex === 0 ? "A국" : "B국";
+  }
+
+  /** Switch active board (쌍국). */
+  switchBoard(reason = "전환"): boolean {
+    if (this.boards.length < 2) return false;
+    this.activeBoardIndex = 1 - this.activeBoardIndex;
+    this.log.push(`쌍국 ${reason}: ${this.boardLabel}`);
+    return true;
+  }
+
+  isForbidden(p: Point): boolean {
+    return this.forbiddenZone.some((z) => z.x === p.x && z.y === p.y);
   }
 
   getUnit(id: string): Unit | undefined {
@@ -231,10 +270,6 @@ export class Battle {
 
   alive(team?: TeamId): Unit[] {
     return this.units.filter((u) => u.alive && (team ? u.team === team : true));
-  }
-
-  isForbidden(p: Point): boolean {
-    return this.forbiddenZone.some((z) => z.x === p.x && z.y === p.y);
   }
 
   tokenAt(x: number, y: number): BoardToken | undefined {
@@ -618,8 +653,8 @@ export class Battle {
     const prog = registerStoneSummon(this.circle);
     this.circle = prog.state;
     if (prog.shouldReset) {
-      resetBoardInPlace(this.board);
-      this.tokens = [];
+      for (const b of this.boards) resetBoardInPlace(b);
+      this.tokensByBoard = this.boards.map(() => []);
       this.log.push(
         `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${amplifyCapForPhase(this.circle.boardPhase)})`,
       );
@@ -634,6 +669,14 @@ export class Battle {
       ) {
         this.applyCircleEvent(rollCircleEvent(this.rng), unit);
       }
+    }
+
+    if (
+      this.boards.length > 1 &&
+      this.circle.stoneSummonCount > 0 &&
+      this.circle.stoneSummonCount % DUAL_BOARD_SWITCH_INTERVAL === 0
+    ) {
+      this.switchBoard("자동");
     }
 
     if (this.fogTurns > 0) this.fogTurns -= 1;

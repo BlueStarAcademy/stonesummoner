@@ -37,6 +37,8 @@ export {
   runImprintSymbol,
   runJoinGuild,
   runGuildCheckIn,
+  guildLeaderboard,
+  runClaimSeasonReward,
   runPracticeDojo,
   runSellSymbol,
   runSetArenaBans,
@@ -47,6 +49,9 @@ export {
   runUpgradeBuilding,
   skillUpManaCost,
   skillUpMinMonsterLevel,
+  SEASON_REWARD_WINS,
+  SEASON_REWARD_GLORY,
+  SEASON_REWARD_CRYSTAL,
   SCROLL_BUY_MANA_COST,
   FUSION_MANA_COST,
   ENERGY_CRYSTAL_COST,
@@ -59,4 +64,10 @@ export {
   stageUnlockLabel,
   SUMMON_SCROLL_COST,
 } from "./loop.js";
-export type { BattleReward, LoopStepResult, OwnedMonster, PlayerSave } from "./loop.js";
+export type {
+  BattleReward,
+  GuildRankRow,
+  LoopStepResult,
+  OwnedMonster,
+  PlayerSave,
+} from "./loop.js";

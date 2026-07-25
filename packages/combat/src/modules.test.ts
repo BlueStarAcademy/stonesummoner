@@ -73,6 +73,24 @@ describe("Modules E/F/G/H", () => {
     assert.equal(modulesForStage(raid).moduleF, true);
   });
 
+  it("enables dual boards for guild raid modules", () => {
+    const mods = modulesForStage(getStage("guild_raid_boss")!);
+    assert.equal(mods.dualBoard, true);
+    const b = new Battle({
+      boardSize: 5,
+      units: units(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      modules: { dualBoard: true },
+      rng: () => 0.1,
+    });
+    assert.equal(b.boards.length, 2);
+    assert.equal(b.boardLabel, "A국");
+    assert.equal(b.switchBoard("테스트"), true);
+    assert.equal(b.boardLabel, "B국");
+    assert.equal(b.activeBoardIndex, 1);
+  });
+
   it("blocks forbidden zone plays", () => {
     const b = new Battle({
       boardSize: 5,

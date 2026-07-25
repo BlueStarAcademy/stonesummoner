@@ -118,6 +118,10 @@ export interface PlayerSave {
   guildName: string | null;
   /** YYYY-MM-DD of last guild check-in. */
   guildCheckInDay: string | null;
+  /** Best single guild-raid contribution gain. */
+  guildRaidBest: number;
+  /** World-arena season reward tiers claimed. */
+  seasonRewardsClaimed: number;
 }
 
 export interface BattleReward {
@@ -297,6 +301,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     dojoDrills: 0,
     guildName: null,
     guildCheckInDay: null,
+    guildRaidBest: 0,
+    seasonRewardsClaimed: 0,
   };
 }
 
@@ -740,6 +746,58 @@ export function runGuildCheckIn(
       guildContribution: (save.guildContribution ?? 0) + contribGain,
     },
     message: `길드 출석 (${save.guildName}): 영광 +${gloryGain} · 기여 +${contribGain}`,
+  };
+}
+
+export interface GuildRankRow {
+  name: string;
+  contribution: number;
+  self?: boolean;
+}
+
+/** Async guild raid board stub (NPC + self). */
+export function guildLeaderboard(save: PlayerSave): GuildRankRow[] {
+  const selfScore = save.guildContribution ?? 0;
+  const selfName = save.guildName ? `${save.guildName}·나` : "무소속·나";
+  const npcs: GuildRankRow[] = [
+    { name: "심연수호·갑", contribution: Math.max(80, selfScore + 40) },
+    { name: "진문연맹·을", contribution: Math.max(55, selfScore + 10) },
+    { name: "사석사냥·병", contribution: Math.max(35, Math.floor(selfScore * 0.7)) },
+    { name: "화점길드·정", contribution: Math.max(20, Math.floor(selfScore * 0.4)) },
+    { name: "안개원정·무", contribution: 12 },
+  ];
+  return [...npcs, { name: selfName, contribution: selfScore, self: true }].sort(
+    (a, b) => b.contribution - a.contribution || (a.self ? -1 : 1),
+  );
+}
+
+export const SEASON_REWARD_WINS = 3;
+export const SEASON_REWARD_GLORY = 40;
+export const SEASON_REWARD_CRYSTAL = 6;
+
+/** Claim world-arena season reward every SEASON_REWARD_WINS wins. */
+export function runClaimSeasonReward(save: PlayerSave): LoopStepResult {
+  const wins = save.arenaSeasonWins ?? 0;
+  const claimed = save.seasonRewardsClaimed ?? 0;
+  const need = (claimed + 1) * SEASON_REWARD_WINS;
+  if (wins < need) {
+    return {
+      save,
+      message: `시즌 보상 잠김 — 월드아레나 승 ${wins}/${need}`,
+    };
+  }
+  const island = {
+    ...save.island,
+    crystal: save.island.crystal + SEASON_REWARD_CRYSTAL,
+  };
+  return {
+    save: {
+      ...save,
+      island,
+      gloryPoints: (save.gloryPoints ?? 0) + SEASON_REWARD_GLORY,
+      seasonRewardsClaimed: claimed + 1,
+    },
+    message: `시즌 보상 #${claimed + 1}: 영광 +${SEASON_REWARD_GLORY} · 크리스탈 +${SEASON_REWARD_CRYSTAL}`,
   };
 }
 
@@ -1365,9 +1423,11 @@ export function applyRewards(
 
   let contributionGain = 0;
   let guildContribution = save.guildContribution ?? 0;
+  let guildRaidBest = save.guildRaidBest ?? 0;
   if (stage.mode === "guild_raid") {
     contributionGain = 40 + jinmunGain * 5 + gloryGain * 2;
     guildContribution += contributionGain;
+    guildRaidBest = Math.max(guildRaidBest, contributionGain);
   }
 
   let arenaSeasonWins = save.arenaSeasonWins ?? 0;
@@ -1404,6 +1464,8 @@ export function applyRewards(
       dojoDrills: save.dojoDrills ?? 0,
       guildName: save.guildName ?? null,
       guildCheckInDay: save.guildCheckInDay ?? null,
+      guildRaidBest,
+      seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
     },
     reward: {
       mana: manaGain,
@@ -1462,6 +1524,8 @@ export function runSortie(
     dojoDrills: save.dojoDrills ?? 0,
     guildName: save.guildName ?? null,
     guildCheckInDay: save.guildCheckInDay ?? null,
+    guildRaidBest: save.guildRaidBest ?? 0,
+    seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
   };
   const battle = createStageBattle(stage, mid, {
     banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,

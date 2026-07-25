@@ -20,6 +20,8 @@ export interface BattleModules {
   manaRace?: boolean;
   /** Forbidden center zone (금기구역) — usually with moduleC. */
   forbidZone?: boolean;
+  /** Dual boards (쌍국) — Module F. */
+  dualBoard?: boolean;
 }
 
 /** Module H: map stage mode → active modules. */
@@ -40,7 +42,13 @@ export function modulesForStage(stage: StageDef): BattleModules {
     case "world_arena":
       return { moduleD: true, moduleE: true, manaRace: true };
     case "guild_raid":
-      return { moduleB: true, moduleE: true, moduleF: true, forbidZone: true };
+      return {
+        moduleB: true,
+        moduleE: true,
+        moduleF: true,
+        forbidZone: true,
+        dualBoard: true,
+      };
     case "weekday":
       return { moduleB: true, moduleG: true };
     case "scenario":
@@ -77,3 +85,5 @@ export function forbiddenZonePoints(size: number): Point[] {
 }
 
 export const BRILLIANT_MISSION_GOAL = 3;
+/** Auto-switch dual boards every N stone summons. */
+export const DUAL_BOARD_SWITCH_INTERVAL = 6;

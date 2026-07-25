@@ -25,6 +25,8 @@ import {
   runImprintSymbol,
   runJoinGuild,
   runGuildCheckIn,
+  guildLeaderboard,
+  runClaimSeasonReward,
   runPracticeDojo,
   runSellSymbol,
   runSetArenaBans,
@@ -229,6 +231,20 @@ describe("game loop", () => {
     assert.ok((check.save.guildContribution ?? 0) > (g.guildContribution ?? 0));
     const again = runGuildCheckIn(check.save, Date.parse("2026-07-25T18:00:00Z"));
     assert.match(again.message, /이미 출석/);
+    const ranks = guildLeaderboard(check.save);
+    assert.ok(ranks.some((r) => r.self));
+    assert.ok(ranks[0]!.contribution >= ranks[ranks.length - 1]!.contribution);
+
+    let season = {
+      ...check.save,
+      arenaSeasonWins: 3,
+      seasonRewardsClaimed: 0,
+    };
+    const claim = runClaimSeasonReward(season);
+    assert.match(claim.message, /시즌 보상/);
+    assert.equal(claim.save.seasonRewardsClaimed, 1);
+    const locked = runClaimSeasonReward(claim.save);
+    assert.match(locked.message, /잠김/);
   });
 
   it("sets party from roster indices", () => {
