@@ -17,6 +17,12 @@ import {
   runDemoLoop,
   runEnhance,
   runEnhanceGear,
+  runAwakenSummoner,
+  awakenManaCost,
+  awakenCrystalCost,
+  awakenMinLevel,
+  awakenLeaderAtkPct,
+  MAX_SUMMONER_AWAKEN,
   runEnhanceSymbol,
   runEquipSymbol,
   runUnequipSymbol,
@@ -412,6 +418,55 @@ describe("game loop", () => {
     const uq = runUnequipSymbol(eq.save, "1", 3);
     assert.match(uq.message, /해제/);
     assert.equal(uq.save.roster[1]!.symbolSlots[2], null);
+  });
+
+  it("awakens summoner with level/mana/crystal gates", () => {
+    let save = createNewSave(0);
+    assert.equal(save.summonerAwaken, 0);
+    assert.equal(awakenManaCost(0), 500);
+    assert.equal(awakenCrystalCost(0), 3);
+    assert.equal(awakenMinLevel(0), 5);
+    assert.equal(awakenLeaderAtkPct(2), 0.024);
+
+    const locked = runAwakenSummoner(save);
+    assert.match(locked.message, /해금|Lv/);
+    assert.equal(locked.save.summonerAwaken, 0);
+
+    save = {
+      ...save,
+      island: {
+        ...save.island,
+        summonerLevel: 5,
+        mana: 2000,
+        crystal: 20,
+      },
+    };
+    const ok = runAwakenSummoner(save);
+    assert.match(ok.message, /각성 \+1/);
+    assert.equal(ok.save.summonerAwaken, 1);
+    assert.equal(ok.save.island.mana, 2000 - 500);
+    assert.equal(ok.save.island.crystal, 20 - 3);
+    save = ok.save;
+
+    const battle = createStageBattle(getStage("garen_1_1")!, {
+      ...save,
+      summonerAwaken: 3,
+    });
+    const allySum = battle.units.find(
+      (u) => u.kind === "summoner" && u.team === "ally",
+    )!;
+    assert.match(allySum.name, /각성3/);
+    assert.ok(battle.allySummoner.skillPowerBonus >= 0.075);
+    assert.ok(battle.allySummoner.manaMax >= 100 + 24);
+
+    save = {
+      ...save,
+      summonerAwaken: MAX_SUMMONER_AWAKEN,
+      island: { ...save.island, summonerLevel: 99, mana: 99999, crystal: 99 },
+    };
+    const maxed = runAwakenSummoner(save);
+    assert.match(maxed.message, /최대/);
+    assert.equal(maxed.save.summonerAwaken, MAX_SUMMONER_AWAKEN);
   });
 
   it("lists roster", () => {

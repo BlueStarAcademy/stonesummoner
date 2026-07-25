@@ -49,6 +49,10 @@ import {
 } from "stonesummoner-home";
 import {
   applyRewards,
+  awakenCrystalCost,
+  awakenLeaderAtkPct,
+  awakenManaCost,
+  awakenMinLevel,
   createDemoSave,
   createNewSave,
   createStageBattle,
@@ -61,6 +65,8 @@ import {
   MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
+  MAX_SUMMONER_AWAKEN,
+  runAwakenSummoner,
   runBuyEnergy,
   runBuyGlory,
   runBuyScroll,
@@ -274,6 +280,15 @@ function migrateSave(raw: unknown): PlayerSave | null {
     guildRaidBest: typeof p.guildRaidBest === "number" ? p.guildRaidBest : 0,
     seasonRewardsClaimed:
       typeof p.seasonRewardsClaimed === "number" ? p.seasonRewardsClaimed : 0,
+    summonerAwaken: Math.min(
+      MAX_SUMMONER_AWAKEN,
+      Math.max(
+        0,
+        Math.floor(
+          typeof p.summonerAwaken === "number" ? p.summonerAwaken : 0,
+        ),
+      ),
+    ),
   };
 }
 
@@ -1053,7 +1068,7 @@ function render(): void {
         <h1>StoneSummoner ${demoTag}</h1>
       </div>
       <div class="resources">
-        <span class="res-chip res-lv">Lv.${island.summonerLevel}</span>
+        <span class="res-chip res-lv">Lv.${island.summonerLevel}${(save.summonerAwaken ?? 0) > 0 ? ` · 각성${save.summonerAwaken}` : ""}</span>
         <span class="res-chip res-mana">마나 ${Math.floor(island.mana)}</span>
         <span class="res-chip res-crystal">크리스탈 ${island.crystal}</span>
         <span class="res-chip">영광 ${save.gloryPoints ?? 0}</span>
@@ -1147,7 +1162,7 @@ function renderHome(): string {
       <div class="home-mist"></div>
     </div>
     <div class="home-hud">
-      <p class="home-level">서머너 Lv.${save.island.summonerLevel}</p>
+      <p class="home-level">서머너 Lv.${save.island.summonerLevel}${(save.summonerAwaken ?? 0) > 0 ? ` · 각성 ${save.summonerAwaken}` : ""}</p>
       <div class="home-exp" role="progressbar" aria-valuenow="${exp}" aria-valuemin="0" aria-valuemax="100">
         <div class="home-exp-fill" style="width:${Math.min(100, exp)}%"></div>
       </div>
@@ -1155,7 +1170,7 @@ function renderHome(): string {
     </div>
     <div class="island-grid">
       ${tile("summon_hearth", "召", "소환진", `소환서 ${save.scrolls}장`)}
-      ${tile("power_circle", "强", "강화진", "레벨 · 진화 · 스킬업")}
+      ${tile("power_circle", "强", "강화진", "레벨 · 각성 · 장비")}
       ${tile("shop", "商", "마법상점", "소환서 · 연마 · 각인")}
       ${tile("gateway", "門", "출정문", "시나리오 · 심층 · 아레나")}
       ${tile("mana_pond", "池", `진액 연못 Lv.${pondLv}`, `대기 ${storedMana} / ${pondCap}`, {
@@ -1616,8 +1631,30 @@ function renderEnhance(): string {
   const robe = gear.robe;
   const acc = gear.accessory;
   const orb = gear.orb;
+  const awaken = save.summonerAwaken ?? 0;
+  const awakenMax = awaken >= MAX_SUMMONER_AWAKEN;
+  const awakenNeedLv = awakenMinLevel(awaken);
+  const awakenMana = awakenManaCost(awaken);
+  const awakenCrystal = awakenCrystalCost(awaken);
+  const awakenLocked = save.island.summonerLevel < awakenNeedLv;
+  const awakenHint = awakenMax
+    ? `각성 MAX (+${MAX_SUMMONER_AWAKEN})`
+    : awakenLocked
+      ? `각성 Lv.${awakenNeedLv}+`
+      : `각성 +${awaken + 1} (−마나 ${awakenMana} · −크리스탈 ${awakenCrystal})`;
+  const leaderPct = (awakenLeaderAtkPct(awaken) * 100).toFixed(1);
   const body = `<div class="hub-panel">
     ${renderForgeReveal()}
+    <p class="section-label">서머너 각성</p>
+    <div class="stage-list">
+      <button type="button" class="stage-card" id="btn-awaken" data-awaken ${awakenMax ? "disabled" : ""}>
+        <span class="stage-card-mark" aria-hidden="true">覺</span>
+        <span class="stage-card-body">
+          <strong>각성 ${awaken}/${MAX_SUMMONER_AWAKEN}</strong>
+          <small>리더 공+${leaderPct}% · 마나·스킬 영구 보너스 · ${awakenHint}</small>
+        </span>
+      </button>
+    </div>
     <p class="section-label">몬스터</p>
     <div class="stage-list">
       ${save.roster
@@ -1766,7 +1803,7 @@ function renderEnhance(): string {
     </div>
     <button type="button" class="secondary full auth-btn-ghost" data-nav="home" style="margin-top:10px">섬으로</button>
   </div>`;
-  return hubShell("강화진", "몬스터 · 장비 · 상징", body);
+  return hubShell("강화진", "각성 · 몬스터 · 장비 · 상징", body);
 }
 
 function renderShop(): string {
@@ -2554,6 +2591,16 @@ function bind(): void {
           ? raw
           : "accessory";
       const r = runEnhanceGear(save, slot);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-awaken]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const r = runAwakenSummoner(save);
       save = r.save;
       persist();
       flash(r.message);

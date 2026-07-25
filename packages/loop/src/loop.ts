@@ -102,6 +102,8 @@ export interface PlayerSave {
   party: string[];
   scrolls: number;
   gear: SummonerGear;
+  /** Summoner awaken/transcend stub (0..MAX_SUMMONER_AWAKEN). */
+  summonerAwaken: number;
   /** Phase 2: arena glory currency. */
   gloryPoints: number;
   /** Phase 2: magic-circle trial tokens. */
@@ -172,26 +174,52 @@ function equippedSymbols(
     .filter((s): s is SymbolInstance => !!s);
 }
 
+export const MAX_SUMMONER_AWAKEN = 5;
+
+/** Mana cost to raise awaken → awaken+1 */
+export function awakenManaCost(awaken: number): number {
+  return 500 + awaken * 400;
+}
+
+export function awakenCrystalCost(awaken: number): number {
+  return 3 + awaken * 2;
+}
+
+/** Minimum summoner level to attempt this awaken step. */
+export function awakenMinLevel(awaken: number): number {
+  return 5 + awaken * 3;
+}
+
+export function awakenLeaderAtkPct(awaken: number): number {
+  return Math.max(0, awaken) * 0.012;
+}
+
 function buildSummonerState(
   unitId: string,
   gear: SummonerGear,
   weakBoard = false,
+  awaken = 0,
 ): SummonerState {
   const g = normalizeSummonerGear(gear);
   const pieces = [g.weapon, g.robe, g.accessory, g.orb];
+  const a = Math.max(0, awaken);
   const regen =
-    0.85 + pieces.reduce((n, p) => n + (p.manaRegenBonus ?? 0), 0);
+    0.85 +
+    pieces.reduce((n, p) => n + (p.manaRegenBonus ?? 0), 0) +
+    a * 0.06;
   const manaMax =
-    100 + pieces.reduce((n, p) => n + (p.manaMaxBonus ?? 0), 0);
+    100 +
+    pieces.reduce((n, p) => n + (p.manaMaxBonus ?? 0), 0) +
+    a * 8;
   const boardSense = weakBoard
     ? 0.02
-    : 0.05 + pieces.reduce((n, p) => n + (p.boardSenseBonus ?? 0), 0);
+    : 0.05 +
+      pieces.reduce((n, p) => n + (p.boardSenseBonus ?? 0), 0) +
+      a * 0.015;
   const startPct =
-    0.2 + pieces.reduce((n, p) => n + (p.startManaPct ?? 0), 0);
-  const skillPowerBonus = pieces.reduce(
-    (n, p) => n + (p.skillPowerBonus ?? 0),
-    0,
-  );
+    0.2 + pieces.reduce((n, p) => n + (p.startManaPct ?? 0), 0) + a * 0.01;
+  const skillPowerBonus =
+    pieces.reduce((n, p) => n + (p.skillPowerBonus ?? 0), 0) + a * 0.025;
   return {
     unitId,
     mana: Math.min(manaMax, manaMax * startPct),
@@ -299,6 +327,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     party,
     scrolls,
     gear,
+    summonerAwaken: 0,
     gloryPoints: 0,
     jinmunStones: 0,
     gloryLevels: {},
@@ -1097,6 +1126,51 @@ export function runEnhanceGear(
   };
 }
 
+/** Summoner awaken/transcend stub: permanent mana/skill/leader bonuses. */
+export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
+  const cur = save.summonerAwaken ?? 0;
+  if (cur >= MAX_SUMMONER_AWAKEN) {
+    return {
+      save,
+      message: `서머너 각성 이미 최대(+${MAX_SUMMONER_AWAKEN})`,
+    };
+  }
+  const needLv = awakenMinLevel(cur);
+  if (save.island.summonerLevel < needLv) {
+    return {
+      save,
+      message: `각성 해금: 서머너 Lv.${needLv}+ 필요 (현재 ${save.island.summonerLevel})`,
+    };
+  }
+  const manaCost = awakenManaCost(cur);
+  const crystalCost = awakenCrystalCost(cur);
+  if (save.island.mana < manaCost) {
+    return {
+      save,
+      message: `마나 부족 (필요 ${manaCost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  if (save.island.crystal < crystalCost) {
+    return {
+      save,
+      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${save.island.crystal})`,
+    };
+  }
+  const next = cur + 1;
+  return {
+    save: {
+      ...save,
+      summonerAwaken: next,
+      island: {
+        ...save.island,
+        mana: save.island.mana - manaCost,
+        crystal: save.island.crystal - crystalCost,
+      },
+    },
+    message: `서머너 각성 +${next} (−마나 ${manaCost} · −크리스탈 ${crystalCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
+  };
+}
+
 export function runEnhanceSymbol(
   save: PlayerSave,
   idOrIndex: string,
@@ -1330,11 +1404,23 @@ export function createStageBattle(
   }
 
   const lvl = save?.island.summonerLevel ?? 1;
+  const awaken = save?.summonerAwaken ?? 0;
   const robeHp = gear.robe.summonerHpBonus ?? 0;
   const robeDef = gear.robe.summonerDefBonus ?? 0;
+  const leaderPct = awakenLeaderAtkPct(awaken);
+  if (leaderPct > 0) {
+    for (const u of allyMonsters) {
+      u.stats = {
+        ...u.stats,
+        atk: Math.round(u.stats.atk * (1 + leaderPct)),
+        hp: Math.round(u.stats.hp * (1 + leaderPct * 0.5)),
+      };
+      u.hp = u.stats.hp;
+    }
+  }
   const allySummonerUnit = makeUnit({
     id: "a-sum",
-    name: `서머너 Lv.${lvl}`,
+    name: `서머너 Lv.${lvl}${awaken > 0 ? ` · 각성${awaken}` : ""}`,
     team: "ally",
     kind: "summoner",
     element: "light",
@@ -1343,13 +1429,15 @@ export function createStageBattle(
         500 +
         lvl * 20 +
         gear.accessory.manaMaxBonus * 2 +
-        robeHp,
+        robeHp +
+        awaken * 30,
       atk: 85 + lvl * 3,
       def:
         42 +
         Math.floor(gear.accessory.enhance) +
         Math.floor(lvl / 2) +
-        robeDef,
+        robeDef +
+        awaken * 3,
       spd: 98 + Math.floor(lvl / 5),
       critRate: 15,
       critDmg: 50,
@@ -1394,11 +1482,12 @@ export function createStageBattle(
   return new Battle({
     boardSize: stage.boardSize,
     units: [...allyUnits, ...enemyUnits],
-    allySummoner: buildSummonerState("a-sum", gear, false),
+    allySummoner: buildSummonerState("a-sum", gear, false, awaken),
     enemySummoner: buildSummonerState(
       "e-sum",
       createStarterGear(),
       true,
+      0,
     ),
     powerGapAmplifyCap: powerGapCap,
     totalWaves,
@@ -1538,6 +1627,7 @@ export function applyRewards(
       guildCheckInDay: save.guildCheckInDay ?? null,
       guildRaidBest,
       seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
+      summonerAwaken: save.summonerAwaken ?? 0,
     },
     reward: {
       mana: manaGain,
@@ -1598,6 +1688,7 @@ export function runSortie(
     guildCheckInDay: save.guildCheckInDay ?? null,
     guildRaidBest: save.guildRaidBest ?? 0,
     seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
+    summonerAwaken: save.summonerAwaken ?? 0,
   };
   const battle = createStageBattle(stage, mid, {
     banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,
