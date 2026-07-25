@@ -32,7 +32,9 @@ export {
   createStarterGear,
   describeGear,
   gearEnhanceManaCost,
+  gearLeaderAtkPct,
   MAX_GEAR_ENHANCE,
+  normalizeGearPiece,
   normalizeSummonerGear,
 } from "./gear.js";
 export type { GearPiece, GearSlot, SummonerGear } from "./gear.js";

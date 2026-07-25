@@ -16,6 +16,7 @@ import {
   describeGear,
   describeSymbol,
   gearEnhanceManaCost,
+  gearLeaderAtkPct,
   getGloryBuilding,
   getMonster,
   normalizeSummonerGear,
@@ -201,7 +202,7 @@ function buildSummonerState(
   awaken = 0,
 ): SummonerState {
   const g = normalizeSummonerGear(gear);
-  const pieces = [g.weapon, g.robe, g.accessory, g.orb];
+  const pieces = [g.weapon, g.robe, g.accessory, g.orb, g.cloak, g.ring];
   const a = Math.max(0, awaken);
   const regen =
     0.85 +
@@ -858,11 +859,15 @@ export function listRoster(save: PlayerSave): string[] {
 
 export function listGear(save: PlayerSave): string[] {
   const gear = normalizeSummonerGear(save.gear);
+  const leader = (gearLeaderAtkPct(gear) * 100).toFixed(1);
   return [
     `무기 ${describeGear(gear.weapon)} · 스킬+${(gear.weapon.skillPowerBonus * 100).toFixed(0)}%`,
     `로브 ${describeGear(gear.robe)} · HP+${gear.robe.summonerHpBonus} DEF+${gear.robe.summonerDefBonus}`,
     `장신구 ${describeGear(gear.accessory)} · regen+${gear.accessory.manaRegenBonus.toFixed(2)} max+${gear.accessory.manaMaxBonus}`,
     `마법구 ${describeGear(gear.orb)} · sense+${gear.orb.boardSenseBonus.toFixed(2)}`,
+    `망토 ${describeGear(gear.cloak)} · HP+${gear.cloak.summonerHpBonus} 리더+${(gear.cloak.leaderAtkBonus * 100).toFixed(1)}%`,
+    `반지 ${describeGear(gear.ring)} · 스킬+${(gear.ring.skillPowerBonus * 100).toFixed(0)}% 리더+${(gear.ring.leaderAtkBonus * 100).toFixed(1)}%`,
+    `리더 합산 ATK +${leader}%`,
   ];
 }
 
@@ -1405,9 +1410,12 @@ export function createStageBattle(
 
   const lvl = save?.island.summonerLevel ?? 1;
   const awaken = save?.summonerAwaken ?? 0;
-  const robeHp = gear.robe.summonerHpBonus ?? 0;
-  const robeDef = gear.robe.summonerDefBonus ?? 0;
-  const leaderPct = awakenLeaderAtkPct(awaken);
+  const robeHp =
+    (gear.robe.summonerHpBonus ?? 0) + (gear.cloak.summonerHpBonus ?? 0);
+  const robeDef =
+    (gear.robe.summonerDefBonus ?? 0) + (gear.cloak.summonerDefBonus ?? 0);
+  const leaderPct =
+    awakenLeaderAtkPct(awaken) + gearLeaderAtkPct(gear);
   if (leaderPct > 0) {
     for (const u of allyMonsters) {
       u.stats = {

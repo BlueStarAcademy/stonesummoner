@@ -1660,6 +1660,8 @@ function renderEnhance(): string {
   const robe = gear.robe;
   const acc = gear.accessory;
   const orb = gear.orb;
+  const cloak = gear.cloak;
+  const ring = gear.ring;
   const awaken = save.summonerAwaken ?? 0;
   const awakenMax = awaken >= MAX_SUMMONER_AWAKEN;
   const awakenNeedLv = awakenMinLevel(awaken);
@@ -1774,6 +1776,20 @@ function renderEnhance(): string {
         <span class="stage-card-body">
           <strong>${describeGear(orb)}</strong>
           <small>${orb.enhance >= MAX_GEAR_ENHANCE ? "최대" : `강화 −마나 ${gearEnhanceManaCost(orb.enhance)}`}</small>
+        </span>
+      </button>
+      <button type="button" class="stage-card" data-gear="cloak" ${cloak.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
+        <span class="stage-card-mark" aria-hidden="true">氅</span>
+        <span class="stage-card-body">
+          <strong>${describeGear(cloak)}</strong>
+          <small>HP+${cloak.summonerHpBonus} 리더+${(cloak.leaderAtkBonus * 100).toFixed(1)}% · ${cloak.enhance >= MAX_GEAR_ENHANCE ? "MAX" : `강화 −마나 ${gearEnhanceManaCost(cloak.enhance)}`}</small>
+        </span>
+      </button>
+      <button type="button" class="stage-card" data-gear="ring" ${ring.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
+        <span class="stage-card-mark" aria-hidden="true">環</span>
+        <span class="stage-card-body">
+          <strong>${describeGear(ring)}</strong>
+          <small>스킬+${(ring.skillPowerBonus * 100).toFixed(0)}% 리더+${(ring.leaderAtkBonus * 100).toFixed(1)}% · ${ring.enhance >= MAX_GEAR_ENHANCE ? "MAX" : `강화 −마나 ${gearEnhanceManaCost(ring.enhance)}`}</small>
         </span>
       </button>
     </div>
@@ -2620,6 +2636,8 @@ function bind(): void {
         raw === "weapon" ||
         raw === "robe" ||
         raw === "orb" ||
+        raw === "cloak" ||
+        raw === "ring" ||
         raw === "accessory"
           ? raw
           : "accessory";

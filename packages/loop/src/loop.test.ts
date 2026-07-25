@@ -375,7 +375,7 @@ describe("game loop", () => {
     assert.ok(save.gear.weapon);
     assert.ok(save.gear.robe);
     assert.ok(save.gear.accessory);
-    assert.equal(listGear(save).length, 4);
+    assert.equal(listGear(save).length, 7);
     assert.ok(listSymbols(save).length >= 2);
 
     const g = runEnhanceGear(save, "orb");
@@ -390,6 +390,20 @@ describe("game loop", () => {
       w.save.gear.weapon.skillPowerBonus > save.gear.weapon.skillPowerBonus,
     );
     save = w.save;
+
+    const cloak = runEnhanceGear(save, "cloak");
+    assert.match(cloak.message, /장비 강화/);
+    assert.equal(cloak.save.gear.cloak.enhance, 1);
+    assert.ok(
+      cloak.save.gear.cloak.leaderAtkBonus > save.gear.cloak.leaderAtkBonus,
+    );
+    save = cloak.save;
+
+    const ring = runEnhanceGear(save, "ring");
+    assert.match(ring.message, /장비 강화/);
+    assert.equal(ring.save.gear.ring.enhance, 1);
+    assert.ok(ring.save.gear.ring.leaderAtkBonus > save.gear.ring.leaderAtkBonus);
+    save = ring.save;
 
     const se = runEnhanceSymbol(save, "0");
     assert.match(se.message, /상징 강화/);

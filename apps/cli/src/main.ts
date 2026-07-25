@@ -70,7 +70,7 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | crystal | wish | upgrade | glory [id] | fuse <a> <b> | energy [n] | essence | craft | dojo | sell-sym <i> | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | awaken | gear | enh-gear <wpn|robe|acc|orb> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
+    "명령: collect | crystal | wish | upgrade | glory [id] | fuse <a> <b> | energy [n] | essence | craft | dojo | sell-sym <i> | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | awaken | gear | enh-gear <wpn|robe|acc|orb|cloak|ring> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
@@ -252,7 +252,11 @@ async function interactive(): Promise<void> {
             ? "weapon"
             : arg === "robe" || arg === "r"
               ? "robe"
-              : "accessory";
+              : arg === "cloak" || arg === "c" || arg === "mantle"
+                ? "cloak"
+                : arg === "ring" || arg === "rg"
+                  ? "ring"
+                  : "accessory";
       const r = runEnhanceGear(save, slot);
       save = r.save;
       console.log(r.message);

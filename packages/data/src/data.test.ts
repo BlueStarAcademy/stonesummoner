@@ -54,14 +54,18 @@ describe("phase1 data", () => {
     assert.equal(s.slot, 2);
   });
 
-  it("creates starter gear with four slots", () => {
+  it("creates starter gear with six slots", () => {
     const g = createStarterGear();
     assert.equal(g.weapon.slot, "weapon");
     assert.equal(g.robe.slot, "robe");
     assert.equal(g.accessory.slot, "accessory");
     assert.equal(g.orb.slot, "orb");
+    assert.equal(g.cloak.slot, "cloak");
+    assert.equal(g.ring.slot, "ring");
     assert.ok(g.weapon.skillPowerBonus > 0);
     assert.ok(g.robe.summonerHpBonus > 0);
+    assert.ok(g.cloak.leaderAtkBonus > 0);
+    assert.ok(g.ring.leaderAtkBonus > 0);
     assert.ok(gearEnhanceManaCost(0) > 0);
   });
 
@@ -91,6 +95,9 @@ describe("phase1 data", () => {
     assert.equal(g.weapon.slot, "weapon");
     assert.equal(g.robe.slot, "robe");
     assert.equal(g.accessory.enhance, 2);
+    assert.equal(g.cloak.slot, "cloak");
+    assert.equal(g.ring.slot, "ring");
+    assert.ok(g.cloak.leaderAtkBonus > 0);
     assert.equal(g.accessory.skillPowerBonus, 0);
     assert.equal(g.weapon.skillPowerBonus > 0, true);
   });
