@@ -25,14 +25,17 @@ import {
   describeGear,
   describeSymbol,
   gearEnhanceManaCost,
+  gearSellMana,
   GEAR_SET_AFFIX_MANA,
   GEAR_SETS,
   getMonster,
   getStage,
+  MAX_GEAR_BAG,
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
-  summarizeGearSets,
+  normalizeGearPiece,
   normalizeSummonerGear,
+  summarizeGearSets,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_IMPRINT_CRYSTAL_COST,
   symbolEnhanceManaCost,
@@ -72,6 +75,8 @@ import {
   MAX_SUMMONER_AWAKEN,
   runAwakenSummoner,
   runAffixGearSet,
+  runEquipGearBag,
+  runSellGearBag,
   runBuyEnergy,
   runBuyGlory,
   runBuyScroll,
@@ -270,6 +275,9 @@ function migrateSave(raw: unknown): PlayerSave | null {
     party: p.party?.length ? p.party : base.party,
     scrolls: typeof p.scrolls === "number" ? p.scrolls : base.scrolls,
     gear: normalizeSummonerGear(p.gear ?? base.gear),
+    gearBag: Array.isArray(p.gearBag)
+      ? p.gearBag.map((g) => normalizeGearPiece(g, g.slot)).slice(0, 40)
+      : [],
     gloryPoints: typeof p.gloryPoints === "number" ? p.gloryPoints : 0,
     jinmunStones: typeof p.jinmunStones === "number" ? p.jinmunStones : 0,
     gloryLevels: p.gloryLevels ?? {},
@@ -534,7 +542,7 @@ function renderResult(): string {
         <p class="section-label">장비 드롭</p>
         <p class="result-drop-card">${describeGear(reward.gear)}</p>
         <div class="result-drop-cta">
-          <button type="button" class="auth-btn-primary" data-nav="enhance">강화진에서 확인</button>
+          <button type="button" class="auth-btn-primary" data-nav="enhance">강화진 가방에서 장착</button>
         </div>
       </div>`
       : "",
@@ -1846,6 +1854,28 @@ function renderEnhance(): string {
         )
         .join("")}
     </div>
+    <p class="section-label">장비 가방 (${(save.gearBag ?? []).length}/${MAX_GEAR_BAG})</p>
+    <div class="stage-list gear-bag">
+      ${(save.gearBag ?? []).length === 0
+        ? `<p class="muted">가방이 비어 있습니다. 장비 금고에서 드롭을 획득하세요.</p>`
+        : (save.gearBag ?? [])
+            .map(
+              (p, i) => `<div class="sym-card">
+            <button type="button" class="sym-card-main" data-gear-equip="${i}">
+              <span class="stage-card-mark" aria-hidden="true">${p.slot[0]?.toUpperCase() ?? "裝"}</span>
+              <span class="stage-card-body">
+                <strong>${describeGear(p)}</strong>
+                <small>${p.slot} · 장착 시 기존 장비 → 가방</small>
+              </span>
+            </button>
+            <div class="sym-card-actions">
+              <button type="button" class="secondary" data-gear-equip="${i}">장착</button>
+              <button type="button" class="secondary" data-gear-sell="${i}">+${gearSellMana(p)}</button>
+            </div>
+          </div>`,
+            )
+            .join("")}
+    </div>
     <p class="section-label">상징</p>
     ${
       equipPickSymIndex != null && save.symbols[equipPickSymIndex]
@@ -2243,7 +2273,7 @@ function renderStages(): string {
       ${section(
         "장비 금고",
         `<div class="stage-list">${stageButtons(EQUIP_STAGES)}</div>`,
-        "클리어 시 서머너 장비 드롭 · 해당 슬롯 자동 장착",
+        "클리어 시 장비 가방 보관 · 강화진에서 장착/판매",
       )}
       ${section(
         "월드아레나 · 밴픽",
@@ -2729,6 +2759,28 @@ function bind(): void {
         return;
       }
       const r = runAffixGearSet(save, slot, setRaw);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-gear-equip]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.gearEquip ?? "-1");
+      const r = runEquipGearBag(save, idx);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-gear-sell]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.gearSell ?? "-1");
+      const r = runSellGearBag(save, idx);
       save = r.save;
       persist();
       flash(r.message);

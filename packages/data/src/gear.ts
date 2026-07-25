@@ -406,6 +406,14 @@ export function describeGear(piece: GearPiece): string {
   return `${piece.nameKo} +${piece.enhance} [${set}]`;
 }
 
+/** Mana refund when selling a bag piece. */
+export function gearSellMana(piece: GearPiece): number {
+  return 40 + piece.enhance * 30 + Math.round((piece.leaderAtkBonus ?? 0) * 500);
+}
+
+/** Max unequipped gear pieces in the bag. */
+export const MAX_GEAR_BAG = 20;
+
 const GEAR_SLOTS: GearSlot[] = [
   "weapon",
   "robe",

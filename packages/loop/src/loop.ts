@@ -17,11 +17,13 @@ import {
   describeSymbol,
   gearEnhanceManaCost,
   gearLeaderAtkPct,
+  gearSellMana,
   gearSetBonuses,
   GEAR_SET_AFFIX_MANA,
   getGearSet,
   getGloryBuilding,
   getMonster,
+  MAX_GEAR_BAG,
   normalizeSummonerGear,
   rollGearDrop,
   rollSymbolDrop,
@@ -110,6 +112,8 @@ export interface PlayerSave {
   party: string[];
   scrolls: number;
   gear: SummonerGear;
+  /** Unequipped gear drops (equip vault bag). */
+  gearBag: GearPiece[];
   /** Summoner awaken/transcend stub (0..MAX_SUMMONER_AWAKEN). */
   summonerAwaken: number;
   /** Phase 2: arena glory currency. */
@@ -144,7 +148,7 @@ export interface BattleReward {
   contribution?: number;
   expNote: string;
   symbol?: SymbolInstance;
-  /** Equip dungeon wearable drop (auto-equipped). */
+  /** Equip dungeon wearable drop (stored in gearBag). */
   gear?: GearPiece;
   victory: boolean;
   summonerExp?: number;
@@ -346,6 +350,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     party,
     scrolls,
     gear,
+    gearBag: [],
     summonerAwaken: 0,
     gloryPoints: 0,
     jinmunStones: 0,
@@ -894,7 +899,17 @@ export function listGear(save: PlayerSave): string[] {
     `반지 ${describeGear(gear.ring)} · 스킬+${(gear.ring.skillPowerBonus * 100).toFixed(0)}% 리더+${(gear.ring.leaderAtkBonus * 100).toFixed(1)}%`,
     `세트 ${sets || "없음"}`,
     `리더 합산 ATK +${leader}%`,
+    `가방 ${(save.gearBag ?? []).length}/${MAX_GEAR_BAG}`,
   ];
+}
+
+export function listGearBag(save: PlayerSave): string[] {
+  const bag = save.gearBag ?? [];
+  if (bag.length === 0) return ["(가방 비어 있음)"];
+  return bag.map(
+    (p, i) =>
+      `[${i}] ${describeGear(p)} · 판매 +${gearSellMana(p)} · 슬롯 ${p.slot}`,
+  );
 }
 
 export function listSymbols(save: PlayerSave): string[] {
@@ -1190,6 +1205,46 @@ export function runAffixGearSet(
   return {
     save: { ...save, island, gear },
     message: `세트 부여: ${describeGear(next)} (−마나 ${GEAR_SET_AFFIX_MANA})${active ? ` · 활성 ${active}` : ""}`,
+  };
+}
+
+/** Equip a bag piece onto its slot; displaced piece returns to the bag. */
+export function runEquipGearBag(
+  save: PlayerSave,
+  bagIndex: number,
+): LoopStepResult {
+  const bag = [...(save.gearBag ?? [])];
+  const piece = bag[bagIndex];
+  if (!piece) {
+    return { save, message: `가방 인덱스 없음: ${bagIndex}` };
+  }
+  const gearNorm = normalizeSummonerGear(save.gear);
+  const displaced = gearNorm[piece.slot];
+  bag.splice(bagIndex, 1);
+  bag.push(displaced);
+  const gear = { ...gearNorm, [piece.slot]: piece };
+  return {
+    save: { ...save, gear, gearBag: bag },
+    message: `장비 장착: ${describeGear(piece)} · 해제 ${describeGear(displaced)} → 가방`,
+  };
+}
+
+/** Sell a bag piece for mana. */
+export function runSellGearBag(
+  save: PlayerSave,
+  bagIndex: number,
+): LoopStepResult {
+  const bag = [...(save.gearBag ?? [])];
+  const piece = bag[bagIndex];
+  if (!piece) {
+    return { save, message: `가방 인덱스 없음: ${bagIndex}` };
+  }
+  const gain = gearSellMana(piece);
+  bag.splice(bagIndex, 1);
+  const island = { ...save.island, mana: save.island.mana + gain };
+  return {
+    save: { ...save, island, gearBag: bag },
+    message: `장비 판매: ${describeGear(piece)} (+마나 ${gain})`,
   };
 }
 
@@ -1650,7 +1705,9 @@ export function applyRewards(
   }
 
   let gear = normalizeSummonerGear(save.gear);
+  let gearBag = [...(save.gearBag ?? [])];
   let gearDrop: GearPiece | undefined;
+  let bagSoldNote = "";
   if (stage.mode === "equip") {
     const gearChance = stage.gearDropChance ?? 0.75;
     if (rng() < gearChance) {
@@ -1658,7 +1715,13 @@ export function applyRewards(
       if (stage.stage >= 2 && gearDrop.enhance < MAX_GEAR_ENHANCE) {
         gearDrop = bumpGearEnhance(gearDrop);
       }
-      gear = { ...gear, [gearDrop.slot]: gearDrop };
+      if (gearBag.length >= MAX_GEAR_BAG) {
+        const sold = gearBag.shift()!;
+        const gain = gearSellMana(sold);
+        island = { ...island, mana: island.mana + gain };
+        bagSoldNote = ` · 가방초과 판매 ${describeGear(sold)}(+${gain})`;
+      }
+      gearBag.push(gearDrop);
     }
   }
 
@@ -1694,7 +1757,7 @@ export function applyRewards(
   if (jinmunGain > 0) extras.push(`진문석 +${jinmunGain}`);
   if (contributionGain > 0) extras.push(`기여도 +${contributionGain}`);
   if (stage.mode === "world_arena") extras.push(`시즌승 ${arenaSeasonWins}`);
-  if (gearDrop) extras.push(`장비 ${describeGear(gearDrop)}`);
+  if (gearDrop) extras.push(`장비 ${describeGear(gearDrop)} → 가방`);
   const levelNote =
     leveled.levelsGained > 0
       ? ` · 서머너 Lv.${island.summonerLevel}(+${leveled.levelsGained})`
@@ -1706,6 +1769,7 @@ export function applyRewards(
       island,
       symbols,
       gear,
+      gearBag,
       clearedStages: cleared,
       scrolls,
       gloryPoints,
@@ -1727,7 +1791,7 @@ export function applyRewards(
       glory: gloryGain || undefined,
       jinmun: jinmunGain || undefined,
       contribution: contributionGain || undefined,
-      expNote: `${stage.nameKo} 클리어 · ${extras.join(" · ")}${levelNote}`,
+      expNote: `${stage.nameKo} 클리어 · ${extras.join(" · ")}${bagSoldNote}${levelNote}`,
       symbol,
       gear: gearDrop,
       victory: true,
@@ -1782,6 +1846,7 @@ export function runSortie(
     guildRaidBest: save.guildRaidBest ?? 0,
     seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
     summonerAwaken: save.summonerAwaken ?? 0,
+    gearBag: save.gearBag ?? [],
   };
   const battle = createStageBattle(stage, mid, {
     banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,

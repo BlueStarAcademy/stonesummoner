@@ -18,6 +18,8 @@ import {
   runEnhance,
   runEnhanceGear,
   runAffixGearSet,
+  runEquipGearBag,
+  runSellGearBag,
   runAwakenSummoner,
   awakenManaCost,
   awakenCrystalCost,
@@ -121,8 +123,17 @@ describe("game loop", () => {
     assert.ok(r.reward);
     if (r.reward?.victory) {
       assert.ok(r.reward.gear, "equip dungeon should drop gear at high chance");
-      assert.equal(r.save.gear[r.reward.gear.slot].id, r.reward.gear.id);
-      assert.match(r.reward.expNote, /장비/);
+      assert.ok(
+        (r.save.gearBag ?? []).some((g) => g.id === r.reward!.gear!.id),
+      );
+      assert.match(r.reward.expNote, /가방/);
+      save = r.save;
+      const eq = runEquipGearBag(save, 0);
+      assert.match(eq.message, /장착/);
+      assert.equal(eq.save.gear[r.reward.gear.slot].id, r.reward.gear.id);
+      const sell = runSellGearBag(eq.save, 0);
+      assert.match(sell.message, /판매/);
+      assert.ok(sell.save.island.mana > eq.save.island.mana);
     }
   });
 
@@ -395,7 +406,7 @@ describe("game loop", () => {
     assert.ok(save.gear.weapon);
     assert.ok(save.gear.robe);
     assert.ok(save.gear.accessory);
-    assert.equal(listGear(save).length, 8);
+    assert.equal(listGear(save).length, 9);
     assert.ok(listSymbols(save).length >= 2);
 
     const g = runEnhanceGear(save, "orb");

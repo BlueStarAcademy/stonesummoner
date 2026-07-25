@@ -17,6 +17,7 @@ import {
   MONSTERS,
   normalizeSummonerGear,
   rollGearDrop,
+  rollSymbolDrop,
   summarizeGearSets,
   SYMBOL_SETS,
   summarizeSymbolSets,
