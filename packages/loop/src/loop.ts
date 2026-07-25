@@ -30,6 +30,7 @@ import {
   symbolEnhanceManaCost,
   SYMBOL_IMPRINT_CRYSTAL_COST,
   SYMBOL_GRIND_MANA_COST,
+  summarizeSymbolSets,
   ALL_STAGES,
   type GearSlot,
   type GloryBuildingId,
@@ -1276,6 +1277,26 @@ export function runUnequipSymbol(
       ? `해제: ${describeOwned(updated)} ← ${describeSymbol(sym)}`
       : `해제: ${describeOwned(updated)} 슬롯 ${slot}`,
   };
+}
+
+/** Combat stats preview for enhance UI (base vs symbols applied). */
+export function previewOwnedCombatStats(
+  save: PlayerSave,
+  monsterRef: string,
+): {
+  base: ReturnType<typeof scaledMonsterStats>;
+  final: ReturnType<typeof applySymbolsToStats>;
+  sets: ReturnType<typeof summarizeSymbolSets>;
+} | null {
+  const owned = resolveOwned(save, monsterRef);
+  if (!owned) return null;
+  const m = getMonster(owned.monsterId);
+  if (!m) return null;
+  const base = scaledMonsterStats(m, owned.level, owned.evolve ?? 0);
+  const equipped = equippedSymbols(save, owned);
+  const final = applySymbolsToStats(base, equipped);
+  const sets = summarizeSymbolSets(equipped);
+  return { base, final, sets };
 }
 
 export function createStageBattle(

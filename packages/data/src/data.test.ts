@@ -16,6 +16,7 @@ import {
   MONSTERS,
   rollSymbolDrop,
   SYMBOL_SETS,
+  summarizeSymbolSets,
 } from "./index.js";
 
 describe("phase1 data", () => {
@@ -82,6 +83,10 @@ describe("phase1 data", () => {
     };
     const out = applySymbolsToStats(base, [s1, s2]);
     assert.equal(out.hp, 1150);
+    const prog = summarizeSymbolSets([s1, s2]);
+    assert.equal(prog.length, 1);
+    assert.equal(prog[0]!.nameKo, "활로");
+    assert.equal(prog[0]!.active, true);
   });
 
   it("rolls imprintable mains for slots 4–6", () => {

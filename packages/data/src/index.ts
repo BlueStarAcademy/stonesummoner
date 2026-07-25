@@ -24,8 +24,9 @@ export {
   describeSymbol,
   MAX_SYMBOL_ENHANCE,
   symbolEnhanceManaCost,
+  summarizeSymbolSets,
 } from "./symbolStats.js";
-export type { CombatStatBlock } from "./symbolStats.js";
+export type { CombatStatBlock, SymbolSetProgress } from "./symbolStats.js";
 export {
   bumpGearEnhance,
   createStarterGear,

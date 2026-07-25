@@ -32,6 +32,7 @@ export {
   runEnhanceSymbol,
   runEquipSymbol,
   runUnequipSymbol,
+  previewOwnedCombatStats,
   runEvolve,
   runFusion,
   runGrindSymbol,

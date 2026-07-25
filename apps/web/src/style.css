@@ -1469,6 +1469,46 @@ button.slot-cell {
   white-space: nowrap;
 }
 
+.loadout-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 2px 0 6px;
+  font-size: 0.72rem;
+  color: #c4b8d4;
+}
+
+.loadout-stats span {
+  font-variant-numeric: tabular-nums;
+}
+
+.loadout-sets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.set-chip {
+  font-size: 0.68rem;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #5a4e72;
+  background: #120e1c;
+  color: #a89bb8;
+}
+
+.set-chip.active {
+  border-color: var(--gold);
+  color: #f5e6b8;
+  background: #2a2210;
+}
+
+.loadout-sets-empty {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+}
+
 .chip.active {
   border-color: var(--gold);
   box-shadow: 0 0 0 1px #c9a22755;

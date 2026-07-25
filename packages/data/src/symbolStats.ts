@@ -55,6 +55,33 @@ function countSets(equipped: SymbolInstance[]): Partial<Record<SymbolSetId, numb
   return out;
 }
 
+export interface SymbolSetProgress {
+  setId: SymbolSetId;
+  nameKo: string;
+  count: number;
+  pieces: number;
+  active: boolean;
+  effectKo: string;
+}
+
+/** Sets present on equipped symbols, with activation progress. */
+export function summarizeSymbolSets(
+  equipped: SymbolInstance[],
+): SymbolSetProgress[] {
+  const counts = countSets(equipped);
+  return SYMBOL_SETS.map((set) => {
+    const count = counts[set.id] ?? 0;
+    return {
+      setId: set.id,
+      nameKo: set.nameKo,
+      count,
+      pieces: set.pieces,
+      active: count >= set.pieces,
+      effectKo: set.effectKo,
+    };
+  }).filter((p) => p.count > 0);
+}
+
 function emptyBonus(): CombatStatBlock {
   return { hp: 0, atk: 0, def: 0, spd: 0, critRate: 0, critDmg: 0 };
 }

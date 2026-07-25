@@ -73,6 +73,7 @@ import {
   runEnhanceSymbol,
   runEquipSymbol,
   runUnequipSymbol,
+  previewOwnedCombatStats,
   runEvolve,
   runFusion,
   runGrindSymbol,
@@ -1209,7 +1210,28 @@ function renderSymbolLoadout(uid: string): string {
       return `<span class="slot-cell empty"><span class="slot-num">${i + 1}</span><span class="slot-label">빈칸</span></span>`;
     })
     .join("");
-  return `<div class="slot-row" aria-label="상징 슬롯">${cells}</div>`;
+  const preview = previewOwnedCombatStats(save, uid);
+  const stats = preview
+    ? `<div class="loadout-stats">
+        <span>HP ${preview.final.hp}</span>
+        <span>ATK ${preview.final.atk}</span>
+        <span>DEF ${preview.final.def}</span>
+        <span>SPD ${preview.final.spd}</span>
+        <span>치확 ${preview.final.critRate}%</span>
+        <span>치피 ${preview.final.critDmg}%</span>
+      </div>
+      ${
+        preview.sets.length
+          ? `<div class="loadout-sets">${preview.sets
+              .map(
+                (s) =>
+                  `<span class="set-chip${s.active ? " active" : ""}">${s.nameKo} ${s.count}/${s.pieces}${s.active ? ` · ${s.effectKo}` : ""}</span>`,
+              )
+              .join("")}</div>`
+          : `<p class="muted loadout-sets-empty">세트 미진행</p>`
+      }`
+    : "";
+  return `<div class="slot-row" aria-label="상징 슬롯">${cells}</div>${stats}`;
 }
 
 function renderEnhance(): string {
