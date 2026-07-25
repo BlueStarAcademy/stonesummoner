@@ -1,9 +1,29 @@
-import { Battle, makeUnit, type SummonerState, type Unit } from "stonesummoner-combat";
 import {
+  amplifyCapFromPowerDelta,
+  Battle,
+  estimateCombatPower,
+  makeUnit,
+  type SummonerState,
+  type Unit,
+} from "stonesummoner-combat";
+import {
+  applySymbolsToStats,
+  bumpGearEnhance,
+  bumpSymbolEnhance,
   CHAPTER1_STAGES,
+  createStarterGear,
   createStarterHwalro,
+  describeGear,
+  describeSymbol,
+  gearEnhanceManaCost,
   getMonster,
+  MAX_GEAR_ENHANCE,
+  MAX_SYMBOL_ENHANCE,
+  rollSymbolDrop,
+  symbolEnhanceManaCost,
+  type GearSlot,
   type StageDef,
+  type SummonerGear,
   type SymbolInstance,
 } from "stonesummoner-data";
 import {
@@ -15,6 +35,7 @@ import {
 import {
   createStarterRoster,
   describeOwned,
+  emptySymbolSlots,
   enhanceManaCost,
   MAX_MONSTER_LEVEL,
   nextUid,
@@ -40,6 +61,7 @@ export interface PlayerSave {
   /** Up to 4 owned monster uids for battle. */
   party: string[];
   scrolls: number;
+  gear: SummonerGear;
 }
 
 export interface BattleReward {
@@ -56,20 +78,66 @@ export interface LoopStepResult {
   battleLog?: string[];
 }
 
-function summonerState(unitId: string, mana = 25): SummonerState {
+function resolveOwned(
+  save: PlayerSave,
+  uidOrIndex: string,
+): OwnedMonster | undefined {
+  if (/^\d+$/.test(uidOrIndex)) return save.roster[Number(uidOrIndex)];
+  return save.roster.find((m) => m.uid === uidOrIndex);
+}
+
+function resolveSymbol(
+  save: PlayerSave,
+  idOrIndex: string,
+): SymbolInstance | undefined {
+  if (/^\d+$/.test(idOrIndex)) return save.symbols[Number(idOrIndex)];
+  return save.symbols.find((s) => s.id === idOrIndex);
+}
+
+function equippedSymbols(
+  save: PlayerSave,
+  owned: OwnedMonster,
+): SymbolInstance[] {
+  const slots = owned.symbolSlots ?? emptySymbolSlots();
+  return slots
+    .map((id) => (id ? save.symbols.find((s) => s.id === id) : undefined))
+    .filter((s): s is SymbolInstance => !!s);
+}
+
+function buildSummonerState(
+  unitId: string,
+  gear: SummonerGear,
+  weakBoard = false,
+): SummonerState {
+  const regen =
+    0.85 +
+    gear.accessory.manaRegenBonus +
+    gear.orb.manaRegenBonus;
+  const manaMax =
+    100 + gear.accessory.manaMaxBonus + gear.orb.manaMaxBonus;
+  const boardSense = weakBoard
+    ? 0.02
+    : 0.05 + gear.accessory.boardSenseBonus + gear.orb.boardSenseBonus;
+  const startPct =
+    0.2 + gear.accessory.startManaPct + gear.orb.startManaPct;
   return {
     unitId,
-    mana,
-    manaMax: 100,
-    manaRegenPerTick: 0.9,
-    boardSense: 0.1,
+    mana: Math.min(manaMax, manaMax * startPct),
+    manaMax,
+    manaRegenPerTick: regen,
+    boardSense,
   };
 }
 
-function unitFromOwned(owned: OwnedMonster, team: "ally" | "enemy"): Unit {
+function unitFromOwned(
+  save: PlayerSave,
+  owned: OwnedMonster,
+  team: "ally" | "enemy",
+): Unit {
   const m = getMonster(owned.monsterId);
   if (!m) throw new Error(`Unknown monster ${owned.monsterId}`);
-  const stats = scaledMonsterStats(m, owned.level);
+  const base = scaledMonsterStats(m, owned.level);
+  const stats = applySymbolsToStats(base, equippedSymbols(save, owned));
   return makeUnit({
     id: owned.uid,
     name: `${m.nameKo} Lv.${owned.level}`,
@@ -103,13 +171,21 @@ function unitFromMonsterId(
 
 export function createNewSave(now = Date.now()): PlayerSave {
   const { roster, party, scrolls } = createStarterRoster();
+  const gear = createStarterGear();
+  const s1 = { ...createStarterHwalro(1), id: "starter_sym_1" };
+  const s2 = { ...createStarterHwalro(2), id: "starter_sym_2" };
+  roster[0] = {
+    ...roster[0]!,
+    symbolSlots: [s1.id, s2.id, null, null, null, null],
+  };
   return {
     island: createStarterIsland(now),
-    symbols: [],
+    symbols: [s1, s2],
     clearedStages: [],
     roster,
     party,
     scrolls,
+    gear,
   };
 }
 
@@ -131,7 +207,27 @@ export function listStages(): StageDef[] {
 export function listRoster(save: PlayerSave): string[] {
   return save.roster.map((m, i) => {
     const inParty = save.party.includes(m.uid) ? "★" : " ";
-    return `[${i}] ${inParty} ${describeOwned(m)} (${m.uid})`;
+    const owned = {
+      ...m,
+      symbolSlots: m.symbolSlots ?? emptySymbolSlots(),
+    };
+    return `[${i}] ${inParty} ${describeOwned(owned)} (${m.uid})`;
+  });
+}
+
+export function listGear(save: PlayerSave): string[] {
+  return [
+    `장신구 ${describeGear(save.gear.accessory)} · regen+${save.gear.accessory.manaRegenBonus.toFixed(2)} max+${save.gear.accessory.manaMaxBonus}`,
+    `마법구 ${describeGear(save.gear.orb)} · sense+${save.gear.orb.boardSenseBonus.toFixed(2)}`,
+  ];
+}
+
+export function listSymbols(save: PlayerSave): string[] {
+  return save.symbols.map((s, i) => {
+    const worn = save.roster.some((m) =>
+      (m.symbolSlots ?? []).includes(s.id),
+    );
+    return `[${i}] ${worn ? "E" : " "} ${describeSymbol(s)}`;
   });
 }
 
@@ -153,6 +249,7 @@ export function runSummon(
     uid: nextUid("sum"),
     monsterId: def.id,
     level: 1,
+    symbolSlots: emptySymbolSlots(),
   };
   const roster = [...save.roster, owned];
   let party = [...save.party];
@@ -176,11 +273,7 @@ export function runEnhance(
   save: PlayerSave,
   uidOrIndex: string,
 ): LoopStepResult {
-  const byIndex = /^\d+$/.test(uidOrIndex);
-  const owned = byIndex
-    ? save.roster[Number(uidOrIndex)]
-    : save.roster.find((m) => m.uid === uidOrIndex);
-
+  const owned = resolveOwned(save, uidOrIndex);
   if (!owned) {
     return { save, message: `몬스터를 찾을 수 없음: ${uidOrIndex}` };
   }
@@ -211,15 +304,108 @@ export function runEnhance(
   };
 }
 
+export function runEnhanceGear(
+  save: PlayerSave,
+  slot: GearSlot,
+): LoopStepResult {
+  const piece = save.gear[slot];
+  if (piece.enhance >= MAX_GEAR_ENHANCE) {
+    return {
+      save,
+      message: `${describeGear(piece)} 이미 최대(+${MAX_GEAR_ENHANCE})`,
+    };
+  }
+  const cost = gearEnhanceManaCost(piece.enhance);
+  if (save.island.mana < cost) {
+    return {
+      save,
+      message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  const next = bumpGearEnhance(piece);
+  const gear = { ...save.gear, [slot]: next };
+  const island = { ...save.island, mana: save.island.mana - cost };
+  return {
+    save: { ...save, island, gear },
+    message: `장비 강화: ${describeGear(next)} (−마나 ${cost})`,
+  };
+}
+
+export function runEnhanceSymbol(
+  save: PlayerSave,
+  idOrIndex: string,
+): LoopStepResult {
+  const sym = resolveSymbol(save, idOrIndex);
+  if (!sym) {
+    return { save, message: `상징을 찾을 수 없음: ${idOrIndex}` };
+  }
+  if (sym.enhance >= MAX_SYMBOL_ENHANCE) {
+    return {
+      save,
+      message: `${describeSymbol(sym)} 이미 최대(+${MAX_SYMBOL_ENHANCE})`,
+    };
+  }
+  const cost = symbolEnhanceManaCost(sym.enhance);
+  if (save.island.mana < cost) {
+    return {
+      save,
+      message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  const next = bumpSymbolEnhance(sym);
+  const symbols = save.symbols.map((s) => (s.id === sym.id ? next : s));
+  const island = { ...save.island, mana: save.island.mana - cost };
+  return {
+    save: { ...save, island, symbols },
+    message: `상징 강화: ${describeSymbol(next)} (−마나 ${cost})`,
+  };
+}
+
+/** Equip inventory symbol onto monster (replaces same slot). */
+export function runEquipSymbol(
+  save: PlayerSave,
+  monsterRef: string,
+  symbolRef: string,
+): LoopStepResult {
+  const owned = resolveOwned(save, monsterRef);
+  const sym = resolveSymbol(save, symbolRef);
+  if (!owned) return { save, message: `몬스터 없음: ${monsterRef}` };
+  if (!sym) return { save, message: `상징 없음: ${symbolRef}` };
+
+  const slotIdx = sym.slot - 1;
+  const slots = [...(owned.symbolSlots ?? emptySymbolSlots())];
+
+  // Unequip from any other monster first
+  let roster = save.roster.map((m) => {
+    const ss = [...(m.symbolSlots ?? emptySymbolSlots())];
+    const cleared = ss.map((id) => (id === sym.id ? null : id));
+    return { ...m, symbolSlots: cleared };
+  });
+
+  roster = roster.map((m) => {
+    if (m.uid !== owned.uid) return m;
+    const ss = [...(m.symbolSlots ?? emptySymbolSlots())];
+    ss[slotIdx] = sym.id;
+    return { ...m, symbolSlots: ss };
+  });
+
+  const updated = roster.find((m) => m.uid === owned.uid)!;
+  return {
+    save: { ...save, roster },
+    message: `장착: ${describeOwned(updated)} ← ${describeSymbol(sym)}`,
+  };
+}
+
 export function createStageBattle(
   stage: StageDef,
   save?: PlayerSave,
 ): Battle {
+  const gear = save?.gear ?? createStarterGear();
   const allyMonsters: Unit[] = [];
   if (save?.party.length) {
     for (const uid of save.party.slice(0, 4)) {
       const owned = save.roster.find((m) => m.uid === uid);
-      if (owned) allyMonsters.push(unitFromOwned(owned, "ally"));
+      if (owned) allyMonsters.push(unitFromOwned(save, owned, "ally"));
     }
   }
   if (allyMonsters.length === 0) {
@@ -229,17 +415,24 @@ export function createStageBattle(
     );
   }
 
-  const units: Unit[] = [
-    makeUnit({
-      id: "a-sum",
-      name: "서머너",
-      team: "ally",
-      kind: "summoner",
-      element: "light",
-      stats: { hp: 520, atk: 90, def: 45, spd: 100, critRate: 15, critDmg: 50 },
-      skillCoeff: 1,
-    }),
-    ...allyMonsters,
+  const allySummonerUnit = makeUnit({
+    id: "a-sum",
+    name: "서머너",
+    team: "ally",
+    kind: "summoner",
+    element: "light",
+    stats: {
+      hp: 520 + gear.accessory.manaMaxBonus * 2,
+      atk: 90,
+      def: 45 + Math.floor(gear.accessory.enhance),
+      spd: 100,
+      critRate: 15,
+      critDmg: 50,
+    },
+    skillCoeff: 1,
+  });
+
+  const enemyUnits: Unit[] = [
     makeUnit({
       id: "e-sum",
       name: "적 서머너",
@@ -254,11 +447,21 @@ export function createStageBattle(
     ),
   ];
 
+  const allyUnits = [allySummonerUnit, ...allyMonsters];
+  const delta =
+    estimateCombatPower(allyUnits) - estimateCombatPower(enemyUnits);
+  const powerGapCap = amplifyCapFromPowerDelta(delta);
+
   return new Battle({
     boardSize: stage.boardSize,
-    units,
-    allySummoner: summonerState("a-sum"),
-    enemySummoner: summonerState("e-sum"),
+    units: [...allyUnits, ...enemyUnits],
+    allySummoner: buildSummonerState("a-sum", gear, false),
+    enemySummoner: buildSummonerState(
+      "e-sum",
+      createStarterGear(),
+      true,
+    ),
+    powerGapAmplifyCap: powerGapCap,
   });
 }
 
@@ -300,13 +503,10 @@ export function applyRewards(
   const symbols = [...save.symbols];
   let symbol: SymbolInstance | undefined;
   if (rng() < 0.65) {
-    const slot = ([1, 2, 3, 4, 5, 6] as const)[Math.floor(rng() * 6)]!;
-    symbol = createStarterHwalro(slot);
-    symbol = { ...symbol, id: `drop_${stage.id}_${slot}` };
+    symbol = rollSymbolDrop(rng, `drop_${stage.id}_${symbols.length}`);
     symbols.push(symbol);
   }
 
-  // Stage clear bonus: +1 scroll occasionally
   let scrolls = save.scrolls;
   if (rng() < 0.4) scrolls += 1;
 
@@ -368,7 +568,7 @@ export function runSortie(
   };
 }
 
-/** Scripted demo: collect → summon → enhance → clear 1-1 → collect. */
+/** Scripted demo: collect → summon → gear → equip/enhance → sortie → collect. */
 export function runDemoLoop(rng: () => number = () => 0.2): LoopStepResult[] {
   let save = createNewSave(0);
   const steps: LoopStepResult[] = [];
@@ -384,6 +584,14 @@ export function runDemoLoop(rng: () => number = () => 0.2): LoopStepResult[] {
   const enh = runEnhance(save, "0");
   steps.push(enh);
   save = enh.save;
+
+  const g = runEnhanceGear(save, "accessory");
+  steps.push(g);
+  save = g.save;
+
+  const se = runEnhanceSymbol(save, "0");
+  steps.push(se);
+  save = se.save;
 
   const s1 = runSortie(save, "garen_1_1", { rng });
   steps.push(s1);

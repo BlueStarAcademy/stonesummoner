@@ -1,5 +1,5 @@
 /**
- * StoneSummoner CLI — 홈 → 소환/강화 → 출정 → 전투 → 보상
+ * StoneSummoner CLI — 홈 → 소환/강화/장비/상징 → 출정 → 보상
  *
  *   npm run cli          # interactive
  *   npm run cli:demo     # non-interactive demo
@@ -9,10 +9,15 @@ import { stdin as input, stdout as output } from "node:process";
 import {
   createNewSave,
   homeCollect,
+  listGear,
   listRoster,
   listStages,
+  listSymbols,
   runDemoLoop,
   runEnhance,
+  runEnhanceGear,
+  runEnhanceSymbol,
+  runEquipSymbol,
   runSortie,
   runSummon,
   type PlayerSave,
@@ -35,14 +40,17 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | summon | enhance <i> | roster | stages | go <id> | status | demo | quit",
+    "명령: collect | summon | enhance <i> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | roster | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
   while (true) {
     const line = (await rl.question("> ")).trim();
     if (!line) continue;
-    const [cmd, arg] = line.split(/\s+/);
+    const parts = line.split(/\s+/);
+    const cmd = parts[0]!;
+    const arg = parts[1];
+    const arg2 = parts[2];
 
     if (cmd === "quit" || cmd === "q" || cmd === "exit") break;
 
@@ -77,6 +85,40 @@ async function interactive(): Promise<void> {
 
     if (cmd === "enhance" || cmd === "enh" || cmd === "e") {
       const r = runEnhance(save, arg ?? "0");
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "gear" || cmd === "eq") {
+      for (const line of listGear(save)) console.log(line);
+      continue;
+    }
+
+    if (cmd === "enh-gear" || cmd === "eg") {
+      const slot = arg === "orb" || arg === "o" ? "orb" : "accessory";
+      const r = runEnhanceGear(save, slot);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "symbols" || cmd === "sym") {
+      for (const line of listSymbols(save)) console.log(line);
+      continue;
+    }
+
+    if (cmd === "equip") {
+      const r = runEquipSymbol(save, arg ?? "0", arg2 ?? "0");
+      save = r.save;
+      console.log(r.message);
+      continue;
+    }
+
+    if (cmd === "enh-sym" || cmd === "es") {
+      const r = runEnhanceSymbol(save, arg ?? "0");
       save = r.save;
       console.log(r.message);
       printStatus(save);
@@ -126,7 +168,7 @@ async function interactive(): Promise<void> {
     }
 
     console.log(
-      "알 수 없는 명령. collect | summon | enhance <i> | roster | stages | go <id> | status | demo | quit",
+      "알 수 없는 명령. collect | summon | enhance | gear | enh-gear | symbols | equip | enh-sym | roster | stages | go | status | demo | quit",
     );
   }
 

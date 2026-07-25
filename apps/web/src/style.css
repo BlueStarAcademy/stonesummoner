@@ -214,7 +214,7 @@ main {
 
 .unit-card {
   flex: 0 0 auto;
-  width: 76px;
+  width: 72px;
   background: #241c36;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -227,12 +227,23 @@ main {
   box-shadow: 0 0 0 1px var(--gold);
 }
 
+.unit-card.summoner {
+  width: 84px;
+  border-color: #7b6cff88;
+}
+
 .unit-card .name {
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.unit-card .hp-num {
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-bottom: 2px;
 }
 
 .bar {
@@ -263,6 +274,7 @@ main {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  position: relative;
 }
 
 .board {
@@ -340,6 +352,32 @@ main {
   font-size: 0.7rem !important;
 }
 
+.section-label {
+  margin: 14px 0 8px;
+  font-size: 0.78rem;
+  color: var(--gold);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.sym-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.sym-row > button:first-child {
+  text-align: left;
+}
+
+.sym-eq {
+  min-width: 64px;
+  min-height: var(--touch);
+  border-radius: 12px;
+  font-weight: 700;
+}
+
 .board button.cell.legal {
   outline: 2px solid #7b6cff;
   outline-offset: -2px;
@@ -355,6 +393,98 @@ main {
   gap: 8px;
 }
 
+.battle-top {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dmg-layer {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.dmg-float {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #f2ebe0;
+  text-shadow: 0 1px 3px #000c;
+  animation: floatUp 0.9s ease-out forwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+.dmg-float.crit {
+  color: #ffcf5a;
+  font-size: 1.2rem;
+}
+
+.dmg-float.ult {
+  color: #b9a8ff;
+}
+
+@keyframes floatUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.9);
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-36px) scale(1.05);
+  }
+}
+
+.bar.mana-lg {
+  height: 10px;
+}
+
+.skill-row {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 8px;
+}
+
+.skill-row button {
+  min-height: var(--touch);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #241c36;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.skill-row button:disabled {
+  opacity: 0.4;
+}
+
+.skill-row button.ult.ready {
+  background: linear-gradient(180deg, #8b7cff, #5a4ec8);
+  border-color: #b9a8ff;
+  color: #fff;
+}
+
+.skill-hint {
+  text-align: center;
+  margin: 0;
+}
+
+.battle-hud {
+  display: grid;
+  grid-template-columns: 1fr 0.7fr 1fr;
+  gap: 8px;
+}
+
+.battle-hud button,
 .battle-actions button,
 .primary {
   min-height: var(--touch);
@@ -367,10 +497,16 @@ main {
   font-size: 0.95rem;
 }
 
+.battle-hud button.secondary,
 .battle-actions button.secondary {
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--line);
+}
+
+.battle-hud button.auto-on {
+  background: linear-gradient(180deg, #3d9a6a, #2a6b4a);
+  color: #fff;
 }
 
 .battle-actions #btn-back {

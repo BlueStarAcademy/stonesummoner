@@ -1,6 +1,16 @@
 import "./style.css";
-import type { Battle } from "stonesummoner-combat";
-import { CHAPTER1_STAGES, getMonster, type StageDef } from "stonesummoner-data";
+import type { Battle, SkillResult, Unit } from "stonesummoner-combat";
+import {
+  CHAPTER1_STAGES,
+  describeGear,
+  describeSymbol,
+  gearEnhanceManaCost,
+  getMonster,
+  MAX_GEAR_ENHANCE,
+  MAX_SYMBOL_ENHANCE,
+  symbolEnhanceManaCost,
+  type StageDef,
+} from "stonesummoner-data";
 import { collectMana, tickProduction } from "stonesummoner-home";
 import {
   applyRewards,
@@ -10,6 +20,9 @@ import {
   enhanceManaCost,
   MAX_MONSTER_LEVEL,
   runEnhance,
+  runEnhanceGear,
+  runEnhanceSymbol,
+  runEquipSymbol,
   runSummon,
   type PlayerSave,
 } from "stonesummoner-loop";
@@ -18,7 +31,7 @@ import type { Point } from "stonesummoner-board";
 type View = "home" | "summon" | "enhance" | "stages" | "battle";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
-const SAVE_KEY = "stonesummoner.save.v3";
+const SAVE_KEY = "stonesummoner.save.v4";
 
 let save: PlayerSave = loadSave();
 let view: View = "home";
@@ -27,26 +40,39 @@ let currentStage: StageDef | null = null;
 let legalHints: Point[] = [];
 let lastRewardMsg = "";
 let toast = "";
+let battleSpeed: 1 | 2 | 3 = 1;
+let autoMode = false;
+let autoTimer: ReturnType<typeof setTimeout> | null = null;
+let dmgFloats: { id: number; text: string; crit: boolean; ult: boolean }[] = [];
+let floatSeq = 0;
 
 function migrateSave(raw: unknown): PlayerSave | null {
   if (!raw || typeof raw !== "object") return null;
   const p = raw as Partial<PlayerSave>;
   if (!p.island) return null;
   const base = createNewSave();
+  const roster = (p.roster?.length ? p.roster : base.roster).map((m) => ({
+    ...m,
+    symbolSlots: m.symbolSlots ?? [null, null, null, null, null, null],
+  }));
   return {
     ...base,
     island: tickProduction(p.island),
-    symbols: p.symbols ?? [],
+    symbols: p.symbols?.length ? p.symbols : base.symbols,
     clearedStages: p.clearedStages ?? [],
-    roster: p.roster?.length ? p.roster : base.roster,
+    roster,
     party: p.party?.length ? p.party : base.party,
     scrolls: typeof p.scrolls === "number" ? p.scrolls : base.scrolls,
+    gear: p.gear ?? base.gear,
   };
 }
 
 function loadSave(): PlayerSave {
   try {
-    const raw = localStorage.getItem(SAVE_KEY) ?? localStorage.getItem("stonesummoner.save.v2");
+    const raw =
+      localStorage.getItem(SAVE_KEY) ??
+      localStorage.getItem("stonesummoner.save.v3") ??
+      localStorage.getItem("stonesummoner.save.v2");
     if (raw) {
       const migrated = migrateSave(JSON.parse(raw));
       if (migrated) return migrated;
@@ -81,6 +107,9 @@ function startBattle(stage: StageDef): void {
   persist();
   currentStage = stage;
   lastRewardMsg = "";
+  autoMode = false;
+  clearAutoTimer();
+  dmgFloats = [];
   battle = createStageBattle(stage, save);
   battle.tickUntilReady();
   refreshLegal();
@@ -117,15 +146,52 @@ function grantRewardIfNeeded(): void {
 
 function onCellClick(x: number, y: number): void {
   if (!battle || battle.phase !== "await_stone") return;
+  if (autoMode) return;
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
     : null;
   if (!unit || unit.team !== "ally") return;
   if (!battle.playStone({ x, y })) return;
-  battle.useSkill({
-    useSummonerSkill: battle.canUseSummonerSkill(unit),
-  });
-  afterPlayerAction();
+  refreshLegal();
+  render();
+}
+
+function pushDamageFloats(hits: SkillResult[]): void {
+  const ids: number[] = [];
+  for (const h of hits) {
+    floatSeq += 1;
+    ids.push(floatSeq);
+    dmgFloats.push({
+      id: floatSeq,
+      text: h.crit ? `CRIT ${h.damage}` : `-${h.damage}`,
+      crit: h.crit,
+      ult: h.usedSummonerSkill,
+    });
+  }
+  if (!ids.length) return;
+  setTimeout(() => {
+    const idSet = new Set(ids);
+    dmgFloats = dmgFloats.filter((f) => !idSet.has(f.id));
+    const layer = app.querySelector(".dmg-layer");
+    if (layer) layer.innerHTML = renderDmgLayer();
+  }, 900 / battleSpeed);
+}
+
+function renderDmgLayer(): string {
+  return dmgFloats
+    .map(
+      (f, i) =>
+        `<span class="dmg-float${f.crit ? " crit" : ""}${f.ult ? " ult" : ""}" style="--i:${i}">${f.text}</span>`,
+    )
+    .join("");
+}
+
+function orderTeam(units: Unit[]): Unit[] {
+  const mons = units.filter((u) => u.kind === "monster");
+  const sum = units.find((u) => u.kind === "summoner");
+  return [mons[0], mons[1], sum, mons[2], mons[3]].filter(
+    (u): u is Unit => !!u,
+  );
 }
 
 function afterPlayerAction(): void {
@@ -135,19 +201,51 @@ function afterPlayerAction(): void {
     if (!u) break;
     if (u.team === "ally") {
       refreshLegal();
-      render();
+      if (autoMode) {
+        scheduleAuto();
+      } else {
+        render();
+      }
       return;
     }
     battle.autoStone();
-    battle.useSkill({ useSummonerSkill: battle.canUseSummonerSkill(u) });
+    const hits = battle.useSkill({
+      useSummonerSkill: battle.canUseSummonerSkill(u),
+    });
+    pushDamageFloats(hits);
   }
-  if (battle.finishReason) grantRewardIfNeeded();
+  if (battle.finishReason) {
+    autoMode = false;
+    clearAutoTimer();
+    grantRewardIfNeeded();
+  }
   refreshLegal();
   render();
+  if (autoMode && battle && !battle.finishReason) scheduleAuto();
+}
+
+function clearAutoTimer(): void {
+  if (autoTimer) {
+    clearTimeout(autoTimer);
+    autoTimer = null;
+  }
+}
+
+function scheduleAuto(): void {
+  clearAutoTimer();
+  if (!autoMode || !battle || battle.finishReason) return;
+  autoTimer = setTimeout(() => {
+    autoAllyTurn();
+  }, 420 / battleSpeed);
 }
 
 function autoAllyTurn(): void {
-  if (!battle || battle.finishReason) return;
+  if (!battle || battle.finishReason) {
+    autoMode = false;
+    clearAutoTimer();
+    render();
+    return;
+  }
   if (battle.phase === "idle" || battle.phase === "resolved") {
     battle.tickUntilReady();
   }
@@ -164,23 +262,42 @@ function autoAllyTurn(): void {
   }
   if (battle.phase === "await_stone") battle.autoStone();
   if (battle.phase === "await_skill") {
-    battle.useSkill({ useSummonerSkill: battle.canUseSummonerSkill(unit) });
+    const hits = battle.useSkill({
+      useSummonerSkill: battle.canUseSummonerSkill(unit),
+    });
+    pushDamageFloats(hits);
   }
   afterPlayerAction();
 }
 
-function renderUnit(u: {
-  id: string;
-  name: string;
-  hp: number;
-  stats: { hp: number };
-  atb: number;
-}): string {
+function castSkill(mode: "basic" | "ult" | "smart"): void {
+  if (!battle || battle.phase !== "await_skill" || autoMode) return;
+  const unit = battle.activeUnitId
+    ? battle.getUnit(battle.activeUnitId)
+    : null;
+  if (!unit || unit.team !== "ally") return;
+  const useUlt =
+    mode === "ult" ||
+    (mode === "smart" && battle.canUseSummonerSkill(unit));
+  if (mode === "ult" && !battle.canUseSummonerSkill(unit)) {
+    flash("마나가 부족합니다.");
+    render();
+    return;
+  }
+  const hits = battle.useSkill({ useSummonerSkill: useUlt });
+  pushDamageFloats(hits);
+  afterPlayerAction();
+}
+
+function renderUnit(u: Unit): string {
   const active = battle?.activeUnitId === u.id ? " active" : "";
+  const center = u.kind === "summoner" ? " summoner" : "";
   const hpPct = Math.round((u.hp / u.stats.hp) * 100);
   const atbPct = Math.min(100, Math.round(u.atb));
-  return `<div class="unit-card${active}">
+  const shield = u.shieldHp && u.shieldHp > 0 ? Math.round(u.shieldHp) : 0;
+  return `<div class="unit-card${active}${center}">
     <div class="name">${u.name}</div>
+    <div class="hp-num">${Math.max(0, Math.round(u.hp))}${shield ? `+${shield}` : ""}</div>
     <div class="bar hp"><i style="width:${hpPct}%"></i></div>
     <div class="bar atb"><i style="width:${atbPct}%"></i></div>
   </div>`;
@@ -314,11 +431,14 @@ function renderSummon(): string {
 }
 
 function renderEnhance(): string {
+  const acc = save.gear.accessory;
+  const orb = save.gear.orb;
   return `<div class="panel">
-    <p class="muted">강화진 · 탭하여 레벨업</p>
+    <p class="muted">강화진 · 몬스터 / 장비 / 상징</p>
+    <p class="section-label">몬스터</p>
     <div class="stage-list">
       ${save.roster
-        .map((m, i) => {
+        .map((m) => {
           const cost = enhanceManaCost(m.level);
           const maxed = m.level >= MAX_MONSTER_LEVEL;
           const inParty = save.party.includes(m.uid) ? " · 파티" : "";
@@ -326,6 +446,32 @@ function renderEnhance(): string {
             <strong>${describeOwned(m)}${inParty}</strong><br/>
             <small class="muted">${maxed ? "최대 레벨" : `강화 −마나 ${cost}`}</small>
           </button>`;
+        })
+        .join("")}
+    </div>
+    <p class="section-label">서머너 장비</p>
+    <div class="stage-list">
+      <button type="button" data-gear="accessory" ${acc.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
+        <strong>${describeGear(acc)}</strong><br/>
+        <small class="muted">${acc.enhance >= MAX_GEAR_ENHANCE ? "최대" : `강화 −마나 ${gearEnhanceManaCost(acc.enhance)}`}</small>
+      </button>
+      <button type="button" data-gear="orb" ${orb.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
+        <strong>${describeGear(orb)}</strong><br/>
+        <small class="muted">${orb.enhance >= MAX_GEAR_ENHANCE ? "최대" : `강화 −마나 ${gearEnhanceManaCost(orb.enhance)}`}</small>
+      </button>
+    </div>
+    <p class="section-label">상징</p>
+    <div class="stage-list">
+      ${save.symbols
+        .map((s, i) => {
+          const maxed = s.enhance >= MAX_SYMBOL_ENHANCE;
+          return `<div class="sym-row">
+            <button type="button" data-sym="${i}" ${maxed ? "disabled" : ""}>
+              <strong>${describeSymbol(s)}</strong><br/>
+              <small class="muted">${maxed ? "최대" : `강화 −마나 ${symbolEnhanceManaCost(s.enhance)}`}</small>
+            </button>
+            <button type="button" class="secondary sym-eq" data-equip-sym="${i}">장착</button>
+          </div>`;
         })
         .join("")}
     </div>
@@ -347,36 +493,61 @@ function renderStages(): string {
 
 function renderBattle(manaPct: number): string {
   if (!battle || !currentStage) return "";
-  const allies = battle.units.filter((u) => u.team === "ally");
-  const enemies = battle.units.filter((u) => u.team === "enemy");
+  const allies = orderTeam(battle.units.filter((u) => u.team === "ally"));
+  const enemies = orderTeam(battle.units.filter((u) => u.team === "enemy"));
   const phase = battle.circle.boardPhase;
   const phaseLabel =
     phase <= 0 ? "일반 진문" : `강화 진문 ${"I".repeat(Math.min(phase, 3))}`;
+  const active = battle.activeUnitId
+    ? battle.getUnit(battle.activeUnitId)
+    : null;
+  const awaitSkill =
+    battle.phase === "await_skill" && active?.team === "ally" && !autoMode;
+  const canUlt = !!active && battle.canUseSummonerSkill(active);
   const status = battle.finishReason
     ? battle.finishReason === "ally_win"
       ? "승리!"
       : "패배..."
-    : `${battle.phase} · amp ${battle.currentAmplify().toFixed(2)} · ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})`;
+    : `${battle.phase} · amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} · ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})`;
+
+  const skillHint =
+    battle.phase === "await_stone" && active?.team === "ally"
+      ? "착수할 칸을 탭하세요"
+      : awaitSkill
+        ? "스킬을 선택하세요"
+        : autoMode
+          ? `AUTO x${battleSpeed}`
+          : "";
 
   return `<div class="battle-layout panel">
-    <div class="muted">${currentStage.nameKo} · ${currentStage.boardSize}×${currentStage.boardSize} · ${status}</div>
-    <div class="muted item-legend">토큰: 치=치명부적 · 실=실드핵 · 자=사석자석</div>
+    <div class="battle-top">
+      <div class="muted">${currentStage.nameKo} · ${currentStage.boardSize}×${currentStage.boardSize}</div>
+      <div class="muted">${status}</div>
+    </div>
+    <div class="muted item-legend">토큰: 치=치명 · 실=실드 · 자=자석</div>
     ${lastRewardMsg ? `<div class="muted">${lastRewardMsg}</div>` : ""}
-    <div class="team-row">${enemies.map(renderUnit).join("")}</div>
+    <div class="team-row enemy">${enemies.map(renderUnit).join("")}</div>
     <div class="board-wrap">
+      <div class="dmg-layer">${renderDmgLayer()}</div>
       ${renderBoard()}
       <div style="width:100%">
-        <div class="muted">서머너 마나</div>
-        <div class="bar mana"><i style="width:${manaPct}%"></i></div>
+        <div class="muted">서머너 마나 ${Math.floor(battle.allySummoner.mana)}/${battle.allySummoner.manaMax}</div>
+        <div class="bar mana mana-lg"><i style="width:${manaPct}%"></i></div>
       </div>
     </div>
-    <div class="team-row">${allies.map(renderUnit).join("")}</div>
-    <div class="battle-actions">
-      <button type="button" id="btn-auto">자동 1턴</button>
-      <button type="button" class="secondary" id="btn-auto5">자동 ×5</button>
-      <button type="button" class="secondary" id="btn-back">출정 목록</button>
+    <div class="skill-row">
+      <button type="button" id="sk-basic" ${awaitSkill ? "" : "disabled"}>평타</button>
+      <button type="button" id="sk-ult" class="ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>진문개방</button>
+      <button type="button" id="sk-smart" ${awaitSkill ? "" : "disabled"}>추천</button>
     </div>
-    <div class="log">${battle.log.slice(-8).map((l) => `<div>${l}</div>`).join("")}</div>
+    ${skillHint ? `<p class="muted skill-hint">${skillHint}</p>` : ""}
+    <div class="team-row ally">${allies.map(renderUnit).join("")}</div>
+    <div class="battle-hud">
+      <button type="button" class="secondary" id="btn-back">나가기</button>
+      <button type="button" class="secondary" id="btn-speed">x${battleSpeed}</button>
+      <button type="button" id="btn-auto-toggle" class="${autoMode ? "auto-on" : ""}">${autoMode ? "AUTO ON" : "AUTO"}</button>
+    </div>
+    <div class="log">${battle.log.slice(-6).map((l) => `<div>${l}</div>`).join("")}</div>
   </div>`;
 }
 
@@ -449,6 +620,40 @@ function bind(): void {
     });
   });
 
+  app.querySelectorAll<HTMLButtonElement>("[data-gear]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slot = btn.dataset.gear === "orb" ? "orb" : "accessory";
+      const r = runEnhanceGear(save, slot);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-sym]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = btn.dataset.sym!;
+      const r = runEnhanceSymbol(save, idx);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-equip-sym]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = btn.dataset.equipSym!;
+      const mon = save.party[0] ?? save.roster[0]?.uid ?? "0";
+      const r = runEquipSymbol(save, mon, idx);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
   app.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const stage = CHAPTER1_STAGES.find((s) => s.id === btn.dataset.stage);
@@ -462,13 +667,33 @@ function bind(): void {
     });
   });
 
-  app.querySelector("#btn-auto")?.addEventListener("click", () => autoAllyTurn());
-  app.querySelector("#btn-auto5")?.addEventListener("click", () => {
-    for (let i = 0; i < 5 && battle && !battle.finishReason; i++) autoAllyTurn();
+  app.querySelector("#sk-basic")?.addEventListener("click", () => castSkill("basic"));
+  app.querySelector("#sk-ult")?.addEventListener("click", () => castSkill("ult"));
+  app.querySelector("#sk-smart")?.addEventListener("click", () => castSkill("smart"));
+
+  app.querySelector("#btn-speed")?.addEventListener("click", () => {
+    battleSpeed = battleSpeed === 1 ? 2 : battleSpeed === 2 ? 3 : 1;
+    render();
+    if (autoMode) scheduleAuto();
   });
+
+  app.querySelector("#btn-auto-toggle")?.addEventListener("click", () => {
+    if (!battle || battle.finishReason) return;
+    autoMode = !autoMode;
+    if (autoMode) {
+      scheduleAuto();
+    } else {
+      clearAutoTimer();
+    }
+    render();
+  });
+
   app.querySelector("#btn-back")?.addEventListener("click", () => {
+    autoMode = false;
+    clearAutoTimer();
     battle = null;
     currentStage = null;
+    dmgFloats = [];
     view = "stages";
     render();
   });

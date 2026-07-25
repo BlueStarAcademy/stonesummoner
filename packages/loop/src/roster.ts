@@ -4,6 +4,8 @@ export interface OwnedMonster {
   uid: string;
   monsterId: string;
   level: number;
+  /** Equipped symbol instance ids by slot index 0..5 (slot 1..6). */
+  symbolSlots: (string | null)[];
 }
 
 export const MAX_MONSTER_LEVEL = 15;
@@ -50,6 +52,10 @@ export function nextUid(prefix = "m"): string {
   return `${prefix}_${uidSeq}_${Date.now().toString(36)}`;
 }
 
+export function emptySymbolSlots(): (string | null)[] {
+  return [null, null, null, null, null, null];
+}
+
 export function createStarterRoster(): {
   roster: OwnedMonster[];
   party: string[];
@@ -60,6 +66,7 @@ export function createStarterRoster(): {
     uid: `starter_${i}`,
     monsterId: id,
     level: 1,
+    symbolSlots: emptySymbolSlots(),
   }));
   return {
     roster,
@@ -77,5 +84,7 @@ export function describeOwned(m: OwnedMonster): string {
   const def = getMonster(m.monsterId);
   const name = def?.nameKo ?? m.monsterId;
   const stars = def ? "★".repeat(def.naturalStars) : "";
-  return `${name} Lv.${m.level} ${stars}`.trim();
+  const slots = m.symbolSlots ?? emptySymbolSlots();
+  const eqs = slots.filter(Boolean).length;
+  return `${name} Lv.${m.level} ${stars} 상징${eqs}/6`.trim();
 }

@@ -1,6 +1,10 @@
 export { Battle, makeUnit } from "./battle.js";
 export type { BattleConfig, SkillResult } from "./battle.js";
 export { computeDamage, clampAmplify, elementMultiplier } from "./damage.js";
+export {
+  amplifyCapFromPowerDelta,
+  estimateCombatPower,
+} from "./power.js";
 export { gainsForBoardEvent, classifyCapture } from "./boardEvents.js";
 export {
   BOARD_ITEMS,

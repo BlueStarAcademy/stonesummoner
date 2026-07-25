@@ -100,6 +100,11 @@ export class Battle {
     );
   }
 
+  /** Effective ΔPower amplify ceiling used this battle. */
+  powerAmplifyCap(): number {
+    return this.powerGapCap;
+  }
+
   /** Advance ATB until a unit is ready, or battle finished. */
   tickUntilReady(maxTicks = 1000): Unit | null {
     if (this.finishReason) return null;

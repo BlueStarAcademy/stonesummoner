@@ -158,13 +158,13 @@ DefenseMitigation = 1000 / (1000 + DEF_effective)
 
 ## 8. Phase 1 구현 체크리스트
 
-- [ ] Amplify 이벤트: 착수 / 따냄 1~2 / 따냄 3+ / 아이템
-- [ ] 마나: 초당 regen + 따냄·아이템 보너스
-- [ ] 서머너 스킬 1종 (진문개방)
-- [ ] 서머너 HP 0 = 패배
-- [ ] AmplifyCap by ΔPower (간단 티어 2단계)
-- [ ] 보드 크기 5 / 7 / 9 스테이지 선택
-- [ ] 9×9 착수 50회 → 강화 진문 리셋 (`boardPhase`, Amplify 상한 상향)
+- [x] Amplify 이벤트: 착수 / 따냄 1~2 / 따냄 3+ / 아이템
+- [x] 마나: 초당 regen + 따냄·아이템 보너스
+- [x] 서머너 스킬 1종 (진문개방)
+- [x] 서머너 HP 0 = 패배
+- [x] AmplifyCap by ΔPower (간단 티어 2단계)
+- [x] 보드 크기 5 / 7 / 9 스테이지 선택
+- [x] 9×9 착수 50회 → 강화 진문 리셋 (`boardPhase`, Amplify 상한 상향)
 
 강화 진문 Amplify 상한: phase0=1.25 → phase1=1.30 → phase2=1.35 → phase3+=1.40  
 (최종은 `min(상한, ΔPowerCap)` — [board-progression.md](board-progression.md))

@@ -23,6 +23,8 @@ npm run build && npm start
 | `collect` | 진액 연못 수집 |
 | `summon` | 소환진 소환 (소환서 1) |
 | `enhance 0` | 강화진 레벨업 (인덱스/uid) |
+| `gear` / `enh-gear acc\|orb` | 서머너 장비 현황·강화 |
+| `symbols` / `equip m s` / `enh-sym i` | 상징 목록·장착·강화 |
 | `roster` | 보유 몬스터 |
 | `stages` | 스테이지 목록 |
 | `go garen_1_1` | 출정·자동전투·보상 |
