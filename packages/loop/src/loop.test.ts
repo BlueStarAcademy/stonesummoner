@@ -545,9 +545,20 @@ describe("game loop", () => {
     const mid = runUnlockSkillNode(save, "mana_pool");
     assert.match(mid.message, /심연 저장/);
     assert.ok(mid.save.skillTree.includes("mana_pool"));
+    save = mid.save;
 
-    const battle = createStageBattle(getStage("garen_1_1")!, mid.save);
-    assert.ok(battle.allySummoner.manaMax >= 100 + 12);
+    const apexGate = runUnlockSkillNode(save, "abyss_well");
+    assert.match(apexGate.message, /Lv/);
+    save = {
+      ...save,
+      island: { ...save.island, summonerLevel: 10, crystal: 20 },
+    };
+    const apex = runUnlockSkillNode(save, "abyss_well");
+    assert.match(apex.message, /심연 우물/);
+    assert.ok(apex.save.skillTree.includes("abyss_well"));
+
+    const battle = createStageBattle(getStage("garen_1_1")!, apex.save);
+    assert.ok(battle.allySummoner.manaMax >= 100 + 12 + 20);
     assert.ok((battle.allySummoner.manaRegenPerTick ?? 0) >= 0.9);
   });
 

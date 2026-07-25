@@ -9,7 +9,10 @@ export type SkillTreeNodeId =
   | "power_focus"
   | "leader_aura"
   | "dual_mastery"
-  | "clean_mastery";
+  | "clean_mastery"
+  | "declare_mastery"
+  | "abyss_well"
+  | "war_chorus";
 
 export interface SkillTreeBonus {
   manaRegenBonus: number;
@@ -142,6 +145,39 @@ export const SKILL_TREE_NODES: SkillTreeNode[] = [
     minLevel: 8,
     requires: ["root_power"],
     bonus: { cleanCostMul: 0.9, cleanAmpBonus: 0.005 },
+  },
+  {
+    id: "declare_mastery",
+    nameKo: "증폭 숙련",
+    branch: "mastery",
+    descKo: "증폭선언 마나 85% · Amp +0.04",
+    manaCost: 550,
+    crystalCost: 2,
+    minLevel: 10,
+    requires: ["power_focus"],
+    bonus: { declareCostMul: 0.85, declarePowerBonus: 0.04 },
+  },
+  {
+    id: "abyss_well",
+    nameKo: "심연 우물",
+    branch: "mana",
+    descKo: "마나 상한 +20 · 재생 +0.06",
+    manaCost: 550,
+    crystalCost: 2,
+    minLevel: 10,
+    requires: ["mana_pool"],
+    bonus: { manaMaxBonus: 20, manaRegenBonus: 0.06 },
+  },
+  {
+    id: "war_chorus",
+    nameKo: "전장 합창",
+    branch: "leader",
+    descKo: "리더 ATK +1.5% · 스킬 위력 +4%",
+    manaCost: 700,
+    crystalCost: 3,
+    minLevel: 12,
+    requires: ["leader_aura", "dual_mastery"],
+    bonus: { leaderAtkBonus: 0.015, skillPowerBonus: 0.04 },
   },
 ];
 
