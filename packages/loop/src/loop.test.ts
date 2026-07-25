@@ -14,6 +14,7 @@ import {
   runEquipSymbol,
   runEvolve,
   runSetParty,
+  runSkillUp,
   runSortie,
   runSummon,
 } from "./loop.js";
@@ -77,6 +78,35 @@ describe("game loop", () => {
     const ok = runEvolve(save, "0");
     assert.match(ok.message, /진화/);
     assert.equal(ok.save.roster[0]!.evolve, 1);
+    assert.ok(ok.save.island.mana < save.island.mana);
+  });
+
+  it("skills up S2 when level and mana met", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      roster: save.roster.map((m, i) =>
+        i === 0
+          ? { ...m, level: 5, skillLevels: [1, 1, 1] as [number, number, number] }
+          : m,
+      ),
+      island: { ...save.island, mana: 3000 },
+    };
+    const blocked = runSkillUp(
+      {
+        ...save,
+        roster: save.roster.map((m, i) =>
+          i === 0 ? { ...m, level: 3 } : m,
+        ),
+      },
+      "0",
+      1,
+    );
+    assert.match(blocked.message, /조건 미달/);
+
+    const ok = runSkillUp(save, "0", 1);
+    assert.match(ok.message, /스킬업/);
+    assert.equal(ok.save.roster[0]!.skillLevels[1], 2);
     assert.ok(ok.save.island.mana < save.island.mana);
   });
 

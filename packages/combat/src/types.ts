@@ -1,4 +1,4 @@
-import type { SkillDef } from "stonesummoner-data";
+import type { SkillDef, StonePassiveId } from "stonesummoner-data";
 
 export type Element = "fire" | "water" | "wind" | "light" | "dark";
 export type TeamId = "ally" | "enemy";
@@ -28,9 +28,12 @@ export interface Unit {
   skills?: SkillDef[];
   /** Remaining cooldown per skill index. */
   skillCd?: number[];
+  stonePassive?: StonePassiveId;
   alive: boolean;
   /** Next skill: flat critRate bonus (consumed on hit). */
   critCharm?: number;
+  /** Next skill: flat critDmg bonus (consumed on hit). */
+  critDmgBonus?: number;
   /** Absorb incoming damage before HP. */
   shieldHp?: number;
 }

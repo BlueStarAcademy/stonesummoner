@@ -8,10 +8,13 @@ export interface OwnedMonster {
   symbolSlots: (string | null)[];
   /** Evolution stage 0–2 (강화진 진화 스텁). */
   evolve: number;
+  /** S1/S2/S3 skill levels (1..MAX_SKILL_LEVEL). */
+  skillLevels: [number, number, number];
 }
 
 export const MAX_MONSTER_LEVEL = 15;
 export const MAX_EVOLVE = 2;
+export const MAX_SKILL_LEVEL = 3;
 export const SUMMON_SCROLL_COST = 1;
 export const STARTER_SCROLLS = 5;
 
@@ -31,6 +34,31 @@ export function evolveManaCost(evolve: number): number {
 
 export function evolveCrystalCost(evolve: number): number {
   return evolve === 0 ? 0 : 5 + evolve * 5;
+}
+
+export function defaultSkillLevels(): [number, number, number] {
+  return [1, 1, 1];
+}
+
+export function normalizeSkillLevels(
+  levels?: number[] | null,
+): [number, number, number] {
+  const base = defaultSkillLevels();
+  if (!levels?.length) return base;
+  return [
+    Math.min(MAX_SKILL_LEVEL, Math.max(1, levels[0] ?? 1)),
+    Math.min(MAX_SKILL_LEVEL, Math.max(1, levels[1] ?? 1)),
+    Math.min(MAX_SKILL_LEVEL, Math.max(1, levels[2] ?? 1)),
+  ];
+}
+
+/** Monster level gate to raise skill from current level → level+1 */
+export function skillUpMinMonsterLevel(skillLevel: number): number {
+  return 3 + skillLevel * 2; // Lv1→2 needs mon Lv5; Lv2→3 needs Lv7
+}
+
+export function skillUpManaCost(skillIndex: number, skillLevel: number): number {
+  return 150 + skillLevel * 120 + skillIndex * 40;
 }
 
 export function levelStatMult(level: number): number {
@@ -89,6 +117,7 @@ export function createStarterRoster(): {
     level: 1,
     symbolSlots: emptySymbolSlots(),
     evolve: 0,
+    skillLevels: defaultSkillLevels(),
   }));
   return {
     roster,
@@ -110,5 +139,7 @@ export function describeOwned(m: OwnedMonster): string {
   const stars = "★".repeat(baseStars) + (evo > 0 ? `+${evo}` : "");
   const slots = m.symbolSlots ?? emptySymbolSlots();
   const eqs = slots.filter(Boolean).length;
-  return `${name} Lv.${m.level} ${stars} 상징${eqs}/6`.trim();
+  const sk = normalizeSkillLevels(m.skillLevels);
+  const skTag = `스킬${sk[0]}/${sk[1]}/${sk[2]}`;
+  return `${name} Lv.${m.level} ${stars} ${skTag} 상징${eqs}/6`.trim();
 }

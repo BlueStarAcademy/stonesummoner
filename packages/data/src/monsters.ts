@@ -1,4 +1,8 @@
 import { basicStrike, type SkillDef } from "./skills.js";
+import {
+  STONE_PASSIVE_LABEL,
+  type StonePassiveId,
+} from "./stonePassives.js";
 
 export type Element = "fire" | "water" | "wind" | "light" | "dark";
 
@@ -19,12 +23,23 @@ export interface MonsterDef {
   /** @deprecated Prefer skills[0]; kept for fallback. */
   skillCoeff: number;
   skills: [SkillDef, SkillDef, SkillDef];
+  stonePassiveId: StonePassiveId;
+  /** Display string for UI. */
   stonePassive: string;
 }
 
-/** Phase 1 sample roster (subset of docs/monster-template.md). */
+function mon(
+  partial: Omit<MonsterDef, "stonePassive">,
+): MonsterDef {
+  return {
+    ...partial,
+    stonePassive: STONE_PASSIVE_LABEL[partial.stonePassiveId],
+  };
+}
+
+/** Phase 1 sample roster (docs/monster-template.md 10종). */
 export const MONSTERS: MonsterDef[] = [
-  {
+  mon({
     id: "fire_fang",
     nameKo: "불꽃잡이",
     element: "fire",
@@ -47,9 +62,9 @@ export const MONSTERS: MonsterDef[] = [
         effects: [{ kind: "damage", target: "all_enemies", coeff: 1.15 }],
       },
     ],
-    stonePassive: "따냄 시 치피 +10%",
-  },
-  {
+    stonePassiveId: "capture_crit",
+  }),
+  mon({
     id: "dew_healer",
     nameKo: "이슬치유사",
     element: "water",
@@ -75,9 +90,9 @@ export const MONSTERS: MonsterDef[] = [
         ],
       },
     ],
-    stonePassive: "실드핵 힐 증폭",
-  },
-  {
+    stonePassiveId: "shield_core_heal",
+  }),
+  mon({
     id: "gale_scout",
     nameKo: "돌풍정찰",
     element: "wind",
@@ -100,9 +115,9 @@ export const MONSTERS: MonsterDef[] = [
         effects: [{ kind: "damage", target: "single", coeff: 1.55 }],
       },
     ],
-    stonePassive: "착수 시 아군 ATB +5%",
-  },
-  {
+    stonePassiveId: "stone_ally_atb",
+  }),
+  mon({
     id: "shield_tortoise",
     nameKo: "방패거북",
     element: "water",
@@ -128,9 +143,9 @@ export const MONSTERS: MonsterDef[] = [
         effects: [{ kind: "shield", target: "self", coeff: 0.35 }],
       },
     ],
-    stonePassive: "대마 유지 받는피해↓",
-  },
-  {
+    stonePassiveId: "high_amp_dr",
+  }),
+  mon({
     id: "ash_archer",
     nameKo: "잿빛궁수",
     element: "fire",
@@ -153,9 +168,37 @@ export const MONSTERS: MonsterDef[] = [
         effects: [{ kind: "damage", target: "all_enemies", coeff: 1.2 }],
       },
     ],
-    stonePassive: "치명부적 +1턴",
-  },
-  {
+    stonePassiveId: "crit_charm_plus",
+  }),
+  mon({
+    id: "mist_shaman",
+    nameKo: "안개무녀",
+    element: "wind",
+    naturalStars: 4,
+    role: "support",
+    baseStats: { hp: 310, atk: 85, def: 38, spd: 96, critRate: 15, critDmg: 50 },
+    skillCoeff: 0.95,
+    skills: [
+      basicStrike("안개탄", 0.95),
+      {
+        id: "s2",
+        nameKo: "공속버프",
+        cooldown: 3,
+        effects: [
+          { kind: "heal", target: "ally_lowest", coeff: 0.12 },
+          { kind: "mana", amount: 10 },
+        ],
+      },
+      {
+        id: "s3",
+        nameKo: "재생안개",
+        cooldown: 4,
+        effects: [{ kind: "heal", target: "ally_lowest", coeff: 0.32 }],
+      },
+    ],
+    stonePassiveId: "stone_ally_heal",
+  }),
+  mon({
     id: "seal_scholar",
     nameKo: "진문학자",
     element: "light",
@@ -184,9 +227,9 @@ export const MONSTERS: MonsterDef[] = [
         ],
       },
     ],
-    stonePassive: "착수 하이라이트 +1",
-  },
-  {
+    stonePassiveId: "suggest_plus",
+  }),
+  mon({
     id: "capture_hound",
     nameKo: "사석사냥꾼",
     element: "dark",
@@ -212,9 +255,9 @@ export const MONSTERS: MonsterDef[] = [
         ],
       },
     ],
-    stonePassive: "따냄 마나 +30%",
-  },
-  {
+    stonePassiveId: "capture_mana",
+  }),
+  mon({
     id: "thunder_lancer",
     nameKo: "천둥창병",
     element: "light",
@@ -237,8 +280,33 @@ export const MONSTERS: MonsterDef[] = [
         effects: [{ kind: "damage", target: "all_enemies", coeff: 1.25 }],
       },
     ],
-    stonePassive: "연타착수 15%",
-  },
+    stonePassiveId: "stone_amp_proc",
+  }),
+  mon({
+    id: "abyss_priest",
+    nameKo: "심연사제",
+    element: "dark",
+    naturalStars: 5,
+    role: "debuffer",
+    baseStats: { hp: 300, atk: 125, def: 36, spd: 94, critRate: 20, critDmg: 60 },
+    skillCoeff: 1.1,
+    skills: [
+      basicStrike("저주", 1.1),
+      {
+        id: "s2",
+        nameKo: "침묵",
+        cooldown: 3,
+        effects: [{ kind: "damage", target: "single", coeff: 1.45 }],
+      },
+      {
+        id: "s3",
+        nameKo: "심연의 눈",
+        cooldown: 5,
+        effects: [{ kind: "damage", target: "all_enemies", coeff: 1.1 }],
+      },
+    ],
+    stonePassiveId: "capture_amp",
+  }),
 ];
 
 export function getMonster(id: string): MonsterDef | undefined {

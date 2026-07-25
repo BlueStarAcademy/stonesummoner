@@ -20,6 +20,7 @@ import {
   runEquipSymbol,
   runEvolve,
   runSetParty,
+  runSkillUp,
   runSortie,
   runSummon,
   stageUnlockLabel,
@@ -47,7 +48,7 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | summon | enhance <i> | evolve <i> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
+    "명령: collect | summon | enhance <i> | evolve <i> | skillup <i> <0-2> | gear | enh-gear <acc|orb> | symbols | equip <m> <s> | enh-sym <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
@@ -101,6 +102,15 @@ async function interactive(): Promise<void> {
 
     if (cmd === "evolve" || cmd === "evo") {
       const r = runEvolve(save, arg ?? "0");
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "skillup" || cmd === "sk" || cmd === "su") {
+      const slot = Number(arg2 ?? "0");
+      const r = runSkillUp(save, arg ?? "0", Number.isFinite(slot) ? slot : 0);
       save = r.save;
       console.log(r.message);
       printStatus(save);
@@ -197,7 +207,7 @@ async function interactive(): Promise<void> {
     }
 
     console.log(
-      "알 수 없는 명령. collect | summon | enhance | evolve | gear | enh-gear | symbols | equip | enh-sym | roster | party | stages | go | status | demo | quit",
+      "알 수 없는 명령. collect | summon | enhance | evolve | skillup | gear | enh-gear | symbols | equip | enh-sym | roster | party | stages | go | status | demo | quit",
     );
   }
 

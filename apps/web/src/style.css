@@ -415,6 +415,26 @@ main {
   font-weight: 700;
 }
 
+.enhance-mon {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.skill-up-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.skill-up-row button {
+  min-height: 40px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  padding: 6px 4px;
+}
+
 .board button.cell.suggest-1 {
   outline: 2px solid #c9a227;
   outline-offset: -2px;
@@ -507,6 +527,27 @@ button.unit-card {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.battle-ticker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 3.6em;
+  overflow: hidden;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #120e1c;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.battle-ticker span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dmg-layer {

@@ -244,6 +244,7 @@ export class Battle {
     const manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
       (1 + this.summonerOf(u.team).boardSense);
+    const topN = u.stonePassive === "suggest_plus" ? 4 : 3;
     return rankStoneSuggestions(
       legal,
       this.board.size,
@@ -252,7 +253,7 @@ export class Battle {
         hasToken: !!this.tokenAt(p.x, p.y),
       }),
       manaMul,
-      3,
+      topN,
     );
   }
 
@@ -262,14 +263,22 @@ export class Battle {
     );
     const name = itemDef(token.id).nameKo;
     if (token.id === "crit_charm") {
-      unit.critCharm = (unit.critCharm ?? 0) + 55;
-      this.log.push(`${unit.name} 획득 ${name} (치명↑)`);
+      const bonus = unit.stonePassive === "crit_charm_plus" ? 55 * 2 : 55;
+      unit.critCharm = (unit.critCharm ?? 0) + bonus;
+      this.log.push(
+        `${unit.name} 획득 ${name} (치명↑${unit.stonePassive === "crit_charm_plus" ? "×2" : ""})`,
+      );
       return;
     }
     if (token.id === "shield_core") {
       const shield = Math.round(unit.stats.hp * 0.18);
       unit.shieldHp = (unit.shieldHp ?? 0) + shield;
       this.log.push(`${unit.name} 획득 ${name} (실드 +${shield})`);
+      if (unit.stonePassive === "shield_core_heal") {
+        const heal = Math.round(unit.stats.hp * 0.12);
+        unit.hp = Math.min(unit.stats.hp, unit.hp + heal);
+        this.log.push(`스톤패시브: ${unit.name} 회복 +${heal}`);
+      }
       return;
     }
     // capture_magnet
@@ -328,13 +337,25 @@ export class Battle {
     }
 
     const kind = classifyCapture(result.capturedCount);
-    const manaMul =
+    let manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
       (1 + this.summonerOf(unit.team).boardSense);
+    if (unit.stonePassive === "capture_mana" && result.capturedCount > 0) {
+      manaMul *= 1.3;
+    }
     const gains = gainsForBoardEvent(kind, result.capturedCount, manaMul);
 
+    let ampDelta = gains.amplifyDelta;
+    if (unit.stonePassive === "capture_amp" && result.capturedCount > 0) {
+      ampDelta += 0.04;
+    }
+    if (unit.stonePassive === "stone_amp_proc" && this.rng() < 0.15) {
+      ampDelta += 0.06;
+      this.log.push(`스톤패시브: ${unit.name} 연타착수`);
+    }
+
     this.amplify = clampAmplify(
-      this.amplify + gains.amplifyDelta,
+      this.amplify + ampDelta,
       amplifyCapForPhase(this.circle.boardPhase),
       this.powerGapCap,
     );
@@ -342,6 +363,36 @@ export class Battle {
 
     const sm = this.summonerOf(unit.team);
     sm.mana = Math.min(sm.manaMax, sm.mana + gains.mana);
+
+    if (unit.stonePassive === "capture_crit" && result.capturedCount > 0) {
+      unit.critDmgBonus = (unit.critDmgBonus ?? 0) + 10;
+      this.log.push(`스톤패시브: ${unit.name} 치피 +10%`);
+    }
+    if (unit.stonePassive === "stone_ally_atb") {
+      const ally = this.units.find(
+        (u) =>
+          u.alive &&
+          u.team === unit.team &&
+          u.kind === "monster" &&
+          u.id !== unit.id,
+      );
+      if (ally) {
+        ally.atb = Math.min(100, ally.atb + 5);
+        this.log.push(`스톤패시브: ${ally.name} ATB +5`);
+      }
+    }
+    if (unit.stonePassive === "stone_ally_heal") {
+      const ally =
+        this.units
+          .filter(
+            (u) =>
+              u.alive && u.team === unit.team && u.kind === "monster",
+          )
+          .sort((a, b) => a.hp / a.stats.hp - b.hp / b.stats.hp)[0] ?? unit;
+      const heal = Math.round(ally.stats.hp * 0.06);
+      ally.hp = Math.min(ally.stats.hp, ally.hp + heal);
+      this.log.push(`스톤패시브: ${ally.name} 회복 +${heal}`);
+    }
 
     const picked = this.tokenAt(point.x, point.y);
     if (picked) this.applyTokenPickup(unit, picked);
@@ -558,6 +609,16 @@ export class Battle {
 
     const critBonus = attacker.critCharm ?? 0;
     if (critBonus > 0) attacker.critCharm = 0;
+    const critDmgExtra = attacker.critDmgBonus ?? 0;
+    if (critDmgExtra > 0) attacker.critDmgBonus = 0;
+
+    let incomingMul = 1;
+    if (
+      target.stonePassive === "high_amp_dr" &&
+      this.currentAmplify() >= 1.08
+    ) {
+      incomingMul = 0.9;
+    }
 
     const { damage, crit } = computeDamage({
       atk: attacker.stats.atk,
@@ -567,11 +628,11 @@ export class Battle {
       defenderDef: target.stats.def,
       amplify: this.currentAmplify(),
       critRate: attacker.stats.critRate + critBonus,
-      critDmg: attacker.stats.critDmg,
+      critDmg: attacker.stats.critDmg + critDmgExtra,
       rng: this.rng,
     });
 
-    let remaining = damage;
+    let remaining = Math.round(damage * incomingMul);
     if (target.shieldHp && target.shieldHp > 0) {
       const absorbed = Math.min(target.shieldHp, remaining);
       target.shieldHp -= absorbed;

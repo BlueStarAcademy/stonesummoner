@@ -43,9 +43,14 @@ import {
   evolveMinLevel,
   MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
+  MAX_SKILL_LEVEL,
   nextUid,
+  normalizeSkillLevels,
   pickSummonMonster,
   scaledMonsterStats,
+  skillUpManaCost,
+  skillUpMinMonsterLevel,
+  defaultSkillLevels,
   SUMMON_SCROLL_COST,
   type OwnedMonster,
 } from "./roster.js";
@@ -60,6 +65,10 @@ export {
   evolveMinLevel,
   MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
+  MAX_SKILL_LEVEL,
+  normalizeSkillLevels,
+  skillUpManaCost,
+  skillUpMinMonsterLevel,
   SUMMON_SCROLL_COST,
 } from "./roster.js";
 export { isStageUnlocked, stageUnlockLabel } from "./progress.js";
@@ -145,14 +154,25 @@ function buildSummonerState(
 function skillsForMonster(
   m: NonNullable<ReturnType<typeof getMonster>>,
   evolve = 0,
+  skillLevels: [number, number, number] = defaultSkillLevels(),
 ) {
-  const bump = evolve * 0.05;
-  return m.skills.map((sk) => ({
-    ...sk,
-    effects: sk.effects.map((e) =>
-      e.kind === "damage" ? { ...e, coeff: e.coeff + bump } : { ...e },
-    ),
-  }));
+  const evoBump = evolve * 0.05;
+  return m.skills.map((sk, i) => {
+    const lv = skillLevels[i] ?? 1;
+    const skBump = (lv - 1) * 0.08;
+    return {
+      ...sk,
+      effects: sk.effects.map((e) => {
+        if (e.kind === "damage" || e.kind === "heal" || e.kind === "shield") {
+          return { ...e, coeff: e.coeff + evoBump + skBump };
+        }
+        if (e.kind === "mana") {
+          return { ...e, amount: Math.round(e.amount * (1 + skBump)) };
+        }
+        return { ...e };
+      }),
+    };
+  });
 }
 
 function unitFromOwned(
@@ -165,6 +185,7 @@ function unitFromOwned(
   const base = scaledMonsterStats(m, owned.level, owned.evolve ?? 0);
   const stats = applySymbolsToStats(base, equippedSymbols(save, owned));
   const evoTag = (owned.evolve ?? 0) > 0 ? ` E${owned.evolve}` : "";
+  const skillLevels = normalizeSkillLevels(owned.skillLevels);
   return makeUnit({
     id: owned.uid,
     name: `${m.nameKo} Lv.${owned.level}${evoTag}`,
@@ -172,8 +193,9 @@ function unitFromOwned(
     kind: "monster",
     element: m.element,
     stats: { ...stats },
-    skillCoeff: m.skillCoeff + (owned.evolve ?? 0) * 0.05,
-    skills: skillsForMonster(m, owned.evolve ?? 0),
+    skillCoeff: m.skillCoeff + (owned.evolve ?? 0) * 0.05 + (skillLevels[0]! - 1) * 0.08,
+    skills: skillsForMonster(m, owned.evolve ?? 0, skillLevels),
+    stonePassive: m.stonePassiveId,
   });
 }
 
@@ -195,6 +217,7 @@ function unitFromMonsterId(
     stats: { ...stats },
     skillCoeff: m.skillCoeff,
     skills: skillsForMonster(m, 0),
+    stonePassive: m.stonePassiveId,
   });
 }
 
@@ -330,6 +353,7 @@ export function runSummon(
     level: 1,
     symbolSlots: emptySymbolSlots(),
     evolve: 0,
+    skillLevels: defaultSkillLevels(),
   };
   const roster = [...save.roster, owned];
   let party = [...save.party];
@@ -442,6 +466,63 @@ export function runEvolve(
   return {
     save: { ...save, island, roster },
     message: `진화: ${describeOwned({ ...owned, evolve: nextEvo })} (${costNote})`,
+  };
+}
+
+/**
+ * Skill-up at 강화진 — raise one of S1/S2/S3 (cap MAX_SKILL_LEVEL).
+ */
+export function runSkillUp(
+  save: PlayerSave,
+  uidOrIndex: string,
+  skillIndex: number,
+): LoopStepResult {
+  const owned = resolveOwned(save, uidOrIndex);
+  if (!owned) {
+    return { save, message: `몬스터를 찾을 수 없음: ${uidOrIndex}` };
+  }
+  const idx = Math.floor(skillIndex);
+  if (idx < 0 || idx > 2) {
+    return { save, message: "스킬 슬롯은 0~2 (S1~S3)만 가능" };
+  }
+  const levels = normalizeSkillLevels(owned.skillLevels);
+  const cur = levels[idx]!;
+  if (cur >= MAX_SKILL_LEVEL) {
+    return {
+      save,
+      message: `${describeOwned(owned)} S${idx + 1} 이미 최대(+${MAX_SKILL_LEVEL})`,
+    };
+  }
+  const needLv = skillUpMinMonsterLevel(cur);
+  if (owned.level < needLv) {
+    return {
+      save,
+      message: `스킬업 조건 미달 — Lv.${needLv} 필요 (현재 ${owned.level})`,
+    };
+  }
+  const cost = skillUpManaCost(idx, cur);
+  if (save.island.mana < cost) {
+    return {
+      save,
+      message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+
+  const nextLevels: [number, number, number] = [...levels];
+  nextLevels[idx] = cur + 1;
+  const def = getMonster(owned.monsterId);
+  const skillName = def?.skills[idx]?.nameKo ?? `S${idx + 1}`;
+  const roster = save.roster.map((m) =>
+    m.uid === owned.uid
+      ? { ...m, skillLevels: nextLevels }
+      : m,
+  );
+  const island = { ...save.island, mana: save.island.mana - cost };
+  const updated = { ...owned, skillLevels: nextLevels };
+
+  return {
+    save: { ...save, island, roster },
+    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[idx]} (−마나 ${cost})`,
   };
 }
 

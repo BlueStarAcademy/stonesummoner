@@ -14,10 +14,12 @@ import {
 } from "./index.js";
 
 describe("phase1 data", () => {
-  it("has 8 monsters and 3 symbol sets", () => {
-    assert.equal(MONSTERS.length, 8);
+  it("has 10 monsters and 3 symbol sets", () => {
+    assert.equal(MONSTERS.length, 10);
     assert.equal(SYMBOL_SETS.length, 3);
     assert.ok(getMonster("fire_fang"));
+    assert.ok(getMonster("mist_shaman"));
+    assert.ok(getMonster("abyss_priest"));
   });
 
   it("gives each monster three skills", () => {

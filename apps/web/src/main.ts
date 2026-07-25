@@ -31,13 +31,17 @@ import {
   isStageUnlocked,
   MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
+  MAX_SKILL_LEVEL,
   runEnhance,
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
   runEvolve,
   runSetParty,
+  runSkillUp,
   runSummon,
+  skillUpManaCost,
+  skillUpMinMonsterLevel,
   stageUnlockLabel,
   type PlayerSave,
 } from "stonesummoner-loop";
@@ -59,7 +63,7 @@ const SAVE_KEY = "stonesummoner.save.v5";
 const DEMO_SAVE_KEY = "stonesummoner.save.demo.v5";
 
 let sessionUser: SessionUser | null = null;
-let authPanel: "menu" | "login" | "register" = "menu";
+const authUi = { pane: "menu" as "menu" | "login" | "register" };
 let bootReady = false;
 let cloudTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -107,6 +111,7 @@ function migrateSave(raw: unknown): PlayerSave | null {
   const roster = (p.roster?.length ? p.roster : base.roster).map((m) => ({
     ...m,
     evolve: m.evolve ?? 0,
+    skillLevels: (m.skillLevels ?? [1, 1, 1]) as [number, number, number],
     symbolSlots: m.symbolSlots ?? [null, null, null, null, null, null],
   }));
   const island = tickProduction({
@@ -195,7 +200,7 @@ async function enterWithUser(
     save = loadLocalSave() ?? (opts?.demo ? createDemoSave() : createNewSave());
     localStorage.setItem(localSaveKey(), JSON.stringify(save));
   }
-  authPanel = "menu";
+  authUi.pane = "menu";
   view = "home";
   flash(
     user.kind === "demo"
@@ -216,7 +221,7 @@ async function logout(): Promise<void> {
   currentStage = null;
   autoMode = false;
   clearAutoTimer();
-  authPanel = "menu";
+  authUi.pane = "menu";
   view = "auth";
   save = createNewSave();
   flash("로그아웃했습니다.");
@@ -590,15 +595,17 @@ function renderSuggestStrip(): string {
 }
 
 function renderAuth(): string {
-  if (authQueue === "login" || authQueue === "register") {
-    const title = authQueue === "login" ? "로그인" : "회원가입";
+  const pane = authUi.pane;
+  if (pane === "login" || pane === "register") {
+    const title = pane === "login" ? "로그인" : "회원가입";
+    const pwAuto = pane === "login" ? "current-password" : "new-password";
     return `<div class="auth-screen">
       <p class="auth-brand">StoneSummoner</p>
       <h2 class="auth-title">${title}</h2>
       <p class="auth-copy">이메일과 비밀번호로 세이브를 클라우드에 보관합니다.</p>
       <form id="auth-form" class="auth-form">
         <label>이메일<input name="email" type="email" autocomplete="username" required /></label>
-        <label>비밀번호<input name="password" type="password" autocomplete="${authQueue === "login" ? "current-password" : "new-password"}" minlength="6" required /></label>
+        <label>비밀번호<input name="password" type="password" autocomplete="${pwAuto}" minlength="6" required /></label>
         <button type="submit">${title}</button>
       </form>
       <button type="button" class="secondary full" id="auth-back">뒤로</button>
@@ -714,7 +721,7 @@ function renderHome(): string {
     <p class="muted">서머너 Lv.${save.island.summonerLevel} · EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
     <div class="island-grid">
       <button type="button" class="building" data-b="summon_hearth"><strong>소환진</strong><small>소환서 ${save.scrolls}장</small></button>
-      <button type="button" class="building" data-b="power_circle"><strong>강화진</strong><small>레벨 · 진화 · 장비</small></button>
+      <button type="button" class="building" data-b="power_circle"><strong>강화진</strong><small>레벨 · 진화 · 스킬업</small></button>
       <button type="button" class="building" data-b="gateway"><strong>출정문</strong><small>시나리오 진입</small></button>
       <button type="button" class="building" data-b="mana_pond"><strong>진액 연못</strong><small>대기 ${Math.floor(pond?.storedMana ?? 0)} / 4000</small></button>
       <button type="button" class="building" data-b="party"><strong>파티</strong><small>출전 몬스터 편성</small></button>
@@ -787,15 +794,39 @@ function renderEnhance(): string {
             : m.level < evoNeed
               ? `진화 Lv.${evoNeed}+`
               : `진화 ${evoCost}`;
+          const levels = (m.skillLevels ?? [1, 1, 1]) as [
+            number,
+            number,
+            number,
+          ];
+          const def = getMonster(m.monsterId);
+          const skillBtns = [0, 1, 2]
+            .map((si) => {
+              const lv = levels[si]!;
+              const maxSk = lv >= MAX_SKILL_LEVEL;
+              const need = skillUpMinMonsterLevel(lv);
+              const skCost = skillUpManaCost(si, lv);
+              const name = def?.skills[si]?.nameKo ?? `S${si + 1}`;
+              const hint = maxSk
+                ? `${name} MAX`
+                : m.level < need
+                  ? `${name} Lv.${need}+`
+                  : `${name}+ (−${skCost})`;
+              return `<button type="button" class="secondary sk-up" data-skup="${m.uid}" data-skslot="${si}" ${maxSk ? "disabled" : ""}>${hint}</button>`;
+            })
+            .join("");
           const inParty = save.party.includes(m.uid) ? " · 파티" : "";
-          return `<div class="sym-row">
-            <button type="button" data-enh="${m.uid}" ${maxed ? "disabled" : ""}>
-              <strong>${describeOwned(m)}${inParty}</strong><br/>
-              <small class="muted">${maxed ? "최대 레벨" : `강화 −마나 ${cost}`}</small>
-            </button>
-            <button type="button" class="secondary" data-evo="${m.uid}" ${evoMax ? "disabled" : ""}>
-              ${evoHint}
-            </button>
+          return `<div class="enhance-mon">
+            <div class="sym-row">
+              <button type="button" data-enh="${m.uid}" ${maxed ? "disabled" : ""}>
+                <strong>${describeOwned(m)}${inParty}</strong><br/>
+                <small class="muted">${maxed ? "최대 레벨" : `강화 −마나 ${cost}`}</small>
+              </button>
+              <button type="button" class="secondary" data-evo="${m.uid}" ${evoMax ? "disabled" : ""}>
+                ${evoHint}
+              </button>
+            </div>
+            <div class="skill-up-row">${skillBtns}</div>
           </div>`;
         })
         .join("")}
@@ -846,6 +877,22 @@ function renderStages(): string {
   </div>`;
 }
 
+function renderBattleTicker(): string {
+  if (!battle) return "";
+  const lines = battle.log
+    .filter(
+      (l) =>
+        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방/.test(l),
+    )
+    .slice(-3);
+  if (!lines.length) {
+    return `<div class="battle-ticker muted">전투 알림 — 따냄·아이템·패시브가 여기 표시됩니다</div>`;
+  }
+  return `<div class="battle-ticker" aria-live="polite">${lines
+    .map((l) => `<span>${l}</span>`)
+    .join("")}</div>`;
+}
+
 function renderBattle(manaPct: number): string {
   if (!battle || !currentStage) return "";
   const allyUnits = battle.units.filter((u) => u.team === "ally");
@@ -883,6 +930,7 @@ function renderBattle(manaPct: number): string {
       <div class="muted">${currentStage.nameKo} · ${currentStage.boardSize}×${currentStage.boardSize} · 웨이브 ${battle.currentWave}/${battle.totalWaves}</div>
       <div class="muted">${status}</div>
     </div>
+    ${renderBattleTicker()}
     <div class="muted item-legend">서머너 후열(무적) · 전열 소환수 전멸 시 승패</div>
     ${lastRewardMsg ? `<div class="muted">${lastRewardMsg}</div>` : ""}
     ${renderSummonerBack(enemyBack, "enemy")}
@@ -949,15 +997,15 @@ function bindAuth(): void {
   });
 
   app.querySelector("#auth-login")?.addEventListener("click", () => {
-    authQueue = "login";
+    authUi.pane = "login";
     render();
   });
   app.querySelector("#auth-register")?.addEventListener("click", () => {
-    authQueue = "register";
+    authUi.pane = "register";
     render();
   });
   app.querySelector("#auth-back")?.addEventListener("click", () => {
-    authQueue = "menu";
+    authUi.pane = "menu";
     render();
   });
 
@@ -968,7 +1016,7 @@ function bindAuth(): void {
     const email = String(fd.get("email") ?? "");
     const password = String(fd.get("password") ?? "");
     const path =
-      authQueue === "register" ? "/api/auth/register" : "/api/auth/login";
+      authUi.pane === "register" ? "/api/auth/register" : "/api/auth/login";
     void (async () => {
       try {
         const res = await fetch(path, {
@@ -1086,6 +1134,18 @@ function bind(): void {
     btn.addEventListener("click", () => {
       const uid = btn.dataset.evo!;
       const r = runEvolve(save, uid);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-skup]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.skup!;
+      const slot = Number(btn.dataset.skslot ?? "0");
+      const r = runSkillUp(save, uid, slot);
       save = r.save;
       persist();
       flash(r.message);

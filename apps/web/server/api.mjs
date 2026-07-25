@@ -130,8 +130,17 @@ export function mountApi(app, store) {
   });
 
   app.get("/api/me", async (req, res) => {
-    const user = await requireUser(store, req, res);
-    if (!user) return;
+    const token = req.cookies?.[COOKIE];
+    if (!token) {
+      res.json({ user: null });
+      return;
+    }
+    const user = await store.userFromToken(token);
+    if (!user) {
+      clearSession(res, req);
+      res.json({ user: null });
+      return;
+    }
     res.json({ user });
   });
 
