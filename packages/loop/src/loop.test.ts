@@ -585,6 +585,19 @@ describe("game loop", () => {
     assert.ok((battle.allySummoner.manaRegenPerTick ?? 0) >= 0.9);
   });
 
+  it("scales enemy summoner pressure by stage", () => {
+    const save = createNewSave(0);
+    const early = createStageBattle(getStage("garen_1_1")!, save);
+    const mid = createStageBattle(getStage("garen_1_4")!, save);
+    const arena = createStageBattle(getStage("arena_veteran")!, save);
+    assert.ok(
+      mid.enemySummoner.manaRegenPerTick > early.enemySummoner.manaRegenPerTick,
+    );
+    assert.ok(mid.enemySummoner.boardSense > early.enemySummoner.boardSense);
+    assert.ok(arena.enemySummoner.boardSense > early.enemySummoner.boardSense);
+    assert.ok((arena.enemySummoner.skillPowerBonus ?? 0) > 0);
+  });
+
   it("lists roster", () => {
     const lines = listRoster(createNewSave(0));
     assert.equal(lines.length, 4);

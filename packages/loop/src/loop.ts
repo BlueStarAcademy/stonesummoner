@@ -273,6 +273,27 @@ function buildSummonerState(
   };
 }
 
+/** Scale enemy summoner pressure by stage mode / number. */
+function enemySummonerProfile(stage: StageDef): {
+  weakBoard: boolean;
+  awaken: number;
+  skillTree: string[];
+} {
+  const isPvp =
+    stage.mode === "arena" || stage.mode === "world_arena";
+  const awaken = isPvp
+    ? Math.min(4, Math.floor(stage.stage) + 1)
+    : Math.min(3, Math.floor(stage.stage / 2));
+  const weakBoard = !isPvp && stage.stage <= 2;
+  const skillTree: string[] = [];
+  if (stage.stage >= 2 || isPvp) skillTree.push("root_power");
+  if (stage.stage >= 3 || isPvp) skillTree.push("root_mana");
+  if (stage.stage >= 4 || (isPvp && stage.stage >= 2)) {
+    skillTree.push("power_focus");
+  }
+  return { weakBoard, awaken, skillTree };
+}
+
 function skillsForMonster(
   m: NonNullable<ReturnType<typeof getMonster>>,
   evolve = 0,
@@ -1696,6 +1717,7 @@ export function createStageBattle(
   const totalWaves = Math.max(1, stage.waves);
 
   const modules = modulesForStage(stage);
+  const enemyProfile = enemySummonerProfile(stage);
 
   return new Battle({
     boardSize: stage.boardSize,
@@ -1704,9 +1726,9 @@ export function createStageBattle(
     enemySummoner: buildSummonerState(
       "e-sum",
       createStarterGear(),
-      true,
-      0,
-      [],
+      enemyProfile.weakBoard,
+      enemyProfile.awaken,
+      enemyProfile.skillTree,
     ),
     powerGapAmplifyCap: powerGapCap,
     totalWaves,

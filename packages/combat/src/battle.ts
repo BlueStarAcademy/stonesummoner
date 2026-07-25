@@ -1472,9 +1472,14 @@ export class Battle {
     if (this.canUseSummonerSkill(unit)) {
       return this.useSkill({ summonerSkill: "open" });
     }
+    // Contest Amplify early when lagging (esp. enemy summoner mana race).
+    if (this.canUseSummonerDeclare(unit) && this.amplify < 1.08) {
+      return this.useSkill({ summonerSkill: "declare" });
+    }
+    const cleanNeed = unit.team === "enemy" ? 3 : 4;
     if (
       this.canUseSummonerClean(unit) &&
-      this.countEnemyStones(unit.team) >= 4
+      this.countEnemyStones(unit.team) >= cleanNeed
     ) {
       return this.useSkill({ summonerSkill: "clean" });
     }
