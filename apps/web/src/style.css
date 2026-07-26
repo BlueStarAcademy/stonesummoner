@@ -3407,6 +3407,7 @@ button.slot-cell {
 .auth-checks {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 10px 16px;
   margin: 2px 0 4px;
 }
