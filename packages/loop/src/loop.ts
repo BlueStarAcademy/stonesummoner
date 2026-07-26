@@ -56,6 +56,7 @@ import {
   type SummonerGear,
   type SymbolInstance,
 } from "stonesummoner-data";
+export { MAX_GEAR_BAG };
 import {
   addSummonerExp,
   collectCrystal,
