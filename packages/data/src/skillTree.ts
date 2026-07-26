@@ -13,6 +13,8 @@ export type SkillTreeNodeId =
   | "declare_mastery"
   | "abyss_well"
   | "sense_tide"
+  | "dual_surge"
+  | "clean_surge"
   | "war_chorus";
 
 export interface SkillTreeBonus {
@@ -183,6 +185,28 @@ export const SKILL_TREE_NODES: SkillTreeNode[] = [
       startManaPct: 0.03,
       manaRegenBonus: 0.04,
     },
+  },
+  {
+    id: "dual_surge",
+    nameKo: "쌍착 심화",
+    branch: "mastery",
+    descKo: "쌍착수 마나 75% · 감응 +0.02",
+    manaCost: 550,
+    crystalCost: 2,
+    minLevel: 10,
+    requires: ["dual_mastery"],
+    bonus: { dualCostMul: 0.75, boardSenseBonus: 0.02 },
+  },
+  {
+    id: "clean_surge",
+    nameKo: "청소 심화",
+    branch: "mastery",
+    descKo: "진문청소 마나 80% · 제거당 Amp +0.008",
+    manaCost: 550,
+    crystalCost: 2,
+    minLevel: 10,
+    requires: ["clean_mastery"],
+    bonus: { cleanCostMul: 0.8, cleanAmpBonus: 0.008 },
   },
   {
     id: "war_chorus",

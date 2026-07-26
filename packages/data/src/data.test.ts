@@ -68,7 +68,7 @@ describe("phase1 data", () => {
   });
 
   it("aggregates shallow skill tree bonuses", () => {
-    assert.equal(SKILL_TREE_NODES.length, 13);
+    assert.equal(SKILL_TREE_NODES.length, 15);
     const b = skillTreeBonuses(["root_mana", "dual_mastery"]);
     assert.ok(b.manaRegenBonus >= 0.05);
     assert.equal(b.dualCostMul, 0.85);
@@ -82,11 +82,18 @@ describe("phase1 data", () => {
       "root_sense",
       "sense_start",
       "sense_tide",
+      "dual_mastery",
+      "dual_surge",
+      "clean_mastery",
+      "clean_surge",
     ]);
     assert.equal(apex.declareCostMul, 0.85);
+    assert.equal(apex.dualCostMul, 0.75);
+    assert.equal(apex.cleanCostMul, 0.8);
     assert.ok(apex.manaMaxBonus >= 32);
     assert.ok(apex.declarePowerBonus >= 0.07);
-    assert.ok(apex.boardSenseBonus >= 0.1);
+    assert.ok(apex.boardSenseBonus >= 0.12);
+    assert.ok(apex.cleanAmpBonus >= 0.013);
   });
 
   it("creates starter symbol", () => {
