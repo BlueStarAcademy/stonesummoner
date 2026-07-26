@@ -212,6 +212,10 @@ let autoMode = false;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let dmgFloats: { id: number; text: string; crit: boolean; ult: boolean }[] = [];
 let floatSeq = 0;
+/** Last seen circle phase — detect empowered reset for board FX. */
+let lastSeenBoardPhase = 0;
+/** One-shot collapse→rekindle class on the board frame. */
+let boardRekindleFx = false;
 
 function localSaveKey(): string {
   return sessionUser?.kind === "demo" ? DEMO_SAVE_KEY : SAVE_KEY;
@@ -455,6 +459,8 @@ function startBattle(stage: StageDef): void {
   clearAutoTimer();
   dmgFloats = [];
   selectedTargetId = null;
+  lastSeenBoardPhase = 0;
+  boardRekindleFx = false;
   battle = createStageBattle(stage, save, {
     banEnemyIds:
       stage.mode === "world_arena" ? save.arenaBanIds ?? [] : undefined,
@@ -910,6 +916,23 @@ function renderBoard(): string {
       ? `${battle.victoryPoint.x},${battle.victoryPoint.y}`
       : null;
   const phase = battle.circle.boardPhase;
+  if (phase > lastSeenBoardPhase) {
+    if (phase > 0) boardRekindleFx = true;
+    lastSeenBoardPhase = phase;
+  }
+  const showRekindle = boardRekindleFx;
+  if (showRekindle) {
+    queueMicrotask(() => {
+      boardRekindleFx = false;
+    });
+  }
+  const rebuildTag =
+    phase <= 0
+      ? "일반 진문"
+      : `진문 재건 ${"I".repeat(Math.min(phase, 3))}`;
+  const openingHint = battle.openingBonusPending
+    ? `<span class="board-opening-hint">포석 보너스</span>`
+    : "";
   const canClick =
     battle.phase === "await_stone" &&
     !!battle.activeUnitId &&
@@ -979,7 +1002,8 @@ function renderBoard(): string {
         100,
     ),
   );
-  return `<div class="board-frame phase-${Math.min(phase, 3)}" data-element="${battle.circleElement ?? ""}">
+  return `<div class="board-frame phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}" data-element="${battle.circleElement ?? ""}">
+    <div class="board-phase-tag">${rebuildTag}${openingHint}</div>
     <div class="board-phase-meter" aria-hidden="true"><i style="width:${resetPct}%"></i></div>
     <div class="board size-${size} phase-${Math.min(phase, 3)}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${cells}</div>
   </div>`;
@@ -2448,7 +2472,7 @@ function renderBattleTicker(): string {
   const lines = battle.log
     .filter(
       (l) =>
-        /스톤패시브|획득|스폰|웨이브|강화 진문|defeated|회복|진문개방|증폭선언|쌍착수|진문청소|진문수호|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수|묘수|맞마나|이중층/.test(l),
+        /스톤패시브|획득|스폰|웨이브|강화 진문|진문 붕괴|포석 보너스|defeated|회복|진문개방|증폭선언|쌍착수|진문청소|진문수호|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수|묘수|맞마나|이중층/.test(l),
     )
     .slice(-3);
   if (!lines.length) {

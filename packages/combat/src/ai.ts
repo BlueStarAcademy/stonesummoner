@@ -40,6 +40,7 @@ export function pickAutoStone(
 /**
  * Top-N stone candidates for semi-auto UI (default 3).
  * Score: captures ≫ token ≫ center proximity.
+ * `openingBias` (포석 보너스) further prefers center after empowered reset.
  */
 export function rankStoneSuggestions(
   legal: Point[],
@@ -47,6 +48,7 @@ export function rankStoneSuggestions(
   evaluate: (p: Point) => StoneEval,
   manaMul = 1,
   limit = 3,
+  openingBias = 0,
 ): StoneSuggestion[] {
   if (legal.length === 0) return [];
   const cx = (boardSize - 1) / 2;
@@ -58,7 +60,10 @@ export function rankStoneSuggestions(
     const dist = Math.abs(p.x - cx) + Math.abs(p.y - cy);
     const tokenBonus = ev.hasToken ? 2.5 : 0;
     const baitBonus = ev.baitLure ? 45 : 0;
-    const score = cap * 100 + tokenBonus * 10 + baitBonus - dist;
+    const openBonus =
+      openingBias > 0 ? Math.max(0, boardSize - dist) * openingBias : 0;
+    const score =
+      cap * 100 + tokenBonus * 10 + baitBonus + openBonus - dist;
     const kind = classifyCapture(cap);
     const gains = gainsForBoardEvent(kind, cap, manaMul);
     const magnet = ev.hasToken

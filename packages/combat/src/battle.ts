@@ -169,6 +169,11 @@ export class Battle {
   private sealsByBoard: TempSeal[][] = [];
   /** Active AI lure from 미끼돌 (shared; cleared on empowered reset). */
   baitLure: BaitLure | null = null;
+  /**
+   * After empowered 9×9 reset: next stone play gets center-biased suggest
+   * and a small Amp/mana 포석 보너스.
+   */
+  openingBonusPending = false;
   /** Ally large-capture shop waiting for choice. */
   pendingCaptureShop: { unitId: string } | null = null;
   /** 1-based current wave. */
@@ -421,6 +426,7 @@ export class Battle {
       }),
       manaMul,
       topN,
+      this.openingBonusPending ? 8 : 0,
     );
   }
 
@@ -799,6 +805,13 @@ export class Battle {
       this.log.push(`돌흡수: 적 마나 +25`);
     }
 
+    if (this.openingBonusPending) {
+      ampDelta += 0.03;
+      manaGain += 8;
+      this.openingBonusPending = false;
+      this.log.push(`포석 보너스 (중앙 국면)`);
+    }
+
     this.amplify = clampAmplify(
       this.amplify + ampDelta,
       amplifyCapForPhase(this.circle.boardPhase),
@@ -887,9 +900,11 @@ export class Battle {
       this.tokensByBoard = this.boards.map(() => []);
       this.sealsByBoard = this.boards.map(() => []);
       this.baitLure = null;
+      this.openingBonusPending = true;
       this.log.push(
         `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${amplifyCapForPhase(this.circle.boardPhase)})`,
       );
+      this.log.push(`진문 붕괴 → 재점화 · 다음 착수 포석 보너스`);
       if (this.modules.moduleF) {
         this.log.push(`진형파괴 — 보스 페이즈 보드 재건`);
       }

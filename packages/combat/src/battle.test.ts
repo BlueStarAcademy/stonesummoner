@@ -646,5 +646,39 @@ describe("Battle flow", () => {
     assert.equal(b.tokens.length, 0);
     assert.ok(b.board.getBoard().flat().every((c) => c === null));
     assert.match(b.log.join("\n"), /강화 진문/);
+    assert.equal(b.openingBonusPending, true);
+    assert.match(b.log.join("\n"), /포석 보너스/);
+  });
+
+  it("applies opening bonus on the next stone after reset", () => {
+    const b = new Battle({
+      boardSize: 9,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+      resetThreshold: 2,
+    });
+    for (let i = 0; i < 2; i++) {
+      b.runAutoTurn();
+    }
+    assert.equal(b.openingBonusPending, true);
+    const sug = b.suggestStones(b.getUnit("a-m1")!);
+    assert.ok(sug.length >= 1);
+    const top = sug[0]!.point;
+    const cx = 4;
+    const cy = 4;
+    const topDist = Math.abs(top.x - cx) + Math.abs(top.y - cy);
+    assert.ok(topDist <= 4);
+
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    const amp0 = b.amplify;
+    const mana0 = b.allySummoner.mana;
+    assert.equal(b.playStone(top), true);
+    assert.equal(b.openingBonusPending, false);
+    assert.ok(b.amplify >= amp0 + 0.03 - 1e-9);
+    assert.ok(b.allySummoner.mana >= mana0 + 8);
+    assert.match(b.log.join("\n"), /포석 보너스 \(중앙 국면\)/);
   });
 });
