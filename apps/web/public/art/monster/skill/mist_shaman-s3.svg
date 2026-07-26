@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg_mist_shaman_s3" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#142418"/><stop offset="1" stop-color="#081208"/>
+    </linearGradient>
+    <linearGradient id="a1_mist_shaman_s3" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8FFE0"/><stop offset=".45" stop-color="#58C878"/><stop offset="1" stop-color="#287848"/>
+    </linearGradient>
+    <linearGradient id="a2_mist_shaman_s3" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8FFE0"/><stop offset="1" stop-color="#58C878"/>
+    </linearGradient>
+    <linearGradient id="a3_mist_shaman_s3" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#58C878"/><stop offset="1" stop-color="#287848"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg_mist_shaman_s3)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#58C878" stroke-opacity=".35" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="24" fill="#58C878" fill-opacity=".10"/>
+  
+      <path d="M12 42C18 30 26 30 32 42C38 54 46 54 52 42" fill="url(#a1_mist_shaman_s3)" opacity=".45"/>
+      <path d="M16 34C22 24 28 24 32 34C36 44 42 44 48 34" stroke="#58C878" stroke-width="2.5" fill="none"/>
+      <circle cx="32" cy="22" r="7" fill="url(#a2_mist_shaman_s3)"/>
+      <path d="M32 17V27M27 22H37" stroke="#081208" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

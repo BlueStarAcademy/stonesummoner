@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "api": "node server.mjs",
-    "build": "vite build",
+    "build": "npm run check:encoding && vite build",
     "preview": "vite preview",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "i18n:gen": "node scripts/gen-i18n-packs.mjs",
+    "check:encoding": "node scripts/check-encoding.mjs"
   },
   "dependencies": {
     "stonesummoner-board": "*",

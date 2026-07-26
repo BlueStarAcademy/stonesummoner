@@ -403,7 +403,7 @@ export const GUILD_RAID_STAGES: StageDef[] = [
   },
 ];
 
-/** 주간 장비 금고 — 서머너 장비 드롭 스텁. */
+/** 주간 장비 금고 — 소환사 장비 드롭 스텁. */
 export const EQUIP_STAGES: StageDef[] = [
   {
     id: "equip_vault_1",

@@ -67,6 +67,7 @@ import {
   syncBuildingUnlocks,
   tickProduction,
   upgradeBuilding,
+  spendEnergy,
   type BuildingId,
   type IslandState,
 } from "stonesummoner-home";
@@ -83,10 +84,12 @@ import {
   MAX_SKILL_LEVEL,
   nextUid,
   normalizeSkillLevels,
+  pickRandomSkillUpIndex,
   pickSummonMonster,
   scaledMonsterStats,
   skillUpManaCost,
   skillUpMinMonsterLevel,
+  skillUpgradableIndices,
   defaultSkillLevels,
   SCROLL_BUY_MANA_COST,
   SCROLL_PREMIUM_BUY_MANA_COST,
@@ -112,6 +115,8 @@ export {
   MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
   normalizeSkillLevels,
+  pickRandomSkillUpIndex,
+  skillUpgradableIndices,
   skillUpManaCost,
   skillUpMinMonsterLevel,
   SCROLL_BUY_MANA_COST,
@@ -335,6 +340,8 @@ export interface PlayerSave {
   equipVaultWeekKey: string | null;
   /** Equip vault entries used this week. */
   equipVaultWeekEntries: number;
+  /** Symbol inventory capacity (base 100 … max 1000, +10 per expand). */
+  symbolBagSlots: number;
 }
 
 export interface BattleReward {
@@ -492,8 +499,10 @@ function skillsForMonster(
   return m.skills.map((sk, i) => {
     const lv = skillLevels[i] ?? 1;
     const skBump = (lv - 1) * 0.08;
+    const cdCut = sk.cooldown > 0 && lv >= MAX_SKILL_LEVEL ? 1 : 0;
     return {
       ...sk,
+      cooldown: Math.max(0, sk.cooldown - cdCut),
       effects: sk.effects.map((e) => {
         if (e.kind === "damage" || e.kind === "heal" || e.kind === "shield") {
           return { ...e, coeff: e.coeff + evoBump + skBump };
@@ -533,6 +542,7 @@ function unitFromOwned(
     name: `${m.nameKo} Lv.${owned.level}${evoTag}`,
     team,
     kind: "monster",
+    monsterId: m.id,
     element: m.element,
     stats: { ...stats },
     skillCoeff: m.skillCoeff + (owned.evolve ?? 0) * 0.05 + (skillLevels[0]! - 1) * 0.08,
@@ -555,6 +565,7 @@ function unitFromMonsterId(
     name: m.nameKo,
     team,
     kind: "monster",
+    monsterId: m.id,
     element: m.element,
     stats: { ...stats },
     skillCoeff: m.skillCoeff,
@@ -602,6 +613,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     seasonRewardsClaimed: 0,
     equipVaultWeekKey: isoWeekKey(now),
     equipVaultWeekEntries: 0,
+    symbolBagSlots: SYMBOL_BAG_BASE_SLOTS,
   };
 }
 
@@ -651,7 +663,7 @@ export function homeCollectCrystal(
   if (!island.buildings.some((b) => b.id === "crystal_mine")) {
     return {
       save: { ...save, island },
-      message: "수정 광맥 해금 필요 (서머너 Lv.10)",
+      message: "수정 광맥 해금 필요 (소환사 Lv.10)",
     };
   }
   const before = island.crystal;
@@ -730,6 +742,78 @@ export function runBuyGlory(
 export const FUSION_MANA_COST = 800;
 export const ENERGY_CRYSTAL_COST = 10;
 export const ENERGY_BUY_AMOUNT = 20;
+
+/** Symbol bag: start 100, +10 per expand, hard cap 1000. */
+export const SYMBOL_BAG_BASE_SLOTS = 100;
+export const SYMBOL_BAG_EXPAND_STEP = 10;
+export const SYMBOL_BAG_MAX_SLOTS = 1000;
+/** Expand cost: 10, 20, … then caps at 100 crystal each. */
+export const SYMBOL_BAG_EXPAND_COST_START = 10;
+export const SYMBOL_BAG_EXPAND_COST_STEP = 10;
+export const SYMBOL_BAG_EXPAND_COST_CAP = 100;
+
+export function symbolBagCapacity(save: PlayerSave): number {
+  const raw =
+    typeof save.symbolBagSlots === "number"
+      ? save.symbolBagSlots
+      : SYMBOL_BAG_BASE_SLOTS;
+  return Math.min(
+    SYMBOL_BAG_MAX_SLOTS,
+    Math.max(SYMBOL_BAG_BASE_SLOTS, Math.floor(raw)),
+  );
+}
+
+/** How many +10 expands have already been purchased. */
+export function symbolBagExpandCount(save: PlayerSave): number {
+  return Math.max(
+    0,
+    Math.floor(
+      (symbolBagCapacity(save) - SYMBOL_BAG_BASE_SLOTS) / SYMBOL_BAG_EXPAND_STEP,
+    ),
+  );
+}
+
+/** Crystal cost for the next +10 expand, or null if already at max. */
+export function symbolBagExpandCost(save: PlayerSave): number | null {
+  if (symbolBagCapacity(save) >= SYMBOL_BAG_MAX_SLOTS) return null;
+  const n = symbolBagExpandCount(save);
+  return Math.min(
+    SYMBOL_BAG_EXPAND_COST_START + n * SYMBOL_BAG_EXPAND_COST_STEP,
+    SYMBOL_BAG_EXPAND_COST_CAP,
+  );
+}
+
+/** Buy +10 symbol bag slots for crystal. */
+export function runExpandSymbolBag(save: PlayerSave): LoopStepResult {
+  const cost = symbolBagExpandCost(save);
+  if (cost == null) {
+    return {
+      save,
+      message: `상징 가방 슬롯 최대 (${SYMBOL_BAG_MAX_SLOTS})`,
+    };
+  }
+  if (save.island.crystal < cost) {
+    return {
+      save,
+      message: `크리스탈 부족 (필요 ${cost}, 보유 ${save.island.crystal})`,
+    };
+  }
+  const next = Math.min(
+    SYMBOL_BAG_MAX_SLOTS,
+    symbolBagCapacity(save) + SYMBOL_BAG_EXPAND_STEP,
+  );
+  return {
+    save: {
+      ...save,
+      symbolBagSlots: next,
+      island: {
+        ...save.island,
+        crystal: save.island.crystal - cost,
+      },
+    },
+    message: `상징 가방 +${SYMBOL_BAG_EXPAND_STEP} (−크리스탈 ${cost}) · ${next}/${SYMBOL_BAG_MAX_SLOTS}`,
+  };
+}
 /** 제작소: 진문석 + 골드 → 소환서 */
 export const CRAFT_SCROLL_JINMUN = 2;
 export const CRAFT_SCROLL_MANA = 300;
@@ -756,13 +840,13 @@ export function runFusion(
   ) {
     return {
       save: { ...save, island },
-      message: "융합의 별 해금 필요 (서머너 Lv.17)",
+      message: "융합의 별 해금 필요 (소환사 Lv.17)",
     };
   }
   const a = resolveOwned(save, refA);
   const b = resolveOwned(save, refB);
-  if (!a || !b) return { save, message: "융합 재료 몬스터를 찾을 수 없음" };
-  if (a.uid === b.uid) return { save, message: "같은 몬스터는 융합할 수 없음" };
+  if (!a || !b) return { save, message: "융합 재료 소환수를 찾을 수 없음" };
+  if (a.uid === b.uid) return { save, message: "같은 소환수는 융합할 수 없음" };
   if (a.monsterId !== b.monsterId) {
     return { save, message: "동일 종만 융합 가능 (스텁)" };
   }
@@ -858,7 +942,7 @@ export function runCraftScroll(save: PlayerSave): LoopStepResult {
   ) {
     return {
       save: { ...save, island },
-      message: "제작소 해금 필요 (서머너 Lv.19)",
+      message: "제작소 해금 필요 (소환사 Lv.19)",
     };
   }
   if ((save.jinmunStones ?? 0) < CRAFT_SCROLL_JINMUN) {
@@ -893,7 +977,7 @@ export function runCraftEssence(save: PlayerSave): LoopStepResult {
   ) {
     return {
       save: { ...save, island },
-      message: "정수 공방 해금 필요 (서머너 Lv.12)",
+      message: "정수 공방 해금 필요 (소환사 Lv.12)",
     };
   }
   if ((save.jinmunStones ?? 0) < ESSENCE_JINMUN_COST) {
@@ -954,7 +1038,7 @@ export function runPracticeDojo(
   ) {
     return {
       save: { ...save, island },
-      message: "마법진 도장 해금 필요 (서머너 Lv.8)",
+      message: "마법진 도장 해금 필요 (소환사 Lv.8)",
     };
   }
   const active = getActiveSummoner({ ...save, island });
@@ -977,7 +1061,7 @@ export function runPracticeDojo(
     },
     message: `도장 수련: 골드 +${manaGain} · EXP +15 · 수련 ${dojoDrills}회${
       leveled.levelsGained > 0
-        ? ` · 서머너 Lv.${nextActive.level}`
+        ? ` · 소환사 Lv.${nextActive.level}`
         : ""
     }${missionNote}`,
   };
@@ -995,7 +1079,7 @@ export function runJoinGuild(
   ) {
     return {
       save: { ...save, island },
-      message: "길드 홀 해금 필요 (서머너 Lv.12)",
+      message: "길드 홀 해금 필요 (소환사 Lv.12)",
     };
   }
   const trimmed = name.trim().slice(0, 16);
@@ -1020,7 +1104,7 @@ export function runGuildCheckIn(
   ) {
     return {
       save: { ...save, island },
-      message: "길드 홀 해금 필요 (서머너 Lv.12)",
+      message: "길드 홀 해금 필요 (소환사 Lv.12)",
     };
   }
   if (!save.guildName) {
@@ -1174,10 +1258,10 @@ export function runSetParty(
   for (const ref of refs) {
     const owned = resolveOwned(save, ref);
     if (!owned) {
-      return { save, message: `몬스터 없음: ${ref}` };
+      return { save, message: `소환수 없음: ${ref}` };
     }
     if (uids.includes(owned.uid)) {
-      return { save, message: "같은 몬스터를 중복 편성할 수 없습니다" };
+      return { save, message: "같은 소환수를 중복 편성할 수 없습니다" };
     }
     uids.push(owned.uid);
   }
@@ -1275,6 +1359,7 @@ export function runSummon(
 
 /**
  * Enhance at 강화진 — spend mana, +1 level (cap MAX_MONSTER_LEVEL).
+ * Like Summoners War power-up: also randomly levels one non-max skill.
  */
 export function runEnhance(
   save: PlayerSave,
@@ -1282,7 +1367,7 @@ export function runEnhance(
 ): LoopStepResult {
   const owned = resolveOwned(save, uidOrIndex);
   if (!owned) {
-    return { save, message: `몬스터를 찾을 수 없음: ${uidOrIndex}` };
+    return { save, message: `소환수를 찾을 수 없음: ${uidOrIndex}` };
   }
   if (owned.level >= MAX_MONSTER_LEVEL) {
     return {
@@ -1300,14 +1385,84 @@ export function runEnhance(
   }
 
   const nextLevel = owned.level + 1;
+  const levels = normalizeSkillLevels(owned.skillLevels);
+  const skillIdx = pickRandomSkillUpIndex(levels);
+  let nextLevels: [number, number, number] = levels;
+  let skillNote = "";
+  if (skillIdx != null) {
+    nextLevels = [levels[0]!, levels[1]!, levels[2]!];
+    nextLevels[skillIdx] = (levels[skillIdx] ?? 1) + 1;
+    const def = getMonster(owned.monsterId);
+    const skillName = def?.skills[skillIdx]?.nameKo ?? `S${skillIdx + 1}`;
+    skillNote = ` · ${skillName} Lv.${nextLevels[skillIdx]}`;
+  }
+
   const roster = save.roster.map((m) =>
-    m.uid === owned.uid ? { ...m, level: nextLevel } : m,
+    m.uid === owned.uid
+      ? { ...m, level: nextLevel, skillLevels: nextLevels }
+      : m,
   );
   const island = { ...save.island, mana: save.island.mana - cost };
 
   return {
     save: { ...save, island, roster },
-    message: `강화: ${describeOwned({ ...owned, level: nextLevel })} (−골드 ${cost})`,
+    message: `강화: ${describeOwned({ ...owned, level: nextLevel, skillLevels: nextLevels })}${skillNote} (−골드 ${cost})`,
+  };
+}
+
+/**
+ * Feed a same-species duplicate into target (Summoners War-style).
+ * Consumes fodder and randomly levels one non-max skill on the target.
+ */
+export function runFeedSameMonster(
+  save: PlayerSave,
+  targetUidOrIndex: string,
+  fodderUidOrIndex: string,
+): LoopStepResult {
+  const target = resolveOwned(save, targetUidOrIndex);
+  const fodder = resolveOwned(save, fodderUidOrIndex);
+  if (!target) {
+    return { save, message: `소환수를 찾을 수 없음: ${targetUidOrIndex}` };
+  }
+  if (!fodder) {
+    return { save, message: `재료 소환수를 찾을 수 없음: ${fodderUidOrIndex}` };
+  }
+  if (target.uid === fodder.uid) {
+    return { save, message: "같은 소환수는 재료로 쓸 수 없습니다" };
+  }
+  if (target.monsterId !== fodder.monsterId) {
+    return { save, message: "동일 소환수만 스킬 강화 재료로 사용할 수 있습니다" };
+  }
+
+  const levels = normalizeSkillLevels(target.skillLevels);
+  const skillIdx = pickRandomSkillUpIndex(levels);
+  if (skillIdx == null) {
+    return {
+      save,
+      message: `${describeOwned(target)} 스킬이 모두 최대입니다`,
+    };
+  }
+
+  const nextLevels: [number, number, number] = [
+    levels[0]!,
+    levels[1]!,
+    levels[2]!,
+  ];
+  nextLevels[skillIdx] = (levels[skillIdx] ?? 1) + 1;
+  const def = getMonster(target.monsterId);
+  const skillName = def?.skills[skillIdx]?.nameKo ?? `S${skillIdx + 1}`;
+
+  const roster = save.roster
+    .filter((m) => m.uid !== fodder.uid)
+    .map((m) =>
+      m.uid === target.uid ? { ...m, skillLevels: nextLevels } : m,
+    );
+  const party = save.party.filter((uid) => uid !== fodder.uid);
+  const updated = { ...target, skillLevels: nextLevels };
+
+  return {
+    save: { ...save, roster, party },
+    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[skillIdx]} (−${describeOwned(fodder)})`,
   };
 }
 
@@ -1321,7 +1476,7 @@ export function runEvolve(
 ): LoopStepResult {
   const owned = resolveOwned(save, uidOrIndex);
   if (!owned) {
-    return { save, message: `몬스터를 찾을 수 없음: ${uidOrIndex}` };
+    return { save, message: `소환수를 찾을 수 없음: ${uidOrIndex}` };
   }
   const evo = owned.evolve ?? 0;
   if (evo >= MAX_EVOLVE) {
@@ -1382,7 +1537,7 @@ export function runSkillUp(
 ): LoopStepResult {
   const owned = resolveOwned(save, uidOrIndex);
   if (!owned) {
-    return { save, message: `몬스터를 찾을 수 없음: ${uidOrIndex}` };
+    return { save, message: `소환수를 찾을 수 없음: ${uidOrIndex}` };
   }
   const idx = Math.floor(skillIndex);
   if (idx < 0 || idx > 2) {
@@ -1569,14 +1724,14 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
   if (cur >= MAX_SUMMONER_AWAKEN) {
     return {
       save: synced,
-      message: `${SUMMONER_ELEMENT_LABEL[el]} 서머너 각성 이미 최대(+${MAX_SUMMONER_AWAKEN})`,
+      message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 각성 이미 최대(+${MAX_SUMMONER_AWAKEN})`,
     };
   }
   const needLv = awakenMinLevel(cur);
   if (active.level < needLv) {
     return {
       save: synced,
-      message: `각성 해금: 서머너 Lv.${needLv}+ 필요 (현재 ${active.level})`,
+      message: `각성 해금: 소환사 Lv.${needLv}+ 필요 (현재 ${active.level})`,
     };
   }
   const manaCost = awakenManaCost(cur);
@@ -1608,7 +1763,7 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
         crystal: synced.island.crystal - crystalCost,
       },
     }),
-    message: `${SUMMONER_ELEMENT_LABEL[el]} 서머너 각성 +${next} (−골드 ${manaCost} · −크리스탈 ${crystalCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
+    message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 각성 +${next} (−골드 ${manaCost} · −크리스탈 ${crystalCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
   };
 }
 
@@ -1810,7 +1965,7 @@ export function runEquipSymbol(
 ): LoopStepResult {
   const owned = resolveOwned(save, monsterRef);
   const sym = resolveSymbol(save, symbolRef);
-  if (!owned) return { save, message: `몬스터 없음: ${monsterRef}` };
+  if (!owned) return { save, message: `소환수 없음: ${monsterRef}` };
   if (!sym) return { save, message: `상징 없음: ${symbolRef}` };
 
   const slotIdx = sym.slot - 1;
@@ -1844,7 +1999,7 @@ export function runUnequipSymbol(
   slot: number,
 ): LoopStepResult {
   const owned = resolveOwned(save, monsterRef);
-  if (!owned) return { save, message: `몬스터 없음: ${monsterRef}` };
+  if (!owned) return { save, message: `소환수 없음: ${monsterRef}` };
   if (slot < 1 || slot > 6) {
     return { save, message: "슬롯은 1~6입니다" };
   }
@@ -1946,7 +2101,7 @@ export function createStageBattle(
   }
   const allySummonerUnit = makeUnit({
     id: "a-sum",
-    name: `${SUMMONER_ELEMENT_LABEL[activeEl]} 서머너 Lv.${lvl}${awaken > 0 ? ` · 각성${awaken}` : ""}`,
+    name: `${SUMMONER_ELEMENT_LABEL[activeEl]} 소환사 Lv.${lvl}${awaken > 0 ? ` · 각성${awaken}` : ""}`,
     team: "ally",
     kind: "summoner",
     element: activeEl,
@@ -1992,7 +2147,7 @@ export function createStageBattle(
   const enemyUnits: Unit[] = [
     makeUnit({
       id: "e-sum",
-      name: "적 서머너",
+      name: "적 소환사",
       team: "enemy",
       kind: "summoner",
       element: "dark",
@@ -2111,12 +2266,21 @@ export function applyRewards(
   const symbols = [...save.symbols];
   let symbol: SymbolInstance | undefined;
   if (rng() < dropChance) {
-    symbol = rollSymbolDrop(
-      rng,
-      `drop_${stage.id}_${symbols.length}`,
-      stage.dropSetId,
-    );
-    symbols.push(symbol);
+    if (symbols.length >= symbolBagCapacity(save)) {
+      symbol = undefined;
+    } else {
+      const preferredSlot =
+        stage.mode === "scenario" && stage.stage >= 1 && stage.stage <= 6
+          ? (stage.stage as 1 | 2 | 3 | 4 | 5 | 6)
+          : undefined;
+      symbol = rollSymbolDrop(
+        rng,
+        `drop_${stage.id}_${symbols.length}`,
+        stage.dropSetId,
+        preferredSlot,
+      );
+      symbols.push(symbol);
+    }
   }
 
   let gear = normalizeSummonerGear(save.gear);
@@ -2193,7 +2357,7 @@ export function applyRewards(
   const activeAfter = getActiveSummoner({ ...working, island });
   const levelNote =
     leveled.levelsGained > 0
-      ? ` · 서머너 Lv.${activeAfter.level}(+${leveled.levelsGained})`
+      ? ` · 소환사 Lv.${activeAfter.level}(+${leveled.levelsGained})`
       : "";
 
   return {
@@ -2273,10 +2437,10 @@ export function runSortie(
     };
   }
 
-  const island = {
-    ...working.island,
-    energy: working.island.energy - stage.energyCost,
-  };
+  const island =
+    stage.energyCost > 0
+      ? spendEnergy(working.island, stage.energyCost)
+      : working.island;
   const mid: PlayerSave = {
     ...working,
     island,

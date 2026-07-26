@@ -8,7 +8,7 @@ const goodTicker = `function renderBattleTicker(): string {
   const lines = battle.log
     .filter(
       (l) =>
-        /스톤패시브|획득|스폰|웨이브|강화 진문|진문 붕괴|포석 보너스|defeated|회복|진문개방|증폭선언|쌍착수|진문청소|진문수호|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수|묘수|맞마나|이중층/.test(l),
+        /스톤패시브|획득|스폰|웨이브|강화 진문|진문 붕괴|포석 보너스|defeated|회복|진문개방|증폭선언|쌍착수|진문청소|진문수호|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|소환사 착수|묘수|맞마나|이중층/.test(l),
     )
     .slice(-3);
   if (!lines.length) {

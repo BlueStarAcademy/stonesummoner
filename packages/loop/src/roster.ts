@@ -82,6 +82,29 @@ export function normalizeSkillLevels(
   ];
 }
 
+/** Indices of skills that can still level up (0..2). */
+export function skillUpgradableIndices(
+  levels?: number[] | null,
+): number[] {
+  const lv = normalizeSkillLevels(levels);
+  const out: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    if ((lv[i] ?? 1) < MAX_SKILL_LEVEL) out.push(i);
+  }
+  return out;
+}
+
+/** Pick a random skill index to level, or null if all maxed. */
+export function pickRandomSkillUpIndex(
+  levels?: number[] | null,
+  rng: () => number = Math.random,
+): number | null {
+  const pool = skillUpgradableIndices(levels);
+  if (!pool.length) return null;
+  const roll = Math.floor(rng() * pool.length);
+  return pool[Math.min(pool.length - 1, Math.max(0, roll))] ?? null;
+}
+
 /** Monster level gate to raise skill from current level → level+1 */
 export function skillUpMinMonsterLevel(skillLevel: number): number {
   return 3 + skillLevel * 2; // Lv1→2 needs mon Lv5; Lv2→3 needs Lv7
@@ -112,6 +135,8 @@ export function scaledMonsterStats(
     spd: def.baseStats.spd + Math.floor((level - 1) / 5) + evolve,
     critRate: def.baseStats.critRate + evolve * 2,
     critDmg: def.baseStats.critDmg + evolve * 5,
+    accuracy: def.baseStats.accuracy,
+    resistance: def.baseStats.resistance,
   };
 }
 

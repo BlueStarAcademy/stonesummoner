@@ -17,12 +17,15 @@
     "start": "npm run start -w stonesummoner-web",
     "cli": "npm run start -w stonesummoner-cli",
     "cli:demo": "npm run demo -w stonesummoner-cli",
+    "check:encoding": "node scripts/check-hangul.mjs",
+    "pretest": "npm run check:encoding",
     "test": "npm test -w stonesummoner-board && npm test -w stonesummoner-combat && npm test -w stonesummoner-home && npm test -w stonesummoner-data && npm test -w stonesummoner-loop",
     "test:board": "npm test -w stonesummoner-board",
     "test:combat": "npm test -w stonesummoner-combat",
     "test:home": "npm test -w stonesummoner-home",
     "test:data": "npm test -w stonesummoner-data",
-    "test:loop": "npm test -w stonesummoner-loop"
+    "test:loop": "npm test -w stonesummoner-loop",
+    "i18n:gen": "node apps/web/scripts/gen-i18n-packs.mjs"
   },
   "engines": {
     "node": ">=20"

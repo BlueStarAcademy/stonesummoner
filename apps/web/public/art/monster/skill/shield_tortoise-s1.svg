@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg_shield_tortoise_s1" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#102028"/><stop offset="1" stop-color="#081018"/>
+    </linearGradient>
+    <linearGradient id="a1_shield_tortoise_s1" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8F0FF"/><stop offset=".45" stop-color="#4AA8E0"/><stop offset="1" stop-color="#185888"/>
+    </linearGradient>
+    <linearGradient id="a2_shield_tortoise_s1" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8F0FF"/><stop offset="1" stop-color="#4AA8E0"/>
+    </linearGradient>
+    <linearGradient id="a3_shield_tortoise_s1" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4AA8E0"/><stop offset="1" stop-color="#185888"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg_shield_tortoise_s1)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#4AA8E0" stroke-opacity=".35" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="24" fill="#4AA8E0" fill-opacity=".10"/>
+  
+      <ellipse cx="32" cy="40" rx="16" ry="10" fill="url(#a1_shield_tortoise_s1)"/>
+      <rect x="22" y="16" width="20" height="24" rx="6" fill="url(#a2_shield_tortoise_s1)" stroke="#C8F0FF" stroke-width="1.2"/>
+      <path d="M26 28H38M26 34H38" stroke="#185888" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+</svg>

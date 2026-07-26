@@ -12,6 +12,12 @@ import {
   listRoster,
   listSymbols,
   runBuyEnergy,
+  runExpandSymbolBag,
+  symbolBagCapacity,
+  symbolBagExpandCost,
+  SYMBOL_BAG_BASE_SLOTS,
+  SYMBOL_BAG_EXPAND_STEP,
+  SYMBOL_BAG_MAX_SLOTS,
   runBuyGlory,
   runBuyScroll,
   runCraftEssence,
@@ -34,6 +40,7 @@ import {
   runEquipSymbol,
   runUnequipSymbol,
   runEvolve,
+  runFeedSameMonster,
   runFusion,
   runGrindSymbol,
   runImprintSymbol,
@@ -296,6 +303,51 @@ describe("game loop", () => {
     assert.equal(craft.save.scrollsMystic, (save.scrollsMystic ?? 0) + 1);
   });
 
+  it("expands symbol bag slots with rising crystal cost capped at 100", () => {
+    let save = createNewSave(0);
+    assert.equal(symbolBagCapacity(save), SYMBOL_BAG_BASE_SLOTS);
+    assert.equal(symbolBagExpandCost(save), 10);
+
+    save = {
+      ...save,
+      island: { ...save.island, crystal: 10_000 },
+    };
+
+    const first = runExpandSymbolBag(save);
+    assert.equal(first.save.symbolBagSlots, SYMBOL_BAG_BASE_SLOTS + SYMBOL_BAG_EXPAND_STEP);
+    assert.equal(first.save.island.crystal, 10_000 - 10);
+    assert.equal(symbolBagExpandCost(first.save), 20);
+    save = first.save;
+
+    for (let i = 0; i < 8; i++) {
+      const r = runExpandSymbolBag(save);
+      save = r.save;
+    }
+    // After 9 expands: slots 190, next cost should be 100
+    assert.equal(symbolBagCapacity(save), 190);
+    assert.equal(symbolBagExpandCost(save), 100);
+
+    const tenth = runExpandSymbolBag(save);
+    assert.equal(tenth.save.symbolBagSlots, 200);
+    assert.equal(symbolBagExpandCost(tenth.save), 100);
+    save = tenth.save;
+
+    const broke = runExpandSymbolBag({
+      ...save,
+      island: { ...save.island, crystal: 50 },
+    });
+    assert.match(broke.message, /크리스탈 부족/);
+    assert.equal(broke.save.symbolBagSlots, save.symbolBagSlots);
+
+    const maxed = runExpandSymbolBag({
+      ...save,
+      symbolBagSlots: SYMBOL_BAG_MAX_SLOTS,
+      island: { ...save.island, crystal: 999 },
+    });
+    assert.match(maxed.message, /최대/);
+    assert.equal(symbolBagExpandCost(maxed.save), null);
+  });
+
   it("sells symbols and runs practice dojo", () => {
     let save = createNewSave(0);
     const before = save.symbols.length;
@@ -375,6 +427,56 @@ describe("game loop", () => {
     assert.match(ok.message, /진화/);
     assert.equal(ok.save.roster[0]!.evolve, 1);
     assert.ok(ok.save.island.mana < save.island.mana);
+  });
+
+  it("enhance randomly levels a skill", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      roster: save.roster.map((m, i) =>
+        i === 0
+          ? { ...m, level: 1, skillLevels: [1, 1, 1] as [number, number, number] }
+          : m,
+      ),
+      island: { ...save.island, mana: 5000 },
+    };
+    const before = save.roster[0]!.skillLevels.slice() as [
+      number,
+      number,
+      number,
+    ];
+    const enh = runEnhance(save, "0");
+    assert.match(enh.message, /강화/);
+    assert.equal(enh.save.roster[0]!.level, 2);
+    const after = enh.save.roster[0]!.skillLevels;
+    const bumped =
+      after[0]! > before[0]! ||
+      after[1]! > before[1]! ||
+      after[2]! > before[2]!;
+    assert.equal(bumped, true);
+  });
+
+  it("feed same monster randomly skills up and consumes fodder", () => {
+    let save = createNewSave(0);
+    const base = save.roster[0]!;
+    const fodder = {
+      ...base,
+      uid: "fodder-1",
+      skillLevels: [1, 1, 1] as [number, number, number],
+    };
+    save = {
+      ...save,
+      roster: [
+        { ...base, skillLevels: [1, 1, 1] as [number, number, number] },
+        fodder,
+        ...save.roster.slice(1),
+      ],
+    };
+    const r = runFeedSameMonster(save, base.uid, fodder.uid);
+    assert.match(r.message, /스킬업/);
+    assert.equal(r.save.roster.some((m) => m.uid === fodder.uid), false);
+    const t = r.save.roster.find((m) => m.uid === base.uid)!;
+    assert.ok(t.skillLevels.some((lv) => lv > 1));
   });
 
   it("skills up S2 when level and mana met", () => {

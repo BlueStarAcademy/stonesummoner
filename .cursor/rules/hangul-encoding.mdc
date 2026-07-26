@@ -1,0 +1,22 @@
+---
+description: Prevent Hangul ???? corruption — UI strings live in i18n only
+alwaysApply: true
+---
+
+# Hangul / encoding safety
+
+## Root cause
+Writing Korean (Hangul) into `apps/web/src/main.ts` and then rewriting that file through a non-UTF-8 path replaces Hangul with `?`. The bytes are gone for good.
+
+## Rules
+1. **Never put Hangul (or `???` stand-ins) in `apps/web/src/main.ts`.** Use `t("key")` / `t('ui…')` only.
+2. **UI copy belongs in i18n:**
+   - Add/edit Korean + English in `apps/web/src/i18n/ui-extra.json` (or `apps/web/scripts/gen-i18n-packs.mjs` packs)
+   - Run `npm run i18n:gen` to regenerate `messages/*.ts` and `types.ts`
+3. **Always write text files as UTF-8** (`fs.writeFileSync(path, data, "utf8")`). Prefer small patches over full-file rewrites of huge sources.
+4. **Never put Hangul inside `/regex/` literals** in `main.ts` (corruption → invalid regex). Use `\uXXXX` string keys + `includes()`.
+5. Content names (`nameKo` in `packages/*`) may stay Hangul for now; do not wipe them to `?`.
+6. Before finishing UI work, run `npm run check:encoding`.
+
+## Deprecated
+Do not rely on `scripts/repair-hangul-full.mjs` / `scripts/fix-*-hangul.mjs` for new work — they only patch symptoms.

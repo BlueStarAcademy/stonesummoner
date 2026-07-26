@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="lbg" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2a2410"/>
+      <stop offset="1" stop-color="#141008"/>
+    </linearGradient>
+    <linearGradient id="lsun" x1="20" y1="16" x2="44" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D8"/>
+      <stop offset=".5" stop-color="#E8D48A"/>
+      <stop offset="1" stop-color="#A88830"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#lbg)"/>
+  <circle cx="32" cy="32" r="26" fill="#E8D48A" fill-opacity=".14"/>
+  <g stroke="#F5E6B0" stroke-width="3.2" stroke-linecap="round">
+    <path d="M32 8V14"/>
+    <path d="M32 50V56"/>
+    <path d="M8 32H14"/>
+    <path d="M50 32H56"/>
+    <path d="M14.5 14.5L18.7 18.7"/>
+    <path d="M45.3 45.3L49.5 49.5"/>
+    <path d="M49.5 14.5L45.3 18.7"/>
+    <path d="M18.7 45.3L14.5 49.5"/>
+  </g>
+  <circle cx="32" cy="32" r="12" fill="url(#lsun)" stroke="#FFF8D8" stroke-width="1.6"/>
+  <circle cx="28" cy="28" r="3.5" fill="#FFFFFF" fill-opacity=".45"/>
+</svg>

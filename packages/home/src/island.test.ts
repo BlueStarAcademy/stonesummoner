@@ -6,9 +6,11 @@ import {
   buildingUpgradeManaCost,
   collectMana,
   createStarterIsland,
+  energyRegenRemainingMs,
   hasBuilding,
   productionStorageCap,
   runWish,
+  spendEnergy,
   syncBuildingUnlocks,
   tickProduction,
   upgradeBuilding,
@@ -72,13 +74,29 @@ describe("Phase1 island", () => {
     assert.equal(wish.island.lastWishDay, "2026-01-01");
   });
 
-  it("regens energy over time up to max", () => {
+  it("regens energy 1 per 3 minutes up to max", () => {
     let island = createStarterIsland(0);
-    island = { ...island, energy: 50 };
-    island = tickProduction(island, 3_600_000);
-    assert.ok(island.energy >= 59.9 && island.energy <= 60.1);
-    island = tickProduction(island, 3_600_000 * 20);
+    island = { ...island, energy: 50, energyUpdatedAt: 0 };
+    island = tickProduction(island, 180_000);
+    assert.equal(island.energy, 51);
+    assert.equal(island.energyUpdatedAt, 180_000);
+    island = tickProduction(island, 540_000);
+    assert.equal(island.energy, 53);
+    island = tickProduction(island, 180_000 * 100);
     assert.equal(island.energy, island.energyMax);
+  });
+
+  it("tracks countdown to next energy and starts timer when leaving max", () => {
+    let island = createStarterIsland(0);
+    island = { ...island, energy: 50, energyUpdatedAt: 0 };
+    assert.equal(energyRegenRemainingMs(island, 45_000), 135_000);
+    assert.equal(energyRegenRemainingMs(island, 180_000), 0);
+    island = { ...island, energy: island.energyMax!, energyUpdatedAt: 0 };
+    assert.equal(energyRegenRemainingMs(island, 30_000), null);
+    const spent = spendEnergy(island, 3, 90_000);
+    assert.equal(spent.energy, island.energyMax! - 3);
+    assert.equal(spent.energyUpdatedAt, 90_000);
+    assert.equal(energyRegenRemainingMs(spent, 90_000), 180_000);
   });
 
   it("levels summoner from exp", () => {

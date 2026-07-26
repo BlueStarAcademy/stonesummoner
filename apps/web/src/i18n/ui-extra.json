@@ -1,0 +1,1734 @@
+{
+  "ui.efd1a0e80b": {
+    "ko": "서버가 메모리 DB입니다. Railway에 DATABASE_URL(Postgres)을 연결하세요. 로컬 세이브는 유지됩니다.",
+    "en": "서버가 메모리 DB입니다. Railway에 DATABASE_URL(Postgres)을 연결하세요. 로컬 세이브는 유지됩니다."
+  },
+  "ui.d073e3e918": {
+    "ko": "클라우드 세션이 만료되었습니다. 다시 로그인하면 동기화됩니다. (로컬 세이브 유지)",
+    "en": "클라우드 세션이 만료되었습니다. 다시 로그인하면 동기화됩니다. (로컬 세이브 유지)"
+  },
+  "ui.c17466f9ed": {
+    "ko": "서버에 연결할 수 없습니다. API를 실행한 뒤 다시 시도하세요.",
+    "en": "서버에 연결할 수 없습니다. API를 실행한 뒤 다시 시도하세요."
+  },
+  "ui.0fd080f51d": {
+    "ko": "전투 알림 — 따냄·아이템·패시브가 여기 표시됩니다",
+    "en": "전투 알림 — 따냄·아이템·패시브가 여기 표시됩니다"
+  },
+  "ui.19364fa53d": {
+    "ko": "건물 배치 편집 · 드래그로 위치를 옮기세요",
+    "en": "Layout edit · Drag buildings to move them"
+  },
+  "ui.974e7916c4": {
+    "ko": "Stone Summoners — 신비의마법석",
+    "en": "Stone Summoners — 신비의마법석"
+  },
+  "ui.fa5d2fb50b": {
+    "ko": "로그인되었습니다. 게임시작을 눌러 주세요.",
+    "en": "로그인되었습니다. 게임시작을 눌러 주세요."
+  },
+  "ui.4ae6a748b6": {
+    "ko": "다음 수련 시 묘수 미션 (진문석 +1)",
+    "en": "다음 수련 시 묘수 미션 (진문석 +1)"
+  },
+  "ui.250a3a4d15": {
+    "ko": "적 소환수를 탭해 대상 지정 후 스킬",
+    "en": "적 소환수를 탭해 대상 지정 후 스킬"
+  },
+  "ui.b72f5a4752": {
+    "ko": "이전 스테이지를 먼저 클리어하세요.",
+    "en": "Clear the previous stage first."
+  },
+  "ui.19d508040d": {
+    "ko": "각성 · 스킬트리 · 장비 · 상징",
+    "en": "각성 · 스킬트리 · 장비 · 상징"
+  },
+  "ui.62b39a7abd": {
+    "ko": "추천 착수(1·2·3) 또는 칸 탭",
+    "en": "추천 착수(1·2·3) 또는 칸 탭"
+  },
+  "ui.0e5bf793ef": {
+    "ko": "이메일 또는 비밀번호를 확인하세요.",
+    "en": "이메일 또는 비밀번호를 확인하세요."
+  },
+  "ui.4215c0df88": {
+    "ko": "${opts.bubble} 수집",
+    "en": "${opts.bubble} 수집"
+  },
+  "ui.8d9e9106fa": {
+    "ko": "패배... (아군 소환수 전멸)",
+    "en": "패배... (아군 소환수 전멸)"
+  },
+  "ui.9af91c9bed": {
+    "ko": "마나 50% 이상 필요합니다.",
+    "en": "마나 50% 이상 필요합니다."
+  },
+  "ui.b0b1120abf": {
+    "ko": "마나 35% 이상 필요합니다.",
+    "en": "마나 35% 이상 필요합니다."
+  },
+  "ui.c85840dca0": {
+    "ko": "마나 45% 이상 필요합니다.",
+    "en": "마나 45% 이상 필요합니다."
+  },
+  "ui.9cf3c0b981": {
+    "ko": "마나 40% 이상 필요합니다.",
+    "en": "마나 40% 이상 필요합니다."
+  },
+  "ui.c45b8eb502": {
+    "ko": "드래그로 건물 위치를 옮기세요",
+    "en": "Drag to move buildings"
+  },
+  "ui.f66f56e98f": {
+    "ko": "파티에 넣기 (4번째 교체)",
+    "en": "파티에 넣기 (4번째 교체)"
+  },
+  "ui.0b00025fb4": {
+    "ko": "데모 모드로 입장했습니다.",
+    "en": "Entered demo mode."
+  },
+  "ui.ba130f3539": {
+    "ko": "승리! (적 소환수 전멸)",
+    "en": "승리! (적 소환수 전멸)"
+  },
+  "ui.e724206861": {
+    "ko": "사석상점 보상을 선택하세요",
+    "en": "사석상점 보상을 선택하세요"
+  },
+  "ui.f88240ee56": {
+    "ko": "기본 배치로 돌려놓았습니다",
+    "en": "Restored default layout"
+  },
+  "ui.654ebee916": {
+    "ko": "아직 해금되지 않았습니다.",
+    "en": "아직 해금되지 않았습니다."
+  },
+  "ui.3ad18550e0": {
+    "ko": "건물 배치를 저장했습니다",
+    "en": "Building layout saved"
+  },
+  "ui.5d8b99bb60": {
+    "ko": "배치 편집을 취소했습니다",
+    "en": "Layout edit cancelled"
+  },
+  "ui.ed3a862c2c": {
+    "ko": "소환서 · 연마 · 각인",
+    "en": "Scrolls · Polish · Engrave"
+  },
+  "ui.eed788cba0": {
+    "ko": "이번 국면 Amplify",
+    "en": "이번 국면 Amplify"
+  },
+  "ui.e44dd9cad3": {
+    "ko": "파티는 최대 4명입니다.",
+    "en": "파티는 최대 4명입니다."
+  },
+  "ui.bb044ada8a": {
+    "ko": "최소 1명을 선택하세요.",
+    "en": "최소 1명을 선택하세요."
+  },
+  "ui.522ab79351": {
+    "ko": "밴은 최대 2마리입니다.",
+    "en": "밴은 최대 2마리입니다."
+  },
+  "ui.02f932d2cd": {
+    "ko": "게스트로 플레이합니다.",
+    "en": "게스트로 플레이합니다."
+  },
+  "ui.1ab42b48a4": {
+    "ko": "레벨 · 각성 · 장비",
+    "en": "Level · Awaken · Gear"
+  },
+  "ui.566fd24305": {
+    "ko": "오늘은 이미 빌었습니다",
+    "en": "오늘은 이미 빌었습니다"
+  },
+  "ui.928873f927": {
+    "ko": "미가입 · 비동기 순위",
+    "en": "미가입 · 비동기 순위"
+  },
+  "ui.d02305abdb": {
+    "ko": "이미 파티에 있습니다.",
+    "en": "이미 파티에 있습니다."
+  },
+  "ui.711b4aaddc": {
+    "ko": "에너지가 부족합니다.",
+    "en": "에너지가 부족합니다."
+  },
+  "ui.13c82de693": {
+    "ko": "시나리오 · 아레나",
+    "en": "Scenario · Arena"
+  },
+  "ui.4d59148e17": {
+    "ko": "요일·시련 스테이지",
+    "en": "요일·시련 스테이지"
+  },
+  "ui.493fff2990": {
+    "ko": "로그아웃했습니다.",
+    "en": "로그아웃했습니다."
+  },
+  "ui.9eab85fc5c": {
+    "ko": "소환사 마나 충전",
+    "en": "Summoner mana charge"
+  },
+  "ui.5618aec54c": {
+    "ko": "소환사 마나 스킬",
+    "en": "Summoner mana skills"
+  },
+  "ui.73743ba945": {
+    "ko": "스킬 쿨다운 중",
+    "en": "스킬 쿨다운 중"
+  },
+  "ui.58c0079ead": {
+    "ko": "배치 가능 구역",
+    "en": "Buildable area"
+  },
+  "ui.50ce91ae85": {
+    "ko": " · 슬롯 교체",
+    "en": " · 슬롯 교체"
+  },
+  "ui.4ee49fe6c1": {
+    "ko": "아군 실드·정리",
+    "en": "아군 실드·정리"
+  },
+  "ui.b662766cf8": {
+    "ko": "예: 진문수호대",
+    "en": "예: 진문수호대"
+  },
+  "ui.7316fbbfa6": {
+    "ko": "끝없는 층 도전",
+    "en": "끝없는 층 도전"
+  },
+  "ui.e0536c253c": {
+    "ko": "카덴스 · 시련",
+    "en": "카덴스 · 시련"
+  },
+  "ui.e00890de86": {
+    "ko": "주간 장비 파밍",
+    "en": "주간 장비 파밍"
+  },
+  "ui.6ca75b551e": {
+    "ko": "일 1회 소원",
+    "en": "Daily wish ×1"
+  },
+  "ui.b65d90440e": {
+    "ko": "일 1회 기원",
+    "en": "일 1회 기원"
+  },
+  "ui.1074e15059": {
+    "ko": "동일종 융합",
+    "en": "Same-species fusion"
+  },
+  "ui.81e2301960": {
+    "ko": "마법진 도장",
+    "en": "마법진 도장"
+  },
+  "ui.6686a68a3f": {
+    "ko": "파티에 넣기",
+    "en": "파티에 넣기"
+  },
+  "ui.6b12b37c3c": {
+    "ko": "탭하여 해제",
+    "en": "탭하여 해제"
+  },
+  "ui.413147d435": {
+    "ko": "포석 보너스",
+    "en": "포석 보너스"
+  },
+  "ui.7311d239fd": {
+    "ko": "소환사 착수",
+    "en": "Summoner placement"
+  },
+  "ui.efa49027d0": {
+    "ko": "장비 강화:",
+    "en": "장비 강화:"
+  },
+  "ui.6a1629b11c": {
+    "ko": "영광 건물",
+    "en": "영광 건물"
+  },
+  "ui.7c70400fef": {
+    "ko": "진액 연못",
+    "en": "진액 연못"
+  },
+  "ui.d2342783cb": {
+    "ko": "일반 진문",
+    "en": "Normal gate"
+  },
+  "ui.67082f387a": {
+    "ko": " · 토큰",
+    "en": " · 토큰"
+  },
+  "ui.78296b2020": {
+    "ko": "배치 편집",
+    "en": "배치 편집"
+  },
+  "ui.d55c6d0b00": {
+    "ko": "가입·출석",
+    "en": "Join · Attend"
+  },
+  "ui.d8680bb7b3": {
+    "ko": "연마 완료",
+    "en": "연마 완료"
+  },
+  "ui.27cf021299": {
+    "ko": "각인 완료",
+    "en": "각인 완료"
+  },
+  "ui.2c1116fb7b": {
+    "ko": "대기 없음",
+    "en": "None waiting"
+  },
+  "ui.cc24e86471": {
+    "ko": "최대 레벨",
+    "en": "Max level"
+  },
+  "ui.7898ac8908": {
+    "ko": "소원 빌기",
+    "en": "소원 빌기"
+  },
+  "ui.a5d54ca91e": {
+    "ko": "출전 라인",
+    "en": "출전 라인"
+  },
+  "ui.c33ba55e69": {
+    "ko": "출전 선택",
+    "en": "출전 선택"
+  },
+  "ui.3f1100d730": {
+    "ko": "상징 장착",
+    "en": "상징 장착"
+  },
+  "ui.7cf8acb154": {
+    "ko": "상징 슬롯",
+    "en": "상징 슬롯"
+  },
+  "ui.7b191a9f9f": {
+    "ko": " · 파티",
+    "en": " · 파티"
+  },
+  "ui.191dcc34ee": {
+    "ko": " · 최대",
+    "en": " · 최대"
+  },
+  "ui.f4e132f465": {
+    "ko": "강화 구역",
+    "en": "강화 구역"
+  },
+  "ui.b09be9f462": {
+    "ko": "장비 슬롯",
+    "en": "장비 슬롯"
+  },
+  "ui.2a1d74bcdd": {
+    "ko": "길드 현황",
+    "en": "길드 현황"
+  },
+  "ui.cd2bb578b4": {
+    "ko": "심연 던전",
+    "en": "심연 던전"
+  },
+  "ui.be1af5568b": {
+    "ko": "시즌 대전",
+    "en": "시즌 대전"
+  },
+  "ui.6003da6bd2": {
+    "ko": "장비 던전",
+    "en": "장비 던전"
+  },
+  "ui.f4d93d3cf8": {
+    "ko": "스톤패시브",
+    "en": "스톤패시브"
+  },
+  "ui.00b2768bcc": {
+    "ko": "강화 진문",
+    "en": "강화 진문"
+  },
+  "ui.c1ef178866": {
+    "ko": "진문 붕괴",
+    "en": "진문 붕괴"
+  },
+  "ui.b43e678315": {
+    "ko": "새 길드명",
+    "en": "새 길드명"
+  },
+  "ui.0f6f02427f": {
+    "ko": "마법상점",
+    "en": "마법상점"
+  },
+  "ui.1a7f31cadb": {
+    "ko": "돌아가기",
+    "en": "Back"
+  },
+  "ui.f3d47aa42f": {
+    "ko": "진문개방",
+    "en": "진문개방"
+  },
+  "ui.b4d6128261": {
+    "ko": "증폭선언",
+    "en": "증폭선언"
+  },
+  "ui.0898bd2315": {
+    "ko": "진문청소",
+    "en": "진문청소"
+  },
+  "ui.bf60bb0a77": {
+    "ko": "진문수호",
+    "en": "진문수호"
+  },
+  "ui.c2646fe538": {
+    "ko": "사석상점",
+    "en": "사석상점"
+  },
+  "ui.b89e5dbdd6": {
+    "ko": "진형파괴",
+    "en": "진형파괴"
+  },
+  "ui.7343e44b1c": {
+    "ko": "모험가",
+    "en": "Adventurer"
+  },
+  "ui.ff75b4ff24": {
+    "ko": "초기화",
+    "en": "Reset"
+  },
+  "ui.fa73f3a42f": {
+    "ko": "소환서",
+    "en": "Scroll"
+  },
+  "ui.0d242e234f": {
+    "ko": "소환진",
+    "en": "Summon Circle"
+  },
+  "ui.43d54a7358": {
+    "ko": "미장착",
+    "en": "미장착"
+  },
+  "ui.1133a9521e": {
+    "ko": "장신구",
+    "en": "장신구"
+  },
+  "ui.0abb2c440d": {
+    "ko": "마법구",
+    "en": "마법구"
+  },
+  "ui.b5f528925f": {
+    "ko": "각인×",
+    "en": "각인×"
+  },
+  "ui.d21c4c3248": {
+    "ko": "선택중",
+    "en": "선택중"
+  },
+  "ui.4c54b67262": {
+    "ko": "강화진",
+    "en": "강화진"
+  },
+  "ui.262553905b": {
+    "ko": "아레나",
+    "en": "아레나"
+  },
+  "ui.d758337556": {
+    "ko": "섬으로",
+    "en": "섬으로"
+  },
+  "ui.fe1fb24836": {
+    "ko": "웨이브",
+    "en": "웨이브"
+  },
+  "ui.aad8793826": {
+    "ko": "쌍착수",
+    "en": "쌍착수"
+  },
+  "ui.bff20dc3bb": {
+    "ko": "이벤트",
+    "en": "이벤트"
+  },
+  "ui.e480e4fefe": {
+    "ko": "돌흡수",
+    "en": "돌흡수"
+  },
+  "ui.329b63fdf1": {
+    "ko": "맞마나",
+    "en": "맞마나"
+  },
+  "ui.d5028d9279": {
+    "ko": "이중층",
+    "en": "이중층"
+  },
+  "ui.d48858f588": {
+    "ko": "연마:",
+    "en": "연마:"
+  },
+  "ui.04e75ecf18": {
+    "ko": "융합:",
+    "en": "융합:"
+  },
+  "ui.b835657896": {
+    "ko": "소원:",
+    "en": "소원:"
+  },
+  "ui.108f04ca6e": {
+    "ko": "파티",
+    "en": "파티"
+  },
+  "ui.8a1893a931": {
+    "ko": "평타",
+    "en": "평타"
+  },
+  "ui.e234157c2f": {
+    "ko": "실드",
+    "en": "실드"
+  },
+  "ui.ac9d7edf0f": {
+    "ko": "데모",
+    "en": "Demo"
+  },
+  "ui.d1496ce82d": {
+    "ko": "해금",
+    "en": "Unlock"
+  },
+  "ui.8d8680373c": {
+    "ko": "완료",
+    "en": "Done"
+  },
+  "ui.df72a8753d": {
+    "ko": "대기",
+    "en": "Stored"
+  },
+  "ui.ca119dd0f6": {
+    "ko": "수련",
+    "en": "Drill"
+  },
+  "ui.ba0c9e096f": {
+    "ko": "영광",
+    "en": "Glory"
+  },
+  "ui.9614672b56": {
+    "ko": "가능",
+    "en": "가능"
+  },
+  "ui.dc78e6a251": {
+    "ko": "마나",
+    "en": "마나"
+  },
+  "ui.85a1e21cb8": {
+    "ko": "감응",
+    "en": "감응"
+  },
+  "ui.79d043fa1d": {
+    "ko": "위력",
+    "en": "위력"
+  },
+  "ui.dafef2d567": {
+    "ko": "지휘",
+    "en": "지휘"
+  },
+  "ui.33a4be47d4": {
+    "ko": "숙련",
+    "en": "숙련"
+  },
+  "ui.8c4dac1fcc": {
+    "ko": "무기",
+    "en": "무기"
+  },
+  "ui.be23709b65": {
+    "ko": "로브",
+    "en": "로브"
+  },
+  "ui.b01ca73aff": {
+    "ko": "망토",
+    "en": "망토"
+  },
+  "ui.f8435cd16d": {
+    "ko": "반지",
+    "en": "반지"
+  },
+  "ui.8b41b055f7": {
+    "ko": "각인",
+    "en": "각인"
+  },
+  "ui.818a75cd98": {
+    "ko": "장착",
+    "en": "장착"
+  },
+  "ui.048b7511df": {
+    "ko": "획득",
+    "en": "획득"
+  },
+  "ui.00faa47381": {
+    "ko": "스폰",
+    "en": "스폰"
+  },
+  "ui.95ca12ad92": {
+    "ko": "회복",
+    "en": "회복"
+  },
+  "ui.e36213525e": {
+    "ko": "형상",
+    "en": "형상"
+  },
+  "ui.85de958b5f": {
+    "ko": "속성",
+    "en": "속성"
+  },
+  "ui.06dd3affb3": {
+    "ko": "필승",
+    "en": "필승"
+  },
+  "ui.4d67306e14": {
+    "ko": "봉인",
+    "en": "봉인"
+  },
+  "ui.511fa65e38": {
+    "ko": "묘수",
+    "en": "묘수"
+  },
+  "ui.8bbc778e36": {
+    "ko": "A국",
+    "en": "A국"
+  },
+  "ui.a9034f7e3d": {
+    "ko": "수동",
+    "en": "Manual"
+  },
+  "ui.b241493768": {
+    "ko": "장",
+    "en": "장"
+  },
+  "ui.2fc05c02be": {
+    "ko": "회",
+    "en": "회"
+  },
+  "ui.1ac9a0470a": {
+    "ko": "건물 배치 편집",
+    "en": "Layout edit"
+  },
+  "ui.b0814cee04": {
+    "ko": "환영합니다",
+    "en": "Welcome"
+  },
+  "ui.9f3e44b02a": {
+    "ko": "로그인됨 · {email}",
+    "en": "Signed in · {email}"
+  },
+  "ui.a4d2cdf322": {
+    "ko": "이 난이도는 아직 열리지 않았습니다.",
+    "en": "This difficulty is not open yet."
+  },
+  "ui.7882865401": {
+    "ko": "같은 종의 두 마리를 합치면 진화 +1 · 높은 레벨·스킬·상징을 유지합니다",
+    "en": "같은 종의 두 마리를 합치면 진화 +1 · 높은 레벨·스킬·상징을 유지합니다"
+  },
+  "ui.7e6bcf70a0": {
+    "ko": "마나 · 크리스탈 · 소환서 중 하나가 무작위로 내려옵니다",
+    "en": "마나 · 크리스탈 · 소환서 중 하나가 무작위로 내려옵니다"
+  },
+  "ui.a8d95f19ad": {
+    "ko": "가방이 비어 있습니다. 장비 금고에서 드롭을 획득하세요",
+    "en": "가방이 비어 있습니다. 장비 금고에서 드롭을 획득하세요"
+  },
+  "ui.62bb348c39": {
+    "ko": "용 상징이 없습니다. 전투 드롭·상점을 확인하세요",
+    "en": "용 상징이 없습니다. 전투 드롭·상점을 확인하세요"
+  },
+  "ui.3b576b9d2b": {
+    "ko": "서버 DB가 메모리 모드입니다. 배포 환경에서는",
+    "en": "서버 DB가 메모리 모드입니다. 배포 환경에서는"
+  },
+  "ui.6b94c9708e": {
+    "ko": "동일 종 소환수 2마리가 필요합니다",
+    "en": "동일 종 소환수 2마리가 필요합니다"
+  },
+  "ui.41281baf5a": {
+    "ko": "출정문으로 돌아가 다시 도전하세요",
+    "en": "Return to the gate and try again"
+  },
+  "ui.ea58ae8a45": {
+    "ko": "소환서를 사용해 동료를 불러내세요",
+    "en": "Use scrolls to call allies"
+  },
+  "ui.b9c0de06ae": {
+    "ko": "각인 가능한 상징이 없습니다",
+    "en": "각인 가능한 상징이 없습니다"
+  },
+  "ui.1d689ebc57": {
+    "ko": "연마할 상징이 없습니다",
+    "en": "연마할 상징이 없습니다"
+  },
+  "ui.bbef9e1b47": {
+    "ko": "강화진 가방에서 장착",
+    "en": "Equip from forge bag"
+  },
+  "ui.290a3fb982": {
+    "ko": "소환진이 고요합니다",
+    "en": "The circle is quiet"
+  },
+  "ui.e94107292d": {
+    "ko": "진액 수집 · 마나",
+    "en": "진액 수집 · 마나"
+  },
+  "ui.d975611bf8": {
+    "ko": "회 수련 · 마나",
+    "en": "회 수련 · 마나"
+  },
+  "ui.7533294263": {
+    "ko": "강화진에서 장착",
+    "en": "Equip at forge"
+  },
+  "ui.d3d3707997": {
+    "ko": "장착 대상 선택",
+    "en": "장착 대상 선택"
+  },
+  "ui.d7c1f48736": {
+    "ko": "세트 조각 없음",
+    "en": "세트 조각 없음"
+  },
+  "ui.5515ca646d": {
+    "ko": "에너지 · 제작",
+    "en": "에너지 · 제작"
+  },
+  "ui.fafad3d54f": {
+    "ko": "대량 따냄 보상",
+    "en": "대량 따냄 보상"
+  },
+  "ui.df9d336285": {
+    "ko": "동일 종 2마리",
+    "en": "동일 종 2마리"
+  },
+  "ui.9746b4cedd": {
+    "ko": "게스트로 계속",
+    "en": "Continue as guest"
+  },
+  "ui.9f6e1f4e2b": {
+    "ko": "를 연결하세요",
+    "en": "를 연결하세요"
+  },
+  "ui.210ca7ad33": {
+    "ko": "묘수 미션까지",
+    "en": "묘수 미션까지"
+  },
+  "ui.5d8e2b5c4a": {
+    "ko": "회 · 소환사",
+    "en": "x · Summoner"
+  },
+  "ui.71654c1bdc": {
+    "ko": "에 해금됩니다",
+    "en": "에 해금됩니다"
+  },
+  "ui.929b21bf23": {
+    "ko": "아이디 저장",
+    "en": "Save ID"
+  },
+  "ui.217211959e": {
+    "ko": "자동 로그인",
+    "en": "Auto login"
+  },
+  "ui.275aaa8da4": {
+    "ko": "데모 플레이",
+    "en": "Demo play"
+  },
+  "ui.269ecd9013": {
+    "ko": "탭하여 선택",
+    "en": "탭하여 선택"
+  },
+  "ui.102350c0dd": {
+    "ko": "세트 효과 없음",
+    "en": "No set bonus"
+  },
+  "ui.332e9eedf2": {
+    "ko": "레이드 최고",
+    "en": "레이드 최고"
+  },
+  "ui.05873c30d3": {
+    "ko": "전체 클리어",
+    "en": "전체 클리어"
+  },
+  "ui.be85833944": {
+    "ko": "전투 결과",
+    "en": "Battle result"
+  },
+  "ui.70088c999d": {
+    "ko": "결과 없음",
+    "en": "No result"
+  },
+  "ui.6be738a130": {
+    "ko": "장비 드롭",
+    "en": "Gear drop"
+  },
+  "ui.9efcf019b7": {
+    "ko": "연마·각인",
+    "en": "Polish · Engrave"
+  },
+  "ui.03d1f975cb": {
+    "ko": "다시 도전",
+    "en": "Retry"
+  },
+  "ui.0f554c7cff": {
+    "ko": "진문 재건",
+    "en": "진문 재건"
+  },
+  "ui.c943a2bfc5": {
+    "ko": "추천 착수",
+    "en": "Suggested move"
+  },
+  "ui.0b4d534507": {
+    "ko": "융합 완료",
+    "en": "Fusion complete"
+  },
+  "ui.1365952072": {
+    "ko": "수련 현황",
+    "en": "Drill status"
+  },
+  "ui.ecc82466ef": {
+    "ko": "오늘 완료",
+    "en": "오늘 완료"
+  },
+  "ui.6667aae26a": {
+    "ko": "기원 현황",
+    "en": "기원 현황"
+  },
+  "ui.5ef8e0b5ef": {
+    "ko": "편성 저장",
+    "en": "편성 저장"
+  },
+  "ui.91c120d564": {
+    "ko": "강화진으로",
+    "en": "강화진으로"
+  },
+  "ui.4150cda5a2": {
+    "ko": "소환 성공",
+    "en": "소환 성공"
+  },
+  "ui.0e69339fa1": {
+    "ko": "상징 선택",
+    "en": "상징 선택"
+  },
+  "ui.8c1a53b875": {
+    "ko": "각성·트리",
+    "en": "각성·트리"
+  },
+  "ui.9a17e8caeb": {
+    "ko": "스킬 트리",
+    "en": "스킬 트리"
+  },
+  "ui.1195491060": {
+    "ko": "세트 부여",
+    "en": "세트 부여"
+  },
+  "ui.1e356b1fdc": {
+    "ko": "장비 가방",
+    "en": "장비 가방"
+  },
+  "ui.a05d718889": {
+    "ko": "드롭 필요",
+    "en": "드롭 필요"
+  },
+  "ui.d3a3c215c8": {
+    "ko": "상징 연마",
+    "en": "상징 연마"
+  },
+  "ui.515ca5f235": {
+    "ko": "상징 각인",
+    "en": "상징 각인"
+  },
+  "ui.14b961e9d3": {
+    "ko": "보유 영광",
+    "en": "보유 영광"
+  },
+  "ui.ad11613bb4": {
+    "ko": "건물 합산",
+    "en": "건물 합산"
+  },
+  "ui.12ce947dc1": {
+    "ko": "하나 선택",
+    "en": "하나 선택"
+  },
+  "ui.8f968f51eb": {
+    "ko": "세계 지도",
+    "en": "세계 지도"
+  },
+  "ui.5d0bf3b101": {
+    "ko": "크리스탈",
+    "en": "Crystal"
+  },
+  "ui.50cec01118": {
+    "ko": "게임시작",
+    "en": "Start"
+  },
+  "ui.3879f078a4": {
+    "ko": "로그아웃",
+    "en": "Log out"
+  },
+  "ui.ecb4cc8789": {
+    "ko": "회원가입",
+    "en": "Sign up"
+  },
+  "ui.81973897c7": {
+    "ko": "비밀번호",
+    "en": "Password"
+  },
+  "ui.23a04d1293": {
+    "ko": "수련하기",
+    "en": "Drill"
+  },
+  "ui.4b482b3675": {
+    "ko": "진문석",
+    "en": "Jinmun"
+  },
+  "ui.443ac89859": {
+    "ko": "기여도",
+    "en": "Contribution"
+  },
+  "ui.fd3c4455cd": {
+    "ko": "소환사",
+    "en": "Summoner"
+  },
+  "ui.0f9f095864": {
+    "ko": "출정문",
+    "en": "Gate"
+  },
+  "ui.d8c261904f": {
+    "ko": "홈으로",
+    "en": "Home"
+  },
+  "ui.e225a6fd75": {
+    "ko": "로그인",
+    "en": "Log in"
+  },
+  "ui.3c37764a2b": {
+    "ko": "이메일",
+    "en": "Email"
+  },
+  "ui.e5f5d19099": {
+    "ko": "레벨업",
+    "en": "레벨업"
+  },
+  "ui.079b50d844": {
+    "ko": "로스터",
+    "en": "로스터"
+  },
+  "ui.ebe035bf0f": {
+    "ko": "착용중",
+    "en": "착용중"
+  },
+  "ui.fa2390684b": {
+    "ko": "소환수",
+    "en": "소환수"
+  },
+  "ui.49758b94ae": {
+    "ko": "접두어",
+    "en": "접두어"
+  },
+  "ui.f6d4bb4a67": {
+    "ko": "길드명",
+    "en": "길드명"
+  },
+  "ui.b35f488f01": {
+    "ko": "미해금",
+    "en": "미해금"
+  },
+  "ui.794b55c1ef": {
+    "ko": "시즌승",
+    "en": "시즌승"
+  },
+  "ui.453d0d2df5": {
+    "ko": "레벨",
+    "en": "Level"
+  },
+  "ui.b61d5e36ba": {
+    "ko": "따냄",
+    "en": "따냄"
+  },
+  "ui.468266d639": {
+    "ko": "확인",
+    "en": "OK"
+  },
+  "ui.c7b8d42347": {
+    "ko": "누적",
+    "en": "Total"
+  },
+  "ui.1f1712acff": {
+    "ko": "저장",
+    "en": "저장"
+  },
+  "ui.2bdce5e8cc": {
+    "ko": "오늘",
+    "en": "오늘"
+  },
+  "ui.0f8cd87cd5": {
+    "ko": "최근",
+    "en": "최근"
+  },
+  "ui.d5e7024eb8": {
+    "ko": "편성",
+    "en": "편성"
+  },
+  "ui.81d226110c": {
+    "ko": "슬롯",
+    "en": "슬롯"
+  },
+  "ui.c686d05434": {
+    "ko": "이동",
+    "en": "이동"
+  },
+  "ui.19b2d19bc1": {
+    "ko": "취소",
+    "en": "취소"
+  },
+  "ui.04de68c24f": {
+    "ko": "치확",
+    "en": "치확"
+  },
+  "ui.0502c88b0e": {
+    "ko": "치피",
+    "en": "치피"
+  },
+  "ui.3e1a337d93": {
+    "ko": "강화",
+    "en": "강화"
+  },
+  "ui.a2d1ab7b28": {
+    "ko": "각성",
+    "en": "각성"
+  },
+  "ui.d02987ca08": {
+    "ko": "진화",
+    "en": "진화"
+  },
+  "ui.69aa2df9f2": {
+    "ko": "착용",
+    "en": "착용"
+  },
+  "ui.c14c1b1bc6": {
+    "ko": "연마",
+    "en": "연마"
+  },
+  "ui.e17b206052": {
+    "ko": "장비",
+    "en": "Gear"
+  },
+  "ui.60fbf51b13": {
+    "ko": "상징",
+    "en": "상징"
+  },
+  "ui.2b47128fd2": {
+    "ko": "스킬",
+    "en": "스킬"
+  },
+  "ui.e41479e637": {
+    "ko": "보유",
+    "en": "보유"
+  },
+  "ui.29efb69b57": {
+    "ko": "종류",
+    "en": "종류"
+  },
+  "ui.fe2c5c3e7d": {
+    "ko": "기여",
+    "en": "기여"
+  },
+  "ui.937c424f40": {
+    "ko": "출석",
+    "en": "출석"
+  },
+  "ui.8b92576f2b": {
+    "ko": "가입",
+    "en": "가입"
+  },
+  "ui.3c15bd34eb": {
+    "ko": "메인",
+    "en": "메인"
+  },
+  "ui.2d99fde255": {
+    "ko": "개방",
+    "en": "개방"
+  },
+  "ui.bd1967124e": {
+    "ko": "증폭",
+    "en": "증폭"
+  },
+  "ui.1fa6111a65": {
+    "ko": "쌍착",
+    "en": "쌍착"
+  },
+  "ui.ac2f6c7ca5": {
+    "ko": "청소",
+    "en": "청소"
+  },
+  "ui.0be109c051": {
+    "ko": "수호",
+    "en": "수호"
+  },
+  "ui.4b0ea2fcd0": {
+    "ko": "추천",
+    "en": "추천"
+  },
+  "ui.bf185333fe": {
+    "ko": "쌍국",
+    "en": "쌍국"
+  },
+  "ui.f5163600f4": {
+    "ko": "크",
+    "en": "크"
+  },
+  "ui.d0e22dbd7b": {
+    "ko": "소환",
+    "en": "Summon"
+  },
+  "ui.2387a8e0b0": {
+    "ko": "기본 난이도",
+    "en": "Standard difficulty"
+  },
+  "ui.3dfdef02ab": {
+    "ko": "어려움",
+    "en": "Hard"
+  },
+  "ui.4292516afd": {
+    "ko": "난이도 잠김",
+    "en": "Difficulty locked"
+  },
+  "ui.bc22e8e368": {
+    "ko": "행동력 0",
+    "en": "Energy 0"
+  },
+  "ui.1a3b3223e1": {
+    "ko": "난이도 선택",
+    "en": "Select difficulty"
+  },
+  "ui.83b2a7f44c": {
+    "ko": "마나·스킬 영구 보너스",
+    "en": "마나·스킬 영구 보너스"
+  },
+  "ui.956df04e9a": {
+    "ko": "접두어 부여/재부여",
+    "en": "접두어 부여/재부여"
+  },
+  "ui.118337544a": {
+    "ko": "기여·보상 수령",
+    "en": "기여·보상 수령"
+  },
+  "ui.285324164a": {
+    "ko": "주옵션 재부여",
+    "en": "주옵션 재부여"
+  },
+  "ui.58c8d4982d": {
+    "ko": "소환서 1장",
+    "en": "소환서 1장"
+  },
+  "ui.544ebe1d37": {
+    "ko": "소환서 5장",
+    "en": "소환서 5장"
+  },
+  "ui.e9db3b5735": {
+    "ko": "최대 16자",
+    "en": "최대 16자"
+  },
+  "ui.6623b135fa": {
+    "ko": "진액 제작",
+    "en": "진액 제작"
+  },
+  "ui.ebc3c5c656": {
+    "ko": "결과 진화",
+    "en": "결과 진화"
+  },
+  "ui.b3fe16e64a": {
+    "ko": "수집하기",
+    "en": "수집하기"
+  },
+  "ui.9eb09d2d1c": {
+    "ko": "리더 공",
+    "en": "리더 공"
+  },
+  "ui.7154da110a": {
+    "ko": "에너지",
+    "en": "에너지"
+  },
+  "ui.759f762a02": {
+    "ko": "빈칸",
+    "en": "Empty"
+  },
+  "ui.aef1a1e70e": {
+    "ko": "일반",
+    "en": "Normal"
+  },
+  "ui.1c208809ed": {
+    "ko": "고급",
+    "en": "Premium"
+  },
+  "ui.2d586d2a06": {
+    "ko": "신성/심연",
+    "en": "Mystic"
+  },
+  "ui.5ff5da3786": {
+    "ko": "부족",
+    "en": "Need more"
+  },
+  "ui.adb4a28256": {
+    "ko": "화",
+    "en": "F"
+  },
+  "ui.c04eb2ef10": {
+    "ko": "수",
+    "en": "W"
+  },
+  "ui.9f329dea90": {
+    "ko": "풍",
+    "en": "A"
+  },
+  "ui.173366486b": {
+    "ko": "지옥",
+    "en": "Hell"
+  },
+  "ui.ab309da205": {
+    "ko": "적 강화 +4 · 보상 대폭 증가",
+    "en": "Enemy +4 · much better rewards"
+  },
+  "ui.7be5aa7542": {
+    "ko": "적 강화 +2 · 보상 증가",
+    "en": "Enemy +2 · better rewards"
+  },
+  "ui.956f2f4243": {
+    "ko": "잠김",
+    "en": "Locked"
+  },
+  "ui.94b7dba159": {
+    "ko": "닫기",
+    "en": "Close"
+  },
+  "ui.c6953a607b": {
+    "ko": "소환 대기",
+    "en": "Awaiting summon"
+  },
+  "ui.8b8572eda1": {
+    "ko": "시즌 보상 수령",
+    "en": "Claim season reward"
+  },
+  "ui.6b0ff13ffd": {
+    "ko": "1회 소환",
+    "en": "Summon ×1"
+  },
+  "ui.9cbaf58b88": {
+    "ko": "주간",
+    "en": "Weekly"
+  },
+  "ui.7dcdb553c8": {
+    "ko": "행동력",
+    "en": "Energy"
+  },
+  "ui.9d96ebc162": {
+    "ko": "메인 퀘스트",
+    "en": "Main quest"
+  },
+  "ui.402782da6b": {
+    "ko": "밴 중",
+    "en": "Banned"
+  },
+  "ui.25a68ffa5c": {
+    "ko": "밴 가능",
+    "en": "Can ban"
+  },
+  "ui.b78477b088": {
+    "ko": "시즌 아레나 승",
+    "en": "Season arena wins"
+  },
+  "ui.45e62f7d49": {
+    "ko": "다음 보상",
+    "en": "Next reward"
+  },
+  "ui.3b1908b79a": {
+    "ko": "승",
+    "en": " wins"
+  },
+  "ui.d18227b255": {
+    "ko": "수령",
+    "en": "Claimed"
+  },
+  "ui.330ccf22cb": {
+    "ko": "클리어",
+    "en": "Cleared"
+  },
+  "ui.e35b325054": {
+    "ko": "주간 금고",
+    "en": "Weekly vault"
+  },
+  "ui.6a432402bd": {
+    "ko": "장비 드롭은 주간 한도까지",
+    "en": "Gear drops until weekly cap"
+  },
+  "ui.3ea974d72f": {
+    "ko": "레이드",
+    "en": "Raid"
+  },
+  "ui.485e4f6a0d": {
+    "ko": "어려움",
+    "en": "Hard"
+  },
+  "ui.ca139249b0": {
+    "ko": "밴",
+    "en": "Bans"
+  },
+  "ui.d58fa73adc": {
+    "ko": "없음",
+    "en": "None"
+  },
+  "ui.869e9feb1b": {
+    "ko": "최대",
+    "en": "Max"
+  },
+  "ui.7ff9ee538f": {
+    "ko": "소환사 마나",
+    "en": "Summoner mana"
+  },
+  "ui.be988ce3e3": {
+    "ko": "회 소환",
+    "en": "× summon"
+  },
+  "ui.6f2a161fa2": {
+    "ko": "구매",
+    "en": "Buy"
+  },
+  "ui.f4b67da03a": {
+    "ko": "게스트",
+    "en": "Guest"
+  },
+  "ui.b97534218c": {
+    "ko": "서버 DB가 메모리 모드입니다. 배포 환경에서는 Postgres(DATABASE_URL)를 연결하세요.",
+    "en": "Server DB is in-memory. Connect Postgres (DATABASE_URL) in production."
+  },
+  "auth.footer.navAria": {
+    "ko": "약관 및 고객지원",
+    "en": "Terms and support"
+  },
+  "auth.footer.terms": {
+    "ko": "이용약관",
+    "en": "Terms of Service"
+  },
+  "auth.footer.privacy": {
+    "ko": "개인정보처리방침",
+    "en": "Privacy Policy"
+  },
+  "auth.footer.support": {
+    "ko": "고객센터",
+    "en": "Support"
+  },
+  "auth.footer.company": {
+    "ko": "에코스톤",
+    "en": "Ecostone"
+  },
+  "auth.footer.ceo": {
+    "ko": "대표 유효정",
+    "en": "CEO Yoo Hyojeong"
+  },
+  "auth.footer.bizNo": {
+    "ko": "사업자등록번호 574-87-03057",
+    "en": "Business Reg. 574-87-03057"
+  },
+  "auth.footer.mailOrder": {
+    "ko": "통신판매업신고 2024-화성동탄-1338",
+    "en": "Mail-order 2024-Hwaseong-Dongtan-1338"
+  },
+  "auth.footer.address": {
+    "ko": "경기도 화성시 동탄대로 677-10, 7층 715-A22호(영천동)",
+    "en": "715-A22, 7F, 677-10 Dongtandaero, Hwaseong, Gyeonggi"
+  },
+  "auth.footer.phoneLabel": {
+    "ko": "고객센터",
+    "en": "Support"
+  },
+  "auth.footer.copy": {
+    "ko": "ⓒ2026 에코스톤 All rights reserved.",
+    "en": "ⓒ2026 Ecostone All rights reserved."
+  },
+  "ui.tabInfo": {
+    "ko": "정보",
+    "en": "Info"
+  },
+  "ui.effect": {
+    "ko": "효과",
+    "en": "Effect"
+  },
+  "ui.manage": {
+    "ko": "관리",
+    "en": "Manage"
+  },
+  "ui.unequip": {
+    "ko": "해제",
+    "en": "Unequip"
+  },
+  "ui.rarityMythic": {
+    "ko": "신화",
+    "en": "Mythic"
+  },
+  "ui.rarityLegendary": {
+    "ko": "전설",
+    "en": "Legendary"
+  },
+  "ui.rarityEpic": {
+    "ko": "에픽",
+    "en": "Epic"
+  },
+  "ui.rarityRare": {
+    "ko": "희귀",
+    "en": "Rare"
+  },
+  "ui.rarityMagic": {
+    "ko": "마법",
+    "en": "Magic"
+  },
+  "ui.rarityNormal": {
+    "ko": "일반",
+    "en": "Normal"
+  },
+  "ui.statAtk": {
+    "ko": "공격력",
+    "en": "ATK"
+  },
+  "ui.statHp": {
+    "ko": "체력",
+    "en": "HP"
+  },
+  "ui.statDef": {
+    "ko": "방어력",
+    "en": "DEF"
+  },
+  "ui.statSpd": {
+    "ko": "속도",
+    "en": "SPD"
+  },
+  "ui.statCriRate": {
+    "ko": "치명타율",
+    "en": "CRI Rate"
+  },
+  "ui.statCriDmg": {
+    "ko": "치명타 피해",
+    "en": "CRI Dmg"
+  },
+  "ui.setPiecesN": {
+    "ko": "{n}세트",
+    "en": "{n}-set"
+  },
+  "ui.slotN": {
+    "ko": "{n}번",
+    "en": "#{n}"
+  },
+  "ui.levelPrefix": {
+    "ko": "레벨",
+    "en": "Lv."
+  },
+  "ui.setBonusNone": {
+    "ko": "세트 효과 없음",
+    "en": "No set bonus"
+  },
+  "ui.noSymbolForSlot": {
+    "ko": "해당 슬롯 상징 없음",
+    "en": "No symbols for this slot"
+  },
+  "ui.rosterSort": {
+    "ko": "정렬",
+    "en": "Sort"
+  },
+  "ui.sortDefault": {
+    "ko": "기본",
+    "en": "Default"
+  },
+  "ui.sortLevel": {
+    "ko": "레벨",
+    "en": "Level"
+  },
+  "ui.sortStars": {
+    "ko": "성급",
+    "en": "Stars"
+  },
+  "ui.sortElement": {
+    "ko": "속성",
+    "en": "Element"
+  },
+  "ui.sortParty": {
+    "ko": "파티",
+    "en": "Party"
+  },
+  "mission.title": {
+    "ko": "미션",
+    "en": "Missions"
+  },
+  "mission.close": {
+    "ko": "미션 닫기",
+    "en": "Close missions"
+  },
+  "mission.tabDaily": {
+    "ko": "일일미션",
+    "en": "Daily"
+  },
+  "mission.tabAchieve": {
+    "ko": "업적",
+    "en": "Achievements"
+  },
+  "mission.progress": {
+    "ko": "{cur}/{max}",
+    "en": "{cur}/{max}"
+  },
+  "mission.done": {
+    "ko": "완료",
+    "en": "Done"
+  },
+  "mission.inProgress": {
+    "ko": "진행중",
+    "en": "In progress"
+  },
+  "mission.go": {
+    "ko": "바로가기",
+    "en": "Go"
+  },
+  "mission.daily.wish.title": {
+    "ko": "일일 소원",
+    "en": "Daily wish"
+  },
+  "mission.daily.wish.desc": {
+    "ko": "소원의 사당에서 오늘 소원을 빌으세요",
+    "en": "Make today's wish at the temple"
+  },
+  "mission.daily.dojo.title": {
+    "ko": "도장 수련",
+    "en": "Dojo drill"
+  },
+  "mission.daily.dojo.desc": {
+    "ko": "마법진 도장에서 수련을 진행하세요",
+    "en": "Train at the magic circle dojo"
+  },
+  "mission.daily.collect.title": {
+    "ko": "재화 수집",
+    "en": "Collect resources"
+  },
+  "mission.daily.collect.desc": {
+    "ko": "연못·광맥에 쌓인 골드/크리스탈을 수령하세요",
+    "en": "Collect stored gold/crystal from buildings"
+  },
+  "mission.daily.sortie.title": {
+    "ko": "출정 도전",
+    "en": "Sortie"
+  },
+  "mission.daily.sortie.desc": {
+    "ko": "출정문으로 전투에 한 번 나서세요",
+    "en": "Fight once through the gate"
+  },
+  "mission.ach.lv5.title": {
+    "ko": "소환사 Lv.5",
+    "en": "Summoner Lv.5"
+  },
+  "mission.ach.lv5.desc": {
+    "ko": "소환사를 레벨 5까지 성장",
+    "en": "Reach summoner level 5"
+  },
+  "mission.ach.lv10.title": {
+    "ko": "소환사 Lv.10",
+    "en": "Summoner Lv.10"
+  },
+  "mission.ach.lv10.desc": {
+    "ko": "소환사를 레벨 10까지 성장",
+    "en": "Reach summoner level 10"
+  },
+  "mission.ach.clear5.title": {
+    "ko": "스테이지 5클리어",
+    "en": "Clear 5 stages"
+  },
+  "mission.ach.clear5.desc": {
+    "ko": "시나리오 스테이지 5개 클리어",
+    "en": "Clear 5 scenario stages"
+  },
+  "mission.ach.clear15.title": {
+    "ko": "스테이지 15클리어",
+    "en": "Clear 15 stages"
+  },
+  "mission.ach.clear15.desc": {
+    "ko": "시나리오 스테이지 15개 클리어",
+    "en": "Clear 15 scenario stages"
+  },
+  "mission.ach.roster4.title": {
+    "ko": "동료 4마리",
+    "en": "4 allies"
+  },
+  "mission.ach.roster4.desc": {
+    "ko": "소환수 4마리를 보유",
+    "en": "Own 4 monsters"
+  },
+  "mission.ach.glory.title": {
+    "ko": "영광의 첫걸음",
+    "en": "First glory"
+  },
+  "mission.ach.glory.desc": {
+    "ko": "영광 건물을 1회 이상 강화",
+    "en": "Upgrade any glory building once"
+  },
+  "mission.ach.guild.title": {
+    "ko": "길드 가입",
+    "en": "Join a guild"
+  },
+  "mission.ach.guild.desc": {
+    "ko": "길드에 소속되기",
+    "en": "Belong to a guild"
+  },
+  "ui.statAcc": {
+    "ko": "효과 적중",
+    "en": "ACC"
+  },
+  "ui.statRes": {
+    "ko": "효과 저항",
+    "en": "RES"
+  },
+  "ui.roleAttack": {
+    "ko": "공격형",
+    "en": "Attack"
+  },
+  "ui.roleDefense": {
+    "ko": "방어형",
+    "en": "Defense"
+  },
+  "ui.roleHp": {
+    "ko": "체력형",
+    "en": "HP"
+  },
+  "ui.roleSupport": {
+    "ko": "지원형",
+    "en": "Support"
+  },
+  "ui.skillLvPower": {
+    "ko": "위력 +{pct}%",
+    "en": "Power +{pct}%"
+  },
+  "ui.skillLvCd": {
+    "ko": "쿨타임 1턴 감소",
+    "en": "Cooltime Turn -1"
+  },
+  "ui.skillCdLabel": {
+    "ko": "쿨타임 {n}턴",
+    "en": "Cooltime {n} Turn"
+  },
+  "ui.skillFeedTitle": {
+    "ko": "동일 소환수로 스킬 강화",
+    "en": "Skill up with same summon"
+  },
+  "ui.skillFeedEmpty": {
+    "ko": "재료로 쓸 동일 소환수가 없습니다",
+    "en": "No same summon available as material"
+  },
+  "ui.skillFeedUse": {
+    "ko": "재료",
+    "en": "Feed"
+  },
+  "ui.skillEnhanceHint": {
+    "ko": "강화 시 스킬이 랜덤으로 상승합니다",
+    "en": "Enhancing randomly levels a skill"
+  },
+  "ui.skillCdNone": {
+    "ko": "쿨타임 없음",
+    "en": "No cooltime"
+  },
+  "ui.skillFxDamageSingle": {
+    "ko": "적 1명에게 공격력 {pct}% 피해",
+    "en": "Deal {pct}% ATK damage to 1 enemy"
+  },
+  "ui.skillFxDamageAll": {
+    "ko": "적 전체에게 공격력 {pct}% 피해",
+    "en": "Deal {pct}% ATK damage to all enemies"
+  },
+  "ui.skillFxHealSelf": {
+    "ko": "자신의 최대 체력 {pct}% 회복",
+    "en": "Heal self for {pct}% max HP"
+  },
+  "ui.skillFxHealAlly": {
+    "ko": "체력이 가장 낮은 아군을 최대 체력 {pct}% 회복",
+    "en": "Heal lowest-HP ally for {pct}% max HP"
+  },
+  "ui.skillFxShield": {
+    "ko": "자신에게 최대 체력 {pct}% 실드",
+    "en": "Gain a shield equal to {pct}% max HP"
+  },
+  "ui.skillFxMana": {
+    "ko": "마나 +{n}",
+    "en": "Mana +{n}"
+  },
+  "ui.awakenComingSoon": {
+    "ko": "각성 시스템은 추후 업데이트 예정입니다. (아직 구현되지 않았습니다)",
+    "en": "Awakening is planned for a future update. (Not implemented yet)"
+  },
+  "ui.expandSymbolBag": {
+    "ko": "슬롯 +10 (−크리스탈 {cost})",
+    "en": "Slots +10 (−{cost} crystal)"
+  },
+  "ui.expandSymbolBagMax": {
+    "ko": "슬롯 최대 도달",
+    "en": "Bag slots maxed"
+  },
+  "ui.expandSymbolBagTitle": {
+    "ko": "상징 슬롯 확장",
+    "en": "Expand symbol bag"
+  },
+  "ui.expandSymbolBagCurrent": {
+    "ko": "현재 슬롯",
+    "en": "Current slots"
+  },
+  "ui.expandSymbolBagAdd": {
+    "ko": "추가 슬롯",
+    "en": "Slots added"
+  },
+  "ui.expandSymbolBagPrice": {
+    "ko": "가격",
+    "en": "Price"
+  },
+  "ui.expandSymbolBagConfirm": {
+    "ko": "확장하기",
+    "en": "Expand"
+  },
+  "chat.title": {
+    "ko": "월드 채팅",
+    "en": "World chat"
+  },
+  "chat.open": {
+    "ko": "채팅 열기",
+    "en": "Open chat"
+  },
+  "chat.close": {
+    "ko": "채팅 닫기",
+    "en": "Close chat"
+  },
+  "chat.ticker": {
+    "ko": "새 채팅",
+    "en": "New chat"
+  },
+  "chat.channelSelect": {
+    "ko": "채널 선택",
+    "en": "Select channel"
+  },
+  "chat.channelN": {
+    "ko": "채널 {n}",
+    "en": "Channel {n}"
+  },
+  "chat.channelUsers": {
+    "ko": "{n}/{max}명",
+    "en": "{n}/{max} users"
+  },
+  "chat.full": {
+    "ko": "포화",
+    "en": "Full"
+  },
+  "chat.channelFull": {
+    "ko": "채널이 포화 상태입니다. 다른 채널로 입장하세요.",
+    "en": "Channel is full. Join another channel."
+  },
+  "chat.capHint": {
+    "ko": "채널당 최대 {max}명 · 포화 시 다른 채널만 입장 가능",
+    "en": "Max {max} users per channel · Full channels cannot be joined"
+  },
+  "chat.empty": {
+    "ko": "아직 메시지가 없습니다",
+    "en": "No messages yet"
+  },
+  "chat.placeholder": {
+    "ko": "메시지 입력",
+    "en": "Type a message"
+  },
+  "chat.send": {
+    "ko": "전송",
+    "en": "Send"
+  }
+}

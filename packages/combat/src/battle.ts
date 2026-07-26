@@ -729,7 +729,7 @@ export class Battle {
       if (unit.kind === "summoner") {
         manaGain += 12;
         ampDelta += 0.02;
-        this.log.push(`서머너 착수 보너스`);
+        this.log.push(`소환사 착수 보너스`);
       }
       if (this.circleElement && unit.element === this.circleElement) {
         ampDelta += 0.04;

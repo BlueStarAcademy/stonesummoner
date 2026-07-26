@@ -132,7 +132,7 @@ describe("Modules E/F/G/H", () => {
     assert.ok(b.amplify >= beforeAmp);
     assert.ok(b.allySummoner.mana >= beforeMana);
     assert.ok(
-      b.log.some((l) => /속성 테두리|서머너 착수/.test(l)),
+      b.log.some((l) => /속성 테두리|소환사 착수/.test(l)),
       b.log.slice(-8).join(" | "),
     );
   });

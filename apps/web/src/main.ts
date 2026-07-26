@@ -1,5 +1,14 @@
 import "./style.css";
 import {
+  formatNumber,
+  getLocale,
+  initI18n,
+  listLocales,
+  setLocale,
+  t,
+  type LocaleId,
+} from "./i18n";
+import {
   captureShopOffers,
   pickAutoSkillIndex,
   starPoints,
@@ -40,6 +49,7 @@ import {
   normalizeGearPiece,
   normalizeSummonerGear,
   SKILL_TREE_NODES,
+  SYMBOL_SETS,
   stagesForMap,
   summarizeGearSets,
   SYMBOL_GRIND_MANA_COST,
@@ -51,6 +61,8 @@ import {
 import {
   buildingUpgradeManaCost,
   collectMana,
+  energyRegenRemainingMs,
+  ENERGY_REGEN_MS,
   MAX_BUILDING_LEVEL,
   PHASE1_BUILDINGS,
   PHASE_BUILDINGS,
@@ -58,6 +70,7 @@ import {
   productionCrystalPerHour,
   productionManaPerHour,
   productionStorageCap,
+  spendEnergy,
   tickProduction,
   todayKey,
 } from "stonesummoner-home";
@@ -73,9 +86,6 @@ import {
   createSummonerRoster,
   describeOwned,
   enhanceManaCost,
-  evolveCrystalCost,
-  evolveManaCost,
-  evolveMinLevel,
   isStageUnlocked,
   MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
@@ -87,6 +97,12 @@ import {
   runEquipGearBag,
   runSellGearBag,
   runBuyEnergy,
+  runExpandSymbolBag,
+  symbolBagCapacity,
+  symbolBagExpandCost,
+  SYMBOL_BAG_BASE_SLOTS,
+  SYMBOL_BAG_EXPAND_STEP,
+  SYMBOL_BAG_MAX_SLOTS,
   runBuyGlory,
   runBuyScroll,
   runCraftEssence,
@@ -105,6 +121,7 @@ import {
   runUnequipSymbol,
   previewOwnedCombatStats,
   runEvolve,
+  runFeedSameMonster,
   runFusion,
   runGrindSymbol,
   homeCollectCrystal,
@@ -121,7 +138,6 @@ import {
   runSellSymbol,
   runSetArenaBans,
   runSetParty,
-  runSkillUp,
   runSummon,
   runUpgradeBuilding,
   setActiveSummoner,
@@ -134,10 +150,7 @@ import {
   SUMMON_MULTI_COUNT,
   SUMMON_SCROLL_COST,
   SUMMONER_ELEMENTS,
-  SUMMONER_ELEMENT_LABEL,
   symbolSellMana,
-  skillUpManaCost,
-  skillUpMinMonsterLevel,
   stageUnlockLabel,
   EQUIP_VAULT_WEEKLY_LIMIT,
   equipVaultRemaining,
@@ -217,8 +230,121 @@ function writeAuthPrefs(next: AuthPrefs): void {
   localStorage.setItem(AUTH_PREFS_KEY, JSON.stringify(next));
 }
 
+function readIslandLayout(): Record<string, { x: number; y: number }> {
+  const out: Record<string, { x: number; y: number }> = {
+    ...ISLAND_LAYOUT_DEFAULT,
+  };
+  try {
+    const raw = localStorage.getItem(ISLAND_LAYOUT_KEY);
+    if (!raw) return out;
+    const parsed = JSON.parse(raw) as Record<string, { x?: unknown; y?: unknown }>;
+    for (const [id, pos] of Object.entries(parsed)) {
+      if (!ISLAND_LAYOUT_DEFAULT[id]) continue;
+      const x = Number(pos?.x);
+      const y = Number(pos?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      out[id] = clampIslandLayoutPos(x, y);
+    }
+  } catch {
+    /* ignore */
+  }
+  return out;
+}
+
+function writeIslandLayout(layout: Record<string, { x: number; y: number }>): void {
+  const slim: Record<string, { x: number; y: number }> = {};
+  for (const id of Object.keys(ISLAND_LAYOUT_DEFAULT)) {
+    const pos = layout[id] ?? ISLAND_LAYOUT_DEFAULT[id]!;
+    slim[id] = {
+      x: Math.round(pos.x * 10) / 10,
+      y: Math.round(pos.y * 10) / 10,
+    };
+  }
+  localStorage.setItem(ISLAND_LAYOUT_KEY, JSON.stringify(slim));
+}
+
+function resolveIslandSpotPos(
+  id: string,
+  fallbackX: number,
+  fallbackY: number,
+): { x: number; y: number } {
+  const src =
+    islandLayoutEdit && islandLayoutDraft
+      ? islandLayoutDraft
+      : readIslandLayout();
+  return src[id] ?? ISLAND_LAYOUT_DEFAULT[id] ?? { x: fallbackX, y: fallbackY };
+}
+
+function enterIslandLayoutEdit(focusId?: string): void {
+  islandLayoutEdit = true;
+  islandLayoutDraft = { ...readIslandLayout() };
+  islandLayoutSuppressClick = true;
+  islandPanDrag = null;
+  islandLongPress = null;
+  flash(t('ui.19364fa53d'));
+  render();
+  if (focusId) {
+    queueMicrotask(() => {
+      app
+        .querySelectorAll<HTMLElement>("[data-b]")
+        .forEach((el) =>
+          el.classList.toggle("is-layout-focus", el.dataset.b === focusId),
+        );
+    });
+  }
+}
+
+function exitIslandLayoutEdit(commit: boolean): void {
+  if (commit && islandLayoutDraft) {
+    writeIslandLayout(islandLayoutDraft);
+    flash(t('ui.3ad18550e0'));
+  } else if (!commit) {
+    flash(t('ui.5d8b99bb60'));
+  }
+  islandLayoutEdit = false;
+  islandLayoutDraft = null;
+  islandSpotDrag = null;
+  islandLongPress = null;
+  render();
+}
+
+function clientToIslandPct(
+  clientX: number,
+  clientY: number,
+  world: HTMLElement,
+): { x: number; y: number } {
+  const rect = world.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return { x: 50, y: 50 };
+  return clampIslandLayoutPos(
+    ((clientX - rect.left) / rect.width) * 100,
+    ((clientY - rect.top) / rect.height) * 100,
+  );
+}
+
+function applyIslandSpotPosDom(id: string, x: number, y: number): void {
+  if (!islandLayoutDraft) islandLayoutDraft = { ...readIslandLayout() };
+  const prev = islandLayoutDraft[id] ?? ISLAND_LAYOUT_DEFAULT[id] ?? { x: 50, y: 50 };
+  const others = { ...islandLayoutDraft };
+  delete others[id];
+  const pos = resolveIslandSpotCollision(id, x, y, others, prev);
+  islandLayoutDraft[id] = pos;
+  const btn = app.querySelector<HTMLElement>(`[data-b="${id}"]`);
+  if (!btn) return;
+  const depth = Math.max(0, Math.min(1, pos.y / 100));
+  btn.style.left = `${pos.x}%`;
+  btn.style.top = `${pos.y}%`;
+  btn.style.setProperty("--spot-scale", (0.68 + depth * 0.5).toFixed(3));
+  btn.style.zIndex = String(Math.round(10 + pos.y));
+  btn.classList.toggle("is-layout-focus", true);
+  app.querySelectorAll<HTMLElement>("[data-b]").forEach((el) => {
+    if (el.dataset.b !== id) el.classList.remove("is-layout-focus");
+  });
+}
+
+
 let sessionUser: SessionUser | null = null;
-const authUi = { pane: "login" as "login" | "register" };
+/** gate = brand + CTA; login/register = form panel. */
+const authUi = { pane: "gate" as "gate" | "login" | "register" };
 let bootReady = false;
 let cloudTimer: ReturnType<typeof setTimeout> | null = null;
 /** False after cloud 401 ? keep local play, stop PUT spam. */
@@ -246,8 +372,48 @@ let forgeReveal: ForgeReveal | null = null;
 /** Fusion success reveal card. */
 let fusionReveal: FusionReveal | null = null;
 /** Enhance hub section tab. */
-type EnhanceTab = "awaken" | "monsters" | "gear" | "symbols";
-let enhanceTab: EnhanceTab = "awaken";
+type EnhanceTab = "monsters" | "summoner";
+let enhanceTab: EnhanceTab = "monsters";
+/** Bottom dock on monster book: roster slots or symbol bag. */
+let monBookDock: "roster" | "symbols" = "roster";
+/** Selected monster detail side-tab. */
+type MonDetailTab = "info" | "skills" | "awaken" | "symbols";
+let monDetailTab: MonDetailTab = "info";
+
+/** Swap inspect panes without full app re-render (keeps roster dock intact). */
+function applyMonDetailTabUi(): boolean {
+  const shell = app.querySelector<HTMLElement>(".mon-inspect-shell");
+  if (!shell) return false;
+  shell.querySelectorAll<HTMLButtonElement>("[data-mon-detail-tab]").forEach((btn) => {
+    const on = btn.dataset.monDetailTab === monDetailTab;
+    btn.classList.toggle("is-active", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  const body = shell.querySelector(".mon-inspect-body");
+  body?.classList.toggle("mon-inspect-body--symbols", monDetailTab === "symbols");
+  shell
+    .querySelector(".mon-inspect-col-art")
+    ?.classList.toggle("is-hidden", monDetailTab === "symbols");
+  shell
+    .querySelector(".mon-inspect-col-inv")
+    ?.classList.toggle("is-hidden", monDetailTab !== "symbols");
+  shell.querySelectorAll<HTMLElement>("[data-mon-pane]").forEach((pane) => {
+    pane.hidden = pane.dataset.monPane !== monDetailTab;
+  });
+  return true;
+}
+
+/** Selected skill slot (0..2) on skills tab detail pane. */
+let monSkillPick = 0;
+/** Selected monster uid on the monsters book screen. */
+let selectedEnhanceUid: string | null = null;
+/** Roster slot sort mode on enhance book. */
+type RosterSortMode = "default" | "level" | "stars" | "element" | "party";
+let rosterSortMode: RosterSortMode = "default";
+/** Symbol bag index open in detail modal. */
+let symbolDetailIndex: number | null = null;
+/** Symbol bag expand confirm modal. */
+let symbolBagExpandOpen = false;
 /** One-shot pulse/flash on next enhance paint. */
 let enhanceFx: { kind: "node"; id: string } | { kind: "gear"; slot: string } | null =
   null;
@@ -259,6 +425,7 @@ let toast = "";
 let battleSpeed: 1 | 2 | 3 = 1;
 let autoMode = false;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
+let energyRegenTimer: ReturnType<typeof setInterval> | null = null;
 let dmgFloats: { id: number; text: string; crit: boolean; ult: boolean }[] = [];
 let floatSeq = 0;
 /** Last seen circle phase ? detect empowered reset for board FX. */
@@ -272,6 +439,19 @@ let settingsOpen = false;
 let mailboxOpen = false;
 let notifOpen = false;
 let summonerPickerOpen = false;
+let missionOpen = false;
+/** Island world chat panel. */
+let chatOpen = false;
+/** True while the player is connected to a world-chat channel session. */
+let chatConnected = false;
+/** Latest one-line chat preview on the home dock (session-only). */
+let chatLineNick: string | null = null;
+let chatLineText: string | null = null;
+/** True while the one-line dock has unseen messages. */
+let chatLineUnread = false;
+let chatSimTimer: ReturnType<typeof setInterval> | null = null;
+type MissionTab = "daily" | "achievements";
+let missionTab: MissionTab = "daily";
 
 type StagesRegionId =
   | MainQuestPinId
@@ -282,8 +462,29 @@ type StagesRegionId =
   | "warena"
   | "guild";
 let stagesRegion: StagesRegionId | null = null;
+type StageDifficulty = "normal" | "hard" | "hell";
+let stageEntryId: string | null = null;
+let stageEntryDiff: StageDifficulty = "normal";
 let islandPan = { x: 0, y: 0 };
 let islandPanCentered = false;
+/** Bump when cover metrics change so the next bind re-centers once. */
+const ISLAND_COVER_FIT_VERSION = 3;
+let islandCoverFitApplied = 0;
+/** User zoom via island-world layout size (1 = default). Not applied as CSS transform scale. */
+let islandZoom = 1;
+const ISLAND_BASE_SCALE = 1.12;
+/** Must stay in sync with .island-world width/height % at --island-zoom: 1. */
+const ISLAND_WORLD_PCT = { w: 2.12, h: 2.28 } as const;
+/** Extra cover so edges never letterbox after scale. */
+const ISLAND_ZOOM_MIN_OVERSCAN = 1.22;
+/** Fallback ceiling; real max is computed from map pixel size. */
+const ISLAND_ZOOM_MAX_HARD = 4;
+/** Stop just before object-fit cover would upsample the bitmap past 1 CSS px / image px. */
+const ISLAND_ZOOM_SHARP_PAD = 0.98;
+const ISLAND_MAP_NATURAL = { w: 1440, h: 2560 } as const;
+const ISLAND_TRANSFORM_ORIGIN = { x: 0.5, y: 0.36 };
+/** Keep tilt tiny - larger angles foreshorten and leave empty strips at the top. */
+const ISLAND_ROTATE_X_DEG = 2;
 let islandPanDrag: {
   pointerId: number;
   startX: number;
@@ -292,6 +493,157 @@ let islandPanDrag: {
   origY: number;
   moved: boolean;
 } | null = null;
+const islandActivePointers = new Map<number, { x: number; y: number }>();
+let islandPinch: {
+  startDist: number;
+  startZoom: number;
+} | null = null;
+
+const ISLAND_LAYOUT_KEY = "stonesummoner.island-layout.v1";
+const ISLAND_LAYOUT_DEFAULT: Record<string, { x: number; y: number }> = {
+  summon_hearth: { x: 30, y: 44 },
+  power_circle: { x: 50, y: 27 },
+  gateway: { x: 72, y: 40 },
+  mana_pond: { x: 24, y: 58 },
+  shop: { x: 52, y: 52 },
+  party: { x: 76, y: 56 },
+  wish: { x: 18, y: 40 },
+  dojo: { x: 40, y: 70 },
+  crystal_mine: { x: 66, y: 68 },
+  glory: { x: 86, y: 74 },
+  guild: { x: 28, y: 82 },
+  fusion: { x: 58, y: 86 },
+};
+
+/** Placeable terrace (% of island-world). Kept in sync with .island-build-zone CSS. */
+const ISLAND_LAYOUT_BOUNDS = {
+  minX: 14,
+  maxX: 86,
+  minY: 24,
+  maxY: 80,
+} as const;
+
+function clampIslandLayoutPos(x: number, y: number): { x: number; y: number } {
+  return {
+    x: Math.min(ISLAND_LAYOUT_BOUNDS.maxX, Math.max(ISLAND_LAYOUT_BOUNDS.minX, x)),
+    y: Math.min(ISLAND_LAYOUT_BOUNDS.maxY, Math.max(ISLAND_LAYOUT_BOUNDS.minY, y)),
+  };
+}
+function islandSpotTitle(id: string, fallback = ""): string {
+  const extra: Record<string, string> = {
+    shop: t('ui.0f6f02427f'),
+    party: t('ui.108f04ca6e'),
+    glory: t('ui.6a1629b11c'),
+    mana_pond: t('ui.7c70400fef'),
+  };
+  if (extra[id]) return extra[id];
+  const remap: Record<string, string> = {
+    wish: "wish_temple",
+    dojo: "practice_dojo",
+    guild: "guild_hall",
+    fusion: "fusion_star",
+  };
+  const bid = remap[id] ?? id;
+  return PHASE_BUILDINGS.find((b) => b.id === bid)?.nameKo ?? fallback;
+}
+
+function looksBrokenLabel(s: string): boolean {
+  if (!s) return true;
+  if (/[\uac00-\ud7a3]/.test(s)) return false;
+  return /\?/.test(s);
+}
+
+
+/** Footprint ellipse half-axes in % of island-world (scaled by depth). */
+const ISLAND_SPOT_HIT = { rx: 10.5, ry: 12.5 } as const;
+
+function islandSpotScaleAt(y: number): number {
+  return 0.68 + Math.max(0, Math.min(1, y / 100)) * 0.5;
+}
+
+function islandSpotOverlaps(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): boolean {
+  const scale = (islandSpotScaleAt(a.y) + islandSpotScaleAt(b.y)) / 2;
+  const rx = ISLAND_SPOT_HIT.rx * scale;
+  const ry = ISLAND_SPOT_HIT.ry * scale;
+  const dx = (a.x - b.x) / rx;
+  const dy = (a.y - b.y) / ry;
+  return dx * dx + dy * dy < 1;
+}
+
+function islandSpotCollides(
+  id: string,
+  pos: { x: number; y: number },
+  layout: Record<string, { x: number; y: number }>,
+): boolean {
+  for (const [otherId, other] of Object.entries(layout)) {
+    if (otherId === id) continue;
+    if (islandSpotOverlaps(pos, other)) return true;
+  }
+  return false;
+}
+
+/** Push out of overlapping spots, then clamp. Falls back to `fallback` if still blocked. */
+function resolveIslandSpotCollision(
+  id: string,
+  x: number,
+  y: number,
+  layout: Record<string, { x: number; y: number }>,
+  fallback: { x: number; y: number },
+): { x: number; y: number } {
+  let pos = clampIslandLayoutPos(x, y);
+  for (let iter = 0; iter < 10; iter++) {
+    let moved = false;
+    for (const [otherId, other] of Object.entries(layout)) {
+      if (otherId === id) continue;
+      const scale = (islandSpotScaleAt(pos.y) + islandSpotScaleAt(other.y)) / 2;
+      const rx = ISLAND_SPOT_HIT.rx * scale;
+      const ry = ISLAND_SPOT_HIT.ry * scale;
+      let dx = pos.x - other.x;
+      let dy = pos.y - other.y;
+      if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+        dx = 0.35;
+        dy = 0.35;
+      }
+      const nx = dx / rx;
+      const ny = dy / ry;
+      const d2 = nx * nx + ny * ny;
+      if (d2 >= 1) continue;
+      const d = Math.sqrt(d2) || 0.001;
+      const push = (1.02 - d) / d;
+      pos = clampIslandLayoutPos(pos.x + dx * push, pos.y + dy * push);
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  if (islandSpotCollides(id, pos, layout)) {
+    // Axis-slide toward target from fallback
+    const xOnly = clampIslandLayoutPos(x, fallback.y);
+    if (!islandSpotCollides(id, xOnly, layout)) return xOnly;
+    const yOnly = clampIslandLayoutPos(fallback.x, y);
+    if (!islandSpotCollides(id, yOnly, layout)) return yOnly;
+    return fallback;
+  }
+  return pos;
+}
+
+let islandLayoutEdit = false;
+let islandLayoutDraft: Record<string, { x: number; y: number }> | null = null;
+let islandLayoutSuppressClick = false;
+let islandSpotDrag: {
+  id: string;
+  pointerId: number;
+} | null = null;
+let islandLongPress: {
+  id: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  timer: ReturnType<typeof setTimeout>;
+} | null = null;
+
 let stagesPan = { x: 0, y: 0 };
 let stagesPanCentered = false;
 let stagesPanDrag: {
@@ -340,8 +692,8 @@ function noteCloudUnauthorized(): void {
     cloudAuthWarned = true;
     flash(
       ephemeralStore
-        ? "서버가 메모리 DB입니다. Railway에 DATABASE_URL(Postgres)을 연결하세요. 로컬 세이브는 유지됩니다."
-        : "클라우드 세션이 만료되었습니다. 다시 로그인하면 동기화됩니다. (로컬 세이브 유지)",
+        ? t('ui.efd1a0e80b')
+        : t('ui.d073e3e918'),
     );
   }
 }
@@ -414,6 +766,16 @@ function migrateSave(raw: unknown): PlayerSave | null {
       typeof p.equipVaultWeekEntries === "number"
         ? Math.max(0, Math.floor(p.equipVaultWeekEntries))
         : 0,
+    symbolBagSlots: (() => {
+      const raw =
+        typeof p.symbolBagSlots === "number"
+          ? p.symbolBagSlots
+          : SYMBOL_BAG_BASE_SLOTS;
+      return Math.min(
+        SYMBOL_BAG_MAX_SLOTS,
+        Math.max(SYMBOL_BAG_BASE_SLOTS, Math.floor(raw)),
+      );
+    })(),
   };
 }
 
@@ -497,7 +859,7 @@ async function enterWithUser(
   opts?: { demo?: boolean; fresh?: boolean; enterGame?: boolean },
 ): Promise<void> {
   await hydrateSession(user, opts);
-  authUi.pane = "login";
+  authUi.pane = "gate";
   const enterGame =
     opts?.enterGame ??
     (opts?.demo === true ||
@@ -507,17 +869,17 @@ async function enterWithUser(
     view = "home";
     flash(
       user.kind === "demo"
-        ? "데모 모드로 입장했습니다."
+        ? t('ui.0b00025fb4')
         : user.kind === "guest"
-          ? "게스트로 플레이합니다."
-          : `환영합니다${user.email ? ` · ${user.email}` : ""}`,
+          ? t('ui.02f932d2cd')
+          : `${t('ui.b0814cee04')}${user.email ? ` ? ${user.email}` : ""}`,
     );
   } else {
     view = "auth";
     flash(
       user.email
-        ? `로그인됨 · ${user.email}`
-        : "로그인되었습니다. 게임시작을 눌러 주세요.",
+        ? t('ui.9f3e44b02a', { email: user.email })
+        : t('ui.fa5d2fb50b'),
     );
   }
   render();
@@ -528,10 +890,10 @@ function startGameFromAuth(): void {
   view = "home";
   flash(
     sessionUser.kind === "demo"
-        ? "데모 모드로 입장했습니다."
+        ? t('ui.0b00025fb4')
       : sessionUser.kind === "guest"
-        ? "게스트로 플레이합니다."
-        : `환영합니다${sessionUser.email ? ` · ${sessionUser.email}` : ""}`,
+        ? t('ui.02f932d2cd')
+        : `${t('ui.b0814cee04')}${sessionUser.email ? ` ? ${sessionUser.email}` : ""}`,
   );
   render();
 }
@@ -545,10 +907,10 @@ async function logout(): Promise<void> {
   currentStage = null;
   autoMode = false;
   clearAutoTimer();
-  authUi.pane = "login";
+  authUi.pane = "gate";
   view = "auth";
   save = createNewSave();
-  flash("로그아웃했습니다.");
+  flash(t('ui.493fff2990'));
   render();
 }
 
@@ -556,24 +918,128 @@ function flash(msg: string): void {
   toast = msg;
 }
 
-function startBattle(stage: StageDef): void {
+
+function ensureResFxLayer(): HTMLElement {
+  let layer = document.querySelector<HTMLElement>("#res-fx-layer");
+  if (!layer) {
+    layer = document.createElement("div");
+    layer.id = "res-fx-layer";
+    layer.className = "res-fx-layer";
+    layer.setAttribute("aria-hidden", "true");
+    document.body.appendChild(layer);
+  }
+  return layer;
+}
+
+function animateResCount(
+  el: HTMLElement,
+  from: number,
+  to: number,
+  ms = 480,
+): void {
+  const start = performance.now();
+  const delta = to - from;
+  const tick = (now: number) => {
+    const t = Math.min(1, (now - start) / ms);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = fmtRes(from + delta * eased);
+    if (t < 1) requestAnimationFrame(tick);
+    else el.textContent = fmtRes(to);
+  };
+  requestAnimationFrame(tick);
+}
+
+/** Float resource chips upward, then bump the header wallet. */
+function playResourceCollectFx(opts: {
+  kind: "mana" | "crystal";
+  amount: number;
+  from: DOMRect;
+  fromValue: number;
+  toValue: number;
+}): void {
+  if (opts.amount <= 0) return;
+
+  const reduce =
+    typeof matchMedia === "function" &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const walletSel =
+    opts.kind === "mana" ? ".res-item--gold" : ".res-item--crystal";
+  const icon =
+    opts.kind === "mana" ? "/art/ui/res/gold.svg" : "/art/ui/res/crystal.svg";
+  const holdHeader = () => {
+    const item = app.querySelector<HTMLElement>(walletSel);
+    const valEl = item?.querySelector<HTMLElement>(".res-val");
+    if (valEl) valEl.textContent = fmtRes(opts.fromValue);
+  };
+  holdHeader();
+
+  const finishHeader = () => {
+    const item = app.querySelector<HTMLElement>(walletSel);
+    const valEl = item?.querySelector<HTMLElement>(".res-val");
+    if (!valEl || !item) return;
+    item.classList.remove("is-res-gain");
+    void item.offsetWidth;
+    item.classList.add("is-res-gain");
+    animateResCount(valEl, opts.fromValue, opts.toValue, reduce ? 180 : 520);
+    window.setTimeout(() => item.classList.remove("is-res-gain"), 700);
+  };
+
+  if (reduce) {
+    finishHeader();
+    return;
+  }
+
+  const layer = ensureResFxLayer();
+  const cx = opts.from.left + opts.from.width / 2;
+  const cy = opts.from.top + opts.from.height / 2;
+  const n = Math.min(7, Math.max(3, Math.ceil(opts.amount / 40)));
+
+  for (let i = 0; i < n; i++) {
+    const chip = document.createElement("div");
+    chip.className = `res-fly res-fly--${opts.kind}`;
+    const dx = (Math.random() - 0.5) * 56;
+    chip.style.left = `${cx + (Math.random() - 0.5) * 18}px`;
+    chip.style.top = `${cy + (Math.random() - 0.5) * 10}px`;
+    chip.style.setProperty("--dx", `${dx}px`);
+    chip.style.setProperty("--delay", `${i * 42}ms`);
+    chip.innerHTML = `<img src="${icon}" width="16" height="16" alt="" />`;
+    layer.appendChild(chip);
+    chip.addEventListener("animationend", () => chip.remove(), { once: true });
+  }
+
+  const label = document.createElement("div");
+  label.className = `res-fly-label res-fly-label--${opts.kind}`;
+  label.style.left = `${cx}px`;
+  label.style.top = `${cy - 10}px`;
+  label.style.setProperty("--dx", `${(Math.random() - 0.5) * 16}px`);
+  label.textContent = `+${fmtRes(opts.amount)}`;
+  layer.appendChild(label);
+  label.addEventListener("animationend", () => label.remove(), { once: true });
+
+  window.setTimeout(finishHeader, 620);
+}
+
+
+function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   if (!isStageUnlocked(save, stage.id)) {
-    flash("이전 스테이지를 먼저 클리어하세요.");
+    flash(t('ui.b72f5a4752'));
     render();
     return;
   }
-  if (Math.floor(save.island.energy) < stage.energyCost) {
-    flash("에너지가 부족합니다.");
+  if (!isDifficultyOpen(stage, diff)) {
+    flash(t('ui.a4d2cdf322'));
+    render();
+    return;
+  }
+  const cost = stageEnergyCost(stage, diff);
+  if (Math.floor(save.island.energy) < cost) {
+    flash(t('ui.711b4aaddc'));
     render();
     return;
   }
   save = {
     ...save,
-    island: {
-      ...save.island,
-      energy: Math.floor(save.island.energy) - stage.energyCost,
-      energyUpdatedAt: Date.now(),
-    },
+    island: spendEnergy(save.island, cost),
   };
   persist();
   currentStage = stage;
@@ -585,9 +1051,11 @@ function startBattle(stage: StageDef): void {
   selectedTargetId = null;
   lastSeenBoardPhase = 0;
   boardRekindleFx = false;
+  stageEntryId = null;
   battle = createStageBattle(stage, save, {
     banEnemyIds:
       stage.mode === "world_arena" ? save.arenaBanIds ?? [] : undefined,
+    difficulty: diff,
   });
   battle.tickUntilReady();
   refreshLegal();
@@ -645,16 +1113,16 @@ function renderResult(): string {
   const reward = lastReward;
   if (!stage || !reward) {
     return `<div class="result-wrap">
-      ${navBackBtn({ nav: "stages", label: "돌아가기" })}
+      ${navBackBtn({ nav: "stages", label: t('ui.1a7f31cadb') })}
       <div class="battle-sky" aria-hidden="true">
         <img class="battle-sky-img" src="/art/battle/battle-arena-bg.webp" alt="" decoding="async" />
         <div class="battle-sky-veil"></div>
       </div>
       <div class="result-screen is-lose">
         <div class="result-banner">
-          <p class="result-kicker">전투 결과</p>
-          <h2 class="result-title">결과 없음</h2>
-          <p class="result-sub">출정문으로 돌아가 다시 도전하세요</p>
+          <p class="result-kicker">${t('ui.be85833944')}</p>
+          <h2 class="result-title">${t('ui.70088c999d')}</h2>
+          <p class="result-sub">${t('ui.41281baf5a')}</p>
         </div>
       </div>
     </div>`;
@@ -662,62 +1130,62 @@ function renderResult(): string {
   const win = reward.victory;
   const rows: string[] = [];
   if (win) {
-    rows.push(`<li><span>마나</span><strong>+${reward.mana}</strong></li>`);
+    rows.push(`<li><span>${t('ui.dc78e6a251')}</span><strong>+${reward.mana}</strong></li>`);
     if (reward.crystal)
-      rows.push(`<li><span>크리스탈</span><strong>+${reward.crystal}</strong></li>`);
+      rows.push(`<li><span>${t('ui.5d0bf3b101')}</span><strong>+${reward.crystal}</strong></li>`);
     if (reward.glory)
-      rows.push(`<li><span>영광</span><strong>+${reward.glory}</strong></li>`);
+      rows.push(`<li><span>${t('ui.ba0c9e096f')}</span><strong>+${reward.glory}</strong></li>`);
     if (reward.jinmun)
-      rows.push(`<li><span>진문석</span><strong>+${reward.jinmun}</strong></li>`);
+      rows.push(`<li><span>${t('ui.4b482b3675')}</span><strong>+${reward.jinmun}</strong></li>`);
     if (reward.contribution)
       rows.push(
-        `<li><span>기여도</span><strong>+${reward.contribution}</strong></li>`,
+        `<li><span>${t('ui.443ac89859')}</span><strong>+${reward.contribution}</strong></li>`,
       );
     if (reward.summonerExp)
       rows.push(
-        `<li><span>서머너 EXP</span><strong>+${reward.summonerExp}</strong></li>`,
+        `<li><span>${t('ui.fd3c4455cd')} EXP</span><strong>+${reward.summonerExp}</strong></li>`,
       );
     if (reward.levelsGained)
       rows.push(
-        `<li><span>레벨</span><strong>Lv.${save.island.summonerLevel}</strong></li>`,
+        `<li><span>${t('ui.453d0d2df5')}</span><strong>Lv.${save.island.summonerLevel}</strong></li>`,
       );
     if (lastScrollGain)
       rows.push(
-        `<li><span>소환서</span><strong>+${lastScrollGain}</strong></li>`,
+        `<li><span>${t('ui.fa73f3a42f')}</span><strong>+${lastScrollGain}</strong></li>`,
       );
   }
   const drop = [
     reward.gear
       ? `<div class="result-drop">
-        <p class="section-label">장비 드롭</p>
+        <p class="section-label">${t('ui.6be738a130')}</p>
         <p class="result-drop-card">${describeGear(reward.gear)}</p>
         <div class="result-drop-cta">
-          <button type="button" class="auth-btn-primary" data-nav="enhance">강화진 가방에서 장착</button>
+          <button type="button" class="auth-btn-primary" data-nav="enhance">${t('ui.bbef9e1b47')}</button>
         </div>
       </div>`
       : "",
     reward.symbol
       ? `<div class="result-drop">
-        <p class="section-label">장비 드롭</p>
+        <p class="section-label">${t('ui.6be738a130')}</p>
         <p class="result-drop-card">${describeSymbol(reward.symbol)}</p>
         <div class="result-drop-cta">
-          <button type="button" class="auth-btn-primary" data-nav="enhance">강화진에서 장착</button>
-          <button type="button" class="secondary" data-nav="shop">연마·각인</button>
+          <button type="button" class="auth-btn-primary" data-nav="enhance">${t('ui.7533294263')}</button>
+          <button type="button" class="secondary" data-nav="shop">${t('ui.9efcf019b7')}</button>
         </div>
       </div>`
       : "",
   ].join("");
   return `<div class="result-wrap">
-    ${navBackBtn({ nav: "stages", label: "돌아가기" })}
+    ${navBackBtn({ nav: "stages", label: t('ui.1a7f31cadb') })}
     <div class="battle-sky" aria-hidden="true">
       <img class="battle-sky-img" src="/art/battle/battle-arena-bg.webp" alt="" decoding="async" />
       <div class="battle-sky-veil"></div>
     </div>
     <div class="result-screen ${win ? "is-win" : "is-lose"}">
     <div class="result-banner">
-      <p class="result-kicker">전투 결과</p>
-          <h2 class="result-title">결과 없음</h2>
-          <p class="result-sub">출정문으로 돌아가 다시 도전하세요</p>
+          <p class="result-kicker">${t('ui.be85833944')}</p>
+          <h2 class="result-title">${t('ui.70088c999d')}</h2>
+          <p class="result-sub">${t('ui.41281baf5a')}</p>
     </div>
     ${
       win
@@ -725,14 +1193,14 @@ function renderResult(): string {
         : `<p class="muted result-empty">${reward.expNote}</p>`
     }
     <div class="result-cta">
-      <button type="button" class="auth-btn-primary" id="btn-result-again">다시 도전</button>
-      <button type="button" class="secondary auth-btn-ghost" data-nav="stages">출정문</button>
+      <button type="button" class="auth-btn-primary" id="btn-result-again">${t('ui.03d1f975cb')}</button>
+      <button type="button" class="secondary auth-btn-ghost" data-nav="stages">${t('ui.0f9f095864')}</button>
       ${
         win
-          ? `<button type="button" class="secondary auth-btn-ghost" data-nav="party">파티</button>`
+          ? `<button type="button" class="secondary auth-btn-ghost" data-nav="party">${t('ui.108f04ca6e')}</button>`
           : ""
       }
-      <button type="button" class="secondary auth-btn-ghost" data-nav="home">홈으로</button>
+      <button type="button" class="secondary auth-btn-ghost" data-nav="home">${t('ui.d8c261904f')}</button>
     </div>
   </div>
   </div>`;
@@ -794,13 +1262,25 @@ function backSummoner(units: Unit[]): Unit | undefined {
   return units.find((u) => u.kind === "summoner");
 }
 
-function renderSummonerBack(u: Unit | undefined, side: "enemy" | "ally"): string {
-  if (!u) return "";
-  const active = battle?.activeUnitId === u.id ? " active" : "";
-  return `<div class="summoner-back ${side}${active}">
-    <div class="name">${u.name}</div>
-    <div class="muted">후열 · 착수/마나</div>
-  </div>`;
+/** SW-style formation: monsters flanking a center summoner. */
+function renderBattleFront(
+  units: Unit[],
+  side: "enemy" | "ally",
+  opts?: { targetable?: boolean },
+): string {
+  const monsters = frontRow(units);
+  const summoner = backSummoner(units);
+  const mid = Math.ceil(monsters.length / 2);
+  const left = monsters.slice(0, mid);
+  const right = monsters.slice(mid);
+  const summonerOpts =
+    side === "enemy" && opts?.targetable ? opts : undefined;
+  const parts = [
+    ...left.map((u) => renderUnit(u, opts)),
+    summoner ? renderUnit(summoner, summonerOpts) : "",
+    ...right.map((u) => renderUnit(u, opts)),
+  ];
+  return `<div class="battle-front ${side}">${parts.join("")}</div>`;
 }
 
 function afterPlayerAction(): void {
@@ -837,6 +1317,69 @@ function clearAutoTimer(): void {
   if (autoTimer) {
     clearTimeout(autoTimer);
     autoTimer = null;
+  }
+}
+
+function clearEnergyRegenTimer(): void {
+  if (energyRegenTimer) {
+    clearInterval(energyRegenTimer);
+    energyRegenTimer = null;
+  }
+}
+
+function fmtEnergyRegen(ms: number): string {
+  const sec = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function syncEnergyHud(now = Date.now()): void {
+  const max = save.island.energyMax ?? 100;
+  const energy = Math.floor(save.island.energy);
+  const valEl = app.querySelector("#res-energy-val");
+  const timerEl = app.querySelector<HTMLElement>("#res-energy-timer");
+  const itemEl = app.querySelector(".res-item--energy");
+  if (valEl) {
+    valEl.innerHTML = `${energy}<small>/${max}</small>`;
+  }
+  if (itemEl) {
+    itemEl.classList.toggle("has-timer", energy < max);
+  }
+  if (!timerEl) return;
+  if (energy >= max) {
+    timerEl.hidden = true;
+    timerEl.textContent = "";
+    return;
+  }
+  const rem = energyRegenRemainingMs(save.island, now) ?? ENERGY_REGEN_MS;
+  timerEl.hidden = false;
+  timerEl.textContent = fmtEnergyRegen(rem);
+}
+
+function startEnergyRegenTimer(): void {
+  clearEnergyRegenTimer();
+  if (view === "auth") return;
+  const tick = (): void => {
+    const before = Math.floor(save.island.energy);
+    const max = save.island.energyMax ?? 100;
+    if (before >= max) {
+      clearEnergyRegenTimer();
+      syncEnergyHud();
+      return;
+    }
+    const nextIsland = tickProduction(save.island);
+    const after = Math.floor(nextIsland.energy);
+    if (after !== before || nextIsland.energyUpdatedAt !== save.island.energyUpdatedAt) {
+      save = { ...save, island: nextIsland };
+      if (after !== before) persist();
+    }
+    syncEnergyHud();
+    if (after >= max) clearEnergyRegenTimer();
+  };
+  tick();
+  if (Math.floor(save.island.energy) < (save.island.energyMax ?? 100)) {
+    energyRegenTimer = setInterval(tick, 1000);
   }
 }
 
@@ -910,7 +1453,7 @@ function castSkill(
 
   if (mode === "ult") {
     if (!battle.canUseSummonerSkill(unit)) {
-    flash("에너지가 부족합니다.");
+    flash(t('ui.711b4aaddc'));
       render();
       return;
     }
@@ -921,7 +1464,7 @@ function castSkill(
   }
   if (mode === "declare") {
     if (!battle.canUseSummonerDeclare(unit)) {
-      flash("마나 50% 이상 필요합니다.");
+      flash(t('ui.9af91c9bed'));
       render();
       return;
     }
@@ -932,7 +1475,7 @@ function castSkill(
   }
   if (mode === "dual") {
     if (!battle.canUseSummonerDual(unit)) {
-      flash("마나 35% 이상 필요합니다.");
+      flash(t('ui.b0b1120abf'));
       render();
       return;
     }
@@ -943,7 +1486,7 @@ function castSkill(
   }
   if (mode === "clean") {
     if (!battle.canUseSummonerClean(unit)) {
-      flash("마나 45% 이상 필요합니다.");
+      flash(t('ui.c85840dca0'));
       render();
       return;
     }
@@ -954,7 +1497,7 @@ function castSkill(
   }
   if (mode === "guard") {
     if (!battle.canUseSummonerGuard(unit)) {
-      flash("마나 40% 이상 필요합니다.");
+      flash(t('ui.9cf3c0b981'));
       render();
       return;
     }
@@ -967,14 +1510,14 @@ function castSkill(
   const skillIndex =
     mode === "smart" ? pickAutoSkillIndex(unit, battle.units) : mode;
   if (typeof skillIndex === "number" && !battle.canUseSkill(unit, skillIndex)) {
-    flash("스킬 쿨다운 중");
+    flash(t('ui.73743ba945'));
     render();
     return;
   }
   const targetId = ensureTarget();
   const hits = battle.useSkill({ skillIndex, targetId });
   if (!hits.length) {
-    flash("이전 스테이지를 먼저 클리어하세요.");
+    flash(t('ui.b72f5a4752'));
     render();
     return;
   }
@@ -988,7 +1531,7 @@ function renderSkillButtons(active: Unit | null, awaitSkill: boolean): string {
   const slots = [0, 1, 2].map((i) => {
     const sk = skills[i];
     const cd = cds[i] ?? 0;
-    const label = sk ? sk.nameKo : i === 0 ? "평타" : `S${i + 1}`;
+    const label = sk ? sk.nameKo : i === 0 ? t('ui.8a1893a931') : `S${i + 1}`;
     const disabled = !awaitSkill || (sk ? cd > 0 : i > 0);
     const state = cd > 0 ? " cooling" : awaitSkill && !disabled ? " ready" : "";
     return `<button type="button" class="skill-btn${state}" data-skill="${i}" ${disabled ? "disabled" : ""}>
@@ -1000,26 +1543,39 @@ function renderSkillButtons(active: Unit | null, awaitSkill: boolean): string {
 }
 
 function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
-  const active = battle?.activeUnitId === u.id ? " active" : "";
-  const targeted =
-    opts?.targetable && selectedTargetId === u.id ? " targeted" : "";
+  const isActive = battle?.activeUnitId === u.id;
+  const isTargeted = !!(opts?.targetable && selectedTargetId === u.id);
+  const active = isActive ? " active" : "";
+  const targeted = isTargeted ? " targeted" : "";
   const hpPct = Math.round((u.hp / u.stats.hp) * 100);
   const atbPct = Math.min(100, Math.round(u.atb));
   const shield = u.shieldHp && u.shieldHp > 0 ? Math.round(u.shieldHp) : 0;
   const dead = !u.alive ? " dead" : "";
+  const isSummoner = u.kind === "summoner";
   const tag = opts?.targetable && u.alive ? "button" : "div";
   const attrs =
     opts?.targetable && u.alive
       ? `type="button" data-target="${u.id}"`
       : "";
-  return `<${tag} class="unit-card el-${u.element}${active}${targeted}${dead}${shield ? " has-shield" : ""}" ${attrs}>
-    <div class="name">${u.name}</div>
-    <div class="hp-num">
-      <span>${Math.max(0, Math.round(u.hp))}</span>
-      ${shield ? `<span class="shield-badge" title="실드">+${shield}</span>` : ""}
+  const artSize = isSummoner ? 128 : 160;
+  const art =
+    u.kind === "monster"
+      ? monsterArtImg(u.monsterId, "battle-unit-img", artSize)
+      : `<img class="battle-unit-img" src="${summonerArtSrc(u.element)}" width="${artSize}" height="${artSize}" alt="" draggable="false" decoding="async" />`;
+  const showName = isActive || isTargeted;
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""} el-${u.element}${active}${targeted}${dead}${shield ? " has-shield" : ""}" ${attrs} title="${u.name}">
+    <div class="battle-unit-bars">
+      <div class="battle-unit-hp-row">
+        <span class="battle-unit-hp-num">${Math.max(0, Math.round(u.hp))}</span>
+      ${shield ? `<span class="shield-badge" title="${t('ui.e234157c2f')}">+${shield}</span>` : ""}
+      </div>
+      <div class="bar hp"><i style="width:${hpPct}%"></i></div>
+      <div class="bar atb"><i style="width:${atbPct}%"></i></div>
     </div>
-    <div class="bar hp"><i style="width:${hpPct}%"></i></div>
-    <div class="bar atb"><i style="width:${atbPct}%"></i></div>
+    ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
+    <span class="battle-unit-glow" aria-hidden="true"></span>
+    <span class="battle-unit-art" aria-hidden="true">${art}</span>
+    ${showName ? `<span class="battle-unit-name">${u.name}</span>` : ""}
   </${tag}>`;
 }
 
@@ -1051,10 +1607,10 @@ function renderBoard(): string {
   }
   const rebuildTag =
     phase <= 0
-      ? "일반 진문"
-      : `진문 재건 ${"I".repeat(Math.min(phase, 3))}`;
+      ? t('ui.d2342783cb')
+      : `${t('ui.0f554c7cff')} ${"I".repeat(Math.min(phase, 3))}`;
   const openingHint = battle.openingBonusPending
-    ? `<span class="board-opening-hint">포석 보너스</span>`
+    ? `<span class="board-opening-hint">${t('ui.413147d435')}</span>`
     : "";
   const canClick =
     battle.phase === "await_stone" &&
@@ -1154,7 +1710,7 @@ function renderBoardTabs(): string {
 function renderSuggestStrip(): string {
   if (!stoneSuggestions.length || battle?.phase !== "await_stone") return "";
   return `<div class="suggest-strip">
-    <p class="suggest-strip-title">추천 착수</p>
+    <p class="suggest-strip-title">${t('ui.c943a2bfc5')}</p>
     ${stoneSuggestions
       .map(
         (s) =>
@@ -1162,7 +1718,7 @@ function renderSuggestStrip(): string {
             <span class="suggest-rank">${s.rank}</span>
             <span class="suggest-body">
               <strong>${s.point.x},${s.point.y}</strong>
-              <small>따냄 ${s.capturedCount} · 마나 +${s.manaGain} · amp +${s.amplifyDelta.toFixed(2)}${s.hasToken ? " · 토큰" : ""}</small>
+              <small>${t('ui.b61d5e36ba')} ${s.capturedCount} ? ${t('ui.dc78e6a251')} +${s.manaGain} ? amp +${s.amplifyDelta.toFixed(2)}${s.hasToken ? t('ui.67082f387a') : ""}</small>
             </span>
           </button>`,
       )
@@ -1198,7 +1754,7 @@ function authBrand(): string {
         src="/art/auth/logo-title-lockup.webp"
         width="1024"
         height="1024"
-        alt="Stone Summoners — 신비의마법석"
+        alt="${t('ui.974e7916c4')}"
         decoding="async"
         fetchpriority="high"
       />
@@ -1206,44 +1762,82 @@ function authBrand(): string {
   </header>`;
 }
 
+function authFooter(): string {
+  const sep = `<span class="auth-footer-sep" aria-hidden="true">|</span>`;
+  return `<footer class="auth-footer">
+    <nav class="auth-footer-nav" aria-label="${escapeHtml(t("auth.footer.navAria"))}">
+      <a class="auth-footer-link" href="#terms">${escapeHtml(t("auth.footer.terms"))}</a>
+      ${sep}
+      <a class="auth-footer-link" href="#privacy">${escapeHtml(t("auth.footer.privacy"))}</a>
+      ${sep}
+      <a class="auth-footer-link" href="mailto:stonesummoners@gmail.com">${escapeHtml(t("auth.footer.support"))}</a>
+    </nav>
+    <div class="auth-footer-body">
+      <p class="auth-footer-meta">
+        <span class="auth-footer-unit">${escapeHtml(t("auth.footer.company"))}</span>${sep}<span class="auth-footer-unit">${escapeHtml(t("auth.footer.ceo"))}</span>
+      </p>
+      <p class="auth-footer-meta">
+        <span class="auth-footer-unit">${escapeHtml(t("auth.footer.bizNo"))}</span>${sep}<span class="auth-footer-unit">${escapeHtml(t("auth.footer.mailOrder"))}</span>
+      </p>
+      <p class="auth-footer-meta">
+        <span class="auth-footer-unit">${escapeHtml(t("auth.footer.address"))}</span>
+      </p>
+      <p class="auth-footer-meta">
+        <span class="auth-footer-unit">${escapeHtml(t("auth.footer.phoneLabel"))} <a class="auth-footer-link" href="tel:010-5484-1960">010-5484-1960</a></span>${sep}<span class="auth-footer-unit"><a class="auth-footer-link" href="mailto:stonesummoners@gmail.com">stonesummoners@gmail.com</a></span>
+      </p>
+    </div>
+    <p class="auth-footer-copy">${escapeHtml(t("auth.footer.copy"))}</p>
+  </footer>`;
+}
+
 function renderAuth(): string {
   const prefs = readAuthPrefs();
   const pane = authUi.pane;
   const loggedIn = !!sessionUser;
 
-  if (loggedIn) {
-    const label =
-      sessionUser!.email ??
-      (sessionUser!.kind === "demo"
-        ? "데모"
-        : sessionUser!.kind === "guest"
-          ? "?"
-          : "모험가");
+  if (pane === "gate") {
+    const sessionHint = loggedIn
+      ? `<p class="auth-session-hint">${escapeHtml(displayNickname())}${
+          sessionUser!.email ? ` ? ${escapeHtml(sessionUser!.email)}` : ""
+        }</p>`
+      : "";
+    const primary = loggedIn
+      ? `<button type="button" class="auth-btn-primary auth-hero-cta" id="auth-start">${t("ui.50cec01118")}</button>`
+      : `<button type="button" class="auth-btn-primary auth-hero-cta" id="auth-open-login">${t("ui.e225a6fd75")}</button>`;
+    const links = loggedIn
+      ? `<div class="auth-link-row">
+          <button type="button" class="auth-text-link" id="auth-logout">${t("ui.3879f078a4")}</button>
+        </div>`
+      : `<div class="auth-link-row">
+          <button type="button" class="auth-text-link" id="auth-register">${t("ui.ecb4cc8789")}</button>
+          <span class="auth-link-sep" aria-hidden="true">?</span>
+          <button type="button" class="auth-text-link" id="auth-demo">${t("ui.275aaa8da4")}</button>
+          <span class="auth-link-sep" aria-hidden="true">?</span>
+          <button type="button" class="auth-text-link" id="auth-guest">${t("ui.9746b4cedd")}</button>
+        </div>`;
     return `${authHeroLayer()}
-    <div class="auth-screen auth-screen--center">
+    <div class="auth-screen auth-screen--gate">
       ${authBrand()}
-      <div class="auth-panel">
-        <p class="auth-session">로그인 · ${label}</p>
-        <div class="auth-cta">
-          <button type="button" class="auth-btn-primary" id="auth-start">게임시작</button>
-          <button type="button" class="secondary auth-btn-ghost" id="auth-logout">로그아웃</button>
-        </div>
+      <div class="auth-gate">
+        ${sessionHint}
+        ${primary}
+        ${links}
       </div>
     </div>`;
   }
 
   if (pane === "register") {
     return `${authHeroLayer()}
-    <div class="auth-screen auth-screen--center">
-      ${navBackBtn({ id: "auth-back", label: "돌아가기" })}
+    <div class="auth-screen auth-screen--form">
       ${authBrand()}
       <div class="auth-panel">
-        <h2 class="auth-title">회원가입</h2>
+        <h2 class="auth-title">${t("ui.ecb4cc8789")}</h2>
         <form id="auth-form" class="auth-form">
-          <label>이메일<input name="email" type="email" autocomplete="username" required /></label>
-          <label>비밀번호<input name="password" type="password" autocomplete="new-password" minlength="6" required /></label>
-          <button type="submit" class="auth-btn-primary">회원가입</button>
+          <label>${t("ui.3c37764a2b")}<input name="email" type="email" autocomplete="username" required /></label>
+          <label>${t("ui.81973897c7")}<input name="password" type="password" autocomplete="new-password" minlength="6" required /></label>
+          <button type="submit" class="auth-btn-primary">${t("ui.ecb4cc8789")}</button>
         </form>
+        <button type="button" class="secondary full auth-btn-ghost" id="auth-back">${t("ui.1a7f31cadb")}</button>
       </div>
     </div>`;
   }
@@ -1254,28 +1848,29 @@ function renderAuth(): string {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;");
   return `${authHeroLayer()}
-  <div class="auth-screen auth-screen--center">
-      ${authBrand()}
+  <div class="auth-screen auth-screen--form">
+    ${authBrand()}
     <div class="auth-panel">
-        <h2 class="auth-title">회원가입</h2>
+      <h2 class="auth-title">${t("ui.e225a6fd75")}</h2>
       <form id="auth-form" class="auth-form">
-        <label>이메일<input name="email" type="email" autocomplete="username" value="${emailAttr}" required /></label>
-        <label>비밀번호<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
+        <label>${t("ui.3c37764a2b")}<input name="email" type="email" autocomplete="username" value="${emailAttr}" required /></label>
+        <label>${t("ui.81973897c7")}<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
         <div class="auth-checks">
-          <label class="auth-check"><input type="checkbox" name="saveId" ${prefs.saveId ? "checked" : ""} /> 아이디 저장</label>
-          <label class="auth-check"><input type="checkbox" name="autoLogin" ${prefs.autoLogin ? "checked" : ""} /> 자동 로그인</label>
+          <label class="auth-check"><input type="checkbox" name="saveId" ${prefs.saveId ? "checked" : ""} /> ${t("ui.929b21bf23")}</label>
+          <label class="auth-check"><input type="checkbox" name="autoLogin" ${prefs.autoLogin ? "checked" : ""} /> ${t("ui.217211959e")}</label>
         </div>
-          <button type="submit" class="auth-btn-primary">회원가입</button>
+        <button type="submit" class="auth-btn-primary">${t("ui.e225a6fd75")}</button>
       </form>
-      <div class="auth-cta auth-cta--secondary">
-        <button type="button" class="secondary auth-btn-ghost" id="auth-register">회원가입</button>
-        <button type="button" class="secondary auth-btn-ghost" id="auth-demo">데모 플레이</button>
-        <button type="button" class="secondary auth-btn-ghost" id="auth-guest">게스트로 계속</button>
+      <div class="auth-link-row">
+        <button type="button" class="auth-text-link" id="auth-register">${t("ui.ecb4cc8789")}</button>
+        <span class="auth-link-sep" aria-hidden="true">?</span>
+        <button type="button" class="auth-text-link" id="auth-demo">${t("ui.275aaa8da4")}</button>
       </div>
+      <button type="button" class="secondary full auth-btn-ghost" id="auth-back">${t("ui.94b7dba159")}</button>
     </div>
     ${
       ephemeralStore
-        ? `<p class="auth-warn">서버 DB가 메모리 모드입니다. 배포 환경에서는 Postgres(DATABASE_URL)를 연결하세요.</p>`
+        ? `<p class="auth-warn">${t("ui.b97534218c")}</p>`
         : ""
     }
   </div>`;
@@ -1323,7 +1918,21 @@ function fmtRes(n: number): string {
   const v = Math.floor(n);
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 10_000) return `${(Math.round(v / 100) / 10).toFixed(1)}K`;
-  return v.toLocaleString("ko-KR");
+  return formatNumber(v);
+}
+
+function elementLabel(el: SummonerElement): string {
+  return t(`element.${el}`);
+}
+
+function languageOptionsHtml(): string {
+  const current = getLocale();
+  return listLocales()
+    .map(
+      (loc) =>
+        `<option value="${loc.id}" ${loc.id === current ? "selected" : ""}>${escapeHtml(loc.nativeName)}</option>`,
+    )
+    .join("");
 }
 
 function escapeHtml(s: string): string {
@@ -1341,9 +1950,9 @@ function displayNickname(): string {
     const local = email.split("@")[0] || email;
     return local.length > 10 ? `${local.slice(0, 10)}?` : local;
   }
-  if (sessionUser?.kind === "demo") return "체험 계정";
-  if (sessionUser?.kind === "guest") return "게스트";
-  return "모험가";
+  if (sessionUser?.kind === "demo") return t("account.demo");
+  if (sessionUser?.kind === "guest") return t("account.guest");
+  return t("account.default");
 }
 
 /** Toggle currency drawer without a full screen re-render. */
@@ -1353,7 +1962,7 @@ function applyResMoreOpen(): void {
   if (btn) {
     btn.classList.toggle("is-open", resMoreOpen);
     btn.setAttribute("aria-expanded", resMoreOpen ? "true" : "false");
-    const label = resMoreOpen ? "?? ??" : "?? ?? ??";
+    const label = resMoreOpen ? t("res.moreClose") : t("res.moreOpen");
     btn.title = label;
     btn.setAttribute("aria-label", label);
   }
@@ -1364,16 +1973,90 @@ function applyResMoreOpen(): void {
   }
 }
 
+
+/** Replay centered modal pop animation when a layer becomes visible. */
+function replayModalPop(layer: HTMLElement | null): void {
+  const sheet = layer?.querySelector<HTMLElement>(".settings-sheet, .mission-sheet, .stages-region-sheet, .stage-entry-modal");
+  if (!sheet) return;
+  sheet.style.animation = "none";
+  void sheet.offsetWidth;
+  sheet.style.animation = "";
+}
+
+/** Toggle settings modal without a full screen re-render. */
+function applySettingsOpen(): void {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-settings");
+  const layer = app.querySelector<HTMLElement>("#settings-layer");
+  if (btn) {
+    btn.classList.toggle("is-open", settingsOpen);
+    btn.classList.toggle("active", settingsOpen);
+    btn.setAttribute("aria-expanded", settingsOpen ? "true" : "false");
+  }
+  if (layer) {
+    layer.hidden = !settingsOpen;
+    layer.setAttribute("aria-hidden", settingsOpen ? "false" : "true");
+    if (settingsOpen) replayModalPop(layer);
+  }
+}
+
+/** Toggle mailbox modal without a full screen re-render. */
+function applyMailboxOpen(): void {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-mailbox");
+  const layer = app.querySelector<HTMLElement>("#mailbox-layer");
+  if (btn) {
+    btn.classList.toggle("is-open", mailboxOpen);
+    btn.setAttribute("aria-expanded", mailboxOpen ? "true" : "false");
+  }
+  if (layer) {
+    layer.hidden = !mailboxOpen;
+    layer.setAttribute("aria-hidden", mailboxOpen ? "false" : "true");
+    if (mailboxOpen) replayModalPop(layer);
+  }
+}
+
+/** Toggle notification modal without a full screen re-render. */
+function applyNotifOpen(): void {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-notif");
+  const layer = app.querySelector<HTMLElement>("#notif-layer");
+  if (btn) {
+    btn.classList.toggle("is-open", notifOpen);
+    btn.setAttribute("aria-expanded", notifOpen ? "true" : "false");
+  }
+  if (layer) {
+    layer.hidden = !notifOpen;
+    layer.setAttribute("aria-hidden", notifOpen ? "false" : "true");
+    if (notifOpen) replayModalPop(layer);
+  }
+}
+
+/** Toggle mission modal without a full screen re-render. */
+function applyMissionOpen(): void {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-mission");
+  const layer = app.querySelector<HTMLElement>("#mission-layer");
+  if (btn) {
+    btn.classList.toggle("active", missionOpen);
+    btn.setAttribute("aria-expanded", missionOpen ? "true" : "false");
+  }
+  if (layer) {
+    layer.hidden = !missionOpen;
+    layer.setAttribute("aria-hidden", missionOpen ? "false" : "true");
+    if (missionOpen) replayModalPop(layer);
+  }
+}
+
+
 /** Toggle summoner picker sheet without a full screen re-render. */
 function applySummonerPickerOpen(): void {
-  const btn = app.querySelector<HTMLButtonElement>("#btn-summoner-picker");
+  const btn = app.querySelector<HTMLButtonElement>("#btn-nav-summoner");
   const layer = app.querySelector<HTMLElement>("#summoner-picker-layer");
   if (btn) {
     btn.setAttribute("aria-expanded", summonerPickerOpen ? "true" : "false");
+    btn.classList.toggle("active", summonerPickerOpen);
   }
   if (layer) {
     layer.hidden = !summonerPickerOpen;
     layer.setAttribute("aria-hidden", summonerPickerOpen ? "false" : "true");
+    if (summonerPickerOpen) replayModalPop(layer);
   }
 }
 
@@ -1384,26 +2067,26 @@ function tickerMessages(): string[] {
   const energy = Math.floor(save.island.energy);
   const energyMax = save.island.energyMax ?? 100;
   const lines = [
-    "신비의마법석 · 섬을 드래그해 시설을 둘러보세요",
-    `${SUMMONER_ELEMENT_LABEL[el]} 서머너 Lv.${active.level} 육성 중`,
-    `행동력 ${energy}/${energyMax} · 출정문으로 전투에 나서세요`,
-    `소환서 ${totalScrollCount(save)}장 · 소환진에서 동료를 불러내세요`,
+    t("ticker.welcome"),
+    t("ticker.training", { element: elementLabel(el), level: active.level }),
+    t("ticker.energy", { energy, max: energyMax }),
+    t("ticker.scrolls", { n: totalScrollCount(save) }),
   ];
   if ((save.gloryPoints ?? 0) > 0) {
-    lines.push(`영광 ${save.gloryPoints} · 영광 건물에서 보너스를 강화하세요`);
+    lines.push(t("ticker.glory", { n: save.gloryPoints ?? 0 }));
   }
   if (save.island.summonerLevel < 7) {
-    lines.push("서머너 Lv.7에 소원의 사당이 해금됩니다");
+    lines.push(t("ticker.unlockWish"));
   } else if (save.island.summonerLevel < 8) {
-    lines.push("서머너 Lv.8에 마법진 도장이 해금됩니다");
+    lines.push(t("ticker.unlockDojo"));
   }
   return lines;
 }
 
 function renderTicker(): string {
   const items = tickerMessages().map((m) => escapeHtml(m));
-  const joined = items.join("　　·　　");
-  return `<div class="ticker" role="marquee" aria-label="공지 전광판">
+  const joined = items.join(t("ticker.sep"));
+  return `<div class="ticker" role="marquee" aria-label="${escapeHtml(t("ticker.label"))}">
     <div class="ticker-fade" aria-hidden="true"></div>
     <div class="ticker-track">
       <span class="ticker-text">${joined}</span>
@@ -1411,15 +2094,431 @@ function renderTicker(): string {
     </div>
   </div>`;
 }
+const CHAT_CHANNEL_CAP = 100;
+const CHAT_CHANNEL_COUNT = 6;
+
+type ChatMsg = { id: string; nick: string; text: string; at: number };
+type ChatChannel = { id: number; users: number; msgs: ChatMsg[] };
+
+let chatChannels: ChatChannel[] = [];
+let chatChannelId = 1;
+let chatMsgSeq = 0;
+
+const CHAT_BOT_NICKS = [
+  "StoneFox",
+  "RuneOwl",
+  "CrystalJay",
+  "ManaPike",
+  "GloryFin",
+  "DojoCrow",
+];
+const CHAT_BOT_LINES = [
+  "gg",
+  "anyone farming stage 7?",
+  "looking for guild",
+  "nice pull!",
+  "energy refill soon",
+  "symbol bag almost full",
+  "hello channel",
+  "need wind lead",
+];
+
+function ensureChatChannels(): void {
+  if (chatChannels.length) return;
+  for (let i = 1; i <= CHAT_CHANNEL_COUNT; i++) {
+    const seeded =
+      i === 1 ? 18 : i === 2 ? CHAT_CHANNEL_CAP : Math.min(CHAT_CHANNEL_CAP, 35 + i * 9);
+    chatChannels.push({
+      id: i,
+      users: seeded,
+      msgs: [],
+    });
+  }
+  chatChannelId = chatChannels.find((c) => c.users < CHAT_CHANNEL_CAP)?.id ?? 1;
+}
+
+function chatChannel(id: number): ChatChannel | undefined {
+  ensureChatChannels();
+  return chatChannels.find((c) => c.id === id);
+}
+
+function chatIsFull(ch: ChatChannel): boolean {
+  return ch.users >= CHAT_CHANNEL_CAP;
+}
+
+function joinChatChannel(id: number): boolean {
+  ensureChatChannels();
+  const ch = chatChannel(id);
+  if (!ch || chatIsFull(ch)) return false;
+  if (chatChannelId !== id) {
+    const prev = chatChannel(chatChannelId);
+    if (prev && prev.users > 0) prev.users -= 1;
+    ch.users = Math.min(CHAT_CHANNEL_CAP, ch.users + 1);
+    chatChannelId = id;
+  }
+  return true;
+}
+
+function clearChatLine(): void {
+  chatLineNick = null;
+  chatLineText = null;
+  chatLineUnread = false;
+}
+
+function clearChannelMsgs(id: number): void {
+  const ch = chatChannel(id);
+  if (ch) ch.msgs = [];
+}
+
+/** Begin a chat session on a channel ? no history from before this connect. */
+function connectChatSession(id?: number): boolean {
+  ensureChatChannels();
+  const target = id ?? chatChannelId;
+  if (!joinChatChannel(target)) {
+    const fallback = chatChannels.find((c) => !chatIsFull(c));
+    if (!fallback || !joinChatChannel(fallback.id)) return false;
+  }
+  clearChannelMsgs(chatChannelId);
+  chatConnected = true;
+  clearChatLine();
+  return true;
+}
+
+/** End the chat session and wipe session messages. */
+function disconnectChatSession(): void {
+  if (chatConnected) clearChannelMsgs(chatChannelId);
+  chatConnected = false;
+  chatOpen = false;
+  clearChatLine();
+}
+
+/** Switch channel: leave previous session history, join empty. */
+function switchChatSession(id: number): boolean {
+  ensureChatChannels();
+  if (chatConnected && id === chatChannelId) return true;
+  if (chatConnected) clearChannelMsgs(chatChannelId);
+  if (!joinChatChannel(id)) return false;
+  clearChannelMsgs(chatChannelId);
+  chatConnected = true;
+  clearChatLine();
+  return true;
+}
+
+function pushChatMessage(channelId: number, nick: string, text: string): ChatMsg | null {
+  ensureChatChannels();
+  if (!chatConnected || channelId !== chatChannelId) return null;
+  const ch = chatChannel(channelId);
+  if (!ch) return null;
+  const msg: ChatMsg = {
+    id: `m${++chatMsgSeq}`,
+    nick,
+    text,
+    at: Date.now(),
+  };
+  ch.msgs = [...ch.msgs.slice(-40), msg];
+  chatLineNick = nick;
+  chatLineText = text;
+  if (!chatOpen) chatLineUnread = true;
+  return msg;
+}
+
+function simulateChatTick(): void {
+  if (view !== "home" || !chatConnected) return;
+  ensureChatChannels();
+  const ch = chatChannel(chatChannelId);
+  if (!ch || chatIsFull(ch)) return;
+  const nick = CHAT_BOT_NICKS[Math.floor(Math.random() * CHAT_BOT_NICKS.length)]!;
+  const text = CHAT_BOT_LINES[Math.floor(Math.random() * CHAT_BOT_LINES.length)]!;
+  const msg = pushChatMessage(ch.id, nick, text);
+  if (!msg) return;
+  if (chatOpen) {
+    const log = app.querySelector("#chat-log");
+    if (log) {
+      const empty = log.querySelector(".chat-empty");
+      if (empty) empty.remove();
+      const row = document.createElement("div");
+      row.className = "chat-msg";
+      row.innerHTML = `<strong>${escapeHtml(nick)}</strong><span>${escapeHtml(text)}</span>`;
+      log.appendChild(row);
+      log.scrollTop = log.scrollHeight;
+    }
+  } else {
+    applyHomeChatRail();
+  }
+}
+
+function startChatSim(): void {
+  if (!chatConnected) connectChatSession(chatChannelId);
+  if (chatSimTimer) return;
+  ensureChatChannels();
+  chatSimTimer = setInterval(() => simulateChatTick(), 14000);
+}
+
+function stopChatSim(): void {
+  disconnectChatSession();
+  if (!chatSimTimer) return;
+  clearInterval(chatSimTimer);
+  chatSimTimer = null;
+}
+
+function renderHomeChatRail(): string {
+  ensureChatChannels();
+  const hasLine = Boolean(chatLineNick && chatLineText);
+  const nick = hasLine ? escapeHtml(chatLineNick!) : "";
+  const text = hasLine ? escapeHtml(chatLineText!) : "";
+  return `<div class="home-chat-rail${hasLine ? " has-line" : ""}${chatLineUnread ? " has-unread" : ""}" id="home-chat-rail">
+    <button type="button" class="home-chat-line${hasLine ? " has-line" : ""}${chatLineUnread ? " has-unread" : ""}" id="btn-home-chat" aria-expanded="${chatOpen ? "true" : "false"}" aria-controls="chat-layer" title="${escapeHtml(t("chat.open"))}" aria-label="${escapeHtml(chatLineUnread ? t("chat.ticker") : t("chat.open"))}">
+      <span class="home-chat-line-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18">
+          <path fill="currentColor" d="M4 4.8A2.8 2.8 0 0 1 6.8 2h10.4A2.8 2.8 0 0 1 20 4.8v8.4a2.8 2.8 0 0 1-2.8 2.8H11l-4.2 3.2c-.7.5-1.7 0-1.7-.8v-2.4H6.8A2.8 2.8 0 0 1 4 13.2V4.8Z"/>
+        </svg>
+      </span>
+      ${
+        hasLine
+          ? `<span class="home-chat-line-body">
+        <strong class="home-chat-line-nick">${nick}</strong>
+        <span class="home-chat-line-text">${text}</span>
+      </span>`
+          : ""
+      }
+      ${chatLineUnread ? `<span class="home-chat-badge" aria-hidden="true"></span>` : ""}
+    </button>
+  </div>`;
+}
+
+function applyHomeChatRail(): void {
+  const rail = app.querySelector("#home-chat-rail");
+  if (!rail) return;
+  rail.outerHTML = renderHomeChatRail();
+  app.querySelector("#btn-home-chat")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    openHomeChat();
+  });
+}
+
+function openHomeChat(): void {
+  ensureChatChannels();
+  if (!chatConnected) connectChatSession(chatChannelId);
+  chatLineUnread = false;
+  chatOpen = true;
+  mailboxOpen = false;
+  notifOpen = false;
+  settingsOpen = false;
+  summonerPickerOpen = false;
+  missionOpen = false;
+  render();
+  queueMicrotask(() => {
+    const log = app.querySelector("#chat-log");
+    if (log) log.scrollTop = log.scrollHeight;
+  });
+}
+
+function renderChatModal(): string {
+  if (!chatOpen) return "";
+  ensureChatChannels();
+  const ch = chatChannel(chatChannelId) ?? chatChannels[0]!;
+  const options = chatChannels
+    .map((c) => {
+      const full = chatIsFull(c);
+      const on = c.id === chatChannelId;
+      const users = t("chat.channelUsers", { n: c.users, max: CHAT_CHANNEL_CAP });
+      const label = `${t("chat.channelN", { n: c.id })} ? ${users}${full ? ` ? ${t("chat.full")}` : ""}`;
+      return `<option value="${c.id}" ${on ? "selected" : ""} ${full && !on ? "disabled" : ""}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+  const msgs =
+    ch.msgs
+      .map(
+        (m) =>
+          `<div class="chat-msg"><strong>${escapeHtml(m.nick)}</strong><span>${escapeHtml(m.text)}</span></div>`,
+      )
+      .join("") || `<p class="muted chat-empty">${escapeHtml(t("chat.empty"))}</p>`;
+  return `<div class="settings-layer chat-layer" id="chat-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-chat-close" aria-label="${escapeHtml(t("chat.close"))}"></button>
+    <div class="settings-sheet chat-sheet" role="dialog" aria-modal="true" aria-labelledby="chat-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      <h2 class="settings-title" id="chat-title">${escapeHtml(t("chat.title"))}</h2>
+      <p class="chat-cap-hint">${escapeHtml(t("chat.capHint", { max: CHAT_CHANNEL_CAP }))}</p>
+      <label class="chat-ch-select-wrap">
+        <span class="chat-ch-select-label">${escapeHtml(t("chat.channelSelect"))}</span>
+        <select id="chat-channel-select" class="chat-ch-select" aria-label="${escapeHtml(t("chat.channelSelect"))}">
+          ${options}
+        </select>
+      </label>
+      <div class="chat-log" id="chat-log">${msgs}</div>
+      <form class="chat-compose" id="chat-compose">
+        <input class="chat-input" id="chat-input" type="text" maxlength="80" autocomplete="off" placeholder="${escapeHtml(t("chat.placeholder"))}" />
+        <button type="submit" class="chat-send">${escapeHtml(t("chat.send"))}</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+
+
+
+function missionItemHtml(opts: {
+  title: string;
+  desc: string;
+  cur: number;
+  max: number;
+  goNav?: string;
+}): string {
+  const done = opts.cur >= opts.max;
+  const pct = opts.max > 0 ? Math.min(100, Math.round((opts.cur / opts.max) * 100)) : 0;
+  const go = opts.goNav
+    ? `<button type="button" class="mission-item-go" data-mission-go="${opts.goNav}">${t("mission.go")}</button>`
+    : "";
+  return `<article class="mission-item${done ? " is-done" : ""}">
+    <div class="mission-item-top">
+      <div class="mission-item-copy">
+        <strong class="mission-item-title">${opts.title}</strong>
+        <p class="mission-item-desc">${opts.desc}</p>
+      </div>
+      <span class="mission-item-status">${done ? t("mission.done") : t("mission.inProgress")}</span>
+    </div>
+    <div class="mission-item-bar" role="progressbar" aria-valuenow="${opts.cur}" aria-valuemin="0" aria-valuemax="${opts.max}">
+      <i style="width:${pct}%"></i>
+    </div>
+    <div class="mission-item-foot">
+      <span class="mission-item-prog">${t("mission.progress", { cur: Math.min(opts.cur, opts.max), max: opts.max })}</span>
+      ${go}
+    </div>
+  </article>`;
+}
+
+function renderMissionDailyList(): string {
+  const day = todayKey();
+  const wishDone = (save.island.lastWishDay ?? null) === day;
+  const drills = save.dojoDrills ?? 0;
+  const dojoCur = drills % 3;
+  const pond = save.island.buildings.find((b) => b.id === "mana_pond");
+  const mine = save.island.buildings.find((b) => b.id === "crystal_mine");
+  const stored =
+    Math.floor(pond?.storedMana ?? 0) + Math.floor(mine?.storedCrystal ?? 0);
+  const collectDone = stored <= 0;
+  const sortieDone = (save.clearedStages?.length ?? 0) > 0 && Math.floor(save.island.energy) < (save.island.energyMax ?? 100);
+  return [
+    missionItemHtml({
+      title: t("mission.daily.wish.title"),
+      desc: t("mission.daily.wish.desc"),
+      cur: wishDone ? 1 : 0,
+      max: 1,
+      goNav: "wish",
+    }),
+    missionItemHtml({
+      title: t("mission.daily.dojo.title"),
+      desc: t("mission.daily.dojo.desc"),
+      cur: dojoCur === 0 && drills > 0 ? 3 : dojoCur,
+      max: 3,
+      goNav: "dojo",
+    }),
+    missionItemHtml({
+      title: t("mission.daily.collect.title"),
+      desc: t("mission.daily.collect.desc"),
+      cur: collectDone ? 1 : 0,
+      max: 1,
+      goNav: "home",
+    }),
+    missionItemHtml({
+      title: t("mission.daily.sortie.title"),
+      desc: t("mission.daily.sortie.desc"),
+      cur: sortieDone ? 1 : 0,
+      max: 1,
+      goNav: "stages",
+    }),
+  ].join("");
+}
+
+function renderMissionAchieveList(): string {
+  const lv = save.island.summonerLevel ?? 1;
+  const cleared = save.clearedStages?.length ?? 0;
+  const roster = save.roster?.length ?? 0;
+  const gloryLv = Object.values(save.gloryLevels ?? {}).reduce(
+    (n, v) => n + (typeof v === "number" ? v : 0),
+    0,
+  );
+  const guildOk = Boolean(save.guildName);
+  return [
+    missionItemHtml({
+      title: t("mission.ach.lv5.title"),
+      desc: t("mission.ach.lv5.desc"),
+      cur: lv,
+      max: 5,
+    }),
+    missionItemHtml({
+      title: t("mission.ach.lv10.title"),
+      desc: t("mission.ach.lv10.desc"),
+      cur: lv,
+      max: 10,
+    }),
+    missionItemHtml({
+      title: t("mission.ach.clear5.title"),
+      desc: t("mission.ach.clear5.desc"),
+      cur: cleared,
+      max: 5,
+      goNav: "stages",
+    }),
+    missionItemHtml({
+      title: t("mission.ach.clear15.title"),
+      desc: t("mission.ach.clear15.desc"),
+      cur: cleared,
+      max: 15,
+      goNav: "stages",
+    }),
+    missionItemHtml({
+      title: t("mission.ach.roster4.title"),
+      desc: t("mission.ach.roster4.desc"),
+      cur: roster,
+      max: 4,
+      goNav: "summon",
+    }),
+    missionItemHtml({
+      title: t("mission.ach.glory.title"),
+      desc: t("mission.ach.glory.desc"),
+      cur: gloryLv > 0 ? 1 : 0,
+      max: 1,
+      goNav: "glory",
+    }),
+    missionItemHtml({
+      title: t("mission.ach.guild.title"),
+      desc: t("mission.ach.guild.desc"),
+      cur: guildOk ? 1 : 0,
+      max: 1,
+      goNav: "guild",
+    }),
+  ].join("");
+}
+
+function renderMissionModal(): string {
+  const daily = missionTab === "daily";
+  return `<div class="settings-layer mission-layer" id="mission-layer" ${missionOpen ? "" : "hidden"} aria-hidden="${missionOpen ? "false" : "true"}">
+  <button type="button" class="settings-backdrop" id="btn-mission-close" aria-label="${escapeHtml(t("mission.close"))}"></button>
+  <div class="settings-sheet mission-sheet" role="dialog" aria-modal="true" aria-labelledby="mission-title">
+    <div class="settings-sheet-handle" aria-hidden="true"></div>
+    <h2 class="settings-title" id="mission-title">${escapeHtml(t("mission.title"))}</h2>
+    <div class="mission-tabs" role="tablist" aria-label="${escapeHtml(t("mission.title"))}">
+      <button type="button" class="mission-tab${daily ? " is-active" : ""}" role="tab" aria-selected="${daily ? "true" : "false"}" data-mission-tab="daily">${escapeHtml(t("mission.tabDaily"))}</button>
+      <button type="button" class="mission-tab${!daily ? " is-active" : ""}" role="tab" aria-selected="${!daily ? "true" : "false"}" data-mission-tab="achievements">${escapeHtml(t("mission.tabAchieve"))}</button>
+    </div>
+    <div class="mission-list" role="tabpanel">
+      ${daily ? renderMissionDailyList() : renderMissionAchieveList()}
+    </div>
+  </div>
+</div>`;
+}
 
 function render(): void {
+  clearEnergyRegenTimer();
   if (!bootReady) {
     app.classList.add("auth-mode");
+    app.classList.remove("home-mode");
     app.innerHTML = `<main class="auth-main auth-main--center">${authHeroLayer()}
-      <div class="auth-screen auth-screen--center">
+      <div class="auth-screen auth-screen--form">
       ${authBrand()}
-        <p class="auth-copy">불러오는 중…</p>
+        <p class="auth-copy">${escapeHtml(t("boot.loading"))}</p>
       </div>
+      ${authFooter()}
     </main>`;
     return;
   }
@@ -1433,64 +2532,82 @@ function render(): void {
     ? Math.round((allyMana.mana / allyMana.manaMax) * 100)
     : 0;
   const tabBattle = view === "stages" || view === "battle" || view === "result";
+  const tabSummoner = summonerPickerOpen;
   const tabMonster = view === "enhance" || view === "fusion" || view === "party";
-  const tabMission = view === "wish" || view === "glory" || view === "dojo";
+  const tabMission = missionOpen;
   const tabCommunity = view === "guild";
   const tabShop = view === "shop";
   const demoTag = sessionUser?.kind === "demo" ? `<span class="demo-tag">DEMO</span>` : "";
   const mailItems = [
-    { title: "모험가 환영 선물", body: "신비의마법석에 오신 것을 환영합니다. 소환서와 마나를 확인하세요.", tag: "시스템" },
-    { title: "일일 접속 보너스", body: "오늘도 섬을 둘러보고 출정문에 도전해 보세요.", tag: "보상" },
+    {
+      title: t("mail.welcomeTitle"),
+      body: t("mail.welcomeBody"),
+      tag: t("mail.tagEvent"),
+    },
+    {
+      title: t("mail.dailyTitle"),
+      body: t("mail.dailyBody"),
+      tag: t("mail.tagReward"),
+    },
   ];
   const notifItems = tickerMessages().slice(0, 5);
+
+  if (view === "home") {
+    startChatSim();
+  } else {
+    stopChatSim();
+  }
 
   if (view === "auth") {
     app.classList.add("auth-mode");
     app.classList.remove("home-mode");
     app.classList.remove("expedition-mode");
     app.classList.remove("combat-mode");
+    app.classList.remove("monster-mode");
     app.innerHTML = `
-      <main class="auth-main auth-main--center">${renderAuth()}</main>
+      <main class="auth-main auth-main--center">${renderAuth()}${authFooter()}</main>
       ${toast ? `<p class="toast auth-toast">${toast}</p>` : ""}
     `;
     bind();
     if (toast) {
-      const t = toast;
+      const toastText = toast;
       toast = "";
       setTimeout(() => {
         if (!toast) {
           const el = app.querySelector(".toast");
           if (el) el.remove();
         }
+        void toastText;
       }, 2200);
-      void t;
     }
     return;
   }
 
   const activeSum = getActiveSummoner(save);
   const activeEl = save.activeSummoner ?? "light";
+  const activeSumExp = Math.max(0, Math.min(100, Math.floor(activeSum.exp ?? 0)));
   const isHome = view === "home";
   const nick = escapeHtml(displayNickname());
   const userLv = island.summonerLevel;
   const userExp = Math.floor(island.summonerExp ?? 0);
-  const accountLabel =
-    sessionUser?.email ??
-    (sessionUser?.kind === "demo"
-      ? "일반 진문"
-      : sessionUser?.kind === "guest"
-        ? "데모"
-          : "모험가");
+  const accountLabel = escapeHtml(
+    sessionUser?.email ||
+      (sessionUser?.kind === "demo"
+        ? t("account.demo")
+        : sessionUser?.kind === "guest"
+          ? t("account.guest")
+          : t("account.default")),
+  );
   const rosterForPicker = save.summoners ?? createSummonerRoster();
   const summonerPickerList = SUMMONER_ELEMENTS.map((el) => {
     const p = rosterForPicker[el];
     const on = el === activeEl;
-    const aw = p.awaken > 0 ? ` ? ?? ${p.awaken}` : "";
-    return `<button type="button" class="summoner-pick${on ? " ? ?? ?" : ""}" data-summoner="${el}" ${on ? "disabled" : ""}>
-      <img class="summoner-pick-art" src="/art/summoner/${el}.svg" width="44" height="44" alt="" draggable="false" />
+    const aw = p.awaken > 0 ? ` - ${t("summonerPicker.awaken", { n: p.awaken })}` : "";
+    return `<button type="button" class="summoner-pick${on ? " is-active" : ""}" data-summoner="${el}" ${on ? "disabled" : ""}>
+      <img class="summoner-pick-art" src="/art/summoner/${el}.webp" width="44" height="44" alt="" draggable="false" decoding="async" />
       <span class="summoner-pick-body">
-        <strong>${SUMMONER_ELEMENT_LABEL[el]} 서머너</strong>
-        <small>Lv.${p.level}${aw}${on ? " ? ?? ?" : ""}</small>
+        <strong>${escapeHtml(t("summonerPicker.summoner", { element: elementLabel(el) }))}</strong>
+        <small>Lv.${p.level}${aw}${on ? ` - ${escapeHtml(t("summonerPicker.active"))}` : ""}</small>
       </span>
     </button>`;
   }).join("");
@@ -1499,207 +2616,215 @@ function render(): void {
   app.classList.toggle("home-mode", view === "home");
   app.classList.toggle("expedition-mode", view === "stages");
   app.classList.toggle("combat-mode", view === "battle" || view === "result");
+  app.classList.toggle("monster-mode", view === "enhance");
   app.innerHTML = `
-    <header class="app-bar app-bar--strip${isHome ? " app-bar--home" : ""}">
-      <div class="app-bar-frame app-bar-frame--strip">
-        <div class="app-bar-rail" aria-hidden="true"></div>
-        <div class="app-bar-strip">
-          <div class="app-bar-brand app-bar-brand--strip" title="${nick}">
-            <div class="user-profile" aria-label="Lv.${userLv}">
-              <img class="user-profile-img" src="/art/auth/logo-mark-192.png" width="40" height="40" alt="" />
-              <span class="user-profile-lv">Lv.${userLv}</span>
-              <div class="user-profile-foot">
-                <div class="user-profile-exp" role="progressbar" aria-valuenow="${userExp}" aria-valuemin="0" aria-valuemax="100" aria-label="경험치 ${userExp}/100">
-                  <div class="user-profile-exp-fill" style="width:${Math.min(100, userExp)}%"></div>
-                </div>
+    <header class="app-bar app-bar--hud${isHome ? " app-bar--home" : ""}">
+      <div class="app-bar-hud">
+        <div class="hud-profile" title="${nick}">
+          <div class="user-profile" aria-label="Lv.${userLv}">
+            <img class="user-profile-img" src="/art/auth/logo-mark-192.png" width="40" height="40" alt="" />
+            <span class="user-profile-lv">Lv.${userLv}</span>
+            <div class="user-profile-foot">
+              <div class="user-profile-exp" role="progressbar" aria-valuenow="${userExp}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(t("profile.exp", { n: userExp }))}">
+                <div class="user-profile-exp-fill" style="width:${Math.min(100, userExp)}%"></div>
               </div>
-            </div>
-            <div class="user-profile-info">
-              <div class="user-profile-top">
-                <p class="user-profile-nick">${nick}${demoTag ? ` ${demoTag}` : ""}</p>
-                <div class="res-item res-item--energy" title="행동력">
-                  <img class="res-ico" src="/art/ui/res/energy.svg" width="14" height="14" alt="" draggable="false" />
-                  <strong class="res-val">${Math.floor(island.energy)}<small>/${island.energyMax ?? 100}</small></strong>
-                </div>
-              </div>
-              ${
-                isHome
-                  ? ""
-                  : `<p class="user-profile-sub">${SUMMONER_ELEMENT_LABEL[activeEl]} Lv.${activeSum.level}${
-                      activeSum.awaken > 0 ? ` ? ?? ${activeSum.awaken}` : ""
-                    }</p>`
-              }
             </div>
           </div>
-          <div class="res-wallet" role="group" aria-label="주요 재화">
-            <div class="res-item res-item--gold" title="골드">
-              <img class="res-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" />
-              <strong class="res-val">${fmtRes(island.mana)}</strong>
+          <div class="user-profile-info">
+            <p class="user-profile-nick">${nick}${demoTag ? ` ${demoTag}` : ""}</p>
+            ${
+              isHome
+                ? ""
+                : `<p class="user-profile-sub">${escapeHtml(elementLabel(activeEl))} Lv.${activeSum.level}${
+                    activeSum.awaken > 0 ? ` - ${escapeHtml(t("summonerPicker.awaken", { n: activeSum.awaken }))}` : ""
+                  }</p>`
+            }
+          </div>
+        </div>
+        <div class="res-wallet" role="group" aria-label="${escapeHtml(t("res.wallet"))}">
+          <div class="res-item res-item--energy${Math.floor(island.energy) < (island.energyMax ?? 100) ? " has-timer" : ""}" title="${escapeHtml(t("res.energy"))}">
+            <div class="res-energy-row">
+              <span class="res-energy-ico-wrap">
+                <img class="res-ico" src="/art/ui/res/energy.svg" width="14" height="14" alt="" draggable="false" />
+              </span>
+              <strong class="res-val" id="res-energy-val">${Math.floor(island.energy)}<small>/${island.energyMax ?? 100}</small></strong>
             </div>
-            <button type="button" class="res-more-btn${resMoreOpen ? " is-open" : ""}" id="btn-res-more" aria-expanded="${resMoreOpen ? "true" : "false"}" aria-controls="res-more-panel" title="${resMoreOpen ? "재화 접기" : "다른 재화 보기"}" aria-label="${resMoreOpen ? "재화 접기" : "다른 재화 보기"}">
-              <span class="res-more-chevron" aria-hidden="true"></span>
-            </button>
-            <div class="res-item res-item--crystal" title="크리스탈">
-              <img class="res-ico" src="/art/ui/res/crystal.svg" width="14" height="14" alt="" draggable="false" />
-              <strong class="res-val">${fmtRes(island.crystal)}</strong>
+            <span class="res-energy-timer" id="res-energy-timer"${Math.floor(island.energy) < (island.energyMax ?? 100) ? "" : " hidden"}>${
+              Math.floor(island.energy) < (island.energyMax ?? 100)
+                ? fmtEnergyRegen(energyRegenRemainingMs(island) ?? ENERGY_REGEN_MS)
+                : ""
+            }</span>
+          </div>
+          <div class="res-item res-item--gold" title="${escapeHtml(t("res.gold"))}">
+            <img class="res-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" />
+            <strong class="res-val">${fmtRes(island.mana)}</strong>
+          </div>
+          <div class="res-item res-item--crystal" title="${escapeHtml(t("res.crystal"))}">
+            <img class="res-ico" src="/art/ui/res/crystal.svg" width="14" height="14" alt="" draggable="false" />
+            <strong class="res-val">${fmtRes(island.crystal)}</strong>
+          </div>
+          <button type="button" class="res-more-btn${resMoreOpen ? " is-open" : ""}" id="btn-res-more" aria-expanded="${resMoreOpen ? "true" : "false"}" aria-controls="res-more-panel" title="${escapeHtml(resMoreOpen ? t("res.moreClose") : t("res.moreOpen"))}" aria-label="${escapeHtml(resMoreOpen ? t("res.moreClose") : t("res.moreOpen"))}">
+            <span class="res-more-chevron" aria-hidden="true"></span>
+          </button>
+          <div class="res-more-panel${resMoreOpen ? " is-open" : ""}" id="res-more-panel" role="region" aria-label="${escapeHtml(t("res.more"))}" ${resMoreOpen ? "" : "hidden"}>
+            <div class="res-item res-item--scroll" title="${escapeHtml(t("res.scrollNormal"))}">
+              <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(scrollCount(save, "normal"))}</strong>
             </div>
-            <div class="res-more-panel${resMoreOpen ? " is-open" : ""}" id="res-more-panel" role="region" aria-label="기타 재화" ${resMoreOpen ? "" : "hidden"}>
-                <div class="res-item res-item--scroll" title="일반 소환서">
-                  <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
-                  <strong class="res-val">${fmtRes(scrollCount(save, "normal"))}<small>?</small></strong>
-                </div>
-                <div class="res-item res-item--scroll" title="고급 소환서">
-                  <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
-                  <strong class="res-val">${fmtRes(scrollCount(save, "premium"))}<small>?</small></strong>
-                </div>
-                <div class="res-item res-item--scroll" title="신성/심연 소환서">
-                  <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
-                  <strong class="res-val">${fmtRes(scrollCount(save, "mystic"))}<small>?</small></strong>
-                </div>
-                <div class="res-item res-item--glory" title="영광">
-                  <img class="res-ico" src="/art/ui/res/glory.svg" width="16" height="16" alt="" draggable="false" />
-                  <strong class="res-val">${fmtRes(save.gloryPoints ?? 0)}</strong>
-                </div>
-                <div class="res-item res-item--jinmun" title="진문석">
-                  <img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" />
-                  <strong class="res-val">${fmtRes(save.jinmunStones ?? 0)}</strong>
-                </div>
-                <div class="res-item res-item--guild" title="기여">
-                  <img class="res-ico" src="/art/ui/res/guild.svg" width="16" height="16" alt="" draggable="false" />
-                  <strong class="res-val">${fmtRes(save.guildContribution ?? 0)}</strong>
-                </div>
-                <div class="res-item res-item--arena" title="시즌승">
-                  <img class="res-ico" src="/art/ui/res/arena.svg" width="16" height="16" alt="" draggable="false" />
-                  <strong class="res-val">${fmtRes(save.arenaSeasonWins ?? 0)}</strong>
-                </div>
-              </div>
+            <div class="res-item res-item--scroll" title="${escapeHtml(t("res.scrollPremium"))}">
+              <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(scrollCount(save, "premium"))}</strong>
+            </div>
+            <div class="res-item res-item--scroll" title="${escapeHtml(t("res.scrollMystic"))}">
+              <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(scrollCount(save, "mystic"))}</strong>
+            </div>
+            <div class="res-item res-item--glory" title="${escapeHtml(t("res.glory"))}">
+              <img class="res-ico" src="/art/ui/res/glory.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(save.gloryPoints ?? 0)}</strong>
+            </div>
+            <div class="res-item res-item--jinmun" title="${escapeHtml(t("res.jinmun"))}">
+              <img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(save.jinmunStones ?? 0)}</strong>
+            </div>
+            <div class="res-item res-item--guild" title="${escapeHtml(t("res.guild"))}">
+              <img class="res-ico" src="/art/ui/res/guild.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(save.guildContribution ?? 0)}</strong>
+            </div>
+            <div class="res-item res-item--arena" title="${escapeHtml(t("res.arena"))}">
+              <img class="res-ico" src="/art/ui/res/arena.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(save.arenaSeasonWins ?? 0)}</strong>
+            </div>
           </div>
         </div>
       </div>
-      ${renderTicker()}
+      ${isHome ? "" : renderTicker()}
       ${toast ? `<p class="toast">${toast}</p>` : ""}
     </header>
     <main>${mainContent(manaPct)}</main>
-    ${
-      settingsOpen
-        ? `<div class="settings-layer" id="settings-layer">
-      <button type="button" class="settings-backdrop" id="btn-settings-close" aria-label="설정 닫기"></button>
+    <div class="settings-layer" id="settings-layer" ${settingsOpen ? "" : "hidden"} aria-hidden="${settingsOpen ? "false" : "true"}">
+      <button type="button" class="settings-backdrop" id="btn-settings-close" aria-label="${escapeHtml(t("settings.close"))}"></button>
       <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="settings-sheet-handle" aria-hidden="true"></div>
-        <h2 class="settings-title" id="settings-title">설정</h2>
+        <h2 class="settings-title" id="settings-title">${escapeHtml(t("settings.title"))}</h2>
         <p class="settings-account">${accountLabel}</p>
-        <button type="button" class="settings-logout" id="btn-logout">로그아웃</button>
+        <label class="settings-lang" for="settings-lang">
+          <span class="settings-lang-label">${escapeHtml(t("settings.language"))}</span>
+          <span class="settings-lang-hint">${escapeHtml(t("settings.languageHint"))}</span>
+          <select id="settings-lang" class="settings-lang-select" aria-label="${escapeHtml(t("settings.language"))}">
+            ${languageOptionsHtml()}
+          </select>
+        </label>
+        <button type="button" class="settings-logout" id="btn-logout">${escapeHtml(t("settings.logout"))}</button>
       </div>
-    </div>`
-        : ""
-    }
+    </div>
     ${
-      isHome
-        ? `<div class="settings-layer" id="summoner-picker-layer" ${summonerPickerOpen ? "" : "hidden"} aria-hidden="${summonerPickerOpen ? "false" : "true"}">
-      <button type="button" class="settings-backdrop" id="btn-summoner-picker-close" aria-label="서머너 선택 닫기"></button>
+      `<div class="settings-layer" id="summoner-picker-layer" ${summonerPickerOpen ? "" : "hidden"} aria-hidden="${summonerPickerOpen ? "false" : "true"}">
+      <button type="button" class="settings-backdrop" id="btn-summoner-picker-close" aria-label="${escapeHtml(t("summonerPicker.close"))}"></button>
       <div class="settings-sheet summoner-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="summoner-picker-title">
         <div class="settings-sheet-handle" aria-hidden="true"></div>
-        <h2 class="settings-title" id="summoner-picker-title">서머너 변경</h2>
-        <p class="settings-account">속성별 서머너를 선택해 육성하세요</p>
+        <h2 class="settings-title" id="summoner-picker-title">${escapeHtml(t("summonerPicker.title"))}</h2>
+        <p class="settings-account">${escapeHtml(t("summonerPicker.hint"))}</p>
         <div class="summoner-picker-list">${summonerPickerList}</div>
       </div>
     </div>`
-        : ""
     }
-            <aside class="side-quick" aria-label="빠른 메뉴">
-      <button type="button" class="side-quick-btn${mailboxOpen ? " is-open" : ""}" id="btn-mailbox" aria-expanded="${mailboxOpen ? "true" : "false"}" aria-controls="mailbox-layer" title="우편함">
+    ${
+      isHome
+        ? `<aside class="side-quick" aria-label="${escapeHtml(t("side.quick"))}">
+      <button type="button" class="side-quick-btn${mailboxOpen ? " is-open" : ""}" id="btn-mailbox" aria-expanded="${mailboxOpen ? "true" : "false"}" aria-controls="mailbox-layer" title="${escapeHtml(t("mailbox.title"))}">
         <span class="side-quick-glow" aria-hidden="true"></span>
-        <svg class="side-quick-svg" viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" focusable="false">
-  <defs>
-    <linearGradient id="sqMailBody" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f3e6b8"/>
-      <stop offset="55%" stop-color="#d4b45a"/>
-      <stop offset="100%" stop-color="#8a6a22"/>
-    </linearGradient>
-    <linearGradient id="sqMailFlap" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#fff4c8"/>
-      <stop offset="100%" stop-color="#c9a227"/>
-    </linearGradient>
-  </defs>
-  <path fill="url(#sqMailBody)" stroke="#5a4214" stroke-width="1.2" d="M8 14.5h32a3 3 0 0 1 3 3v17a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-17a3 3 0 0 1 3-3z"/>
-  <path fill="url(#sqMailFlap)" stroke="#5a4214" stroke-width="1.1" d="M5.5 16.2 24 28.5 42.5 16.2V15a2 2 0 0 0-1.2-1.8L24 22.2 6.7 13.2A2 2 0 0 0 5.5 15v1.2z"/>
-  <path fill="none" stroke="#fff6c8aa" stroke-width="1" d="M9 18.5h30"/>
-</svg>
-        <span class="side-quick-badge" aria-label="읽지 않은 우편 2">2</span>
-        <span class="side-quick-caption">우편</span>
+        <span class="seal-badge seal-badge--side">
+          <span class="side-quick-ico" aria-hidden="true">
+            <img class="side-quick-img" src="/art/ui/nav/mail.webp" width="52" height="52" alt="" draggable="false" />
+          </span>
+          <span class="side-quick-caption">${escapeHtml(t("side.mailbox"))}</span>
+        </span>
+        <span class="side-quick-badge" aria-label="${escapeHtml(t("mailbox.badge"))}">2</span>
       </button>
-      <button type="button" class="side-quick-btn${notifOpen ? " is-open" : ""}" id="btn-notif" aria-expanded="${notifOpen ? "true" : "false"}" aria-controls="notif-layer" title="알림">
+      <button type="button" class="side-quick-btn${notifOpen ? " is-open" : ""}" id="btn-notif" aria-expanded="${notifOpen ? "true" : "false"}" aria-controls="notif-layer" title="${escapeHtml(t("notif.title"))}">
         <span class="side-quick-glow" aria-hidden="true"></span>
-        <svg class="side-quick-svg" viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" focusable="false">
-  <defs>
-    <linearGradient id="sqBell" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#fff1c0"/>
-      <stop offset="45%" stop-color="#e0c56a"/>
-      <stop offset="100%" stop-color="#9a7420"/>
-    </linearGradient>
-  </defs>
-  <path fill="url(#sqBell)" stroke="#5a4214" stroke-width="1.2" d="M24 6.5c-1.4 0-2.5 1.1-2.5 2.5v1.1c-5.2 1.1-9 5.8-9 11.3v6.2l-3.2 4.8c-.5.8 0 1.9.9 1.9h27.6c.9 0 1.4-1.1.9-1.9l-3.2-4.8V21.4c0-5.5-3.8-10.2-9-11.3V9c0-1.4-1.1-2.5-2.5-2.5z"/>
-  <path fill="url(#sqBell)" stroke="#5a4214" stroke-width="1.1" d="M20.2 36.2a3.8 3.8 0 0 0 7.6 0"/>
-  <circle cx="24" cy="10.2" r="1.4" fill="#fff6c8"/>
-</svg>
+        <span class="seal-badge seal-badge--side">
+          <span class="side-quick-ico" aria-hidden="true">
+            <img class="side-quick-img" src="/art/ui/nav/notif.webp" width="52" height="52" alt="" draggable="false" />
+          </span>
+          <span class="side-quick-caption">${escapeHtml(t("side.notif"))}</span>
+        </span>
         <span class="side-quick-dot" aria-hidden="true"></span>
-        <span class="side-quick-caption">알림</span>
+      </button>
+      <button type="button" class="side-quick-btn${settingsOpen ? " is-open" : ""}" id="btn-settings" aria-expanded="${settingsOpen ? "true" : "false"}" aria-controls="settings-layer" title="${escapeHtml(t("nav.settings"))}">
+        <span class="side-quick-glow" aria-hidden="true"></span>
+        <span class="seal-badge seal-badge--side">
+          <span class="side-quick-ico" aria-hidden="true">
+            <img class="side-quick-img" src="/art/ui/nav/settings.svg" width="52" height="52" alt="" draggable="false" />
+          </span>
+          <span class="side-quick-caption">${escapeHtml(t("nav.settings"))}</span>
+        </span>
       </button>
     </aside>
-    ${
-      mailboxOpen
-        ? `<div class="settings-layer" id="mailbox-layer">
-      <button type="button" class="settings-backdrop" id="btn-mailbox-close" aria-label="우편함 닫기"></button>
+    ${renderChatModal()}`
+        : ""
+    }
+    <div class="settings-layer" id="mailbox-layer" ${mailboxOpen ? "" : "hidden"} aria-hidden="${mailboxOpen ? "false" : "true"}">
+      <button type="button" class="settings-backdrop" id="btn-mailbox-close" aria-label="${escapeHtml(t("mailbox.close"))}"></button>
       <div class="settings-sheet quick-sheet" role="dialog" aria-modal="true" aria-labelledby="mailbox-title">
         <div class="settings-sheet-handle" aria-hidden="true"></div>
-        <h2 class="settings-title" id="mailbox-title">우편함</h2>
-        <p class="settings-account">도착한 우편을 확인하세요</p>
+        <h2 class="settings-title" id="mailbox-title">${escapeHtml(t("mailbox.title"))}</h2>
+        <p class="settings-account">${escapeHtml(t("mailbox.empty"))}</p>
         <div class="quick-sheet-list">${mailItems
         .map(
           (m) => `<article class="quick-sheet-item">
-          <span class="quick-sheet-tag">${m.tag}</span>
-          <strong class="quick-sheet-title">${m.title}</strong>
-          <p class="quick-sheet-body">${m.body}</p>
+          <span class="quick-sheet-tag">${escapeHtml(m.tag)}</span>
+          <strong class="quick-sheet-title">${escapeHtml(m.title)}</strong>
+          <p class="quick-sheet-body">${escapeHtml(m.body)}</p>
         </article>`,
         )
         .join("")}</div>
       </div>
-    </div>`
-        : ""
-    }
-    ${
-      notifOpen
-        ? `<div class="settings-layer" id="notif-layer">
-      <button type="button" class="settings-backdrop" id="btn-notif-close" aria-label="알림 닫기"></button>
+    </div>
+    <div class="settings-layer" id="notif-layer" ${notifOpen ? "" : "hidden"} aria-hidden="${notifOpen ? "false" : "true"}">
+      <button type="button" class="settings-backdrop" id="btn-notif-close" aria-label="${escapeHtml(t("notif.close"))}"></button>
       <div class="settings-sheet quick-sheet" role="dialog" aria-modal="true" aria-labelledby="notif-title">
         <div class="settings-sheet-handle" aria-hidden="true"></div>
-        <h2 class="settings-title" id="notif-title">알림</h2>
-        <p class="settings-account">최근 공지와 안내</p>
+        <h2 class="settings-title" id="notif-title">${escapeHtml(t("notif.title"))}</h2>
+        <p class="settings-account">${escapeHtml(t("notif.empty"))}</p>
         <div class="quick-sheet-list">${notifItems
         .map((n) => `<article class="quick-sheet-item"><p class="quick-sheet-body">${escapeHtml(n)}</p></article>`)
         .join("")}</div>
       </div>
-    </div>`
-        : ""
-    }
-    <nav class="tabs tabs--overlay" aria-label="메인 메뉴">
-      <button type="button" data-nav="stages" class="${tabBattle ? "active" : ""}"><span class="tab-ico tab-ico--battle" aria-hidden="true"></span><span class="tab-label">전투</span></button>
-      <button type="button" data-nav="enhance" class="${tabMonster ? "active" : ""}"><span class="tab-ico tab-ico--monster" aria-hidden="true"></span><span class="tab-label">몬스터</span></button>
-      <button type="button" data-nav="dojo" class="${tabMission ? "active" : ""}"><span class="tab-ico tab-ico--mission" aria-hidden="true"></span><span class="tab-label">미션</span></button>
-      <button type="button" data-nav="guild" class="${tabCommunity ? "active" : ""}"><span class="tab-ico tab-ico--community" aria-hidden="true"></span><span class="tab-label">커뮤니티</span></button>
-      <button type="button" data-nav="shop" class="${tabShop ? "active" : ""}"><span class="tab-ico tab-ico--shop" aria-hidden="true"></span><span class="tab-label">상점</span></button>
-      <button type="button" id="btn-settings" class="${settingsOpen ? "active" : ""}" aria-expanded="${settingsOpen ? "true" : "false"}" aria-controls="settings-layer" title="설정"><span class="tab-ico tab-ico--settings" aria-hidden="true"></span><span class="tab-label">설정</span></button>
+    </div>
+    ${renderMissionModal()}
+    <nav class="tabs tabs--overlay" aria-label="${escapeHtml(t("nav.main"))}">
+      <button type="button" data-nav="stages" class="${tabBattle ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--battle" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/battle.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.battle"))}</span></span></button>
+      <button type="button" id="btn-nav-summoner" class="${tabSummoner ? "active" : ""}" aria-expanded="${summonerPickerOpen ? "true" : "false"}" aria-controls="summoner-picker-layer" title="${escapeHtml(t("nav.summoner"))}">
+        <span class="seal-badge seal-badge--summoner">
+          <span class="tab-ico tab-summoner-face" aria-hidden="true">
+            <img class="tab-ico-img tab-summoner-seal" src="/art/ui/nav/summoner-frame.webp" width="58" height="58" alt="" draggable="false" decoding="async" />
+            <img class="tab-summoner-art" src="/art/summoner/${activeEl}.webp" width="38" height="38" alt="" draggable="false" decoding="async" />
+            <span class="tab-summoner-el">${escapeHtml(elementLabel(activeEl))}</span>
+            <span class="tab-summoner-foot">
+              <span class="tab-summoner-lv">Lv.${activeSum.level}</span>
+              <span class="tab-summoner-exp" role="presentation"><span class="tab-summoner-exp-fill" style="width:${activeSumExp}%"></span></span>
+            </span>
+          </span>
+          <span class="tab-label">${escapeHtml(t("nav.summoner"))}</span>
+        </span>
+      </button>
+      <button type="button" data-nav="enhance" class="${tabMonster ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--monster" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/monster.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.monster"))}</span></span></button>
+      <button type="button" id="btn-mission" class="${missionOpen ? "active" : ""}" aria-expanded="${missionOpen ? "true" : "false"}" aria-controls="mission-layer" title="${escapeHtml(t("nav.mission"))}"><span class="seal-badge"><span class="tab-ico tab-ico--mission" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/mission.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.mission"))}</span></span></button>
+      <button type="button" data-nav="guild" class="${tabCommunity ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--community" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/community.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.community"))}</span></span></button>
+      <button type="button" data-nav="shop" class="${tabShop ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--shop" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/shop.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.shop"))}</span></span></button>
     </nav>
   `;
 
   bind();
   if (toast) {
-    const t = toast;
+    const toastText = toast;
     toast = "";
     setTimeout(() => {
       if (!toast) {
         const el = app.querySelector(".toast");
-        if (el && el.textContent === t) el.remove();
+        if (el && el.textContent === toastText) el.remove();
       }
     }, 2200);
   }
@@ -1713,7 +2838,6 @@ function renderHome(): string {
   const pondCap = productionStorageCap(pondDef, pondLv);
   const storedMana = Math.floor(pond?.storedMana ?? 0);
   const storedCrystal = Math.floor(mine?.storedCrystal ?? 0);
-  const exp = Math.floor(save.island.summonerExp ?? 0);
   const hasWish =
     save.island.buildings.some((b) => b.id === "wish_temple") ||
     save.island.summonerLevel >= 7;
@@ -1747,106 +2871,121 @@ function renderHome(): string {
     const locked = !!opts?.locked;
     const toneKey = opts?.tone ?? "summon";
     const tone = opts?.tone ? ` island-spot--${opts.tone}` : "";
-    const emblemSrc = `/art/hub/emblem-${toneKey}.svg`;
+    const emblemSrc = `/art/hub/bldg-${toneKey}.webp`;
+    const pos = resolveIslandSpotPos(id, x, y);
+    x = pos.x;
+    y = pos.y;
+    const depth = Math.max(0, Math.min(1, y / 100));
+    const spotScale = (0.68 + depth * 0.5).toFixed(3);
+    const spotZ = Math.round(10 + y);
+    const focus =
+      islandLayoutEdit && islandSpotDrag?.id === id ? " is-layout-focus" : "";
     const bubble =
       !locked && opts?.bubble && opts.bubbleKind
-        ? `<span class="res-bubble res-bubble--${opts.bubbleKind}" data-collect="${opts.bubbleKind}" role="button" tabindex="0" aria-label="${opts.bubble} 수집">${opts.bubble}</span>`
+        ? `<span class="res-bubble res-bubble--${opts.bubbleKind}" data-collect="${opts.bubbleKind}" role="button" tabindex="0" aria-label="${t('ui.4215c0df88')}">${opts.bubble}</span>`
         : "";
     const unlock =
       locked && opts?.unlockLv
         ? `<span class="island-spot-lv">Lv.${opts.unlockLv}</span>`
-        : opts?.sub
-          ? `<span class="island-spot-sub">${opts.sub}</span>`
-          : "";
-    const label = locked && opts?.unlockLv ? `${title} · Lv.${opts.unlockLv} 해금` : title;
-    return `<button type="button" class="island-spot${tone}${locked ? " is-locked" : ""}" style="left:${x}%;top:${y}%" data-b="${id}" data-locked="${locked ? "1" : "0"}" ${opts?.unlockLv ? `data-unlock="${opts.unlockLv}"` : ""} aria-label="${label}">
+        : "";
+    const displayTitle =
+      id === "guild" && title && !looksBrokenLabel(title)
+        ? title
+        : islandSpotTitle(id, title);
+    const label = locked && opts?.unlockLv
+      ? `${displayTitle} ? Lv.${opts.unlockLv} ${t('ui.d1496ce82d')}`
+      : displayTitle;
+    return `<button type="button" class="island-spot${tone}${locked ? " is-locked" : ""}${islandLayoutEdit ? " is-layout-edit" : ""}${focus}" style="left:${x}%;top:${y}%;--spot-scale:${spotScale};z-index:${spotZ}" data-b="${id}" data-locked="${locked ? "1" : "0"}" ${opts?.unlockLv ? `data-unlock="${opts.unlockLv}"` : ""} aria-label="${label}">
       <span class="island-spot-art" aria-hidden="true">
         <span class="island-spot-glow"></span>
-        <img class="island-spot-img" src="${emblemSrc}" width="72" height="72" alt="" draggable="false" decoding="async" />
+        <img class="island-spot-img" src="${emblemSrc}" width="96" height="96" alt="" draggable="false" decoding="async" />
       </span>
       ${locked ? lockSvg : ""}
-      <span class="island-spot-name">${title}</span>
+      <span class="island-spot-name">${displayTitle}</span>
       ${unlock}
       ${bubble}
     </button>`;
   };
 
-  const activeEl = save.activeSummoner ?? "light";
-  const activeSum = getActiveSummoner(save);
   return `<div class="home-island">
-    <div class="home-hud">
-      <div class="home-summoner-portrait home-summoner-portrait--${activeEl}" aria-label="${SUMMONER_ELEMENT_LABEL[activeEl]} 서머너 Lv.${activeSum.level}">
-        <img src="/art/summoner/${activeEl}.svg" width="64" height="64" alt="" draggable="false" />
-        <span class="home-summoner-tag">${SUMMONER_ELEMENT_LABEL[activeEl]}${activeSum.awaken > 0 ? ` ·${activeSum.awaken}` : ""}</span>
-        <div class="home-summoner-foot">
-          <span class="home-summoner-lv">Lv.${activeSum.level}</span>
-          <div class="home-summoner-exp" role="progressbar" aria-valuenow="${exp}" aria-valuemin="0" aria-valuemax="100" aria-label="경험치 ${exp}/100">
-            <div class="home-summoner-exp-fill" style="width:${Math.min(100, exp)}%"></div>
-          </div>
-        </div>
+    ${renderHomeChatRail()}
+    ${
+      islandLayoutEdit
+        ? `<div class="island-edit-hud" role="toolbar" aria-label="${t('ui.1ac9a0470a')}">
+      <div class="island-edit-hud-copy">
+        <strong>${t('ui.78296b2020')}</strong>
+        <small>${t('ui.c45b8eb502')}</small>
       </div>
-      <button type="button" class="home-summoner-change" id="btn-summoner-picker" aria-expanded="${summonerPickerOpen ? "true" : "false"}" aria-controls="summoner-picker-layer">
-        변경
-      </button>
-    </div>
-    <div class="island-viewport" id="island-viewport">
-      <div class="island-world" id="island-world" style="transform:translate(${islandPan.x}px,${islandPan.y}px)">
+      <button type="button" class="secondary" id="btn-island-layout-reset">${t('ui.ff75b4ff24')}</button>
+      <button type="button" class="auth-btn-primary" id="btn-island-layout-done">${t('ui.8d8680373c')}</button>
+    </div>`
+        : ""
+    }
+    <div class="island-viewport${islandLayoutEdit ? " is-layout-edit" : ""}" id="island-viewport">
+      <div class="island-world" id="island-world" style="--island-zoom:${islandZoom.toFixed(4)};transform:translate3d(${islandPan.x}px,${islandPan.y}px,0) rotateX(${ISLAND_ROTATE_X_DEG}deg) scale(${ISLAND_BASE_SCALE})">
         <img
           class="island-map-img"
-          src="/art/home/home-island-bg.webp"
-          srcset="/art/home/home-island-bg-720.webp 720w, /art/home/home-island-bg.webp 1080w, /art/home/home-island-bg@2x.webp 1440w"
-          sizes="(max-width: 430px) 160vw, 720px"
-          width="1080"
-          height="1920"
+          src="/art/home/home-island-bg@2x.webp"
+          width="1440"
+          height="2560"
           alt=""
           draggable="false"
           decoding="async"
         />
         <div class="island-map-veil" aria-hidden="true"></div>
-        ${spot("summon_hearth", "소환진", 28, 38, { tone: "summon", sub: `소환서 ${save.scrolls}장` })}
-        ${spot("power_circle", "강화진", 52, 30, { tone: "forge", sub: "레벨 · 각성 · 장비" })}
-        ${spot("gateway", "출정문", 74, 40, { tone: "gate", sub: "시나리오 · 아레나" })}
-        ${spot("mana_pond", "진액 연못", 36, 58, {
-          tone: "pond",
-          sub: `Lv.${pondLv} · 대기 ${storedMana}/${pondCap}`,
-          bubble: storedMana > 0 ? String(storedMana) : undefined,
-          bubbleKind: storedMana > 0 ? "mana" : undefined,
-        })}
-        ${spot("shop", "마법상점", 58, 55, { tone: "shop", sub: "소환서 · 연마 · 각인" })}
-        ${spot("party", "파티", 78, 62, { tone: "party", sub: `${save.party.length}/4` })}
-        ${spot("wish", "소원의 사당", 22, 72, {
-          tone: "wish",
-          locked: !hasWish,
-          unlockLv: 7,
-          sub: hasWish ? "일 1회 소원" : undefined,
-        })}
-        ${spot("dojo", "마법진 도장", 44, 76, {
-          tone: "dojo",
-          locked: !dojoOk,
-          unlockLv: 8,
-          sub: dojoOk ? `수련 ${save.dojoDrills ?? 0}회` : undefined,
-        })}
-        ${spot("crystal_mine", "수정 광맥", 66, 74, {
-          tone: "mine",
-          locked: !mineOk,
-          unlockLv: 10,
-          sub: mineOk ? `대기 ${storedCrystal}` : undefined,
-          bubble: mineOk && storedCrystal > 0 ? String(storedCrystal) : undefined,
-          bubbleKind: mineOk && storedCrystal > 0 ? "crystal" : undefined,
-        })}
-        ${spot("glory", "영광 건물", 84, 78, { tone: "glory", sub: `영광 ${save.gloryPoints ?? 0}` })}
-        ${spot("guild", save.guildName ? save.guildName : "길드 홀", 30, 88, {
-          tone: "guild",
-          locked: !guildOk,
-          unlockLv: 12,
-          sub: guildOk ? "가입·출석" : undefined,
-        })}
-        ${spot("fusion", "융합의 별", 56, 90, {
-          tone: "fusion",
-          locked: !fusionOk,
-          unlockLv: 17,
-          sub: fusionOk ? "동일종 융합" : undefined,
-        })}
+        ${
+          islandLayoutEdit
+            ? `<div class="island-build-zone" aria-hidden="true" style="left:${ISLAND_LAYOUT_BOUNDS.minX}%;top:${ISLAND_LAYOUT_BOUNDS.minY}%;width:${ISLAND_LAYOUT_BOUNDS.maxX - ISLAND_LAYOUT_BOUNDS.minX}%;height:${ISLAND_LAYOUT_BOUNDS.maxY - ISLAND_LAYOUT_BOUNDS.minY}%">
+          <div class="island-build-zone-pad"></div>
+          <div class="island-build-zone-grid"></div>
+          <span class="island-build-zone-label">${t('ui.58c0079ead')}</span>
+        </div>`
+            : ""
+        }
+        ${spot("summon_hearth", islandSpotTitle("summon_hearth"), 30, 44, { tone: "summon", sub: `${t('ui.fa73f3a42f')} ${save.scrolls}${t('ui.b241493768')}` })}
+        ${spot("power_circle", islandSpotTitle("power_circle"), 50, 27, { tone: "forge", sub: t('ui.1ab42b48a4') })}
+        ${spot("gateway", islandSpotTitle("gateway"), 72, 40, { tone: "gate", sub: t('ui.13c82de693') })}
+        ${spot("mana_pond", islandSpotTitle("mana_pond"), 24, 58, {
+                  tone: "pond",
+                  sub: `Lv.${pondLv} ${"\u00B7"} ${t('ui.df72a8753d')} ${storedMana}/${pondCap}`,
+                  bubble: storedMana > 0 ? String(storedMana) : undefined,
+                  bubbleKind: storedMana > 0 ? "mana" : undefined,
+                })}
+        ${spot("shop", islandSpotTitle("shop"), 52, 52, { tone: "shop", sub: t('ui.ed3a862c2c') })}
+        ${spot("party", islandSpotTitle("party"), 76, 56, { tone: "party", sub: `${save.party.length}/4` })}
+        ${spot("wish", islandSpotTitle("wish"), 18, 40, {
+                  tone: "wish",
+                  locked: !hasWish,
+                  unlockLv: 7,
+                  sub: hasWish ? t('ui.6ca75b551e') : undefined,
+                })}
+        ${spot("dojo", islandSpotTitle("dojo"), 40, 70, {
+                  tone: "dojo",
+                  locked: !dojoOk,
+                  unlockLv: 8,
+                  sub: dojoOk ? `${t('ui.ca119dd0f6')} ${save.dojoDrills ?? 0}${t('ui.2fc05c02be')}` : undefined,
+                })}
+        ${spot("crystal_mine", islandSpotTitle("crystal_mine"), 66, 68, {
+                  tone: "mine",
+                  locked: !mineOk,
+                  unlockLv: 10,
+                  sub: mineOk ? `${t('ui.df72a8753d')} ${storedCrystal}` : undefined,
+                  bubble: mineOk && storedCrystal > 0 ? String(storedCrystal) : undefined,
+                  bubbleKind: mineOk && storedCrystal > 0 ? "crystal" : undefined,
+                })}
+        ${spot("glory", islandSpotTitle("glory"), 86, 74, { tone: "glory", sub: `${t('ui.ba0c9e096f')} ${save.gloryPoints ?? 0}` })}
+        ${spot("guild", save.guildName ? save.guildName : islandSpotTitle("guild"), 28, 82, {
+                  tone: "guild",
+                  locked: !guildOk,
+                  unlockLv: 12,
+                  sub: guildOk ? t('ui.d55c6d0b00') : undefined,
+                })}
+        ${spot("fusion", islandSpotTitle("fusion"), 58, 86, {
+                  tone: "fusion",
+                  locked: !fusionOk,
+                  unlockLv: 17,
+                  sub: fusionOk ? t('ui.1074e15059') : undefined,
+                })}
       </div>
     </div>
   </div>`;
@@ -1858,7 +2997,7 @@ function navBackBtn(opts?: {
   id?: string;
   label?: string;
 }): string {
-  const label = opts?.label ?? "데모";
+  const label = opts?.label ?? t('ui.ac9d7edf0f');
   const idAttr = opts?.id ? ` id="${opts.id}"` : "";
   const navAttr = opts?.id ? "" : ` data-nav="${opts?.nav ?? "home"}"`;
   return `<button type="button" class="nav-back"${idAttr}${navAttr} aria-label="${label}">
@@ -1882,7 +3021,7 @@ function hubShell(title: string, subtitle: string, body: string): string {
       <div class="hub-sky-veil"></div>
     </div>
     <div class="hub-content">
-      ${navBackBtn({ nav: "home", label: "돌아가기" })}
+      ${navBackBtn({ nav: "home", label: t('ui.1a7f31cadb') })}
       <header class="hub-hud">
         <p class="hub-title">${title}</p>
         <div class="hub-title-rule" aria-hidden="true"></div>
@@ -1895,7 +3034,7 @@ function hubShell(title: string, subtitle: string, body: string): string {
 
 function renderForgeReveal(): string {
   if (!forgeReveal) return "";
-  const title = forgeReveal.kind === "grind" ? "연마 완료" : "각인 완료";
+  const title = forgeReveal.kind === "grind" ? t('ui.d8680bb7b3') : t('ui.27cf021299');
   const mark = forgeReveal.kind === "grind" ? "?" : "?";
   return `<div class="forge-reveal forge-reveal--${forgeReveal.kind}" aria-live="polite">
     <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">${mark}</span>${title}</p>
@@ -1905,21 +3044,21 @@ function renderForgeReveal(): string {
       <p class="forge-after">${forgeReveal.after}</p>
     </div>
     <p class="forge-reveal-cost muted">${forgeReveal.cost}</p>
-    <button type="button" class="secondary full auth-btn-ghost" id="btn-forge-dismiss">확인</button>
+    <button type="button" class="secondary full auth-btn-ghost" id="btn-forge-dismiss">${t('ui.468266d639')}</button>
   </div>`;
 }
 
 function renderFusionReveal(): string {
   if (!fusionReveal) return "";
   return `<div class="forge-reveal forge-reveal--fusion" aria-live="polite">
-    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">融</span>융합 완료</p>
+    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">?</span>${t('ui.0b4d534507')}</p>
     <div class="forge-reveal-diff">
       <p class="forge-before">${fusionReveal.materials}</p>
       <p class="forge-arrow" aria-hidden="true">?</p>
       <p class="forge-after">${fusionReveal.result}</p>
     </div>
     <p class="forge-reveal-cost muted">${fusionReveal.cost}</p>
-    <button type="button" class="secondary full auth-btn-ghost" id="btn-fusion-dismiss">확인</button>
+    <button type="button" class="secondary full auth-btn-ghost" id="btn-fusion-dismiss">${t('ui.468266d639')}</button>
   </div>`;
 }
 
@@ -1929,27 +3068,27 @@ function renderDojo(): string {
   const untilMission = rem === 0 ? 3 : 3 - rem;
   const nextIsMission = rem === 2;
   const nextNote = nextIsMission
-    ? "다음 수련 시 묘수 미션 (진문석 +1)"
-    : `묘수 미션까지 ${untilMission}회`;
+    ? t('ui.4ae6a748b6')
+    : `${t('ui.210ca7ad33')} ${untilMission}${t('ui.2fc05c02be')}`;
   const manaGain = 120 + save.island.summonerLevel * 8;
   return hubShell(
-    "마법진 도장",
-    `수련 ${drills}회 · 서머너 Lv.${save.island.summonerLevel}`,
+    t('ui.81e2301960'),
+    `${t('ui.ca119dd0f6')} ${drills}${t('ui.5d8e2b5c4a')} Lv.${save.island.summonerLevel}`,
     `<div class="hub-panel">
       <div class="dojo-panel">
-        <p class="dojo-panel-title">수련 현황</p>
+        <p class="dojo-panel-title">${t('ui.1365952072')}</p>
         <div class="dojo-stats">
           <div class="dojo-stat">
-            <span class="dojo-stat-label">누적</span>
+            <span class="dojo-stat-label">${t('ui.c7b8d42347')}</span>
             <strong>${drills}</strong>
           </div>
           <div class="dojo-stat">
-            <span class="dojo-stat-label">누적</span>
+            <span class="dojo-stat-label">${t('ui.c7b8d42347')}</span>
             <strong>${nextNote}</strong>
           </div>
         </div>
-        <p class="muted dojo-hint">1회 수련 · 마나 +${manaGain} · EXP +15</p>
-        <button type="button" class="primary full" id="btn-dojo-drill">수련하기</button>
+        <p class="muted dojo-hint">1${t('ui.d975611bf8')} +${manaGain} ? EXP +15</p>
+        <button type="button" class="primary full" id="btn-dojo-drill">${t('ui.23a04d1293')}</button>
       </div>
     </div>`,
   );
@@ -1966,11 +3105,11 @@ function renderPond(): string {
   const stored = Math.floor(pond?.storedMana ?? 0);
   const fillPct = cap > 0 ? Math.min(100, Math.round((stored / cap) * 100)) : 0;
   return hubShell(
-        "수정 광맥",
-    `Lv.${lv} · ${rate}/hr · 저장 ${stored}/${cap}`,
+    t('ui.81e2301960'),
+    `Lv.${lv} ? ${rate}/hr ? ${t('ui.1f1712acff')} ${stored}/${cap}`,
     `<div class="hub-panel">
       <div class="pond-panel">
-        <p class="pond-panel-title">진액 연못</p>
+        <p class="pond-panel-title">${t('ui.7c70400fef')}</p>
         <div class="pond-bar" role="progressbar" aria-valuenow="${stored}" aria-valuemin="0" aria-valuemax="${cap}">
           <div class="pond-bar-fill" style="width:${fillPct}%"></div>
         </div>
@@ -1983,15 +3122,15 @@ function renderPond(): string {
         <button type="button" class="stage-card" id="btn-pond-collect">
           <span class="stage-card-mark" aria-hidden="true">?</span>
           <span class="stage-card-body">
-            <strong>수집하기</strong>
-            <small>${stored > 0 ? `대기 ${stored}` : "대기 없음"}</small>
+            <strong>${t('ui.b3fe16e64a')}</strong>
+            <small>${stored > 0 ? `${t('ui.df72a8753d')} ${stored}` : t('ui.2c1116fb7b')}</small>
           </span>
         </button>
         <button type="button" class="stage-card" id="btn-pond-upgrade" ${maxed ? "disabled" : ""}>
           <span class="stage-card-mark" aria-hidden="true">?</span>
           <span class="stage-card-body">
-            <strong>${maxed ? "최대 레벨" : `레벨업 → Lv.${lv + 1}`}</strong>
-            <small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `−마나 ${cost}`}</small>
+            <strong>${maxed ? t('ui.cc24e86471') : `${t('ui.e5f5d19099')} ? Lv.${lv + 1}`}</strong>
+            <small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `?${t('ui.dc78e6a251')} ${cost}`}</small>
           </span>
         </button>
       </div>
@@ -2010,11 +3149,11 @@ function renderMine(): string {
   const stored = Math.floor(mine?.storedCrystal ?? 0);
   const fillPct = cap > 0 ? Math.min(100, Math.round((stored / cap) * 100)) : 0;
   return hubShell(
-        "수정 광맥",
-    `Lv.${lv} · ${rate}/hr · 저장 ${stored}/${cap}`,
+    t('ui.81e2301960'),
+    `Lv.${lv} ? ${rate}/hr ? ${t('ui.1f1712acff')} ${stored}/${cap}`,
     `<div class="hub-panel">
       <div class="pond-panel mine-panel">
-        <p class="pond-panel-title">수정 광맥</p>
+        <p class="pond-panel-title">${t('ui.7c70400fef')}</p>
         <div class="pond-bar mine-bar" role="progressbar" aria-valuenow="${stored}" aria-valuemin="0" aria-valuemax="${cap}">
           <div class="pond-bar-fill mine-bar-fill" style="width:${fillPct}%"></div>
         </div>
@@ -2027,15 +3166,15 @@ function renderMine(): string {
         <button type="button" class="stage-card" id="btn-mine-collect">
           <span class="stage-card-mark" aria-hidden="true">?</span>
           <span class="stage-card-body">
-            <strong>수집하기</strong>
-            <small>${stored > 0 ? `대기 ${stored}` : "대기 없음"}</small>
+            <strong>${t('ui.b3fe16e64a')}</strong>
+            <small>${stored > 0 ? `${t('ui.df72a8753d')} ${stored}` : t('ui.2c1116fb7b')}</small>
           </span>
         </button>
         <button type="button" class="stage-card" id="btn-mine-upgrade" ${maxed ? "disabled" : ""}>
           <span class="stage-card-mark" aria-hidden="true">?</span>
           <span class="stage-card-body">
-            <strong>${maxed ? "최대 레벨" : `레벨업 → Lv.${lv + 1}`}</strong>
-            <small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `−마나 ${cost}`}</small>
+            <strong>${maxed ? t('ui.cc24e86471') : `${t('ui.e5f5d19099')} ? Lv.${lv + 1}`}</strong>
+            <small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `?${t('ui.dc78e6a251')} ${cost}`}</small>
           </span>
         </button>
       </div>
@@ -2049,27 +3188,27 @@ function renderWish(): string {
   const used = last === day;
   const reveal = wishReveal
     ? `<div class="forge-reveal forge-reveal--wish" aria-live="polite">
-    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">融</span>융합 완료</p>
+    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">?</span>${t('ui.0b4d534507')}</p>
         <p class="forge-after">${wishReveal}</p>
-        <button type="button" class="secondary full auth-btn-ghost" id="btn-wish-dismiss" style="margin-top:12px">확인</button>
+        <button type="button" class="secondary full auth-btn-ghost" id="btn-wish-dismiss" style="margin-top:12px">${t('ui.468266d639')}</button>
       </div>`
     : "";
   return hubShell(
-    "마법진 도장",
-    used ? `오늘 완료 · ${last}` : "일 1회 기원",
+    t('ui.81e2301960'),
+    used ? `${t('ui.ecc82466ef')} ? ${last}` : t('ui.b65d90440e'),
     `<div class="hub-panel">
       ${reveal}
       <div class="guild-panel wish-panel">
-        <p class="guild-panel-title">기원 현황</p>
+        <p class="guild-panel-title">${t('ui.6667aae26a')}</p>
         <div class="guild-stats">
-          <div class="guild-stat"><span>오늘</span><strong>${used ? "완료" : "가능"}</strong></div>
-          <div class="guild-stat"><span>최근</span><strong>${last ?? "—"}</strong></div>
-          <div class="guild-stat"><span>소환서</span><strong>${save.scrolls}</strong></div>
+          <div class="guild-stat"><span>${t('ui.2bdce5e8cc')}</span><strong>${used ? t('ui.8d8680373c') : t('ui.9614672b56')}</strong></div>
+          <div class="guild-stat"><span>${t('ui.0f8cd87cd5')}</span><strong>${last ?? "?"}</strong></div>
+          <div class="guild-stat"><span>${t('ui.fa73f3a42f')}</span><strong>${save.scrolls}</strong></div>
         </div>
-        <p class="muted dojo-hint">마나 · 크리스탈 · 소환서 중 하나가 무작위로 내려옵니다.</p>
+        <p class="muted dojo-hint">${t('ui.7e6bcf70a0')}.</p>
       </div>
       <button type="button" class="auth-btn-primary full" id="btn-wish-cast" ${used ? "disabled" : ""}>
-        ${used ? "오늘은 이미 빌었습니다" : "소원 빌기"}
+        ${used ? t('ui.566fd24305') : t('ui.7898ac8908')}
       </button>
     </div>`,
   );
@@ -2092,19 +3231,20 @@ function renderParty(): string {
       }
       return `<div class="party-slot el-${def?.element ?? "dark"}">
         <span class="party-slot-num">${i + 1}</span>
+        ${monsterArtImg(m.monsterId, "party-slot-art", 36)}
         <span class="party-slot-name">${describeOwned(m)}</span>
       </div>`;
     })
     .join("");
   return hubShell(
-    "??",
-    `편성 ${selected.size}/4 · 탭하여 선택`,
+    t('ui.759f762a02'),
+    `${t('ui.d5e7024eb8')} ${selected.size}/4 ? ${t('ui.269ecd9013')}`,
     `<div class="hub-panel">
-      <div class="party-lineup" aria-label="출전 라인">
-        <p class="party-lineup-title">출전 라인</p>
+      <div class="party-lineup" aria-label="${t('ui.a5d54ca91e')}">
+        <p class="party-lineup-title">${t('ui.a5d54ca91e')}</p>
         <div class="party-slots">${lineup}</div>
       </div>
-      <p class="section-label">로스터</p>
+      <p class="section-label">${t('ui.079b50d844')}</p>
       <div class="stage-list" id="party-pick">
         ${save.roster
           .map((m) => {
@@ -2114,29 +3254,165 @@ function renderParty(): string {
             const stats = preview
               ? `HP ${preview.final.hp} ? ATK ${preview.final.atk} ? DEF ${preview.final.def}`
               : def?.element ?? "";
-            return `<button type="button" class="stage-card party-card el-${def?.element ?? "dark"}${on ? " ? ?? ?" : ""}" data-party-toggle="${m.uid}">
-              <span class="stage-card-mark" aria-hidden="true">${on ? "?" : (def?.element?.[0]?.toUpperCase() ?? "?")}</span>
+            return `<button type="button" class="stage-card party-card el-${def?.element ?? "dark"}${on ? " picked" : ""}" data-party-toggle="${m.uid}">
+              <span class="stage-card-mark party-card-art" aria-hidden="true">${monsterArtImg(m.monsterId, "party-card-img", 44) || (on ? "?" : (def?.element?.[0]?.toUpperCase() ?? "?"))}</span>
               <span class="stage-card-body">
                 <strong>${describeOwned(m)}</strong>
                 <small>${stats}</small>
-                <small class="party-card-status">${on ? "출전 선택" : "대기"}</small>
+                <small class="party-card-status">${on ? t('ui.c33ba55e69') : t('ui.df72a8753d')}</small>
               </span>
             </button>`;
           })
           .join("")}
       </div>
-      <button type="button" class="auth-btn-primary full" id="btn-party-save" style="margin-top:10px">편성 저장 (${selected.size}/4)</button>
+      <button type="button" class="auth-btn-primary full" id="btn-party-save" style="margin-top:10px">${t('ui.5ef8e0b5ef')} (${selected.size}/4)</button>
     </div>`,
   );
 }
 
 function monsterElementLabel(el: string | undefined): string {
   if (!el) return "?";
-  return SUMMONER_ELEMENT_LABEL[el as SummonerElement] ?? el;
+  if ((SUMMONER_ELEMENTS as readonly string[]).includes(el)) {
+    return elementLabel(el as SummonerElement);
+  }
+  return el;
+}
+
+function monsterElementArtSrc(el: string | undefined | null): string | null {
+  if (!el) return null;
+  if (!(SUMMONER_ELEMENTS as readonly string[]).includes(el)) return null;
+  return `/art/ui/element/${el}.webp`;
+}
+
+function monsterSkillArtSrc(
+  monsterId: string | undefined | null,
+  skillIndex: number,
+  skill?: {
+    effects?: { kind: string }[];
+  } | null,
+): string {
+  if (monsterId && skillIndex >= 0 && skillIndex <= 2) {
+    return `/art/monster/skill/${monsterId}-s${skillIndex + 1}.webp`;
+  }
+  const kind = skill?.effects?.[0]?.kind;
+  if (kind === "heal") return "/art/ui/skill/heal.svg";
+  if (kind === "shield") return "/art/ui/skill/shield.svg";
+  if (kind === "mana") return "/art/ui/skill/mana.svg";
+  return "/art/ui/skill/damage.svg";
+}
+
+function monsterSkillDescLines(
+  skill: {
+    cooldown: number;
+    effects: (
+      | { kind: "damage"; target: string; coeff: number }
+      | { kind: "heal"; target: string; coeff: number }
+      | { kind: "shield"; target: string; coeff: number }
+      | { kind: "mana"; amount: number }
+    )[];
+  } | null | undefined,
+): string[] {
+  if (!skill) return [];
+  const lines: string[] = [
+    skill.cooldown > 0
+      ? t("ui.skillCdLabel", { n: skill.cooldown })
+      : t("ui.skillCdNone"),
+  ];
+  for (const e of skill.effects) {
+    if (e.kind === "damage") {
+      const pct = Math.round(e.coeff * 100);
+      lines.push(
+        e.target === "all_enemies"
+          ? t("ui.skillFxDamageAll", { pct })
+          : t("ui.skillFxDamageSingle", { pct }),
+      );
+    } else if (e.kind === "heal") {
+      const pct = Math.round(e.coeff * 100);
+      lines.push(
+        e.target === "self"
+          ? t("ui.skillFxHealSelf", { pct })
+          : t("ui.skillFxHealAlly", { pct }),
+      );
+    } else if (e.kind === "shield") {
+      lines.push(t("ui.skillFxShield", { pct: Math.round(e.coeff * 100) }));
+    } else if (e.kind === "mana") {
+      lines.push(t("ui.skillFxMana", { n: e.amount }));
+    }
+  }
+  return lines;
+}
+
+function monsterSkillUpgradeRows(
+  skill: { cooldown: number } | null | undefined,
+  currentLv: number,
+): string {
+  const rows: string[] = [];
+  for (let lv = 2; lv <= MAX_SKILL_LEVEL; lv++) {
+    const reached = currentLv >= lv;
+    let text = t("ui.skillLvPower", { pct: 8 });
+    if (lv >= MAX_SKILL_LEVEL && (skill?.cooldown ?? 0) > 0) {
+      text = t("ui.skillLvCd");
+    }
+    rows.push(
+      `<div class="mon-skill-uprow${reached ? " is-on" : ""}"><span class="mon-skill-uplv">Lv.${lv}</span><span class="mon-skill-uptext">${text}</span></div>`,
+    );
+  }
+  return rows.join("");
+}
+
+/** Map catalog role ? ???/???/???/???. */
+function monsterRoleLabel(role: string | undefined, base?: {
+  hp: number;
+  atk: number;
+  def: number;
+}): string {
+  switch (role) {
+    case "support":
+    case "stonesage":
+      return t("ui.roleSupport");
+    case "attacker":
+    case "capturer":
+    case "debuffer":
+      return t("ui.roleAttack");
+    case "tank":
+      if (base && base.def * 10 >= base.hp) return t("ui.roleDefense");
+      return t("ui.roleHp");
+    default:
+      break;
+  }
+  if (base) {
+    const { hp, atk, def: d } = base;
+    if (atk >= d && atk * 3 >= hp) return t("ui.roleAttack");
+    if (d * 10 >= hp && d >= atk) return t("ui.roleDefense");
+    if (hp >= atk * 3 && hp >= d * 10) return t("ui.roleHp");
+  }
+  return t("ui.roleSupport");
 }
 
 function scrollArtSrc(kind: ScrollKind): string {
   return `/art/ui/res/scroll-${kind}.webp`;
+}
+
+function monsterArtSrc(monsterId: string | undefined | null): string | null {
+  if (!monsterId) return null;
+  return `/art/monster/${monsterId}.webp`;
+}
+
+function summonerArtSrc(element: string | undefined | null): string {
+  const el = element && ["fire", "water", "wind", "light", "dark"].includes(element)
+    ? element
+    : "light";
+  return `/art/summoner/${el}.webp`;
+}
+
+function monsterArtImg(
+  monsterId: string | undefined | null,
+  className: string,
+  size = 44,
+): string {
+  const src = monsterArtSrc(monsterId);
+  if (!src) return "";
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
 }
 
 function renderSummonRevealCell(uid: string): string {
@@ -2146,7 +3422,7 @@ function renderSummonRevealCell(uid: string): string {
   const el = def?.element ?? "dark";
   const stars = "?".repeat(def?.naturalStars ?? 0);
   return `<div class="summon-multi-cell el-${el}">
-    <span class="summon-multi-seal" aria-hidden="true">${monsterElementLabel(el).slice(0, 1)}</span>
+    <span class="summon-multi-seal" aria-hidden="true">${monsterArtImg(mon.monsterId, "summon-multi-img", 48) || monsterElementLabel(el).slice(0, 1)}</span>
     <strong>${def?.nameKo ?? mon.monsterId}</strong>
     <small>${monsterElementLabel(el)} ? ${stars}</small>
   </div>`;
@@ -2172,21 +3448,20 @@ function renderSummon(): string {
   const hasReveal = revealedList.length > 0;
   const riteCore = isMulti
     ? `<div class="summon-reveal summon-reveal--multi" aria-live="polite">
-            <p class="equip-picker-title">장착 대상 선택</p>
+            <p class="equip-picker-title">${t('ui.d3d3707997')}</p>
         <div class="summon-multi-grid">
           ${lastSummonUids.map((uid) => renderSummonRevealCell(uid)).join("")}
         </div>
         <div class="summon-reveal-cta">
-          <button type="button" class="secondary" data-nav="enhance">강화진으로</button>
-                <button type="button" class="secondary" data-gear-equip="${i}">장착</button>
+          <button type="button" class="secondary" data-nav="enhance">${t('ui.91c120d564')}</button>
         </div>
       </div>`
     : revealed
       ? `<div class="summon-reveal el-${revEl}" aria-live="polite">
         <div class="summon-reveal-seal" aria-hidden="true">
-          <span class="summon-reveal-el">${monsterElementLabel(revEl).slice(0, 1)}</span>
+          ${monsterArtImg(revealed.monsterId, "summon-reveal-img", 72) || `<span class="summon-reveal-el">${monsterElementLabel(revEl).slice(0, 1)}</span>`}
         </div>
-        <p class="summon-reveal-kicker">소환 성공</p>
+        <p class="summon-reveal-kicker">${t('ui.4150cda5a2')}</p>
         <p class="summon-reveal-stars" aria-label="${revDef?.naturalStars ?? 0}?">${revStars}</p>
         <p class="summon-reveal-name">${revDef?.nameKo ?? revealed.monsterId}</p>
         <p class="summon-reveal-meta">${monsterElementLabel(revEl)} ? ?${revDef?.naturalStars ?? 0}</p>
@@ -2204,25 +3479,25 @@ function renderSummon(): string {
             inParty
               ? ""
               : `<button type="button" class="auth-btn-primary" id="btn-summon-party">${
-                  partyFull ? "파티에 넣기 (4번째 교체)" : "파티에 넣기"
+                  partyFull ? t('ui.f66f56e98f') : t('ui.6686a68a3f')
                 }</button>`
           }
-          <button type="button" class="secondary" data-nav="enhance">강화진으로</button>
+          <button type="button" class="secondary" data-nav="enhance">${t('ui.91c120d564')}</button>
         </div>
       </div>`
       : `<div class="summon-idle">
-        <p class="summon-idle-kicker">?? ??</p>
-        <p class="summon-idle-title">소환진이 고요합니다</p>
-        <p class="summon-idle-copy">소환서를 사용해 동료를 불러내세요</p>
+        <p class="summon-idle-kicker">${t('ui.c6953a607b')}</p>
+        <p class="summon-idle-title">${t('ui.290a3fb982')}</p>
+        <p class="summon-idle-copy">${t('ui.ea58ae8a45')}</p>
       </div>`;
   const shortLabel: Record<ScrollKind, string> = {
-    normal: "??",
-    premium: "??",
-    mystic: "??",
+    normal: t('ui.aef1a1e70e'),
+    premium: t('ui.1c208809ed'),
+    mystic: t('ui.2d586d2a06'),
   };
   const castRow = hasReveal
     ? ""
-    : `<div class="summon-cast-row" role="group" aria-label="?? ??">
+    : `<div class="summon-cast-row" role="group" aria-label="${t('ui.d0e22dbd7b')}">
         ${SCROLL_KINDS.map((kind) => {
           const n = scrollCount(save, kind);
           const ready1 = n >= SUMMON_SCROLL_COST;
@@ -2238,11 +3513,11 @@ function renderSummon(): string {
               <span class="summon-cast-stock"><b>${n}</b>?</span>
             </span>
             <span class="summon-cast-actions">
-              <button type="button" class="summon-cast-cta" data-summon-kind="${kind}" data-summon-count="1" ${ready1 ? "" : "disabled"} aria-label="${SCROLL_KIND_LABEL[kind]} 1? ??">
-                ${ready1 ? "데모" : "??"}
+              <button type="button" class="summon-cast-cta" data-summon-kind="${kind}" data-summon-count="1" ${ready1 ? "" : "disabled"} aria-label="${SCROLL_KIND_LABEL[kind]} ${t('ui.6b0ff13ffd')}">
+                ${ready1 ? t('ui.ac9d7edf0f') : t('ui.759f762a02')}
               </button>
-              <button type="button" class="summon-cast-cta summon-cast-cta--multi" data-summon-kind="${kind}" data-summon-count="${SUMMON_MULTI_COUNT}" ${ready10 ? "" : "disabled"} aria-label="${SCROLL_KIND_LABEL[kind]} ${SUMMON_MULTI_COUNT}? ??">
-                ${ready10 ? `${SUMMON_MULTI_COUNT}?` : "??"}
+              <button type="button" class="summon-cast-cta summon-cast-cta--multi" data-summon-kind="${kind}" data-summon-count="${SUMMON_MULTI_COUNT}" ${ready10 ? "" : "disabled"} aria-label="${SCROLL_KIND_LABEL[kind]} ${SUMMON_MULTI_COUNT}${t('ui.be988ce3e3')}">
+                ${ready10 ? `${SUMMON_MULTI_COUNT}?` : t('ui.759f762a02')}
               </button>
             </span>
           </div>`;
@@ -2250,7 +3525,7 @@ function renderSummon(): string {
       </div>`;
   return `<div class="summon-screen">
     ${hubShell(
-      "소환진",
+      t('ui.0d242e234f'),
       "",
       `<div class="hub-panel summon-panel hub-panel--visual">
         <div class="summon-rite${hasReveal ? " is-revealed" : ""}${anyReady && !hasReveal ? " is-ready" : ""} el-${hasReveal ? revEl : "idle"}">
@@ -2271,13 +3546,207 @@ function symbolWearer(symId: string): string | null {
   return mon ? describeOwned(mon) : null;
 }
 
+function symbolArtSrc(setId: string, slot: number): string {
+  return `/art/ui/symbol/${setId}-${slot}.svg`;
+}
+
+function symbolSetArtSrc(setId: string): string {
+  return `/art/ui/symbol/${setId}.svg`;
+}
+
+function symbolEmptySlotArtSrc(slot: number): string {
+  return `/art/ui/symbol/empty-${slot}.svg`;
+}
+
+function symbolCircleFrameSrc(): string {
+  return `/art/ui/symbol/circle-frame.svg`;
+}
+
+function symbolPlateSrc(rarityId: string, slot: number): string {
+  return `/art/ui/symbol/plate-${rarityId}-${slot}.svg`;
+}
+
+const SYMBOL_SET_ACCENTS: Record<string, string> = {
+  hwalro: "#6cbc7a",
+  yongmaeng: "#e07040",
+  haengma: "#4aa0d0",
+  gunhim: "#c9a227",
+  mussang: "#d0b070",
+  chimtu: "#c04070",
+  bogang: "#8ec8f0",
+  jipjung: "#9a70d0",
+};
+
+function symbolSetAccent(setId: string): string {
+  return SYMBOL_SET_ACCENTS[setId] ?? "#c9a227";
+}
+
+/** Shared mark + enhance badge used in inventory / modal / dock. */
+function renderSymIco(opts: {
+  setId: string;
+  slot: number;
+  enhance: number;
+  rarityId: string;
+  size?: "sm" | "md" | "lg";
+}): string {
+  const size = opts.size ?? "md";
+  return `<span class="sym-ico sym-ico--${size} rarity--${opts.rarityId}">
+    <img class="sym-ico-plate" src="${symbolPlateSrc(opts.rarityId, opts.slot)}" width="72" height="72" alt="" aria-hidden="true" draggable="false" />
+    <img class="sym-ico-art" src="${symbolArtSrc(opts.setId, opts.slot)}" width="64" height="64" alt="" draggable="false" />
+    <span class="sym-ico-plus">${opts.enhance}</span>
+  </span>`;
+}
+
+function symbolRarity(stars: number): { id: string; label: string } {
+  if (stars >= 6) return { id: "mythic", label: t("ui.rarityMythic") };
+  if (stars >= 5) return { id: "legendary", label: t("ui.rarityLegendary") };
+  if (stars >= 4) return { id: "epic", label: t("ui.rarityEpic") };
+  if (stars >= 3) return { id: "rare", label: t("ui.rarityRare") };
+  if (stars >= 2) return { id: "magic", label: t("ui.rarityMagic") };
+  return { id: "normal", label: t("ui.rarityNormal") };
+}
+
+function symbolStatLabelKo(stat: string): string {
+  switch (stat) {
+    case "ATK+": return t("ui.statAtk");
+    case "HP+": return t("ui.statHp");
+    case "DEF+": return t("ui.statDef");
+    case "SPD+": return t("ui.statSpd");
+    case "CRI Rate%": return t("ui.statCriRate");
+    case "CRI Dmg%": return t("ui.statCriDmg");
+    case "ACC%": return t("ui.statAcc");
+    case "RES%": return t("ui.statRes");
+    default: return stat;
+  }
+}
+
+function formatSymbolStatLine(stat: string, value: number): string {
+  const pct = stat.includes("%");
+  const n = Math.round(value);
+  return `${symbolStatLabelKo(stat)} +${n}${pct ? "%" : ""}`;
+}
+
+function symbolMainDisplayValue(sym: { mainValue: number; enhance: number }): number {
+  return sym.mainValue * (1 + sym.enhance * 0.08);
+}
+
+function symbolSubstatCapacity(stars: number): number {
+  if (stars >= 6) return 4;
+  if (stars >= 5) return 3;
+  if (stars >= 3) return 2;
+  return 1;
+}
+
+function findSymbolIndexById(id: string): number {
+  return save.symbols.findIndex((x) => x.id === id);
+}
+
+function renderSymbolDetailModal(): string {
+  if (symbolDetailIndex == null) return "";
+  const sym = save.symbols[symbolDetailIndex];
+  if (!sym) return "";
+  const set = SYMBOL_SETS.find((x) => x.id === sym.setId);
+  const rarity = symbolRarity(sym.stars);
+  const wornUid =
+    save.roster.find((m) => (m.symbolSlots ?? []).includes(sym.id))?.uid ?? null;
+  const wornMon = wornUid ? save.roster.find((m) => m.uid === wornUid) : null;
+  const wornName = wornMon ? describeOwned(wornMon) : null;
+  const mainLine = formatSymbolStatLine(sym.mainStat, symbolMainDisplayValue(sym));
+  const subs: string[] = [];
+  if (sym.prefixStat && sym.prefixValue) {
+    subs.push(formatSymbolStatLine(sym.prefixStat, sym.prefixValue));
+  }
+  const cap = symbolSubstatCapacity(sym.stars);
+  while (subs.length < cap) subs.push("");
+  const subHtml = subs
+    .map((line) =>
+      line
+        ? `<p class="sym-detail-sub">${line}</p>`
+        : `<p class="sym-detail-sub is-empty">&mdash;</p>`,
+    )
+    .join("");
+  const setLine = set
+    ? `<span class="sym-detail-set-ico"><img src="${symbolSetArtSrc(set.id)}" width="20" height="20" alt="" draggable="false" /></span><span class="sym-detail-set-text">${t("ui.setPiecesN", { n: set.pieces })} ${set.effectKo}</span>`
+    : "";
+  const imprintable = canImprintSymbol(sym);
+  const maxed = sym.enhance >= MAX_SYMBOL_ENHANCE;
+  const title = `${set?.nameKo ?? sym.setId} (${t("ui.slotN", { n: sym.slot })}) - ${rarity.label}`;
+  const thirdBtn = wornUid
+    ? `<button type="button" class="sym-detail-act" data-sym-detail-unequip>${t("ui.unequip")}</button>`
+    : `<button type="button" class="sym-detail-act" data-sym-detail-equip>${t("ui.818a75cd98")}</button>`;
+  return `<div class="settings-layer sym-detail-layer" id="sym-detail-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-sym-detail-close" aria-label="close"></button>
+    <div class="sym-detail-sheet rarity--${rarity.id}" role="dialog" aria-modal="true" aria-labelledby="sym-detail-title">
+      <button type="button" class="sym-detail-x" id="btn-sym-detail-x" aria-label="close">&times;</button>
+      <h3 class="sym-detail-title" id="sym-detail-title">${title}</h3>
+      <div class="sym-detail-body">
+        <div class="sym-detail-left">
+          <div class="sym-detail-hero">
+            ${renderSymIco({
+              setId: sym.setId,
+              slot: sym.slot,
+              enhance: sym.enhance,
+              rarityId: rarity.id,
+              size: "lg",
+            })}
+            <div class="sym-detail-main-wrap">
+              <p class="sym-detail-main">${mainLine}</p>
+              <small class="sym-detail-plus">+${sym.enhance}${wornName ? ` / ${wornName}` : ""}</small>
+            </div>
+          </div>
+          <div class="sym-detail-subs">${subHtml}</div>
+        </div>
+        <div class="sym-detail-right">
+          <p class="sym-detail-set">${setLine}</p>
+          <button type="button" class="sym-detail-act" data-sym-detail-imprint ${imprintable ? "" : "disabled"}>${t("ui.8b41b055f7")}</button>
+          <button type="button" class="sym-detail-act" data-sym-detail-enhance ${maxed ? "disabled" : ""}>${t("ui.3e1a337d93")}</button>
+          ${thirdBtn}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderSymbolBagExpandModal(): string {
+  if (!symbolBagExpandOpen) return "";
+  const cur = symbolBagCapacity(save);
+  const cost = symbolBagExpandCost(save);
+  if (cost == null) return "";
+  const add = SYMBOL_BAG_EXPAND_STEP;
+  const next = Math.min(SYMBOL_BAG_MAX_SLOTS, cur + add);
+  return `<div class="settings-layer sym-detail-layer sym-bag-expand-layer" id="sym-bag-expand-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-sym-bag-expand-close" aria-label="close"></button>
+    <div class="sym-bag-expand-sheet" role="dialog" aria-modal="true" aria-labelledby="sym-bag-expand-title">
+      <h3 class="sym-bag-expand-title" id="sym-bag-expand-title">${t("ui.expandSymbolBagTitle")}</h3>
+      <div class="sym-bag-expand-rows">
+        <div class="sym-bag-expand-row">
+          <span>${t("ui.expandSymbolBagCurrent")}</span>
+          <strong>${cur}</strong>
+        </div>
+        <div class="sym-bag-expand-row">
+          <span>${t("ui.expandSymbolBagAdd")}</span>
+          <strong>+${add} ? ${next}</strong>
+        </div>
+        <div class="sym-bag-expand-row sym-bag-expand-row--price">
+          <span>${t("ui.expandSymbolBagPrice")}</span>
+          <strong>${cost} ${t("res.crystal")}</strong>
+        </div>
+      </div>
+      <div class="sym-bag-expand-acts">
+        <button type="button" class="secondary" id="btn-sym-bag-expand-cancel">${t("ui.19b2d19bc1")}</button>
+        <button type="button" class="sym-bag-expand-ok" id="btn-sym-bag-expand-ok">${t("ui.expandSymbolBagConfirm")}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderSlotSymbolPicker(uid: string, slot: number): string {
   const candidates = save.symbols
     .map((s, i) => ({ s, i }))
     .filter(({ s }) => s.slot === slot);
   const mon = save.roster.find((m) => m.uid === uid);
   return `<div class="equip-picker slot-sym-picker" aria-live="polite">
-    <p class="equip-picker-title">슬롯 ${slot} 상징 선택</p>
+    <p class="equip-picker-title">${t('ui.81d226110c')} ${slot} ${t('ui.0e69339fa1')}</p>
     <p class="muted">${mon ? describeOwned(mon) : uid}</p>
     <div class="stage-list">
       ${
@@ -2285,23 +3754,24 @@ function renderSlotSymbolPicker(uid: string, slot: number): string {
           ? candidates
               .map(({ s, i }) => {
                 const worn = symbolWearer(s.id);
-                return `<button type="button" class="stage-card" data-slot-equip-sym="${i}">
-                  <span class="stage-card-mark" aria-hidden="true">${s.slot}</span>
+                const rarity = symbolRarity(s.stars);
+                return `<button type="button" class="stage-card stage-card--sym" data-slot-equip-sym="${i}">
+                  ${renderSymIco({ setId: s.setId, slot: s.slot, enhance: s.enhance, rarityId: rarity.id, size: "sm" })}
                   <span class="stage-card-body">
                     <strong>${describeSymbol(s)}</strong>
-                    <small>${worn ? `착용중 ${worn} · 이동` : "미장착"}</small>
+                    <small>${worn ? `${t('ui.ebe035bf0f')} ${worn} / ${t('ui.c686d05434')}` : t('ui.43d54a7358')}</small>
                   </span>
                 </button>`;
               })
               .join("")
-          : `<p class="muted">슬롯 ${slot}용 상징이 없습니다. 전투 드롭·상점을 확인하세요.</p>`
+          : `<p class="muted">${t("ui.noSymbolForSlot")}</p>`
       }
     </div>
-    <button type="button" class="secondary full" id="btn-slot-equip-cancel">취소</button>
+    <button type="button" class="secondary full" id="btn-slot-equip-cancel">${t('ui.19b2d19bc1')}</button>
   </div>`;
 }
 
-function renderSymbolLoadout(uid: string): string {
+function renderSymbolLoadout(uid: string, opts?: { slotsOnly?: boolean }): string {
   const mon = save.roster.find((m) => m.uid === uid);
   if (!mon) return "";
   const slots = mon.symbolSlots ?? [null, null, null, null, null, null];
@@ -2313,12 +3783,13 @@ function renderSymbolLoadout(uid: string): string {
       const sym = id ? save.symbols.find((s) => s.id === id) : null;
       const slotNum = i + 1;
       if (sym) {
-        return `<button type="button" class="slot-cell filled" data-unequip-uid="${uid}" data-unequip-slot="${slotNum}" title="탭하여 해제">
+        const symIdx = findSymbolIndexById(sym.id);
+        return `<button type="button" class="slot-cell filled" data-sym-detail="${symIdx}" title="${describeSymbol(sym)}">
           <span class="slot-num">${slotNum}</span>
           <span class="slot-label">${sym.setId}</span>
         </button>`;
       }
-      return `<button type="button" class="slot-cell empty${pickingSlot === slotNum ? " is-picking" : ""}" data-slot-pick-uid="${uid}" data-slot-pick="${slotNum}" title="상징 장착">
+      return `<button type="button" class="slot-cell empty${pickingSlot === slotNum ? " is-picking" : ""}" data-slot-pick-uid="${uid}" data-slot-pick="${slotNum}" title="${t('ui.3f1100d730')}">
         <span class="slot-num">${slotNum}</span>
         <span class="slot-label">+</span>
       </button>`;
@@ -2331,27 +3802,117 @@ function renderSymbolLoadout(uid: string): string {
         <div class="stat-cell"><span class="stat-cell-k">ATK</span><span class="stat-cell-v">${preview.final.atk}</span></div>
         <div class="stat-cell"><span class="stat-cell-k">DEF</span><span class="stat-cell-v">${preview.final.def}</span></div>
         <div class="stat-cell"><span class="stat-cell-k">SPD</span><span class="stat-cell-v">${preview.final.spd}</span></div>
-        <div class="stat-cell"><span class="stat-cell-k">치확</span><span class="stat-cell-v">${preview.final.critRate}%</span></div>
-        <div class="stat-cell"><span class="stat-cell-k">치피</span><span class="stat-cell-v">${preview.final.critDmg}%</span></div>
+        <div class="stat-cell"><span class="stat-cell-k">${t('ui.04de68c24f')}</span><span class="stat-cell-v">${preview.final.critRate}%</span></div>
+        <div class="stat-cell"><span class="stat-cell-k">${t('ui.0502c88b0e')}</span><span class="stat-cell-v">${preview.final.critDmg}%</span></div>
       </div>
       ${
         preview.sets.length
           ? `<div class="loadout-sets">${preview.sets
-              .map(
-                (s) =>
-                  `<span class="set-chip${s.active ? " active" : ""}">${s.nameKo} ${s.count}/${s.pieces}${s.active ? ` ? ${s.effectKo}` : ""}</span>`,
-              )
+              .map((s) => {
+                const accent = symbolSetAccent(s.setId);
+                return `<span class="set-chip${s.active ? " active" : ""}" style="--sym-accent:${accent}">
+                    <img class="set-chip-ico" src="${symbolSetArtSrc(s.setId)}" width="16" height="16" alt="" draggable="false" />
+                    <span class="set-chip-label">${s.nameKo} ${s.count}/${s.pieces}${s.active ? ` / ${s.effectKo}` : ""}</span>
+                  </span>`;
+              })
               .join("")}</div>`
-          : `<p class="muted loadout-sets-empty">세트 미진행</p>`
+          : `<p class="muted loadout-sets-empty">${t('ui.102350c0dd')}</p>`
       }`
     : "";
   const picker =
     slotEquipPick?.uid === uid
       ? renderSlotSymbolPicker(uid, slotEquipPick.slot)
       : "";
-  return `<div class="slot-row" aria-label="상징 슬롯">${cells}</div>${stats}${picker}`;
+  if (opts?.slotsOnly) {
+    return `<div class="slot-row" aria-label="${t('ui.7cf8acb154')}">${cells}</div>${picker}`;
+  }
+  return `<div class="slot-row" aria-label="${t('ui.7cf8acb154')}">${cells}</div>${stats}${picker}`;
 }
 
+
+
+function renderMonsterRuneCircle(uid: string): string {
+  const mon = save.roster.find((m) => m.uid === uid);
+  if (!mon) return "";
+  const slots = mon.symbolSlots ?? [null, null, null, null, null, null];
+  const pickingSlot = slotEquipPick?.uid === uid ? slotEquipPick.slot : null;
+  const cells = [0, 1, 2, 3, 4, 5]
+    .map((i) => {
+      const id = slots[i];
+      const sym = id ? save.symbols.find((x) => x.id === id) : null;
+      const slotNum = i + 1;
+      const picking = pickingSlot === slotNum ? " is-picking" : "";
+      if (sym) {
+        const symIdx = findSymbolIndexById(sym.id);
+        const rarity = symbolRarity(sym.stars);
+        return `<button type="button" class="rune-slot rune-slot--${slotNum} filled rarity--${rarity.id}${picking}" data-sym-detail="${symIdx}" title="${describeSymbol(sym)}">
+          <span class="rune-slot-face">
+            <img class="rune-slot-plate" src="${symbolPlateSrc(rarity.id, slotNum)}" width="72" height="72" alt="" aria-hidden="true" draggable="false" />
+            <img class="rune-slot-art" src="${symbolArtSrc(sym.setId, slotNum)}" width="72" height="72" alt="" draggable="false" />
+          </span>
+        </button>`;
+      }
+      return `<button type="button" class="rune-slot rune-slot--${slotNum} empty${picking}" data-slot-pick-uid="${uid}" data-slot-pick="${slotNum}" title="${t("ui.3f1100d730")}">
+          <span class="rune-slot-face">
+            <img class="rune-slot-art" src="${symbolEmptySlotArtSrc(slotNum)}" width="72" height="72" alt="" draggable="false" />
+          </span>
+        </button>`;
+    })
+    .join("");
+  const picker =
+    slotEquipPick?.uid === uid
+      ? renderSlotSymbolPicker(uid, slotEquipPick.slot)
+      : "";
+  return `<div class="rune-circle" aria-label="${t("ui.7cf8acb154")}">
+    <img class="rune-circle-frame" src="${symbolCircleFrameSrc()}" width="240" height="240" alt="" aria-hidden="true" draggable="false" />
+    ${cells}
+  </div>${picker}`;
+}
+
+/** Compact symbol bag grid (SW inventory) for the symbols tab left column. */
+function renderSymbolInventoryGrid(): string {
+  const cap = symbolBagCapacity(save);
+  const filled = Math.min(save.symbols.length, cap);
+  const expandCost = symbolBagExpandCost(save);
+  const atMax = expandCost == null;
+  const expandTitle = atMax
+    ? t("ui.expandSymbolBagMax")
+    : t("ui.expandSymbolBag", { cost: expandCost! });
+  const tiles: string[] = [];
+  for (let i = 0; i < cap; i++) {
+    const sym = i < filled ? save.symbols[i] : null;
+    if (sym) {
+      const worn = symbolWearer(sym.id);
+      const rarity = symbolRarity(sym.stars);
+      tiles.push(`<div class="mon-sym-inv-cell">
+        <button type="button" class="mon-sym-inv-tile rarity--${rarity.id}${worn ? " is-worn" : ""}" data-sym-detail="${i}" title="${describeSymbol(sym)}">
+          <span class="mon-sym-inv-ico" aria-hidden="true">
+            <img class="mon-sym-inv-plate" src="${symbolPlateSrc(rarity.id, sym.slot)}" alt="" draggable="false" />
+            <img class="mon-sym-inv-mark" src="${symbolArtSrc(sym.setId, sym.slot)}" alt="" draggable="false" />
+            <span class="mon-sym-inv-enh">${sym.enhance}</span>
+          </span>
+          ${worn ? `<span class="mon-sym-inv-worn">E</span>` : ""}
+        </button>
+      </div>`);
+    } else {
+      tiles.push(`<div class="mon-sym-inv-cell" aria-hidden="true">
+        <div class="mon-sym-inv-tile is-empty">
+          <span class="mon-sym-inv-empty-face"></span>
+        </div>
+      </div>`);
+    }
+  }
+  return `<div class="mon-sym-inv" aria-label="${t("ui.60fbf51b13")}">
+    <div class="mon-sym-inv-head">
+      <div class="mon-sym-inv-head-title">
+        <strong>${t("ui.60fbf51b13")}</strong>
+        <button type="button" class="mon-sym-inv-expand" data-expand-sym-bag ${atMax ? "disabled" : ""} title="${escapeHtml(expandTitle)}" aria-label="${escapeHtml(expandTitle)}">+</button>
+      </div>
+      <span>${filled}/${cap}</span>
+    </div>
+    <div class="mon-sym-inv-grid">${tiles.join("")}</div>
+  </div>`;
+}
 
 function drawSkillTreeLines(): void {
   const viz = app.querySelector<HTMLElement>("#skill-tree-viz");
@@ -2383,262 +3944,258 @@ function drawSkillTreeLines(): void {
   });
 }
 
+function sortRosterForSlots(
+  roster: typeof save.roster,
+  mode: RosterSortMode,
+): typeof save.roster {
+  const elOrder: Record<string, number> = {
+    fire: 0,
+    water: 1,
+    wind: 2,
+    light: 3,
+    dark: 4,
+  };
+  const list = roster.slice();
+  if (mode === "default") return list;
+  list.sort((a, b) => {
+    const da = getMonster(a.monsterId);
+    const db = getMonster(b.monsterId);
+    if (mode === "level") {
+      if (b.level !== a.level) return b.level - a.level;
+      return (db?.naturalStars ?? 0) - (da?.naturalStars ?? 0);
+    }
+    if (mode === "stars") {
+      const sa = da?.naturalStars ?? 0;
+      const sb = db?.naturalStars ?? 0;
+      if (sb !== sa) return sb - sa;
+      return b.level - a.level;
+    }
+    if (mode === "element") {
+      const ea = elOrder[da?.element ?? ""] ?? 9;
+      const eb = elOrder[db?.element ?? ""] ?? 9;
+      if (ea !== eb) return ea - eb;
+      if (b.level !== a.level) return b.level - a.level;
+      return (db?.naturalStars ?? 0) - (da?.naturalStars ?? 0);
+    }
+    // party
+    const pa = save.party.includes(a.uid) ? 0 : 1;
+    const pb = save.party.includes(b.uid) ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    if (b.level !== a.level) return b.level - a.level;
+    return (db?.naturalStars ?? 0) - (da?.naturalStars ?? 0);
+  });
+  return list;
+}
+
 function renderEnhance(): string {
-  const gearEnhanceCostLabel = (enhance: number): string => {
-    const mana = gearEnhanceManaCost(enhance);
-    const crystal = gearEnhanceCrystalCost(enhance);
-    return crystal > 0
-      ? `강화 −마나 ${mana} · −크리스탈 ${crystal}`
-      : `강화 −마나 ${mana}`;
-  };
-  const gear = normalizeSummonerGear(save.gear);
-  const weapon = gear.weapon;
-  const robe = gear.robe;
-  const acc = gear.accessory;
-  const orb = gear.orb;
-  const cloak = gear.cloak;
-  const ring = gear.ring;
-  const awaken = save.summonerAwaken ?? 0;
-  const awakenMax = awaken >= MAX_SUMMONER_AWAKEN;
-  const awakenNeedLv = awakenMinLevel(awaken);
-  const awakenMana = awakenManaCost(awaken);
-  const awakenCrystal = awakenCrystalCost(awaken);
-  const awakenLocked = save.island.summonerLevel < awakenNeedLv;
-  const awakenHint = awakenMax
-    ? `각성 MAX (+${MAX_SUMMONER_AWAKEN})`
-    : awakenLocked
-      ? `각성 Lv.${awakenNeedLv}+`
-      : `각성 +${awaken + 1} (−마나 ${awakenMana} · −크리스탈 ${awakenCrystal})`;
-  const leaderPct = (awakenLeaderAtkPct(awaken) * 100).toFixed(1);
-  const treeUnlocked = new Set(save.skillTree ?? []);
-  const branchMeta: {
-    id: (typeof SKILL_TREE_NODES)[number]["branch"];
-    label: string;
-    mark: string;
-  }[] = [
-    { id: "mana", label: "마나", mark: "液" },
-    { id: "sense", label: "감응", mark: "感" },
-    { id: "power", label: "위력", mark: "核" },
-    { id: "leader", label: "지휘", mark: "揮" },
-    { id: "mastery", label: "숙련", mark: "熟" },
-  ];
-  const fxNode =
-    enhanceFx?.kind === "node" ? enhanceFx.id : null;
-  const fxGear =
-    enhanceFx?.kind === "gear" ? enhanceFx.slot : null;
-  const tab: EnhanceTab =
-    equipPickSymIndex != null || forgeReveal
+  enhanceTab = "monsters";
+  const dock: "roster" | "symbols" =
+    equipPickSymIndex != null || forgeReveal || monBookDock === "symbols"
       ? "symbols"
-      : slotEquipPick
-        ? "monsters"
-        : enhanceTab;
+      : "roster";
 
-  const gearSlotBtn = (
-    slot: "weapon" | "robe" | "accessory" | "orb" | "cloak" | "ring",
-    piece: typeof weapon,
-    mark: string,
-    label: string,
-    detail: string,
-  ): string => {
-    const maxed = piece.enhance >= MAX_GEAR_ENHANCE;
-    const setName =
-      GEAR_SETS.find((s) => s.id === piece.setId)?.nameKo ?? piece.setId;
-    return `<button type="button" class="gear-slot${fxGear === slot ? " is-flash" : ""}${maxed ? " is-max" : ""}" data-gear="${slot}" ${maxed ? "disabled" : ""} title="${detail}">
-      <span class="gear-slot-mark" aria-hidden="true">${mark}</span>
-      <span class="gear-slot-label">${label}</span>
-      <span class="gear-slot-plus">+${piece.enhance}</span>
-      <span class="gear-slot-set">${setName}</span>
-      <span class="gear-slot-cost">${maxed ? "MAX" : gearEnhanceCostLabel(piece.enhance)}</span>
-    </button>`;
-  };
+  if (
+    !selectedEnhanceUid ||
+    !save.roster.some((m) => m.uid === selectedEnhanceUid)
+  ) {
+    selectedEnhanceUid = save.roster[0]?.uid ?? null;
+  }
+  const selectedMon = selectedEnhanceUid
+    ? save.roster.find((m) => m.uid === selectedEnhanceUid) ?? null
+    : null;
+  const selectedDef = selectedMon ? getMonster(selectedMon.monsterId) : null;
+  const selectedEl = selectedDef?.element ?? "dark";
+  const selectedPreview = selectedMon
+    ? previewOwnedCombatStats(save, selectedMon.uid)
+    : null;
+  const selectedEvo = selectedMon?.evolve ?? 0;
 
-  const setSummary = summarizeGearSets(gear)
-    .filter((s) => s.count > 0)
-    .map(
-      (s) =>
-        `<span class="set-chip${s.active2 || s.active4 || s.active6 ? " active" : ""}">${s.nameKo} ${s.count}${s.active6 ? " ?6" : s.active4 ? " ?4" : s.active2 ? " ?2" : ""}</span>`,
-    )
-    .join("");
+  if (slotEquipPick) monDetailTab = "symbols";
 
-  const branchIcon: Record<(typeof branchMeta)[number]["id"], string> = {
-    mana: "/art/ui/res/gold.svg",
-    sense: "/art/ui/res/energy.svg",
-    power: "/art/hub/emblem-forge.svg",
-    leader: "/art/ui/res/glory.svg",
-    mastery: "/art/hub/emblem-party.svg",
-  };
+  const rosterSlotCap = 60;
+  const sortedRoster = sortRosterForSlots(save.roster, rosterSortMode);
+  const rosterFilled = Math.min(sortedRoster.length, rosterSlotCap);
+  const rosterSlots = Array.from(
+    { length: rosterSlotCap },
+    (_, i) => sortedRoster[i] ?? null,
+  );
 
-  const TREE_POS: Record<string, { col: number; row: number }> = {
-    root_mana: { col: 1, row: 1 },
-    root_sense: { col: 3, row: 1 },
-    root_power: { col: 5, row: 1 },
-    mana_pool: { col: 1, row: 2 },
-    sense_start: { col: 3, row: 2 },
-    power_focus: { col: 5, row: 2 },
-    abyss_well: { col: 1, row: 3 },
-    sense_tide: { col: 3, row: 3 },
-    declare_mastery: { col: 5, row: 3 },
-    leader_aura: { col: 2, row: 3 },
-    dual_mastery: { col: 3, row: 4 },
-    clean_mastery: { col: 5, row: 4 },
-    war_chorus: { col: 2, row: 4 },
-    dual_surge: { col: 3, row: 5 },
-    clean_surge: { col: 5, row: 5 },
-  };
+  const monBookDetail = selectedMon
+    ? (() => {
+        const m = selectedMon;
+        const levels = (m.skillLevels ?? [1, 1, 1]) as [number, number, number];
+        const def = selectedDef;
+        const elLabel = monsterElementLabel(selectedEl);
+        const starsHtml = Array.from(
+          { length: Math.max(1, def?.naturalStars ?? 1) },
+          () => `<span class="mon-star" aria-hidden="true">&#9733;</span>`,
+        ).join("");
+        const art =
+          monsterArtImg(m.monsterId, "mon-inspect-art-img", 200) ||
+          `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
 
-  const renderTreeNodeBtn = (n: (typeof SKILL_TREE_NODES)[number]): string => {
-    const done = treeUnlocked.has(n.id);
-    const missReq = n.requires.some((r) => !treeUnlocked.has(r));
-    const lvLock = save.island.summonerLevel < n.minLevel;
-    const ready = !done && !missReq && !lvLock;
-    const cost =
-      n.crystalCost > 0
-              ? `−마나 ${n.manaCost} · −크 ${n.crystalCost}`
-              : `−마나 ${n.manaCost}`;
-    const hint = done
-      ? "데모"
-      : lvLock
-        ? `Lv.${n.minLevel}+`
-        : missReq
-          ? "데모"
-          : cost;
-    const state = done
-      ? "is-unlocked"
-      : ready
-        ? "is-ready"
-        : "is-locked";
-    const pos = TREE_POS[n.id] ?? { col: 1, row: 1 };
-    return `<button type="button" class="skill-tree-node ${state}${fxNode === n.id ? " is-pulse" : ""}" data-skill-node="${n.id}" data-tree-id="${n.id}" style="grid-column:${pos.col};grid-row:${pos.row}" ${done ? "disabled" : ""} title="${n.descKo}">
-      <span class="skill-tree-node-seal" aria-hidden="true">
-        <img src="${branchIcon[n.branch]}" width="26" height="26" alt="" draggable="false" />
-      </span>
-      <strong class="skill-tree-node-name">${n.nameKo}</strong>
-      <small class="skill-tree-node-hint">${hint}</small>
-    </button>`;
-  };
+        const expPct = Math.round((m.level / MAX_MONSTER_LEVEL) * 100);
+        const enhCost = enhanceManaCost(m.level);
+        const enhMaxed = m.level >= MAX_MONSTER_LEVEL;
+        if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
+        const focusSk = def?.skills[monSkillPick];
+        const focusLv = levels[monSkillPick] ?? 1;
 
-  const treeEdges = SKILL_TREE_NODES.flatMap((n) =>
-    n.requires.map((parent) => {
-      const live = treeUnlocked.has(parent);
-      return `<path class="skill-tree-edge${live ? " is-live" : ""}" data-from="${parent}" data-to="${n.id}" fill="none" />`;
-    }),
-  ).join("");
-
-  const treeBoard = `<div class="skill-tree-viz" id="skill-tree-viz">
-    <div class="skill-tree-cols" aria-hidden="true">
-      <span>??</span><span></span><span>??</span><span></span><span>??</span>
-    </div>
-    <svg class="skill-tree-lines" id="skill-tree-lines" aria-hidden="true">${treeEdges}</svg>
-    <div class="skill-tree-grid">
-      ${SKILL_TREE_NODES.map(renderTreeNodeBtn).join("")}
-    </div>
-  </div>`;
-
-  const monstersPanel = save.roster
-    .map((m) => {
-      const cost = enhanceManaCost(m.level);
-      const maxed = m.level >= MAX_MONSTER_LEVEL;
-      const evo = m.evolve ?? 0;
-      const evoMax = evo >= MAX_EVOLVE;
-      const evoNeed = evolveMinLevel(evo);
-      const evoMana = evolveManaCost(evo);
-      const evoCrystal = evolveCrystalCost(evo);
-      const evoCost =
-        evoCrystal > 0
-          ? `−마나 ${evoMana} · −크리스탈 ${evoCrystal}`
-          : `−마나 ${evoMana}`;
-      const evoHint = evoMax
-      ? "일반 진문"
-        : m.level < evoNeed
-          ? `진화 Lv.${evoNeed}+`
-          : `진화 ${evoCost}`;
-      const levels = (m.skillLevels ?? [1, 1, 1]) as [number, number, number];
-      const def = getMonster(m.monsterId);
-      const skillBtns = [0, 1, 2]
-        .map((si) => {
-          const lv = levels[si]!;
-          const maxSk = lv >= MAX_SKILL_LEVEL;
-          const need = skillUpMinMonsterLevel(lv);
-          const skCost = skillUpManaCost(si, lv);
-          const name = def?.skills[si]?.nameKo ?? `S${si + 1}`;
-          const hint = maxSk
-            ? `${name} MAX`
-            : m.level < need
-              ? `${name} Lv.${need}+`
-              : `${name}+ (?${skCost})`;
-          return `<button type="button" class="secondary sk-up" data-skup="${m.uid}" data-skslot="${si}" ${maxSk ? "disabled" : ""}>${hint}</button>`;
-        })
-        .join("");
-      const inParty = save.party.includes(m.uid);
-      const preview = previewOwnedCombatStats(save, m.uid);
-      return `<div class="enhance-mon el-${def?.element ?? "dark"}">
-            <div class="enhance-mon-head">
-              <button type="button" class="stage-card enhance-main" data-enh="${m.uid}" ${maxed ? "disabled" : ""}>
-                <span class="stage-card-mark" aria-hidden="true">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>
-                <span class="stage-card-body">
-                  <strong>${describeOwned(m)}${inParty ? " · 파티" : ""}</strong>
-                  <small>${preview ? `HP ${preview.final.hp} · ATK ${preview.final.atk}` : ""}${maxed ? " · 최대" : ` · 강화 −마나 ${cost}`}</small>
-                </span>
-              </button>
-              <button type="button" class="secondary enhance-evo" data-evo="${m.uid}" ${evoMax ? "disabled" : ""}>
-                ${evoHint}
-              </button>
-            </div>
-            ${renderSymbolLoadout(m.uid)}
-            <div class="skill-up-row">${skillBtns}</div>
-          </div>`;
-    })
-    .join("");
-
-  const gearAffixRows = (
-    [
-      ["weapon", "무기", weapon],
-      ["robe", "로브", robe],
-      ["accessory", "장신구", acc],
-      ["orb", "마법구", orb],
-      ["cloak", "망토", cloak],
-      ["ring", "반지", ring],
-    ] as const
-  )
-    .map(
-      ([slot, label, piece]) => `<div class="gear-set-row">
-            <span class="gear-set-slot">${label}</span>
-            <div class="gear-set-chips">
-              ${GEAR_SETS.map((s) => {
-                const active = piece.setId === s.id;
-                return `<button type="button" class="set-chip-btn${active ? " is-active" : ""}" data-gear-set="${slot}" data-set-id="${s.id}" ${active ? "disabled" : ""}>${s.nameKo}</button>`;
-              }).join("")}
-            </div>
-          </div>`,
-    )
-    .join("");
-
-  const bagLen = (save.gearBag ?? []).length;
-  const bagGrid =
-    bagLen === 0
-      ? `<p class="muted">가방이 비어 있습니다. 장비 금고에서 드롭을 획득하세요.</p>`
-      : `<div class="gear-bag-grid">${(save.gearBag ?? [])
-          .map((p, i) => {
-            const setName =
-              GEAR_SETS.find((s) => s.id === p.setId)?.nameKo ?? "";
-            return `<div class="gear-tile">
-              <button type="button" class="gear-tile-main" data-gear-equip="${i}">
-                <span class="gear-tile-mark" aria-hidden="true">${p.slot[0]?.toUpperCase() ?? "?"}</span>
-                <strong>${describeGear(p)}</strong>
-                <small>+${p.enhance}${setName ? ` ? ${setName}` : ""}</small>
-              </button>
-              <div class="gear-tile-actions">
-                <button type="button" class="secondary" data-gear-equip="${i}">장착</button>
-                <button type="button" class="secondary" data-gear-sell="${i}">+${gearSellMana(p)}${gearSellCrystal(p) > 0 ? ` ? +?${gearSellCrystal(p)}` : ""}</button>
-              </div>
-            </div>`;
+        const skillIcons = [0, 1, 2]
+          .map((si) => {
+            const sk = def?.skills[si];
+            const lv = levels[si] ?? 1;
+            const on = monSkillPick === si;
+            const maxSk = lv >= MAX_SKILL_LEVEL;
+            return `<button type="button" class="mon-skill-ico${on ? " is-active" : ""}${maxSk ? " is-max" : ""}" data-mon-skill-pick="${si}" aria-pressed="${on}" title="${sk?.nameKo ?? `S${si + 1}`}">
+            <img class="mon-skill-ico-img" src="${monsterSkillArtSrc(m.monsterId, si, sk)}" width="56" height="56" alt="" draggable="false" />
+            <span class="mon-skill-ico-lv">${maxSk ? "MAX" : `Lv.${lv}`}</span>
+          </button>`;
           })
-          .join("")}</div>`;
+          .join("");
 
-  const symbolsPanel = `${
+        const fodderList = save.roster.filter(
+          (x) => x.monsterId === m.monsterId && x.uid !== m.uid,
+        );
+        const feedRows = fodderList
+          .map((f) => {
+            const thumb =
+              monsterArtImg(f.monsterId, "mon-skill-feed-img", 36) || "?";
+            return `<button type="button" class="mon-skill-feed" data-skill-feed-target="${m.uid}" data-skill-feed-fodder="${f.uid}">
+              <span class="mon-skill-feed-art">${thumb}</span>
+              <span class="mon-skill-feed-body">
+                <strong>Lv.${f.level}</strong>
+                <small>${t("ui.skillFeedUse")}</small>
+              </span>
+            </button>`;
+          })
+          .join("");
+
+        const skillDescLines = monsterSkillDescLines(focusSk);
+        const skillsPanel = `<div class="mon-pane mon-pane--skills">
+        <div class="mon-skill-icos" role="tablist" aria-label="skills">${skillIcons}</div>
+        <div class="mon-skill-detail mon-skill-detail--tall">
+          <div class="mon-skill-detail-head">
+            <strong class="mon-skill-detail-name">${focusSk?.nameKo ?? `S${monSkillPick + 1}`}</strong>
+            <span class="mon-skill-detail-lv">Lv.${focusLv}${focusLv >= MAX_SKILL_LEVEL ? " MAX" : ""}</span>
+          </div>
+          <ul class="mon-skill-detail-desc">
+            ${skillDescLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}
+          </ul>
+          <div class="mon-skill-upgrades">${monsterSkillUpgradeRows(focusSk, focusLv)}</div>
+        </div>
+        <div class="mon-skill-footer">
+          <button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--cost" data-enh="${m.uid}" ${enhMaxed ? "disabled" : ""}>${
+            enhMaxed
+              ? "MAX"
+              : `<span class="mon-enh-label">${escapeHtml(t("ui.3e1a337d93"))}</span><span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(enhCost)}</strong></span>`
+          }</button>
+          <p class="mon-skill-feed-caption">${escapeHtml(t("ui.skillFeedTitle"))}</p>
+          ${feedRows ? `<div class="mon-skill-feed-list">${feedRows}</div>` : ""}
+        </div>
+      </div>`;
+
+        const awakenPanel = `<div class="mon-pane mon-pane--awaken">
+        <p class="mon-pane-copy muted">${t("ui.awakenComingSoon")}</p>
+      </div>`;
+
+        const symbolsPanel = `<div class="mon-pane mon-pane--symbols">
+        ${renderMonsterRuneCircle(m.uid)}
+        <div class="rune-effect-block">
+          <div class="rune-effect-head">
+            <strong>${t("ui.effect")}</strong>
+          </div>
+          ${
+            selectedPreview?.sets.length
+              ? `<div class="loadout-sets">${selectedPreview.sets
+                  .map((set) => {
+                    const accent = symbolSetAccent(set.setId);
+                    return `<span class="set-chip${set.active ? " active" : ""}" style="--sym-accent:${accent}">
+                      <img class="set-chip-ico" src="${symbolSetArtSrc(set.setId)}" width="16" height="16" alt="" draggable="false" />
+                      <span class="set-chip-label">${set.nameKo} ${set.count}/${set.pieces}${set.active ? ` / ${set.effectKo}` : ""}</span>
+                    </span>`;
+                  })
+                  .join("")}</div>`
+              : `<p class="muted loadout-sets-empty">${t("ui.setBonusNone")}</p>`
+          }
+        </div>
+      </div>`;
+
+        const infoPanel = `<div class="mon-pane mon-pane--info">
+          <div class="mon-book-stats mon-inspect-stats mon-inspect-stats--stack" role="list">
+            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statHp")}</span><span class="stat-cell-v">${selectedPreview?.final.hp ?? "-"}</span></div>
+            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statAtk")}</span><span class="stat-cell-v">${selectedPreview?.final.atk ?? "-"}</span></div>
+            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statDef")}</span><span class="stat-cell-v">${selectedPreview?.final.def ?? "-"}</span></div>
+            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statSpd")}</span><span class="stat-cell-v">${selectedPreview?.final.spd ?? "-"}</span></div>
+            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statCriRate")}</span><span class="stat-cell-v">${selectedPreview ? selectedPreview.final.critRate + "%" : "-"}</span></div>
+            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statCriDmg")}</span><span class="stat-cell-v">${selectedPreview ? selectedPreview.final.critDmg + "%" : "-"}</span></div>
+            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statAcc")}</span><span class="stat-cell-v">${selectedPreview ? selectedPreview.final.accuracy + "%" : "-"}</span></div>
+            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statRes")}</span><span class="stat-cell-v">${selectedPreview ? selectedPreview.final.resistance + "%" : "-"}</span></div>
+          </div>
+        </div>`;
+
+        const infoPane = infoPanel.replace(
+          'class="mon-pane mon-pane--info"',
+          `class="mon-pane mon-pane--info" data-mon-pane="info"${monDetailTab === "info" ? "" : " hidden"}`,
+        );
+        const skillsPane = skillsPanel.replace(
+          'class="mon-pane mon-pane--skills"',
+          `class="mon-pane mon-pane--skills" data-mon-pane="skills"${monDetailTab === "skills" ? "" : " hidden"}`,
+        );
+        const awakenPane = awakenPanel.replace(
+          'class="mon-pane mon-pane--awaken"',
+          `class="mon-pane mon-pane--awaken" data-mon-pane="awaken"${monDetailTab === "awaken" ? "" : " hidden"}`,
+        );
+        const symbolsPane = symbolsPanel.replace(
+          'class="mon-pane mon-pane--symbols"',
+          `class="mon-pane mon-pane--symbols" data-mon-pane="symbols"${monDetailTab === "symbols" ? "" : " hidden"}`,
+        );
+
+        const artCol = `<div class="mon-inspect-col-art${monDetailTab === "symbols" ? " is-hidden" : ""}">
+            <div class="mon-inspect-id">
+              <span class="mon-el-ico mon-el-ico--${selectedEl}" aria-hidden="true" title="${elLabel}">
+                <img class="mon-el-ico-img" src="${monsterElementArtSrc(selectedEl) ?? ""}" width="36" height="36" alt="" draggable="false" />
+              </span>
+              <div class="mon-inspect-id-text">
+                <strong class="mon-inspect-name">${def?.nameKo ?? m.monsterId}</strong>
+                <div class="mon-inspect-meta">
+                  <span class="mon-inspect-role">${monsterRoleLabel(def?.role, def?.baseStats)}</span>
+                </div>
+              </div>
+            </div>
+            <div class="mon-inspect-art">
+              ${art}
+              <div class="mon-inspect-stars mon-inspect-stars--overlay" aria-label="${def?.naturalStars ?? 0}">${starsHtml}${selectedEvo > 0 ? ` <span class="mon-evo">+${selectedEvo}</span>` : ""}</div>
+              <div class="mon-inspect-art-foot" role="progressbar" aria-valuenow="${expPct}" aria-valuemin="0" aria-valuemax="100" aria-label="Lv.${m.level}">
+                <span class="mon-inspect-art-lv">Lv.${m.level}</span>
+                <div class="mon-inspect-art-exp"><div class="mon-inspect-art-exp-fill" style="width:${Math.min(100, expPct)}%"></div></div>
+              </div>
+            </div>
+          </div>`;
+        const invCol = `<div class="mon-inspect-col-inv${monDetailTab !== "symbols" ? " is-hidden" : ""}">${renderSymbolInventoryGrid()}</div>`;
+
+        return `<div class="mon-inspect el-${selectedEl}">
+      <div class="mon-inspect-shell">
+        <div class="mon-inspect-tabs mon-inspect-tabs--row mon-inspect-tabs--4" role="tablist" aria-label="detail">
+          <button type="button" class="mon-side-tab${monDetailTab === "info" ? " is-active" : ""}" data-mon-detail-tab="info" role="tab" aria-selected="${monDetailTab === "info"}">${t("ui.tabInfo")}</button>
+          <button type="button" class="mon-side-tab${monDetailTab === "skills" ? " is-active" : ""}" data-mon-detail-tab="skills" role="tab" aria-selected="${monDetailTab === "skills"}">${t("ui.2b47128fd2")}</button>
+          <button type="button" class="mon-side-tab${monDetailTab === "awaken" ? " is-active" : ""}" data-mon-detail-tab="awaken" role="tab" aria-selected="${monDetailTab === "awaken"}">${t("ui.a2d1ab7b28")}</button>
+          <button type="button" class="mon-side-tab${monDetailTab === "symbols" ? " is-active" : ""}" data-mon-detail-tab="symbols" role="tab" aria-selected="${monDetailTab === "symbols"}">${t("ui.60fbf51b13")}</button>
+        </div>
+        <div class="mon-inspect-body${monDetailTab === "symbols" ? " mon-inspect-body--symbols" : ""}">
+          ${artCol}
+          ${invCol}
+          <div class="mon-inspect-panel">${infoPane}${skillsPane}${awakenPane}${symbolsPane}</div>
+        </div>
+      </div>
+    </div>`;
+      })()
+    : `<div class="mon-book-empty muted">${t("ui.079b50d844")}</div>`;
+
+  const symbolsDock = `${
     equipPickSymIndex != null && save.symbols[equipPickSymIndex]
       ? `<div class="equip-picker" aria-live="polite">
-            <p class="equip-picker-title">장착 대상 선택</p>
+            <p class="equip-picker-title">${t("ui.d3d3707997")}</p>
             <p class="muted">${describeSymbol(save.symbols[equipPickSymIndex]!)}</p>
             <div class="stage-list">
               ${save.roster
@@ -2646,103 +4203,158 @@ function renderEnhance(): string {
                   const inParty = save.party.includes(m.uid);
                   const slots = m.symbolSlots ?? [];
                   const slot = save.symbols[equipPickSymIndex!]!.slot - 1;
-                  const occupied = slots[slot] ? " · 슬롯 교체" : "";
+                  const occupied = slots[slot] ? t("ui.50ce91ae85") : "";
                   return `<button type="button" class="stage-card" data-equip-to="${m.uid}">
-                    <span class="stage-card-mark" aria-hidden="true">${inParty ? "?" : "?"}</span>
+                    <span class="stage-card-mark" aria-hidden="true">${monsterArtImg(m.monsterId, "mon-slot-img", 36) || "?"}</span>
                     <span class="stage-card-body">
-                  <strong>${describeOwned(m)}${inParty ? " · 파티" : ""}</strong>
-                      <small>슬롯 ${save.symbols[equipPickSymIndex!]!.slot}${occupied}</small>
+                  <strong>${describeOwned(m)}${inParty ? t("ui.7b191a9f9f") : ""}</strong>
+                      <small>${t("ui.81d226110c")} ${save.symbols[equipPickSymIndex!]!.slot}${occupied}</small>
                     </span>
                   </button>`;
                 })
                 .join("")}
             </div>
-            <button type="button" class="secondary full auth-btn-ghost" id="btn-equip-cancel">취소</button>
+            <button type="button" class="secondary full auth-btn-ghost" id="btn-equip-cancel">${t("ui.19b2d19bc1")}</button>
           </div>`
       : ""
   }
-    <div class="stage-list sym-inventory">
-      ${save.symbols
-        .map((s, i) => {
-          const maxed = s.enhance >= MAX_SYMBOL_ENHANCE;
-          const imprintable = canImprintSymbol(s);
-          const grindable = canGrindSymbol(s);
-          const picking = equipPickSymIndex === i;
-          const worn = symbolWearer(s.id);
-          return `<div class="sym-card${picking ? " is-picking" : ""}">
-            <button type="button" class="sym-card-main" data-sym="${i}" ${maxed ? "disabled" : ""}>
-              <span class="stage-card-mark" aria-hidden="true">${s.slot}</span>
-              <span class="stage-card-body">
-                <strong>${worn ? "E ? " : ""}${describeSymbol(s)}</strong>
-                <small>${worn ? `착용 ${worn}` : "미장착"}${maxed ? " · 최대" : ` · 강화 −마나 ${symbolEnhanceManaCost(s.enhance)}`}</small>
+    <div class="mon-sym-grid">
+      ${save.symbols.length
+        ? save.symbols
+            .map((sym, i) => {
+              const maxed = sym.enhance >= MAX_SYMBOL_ENHANCE;
+              const imprintable = canImprintSymbol(sym);
+              const grindable = canGrindSymbol(sym);
+              const picking = equipPickSymIndex === i;
+              const worn = symbolWearer(sym.id);
+              const rarity = symbolRarity(sym.stars);
+              const setDef = SYMBOL_SETS.find((x) => x.id === sym.setId);
+              return `<div class="mon-sym-tile${picking ? " is-picking" : ""}">
+            <button type="button" class="mon-sym-main" data-sym-detail="${i}" title="${describeSymbol(sym)}">
+              ${renderSymIco({
+                setId: sym.setId,
+                slot: sym.slot,
+                enhance: sym.enhance,
+                rarityId: rarity.id,
+                size: "sm",
+              })}
+              <span class="mon-sym-main-text">
+                <strong class="mon-sym-name">${worn ? "E / " : ""}${setDef?.nameKo ?? sym.setId}</strong>
+                <small>+${sym.enhance}${worn ? ` / ${worn}` : ""}</small>
               </span>
             </button>
-            <div class="sym-card-actions">
-              <button type="button" class="secondary" data-grind="${i}" ${grindable ? "" : "disabled"}>연마</button>
-              <button type="button" class="secondary" data-imprint="${i}" ${imprintable ? "" : "disabled"}>${imprintable ? "각인" : "각인×"}</button>
-              <button type="button" class="secondary sym-eq${picking ? " active" : ""}" data-equip-sym="${i}">${picking ? "선택중" : "장착"}</button>
-              <button type="button" class="secondary" data-sell-sym="${i}">+${symbolSellMana(s.enhance)}</button>
+            <div class="mon-sym-actions">
+              <button type="button" class="secondary" data-grind="${i}" ${grindable ? "" : "disabled"}>${t("ui.c14c1b1bc6")}</button>
+              <button type="button" class="secondary" data-imprint="${i}" ${imprintable ? "" : "disabled"}>${imprintable ? t("ui.8b41b055f7") : t("ui.b5f528925f")}</button>
+              <button type="button" class="secondary sym-eq${picking ? " active" : ""}" data-equip-sym="${i}">${picking ? t("ui.d21c4c3248") : t("ui.818a75cd98")}</button>
+              <button type="button" class="secondary" data-sell-sym="${i}">+${symbolSellMana(sym.enhance)}</button>
             </div>
           </div>`;
-        })
-        .join("")}
+            })
+            .join("")
+        : `<p class="muted mon-book-empty">${t("ui.43d54a7358")}</p>`}
     </div>`;
 
-  const body = `<div class="hub-panel enhance-panel">
+  const rosterDock = `<div class="mon-roster-dock">
+      <div class="mon-roster-toolbar">
+        <label class="mon-roster-sort" for="mon-roster-sort">
+          <span class="mon-roster-sort-label">${t("ui.rosterSort")}</span>
+          <select id="mon-roster-sort" class="mon-roster-sort-select" aria-label="${t("ui.rosterSort")}">
+            <option value="default"${rosterSortMode === "default" ? " selected" : ""}>${t("ui.sortDefault")}</option>
+            <option value="level"${rosterSortMode === "level" ? " selected" : ""}>${t("ui.sortLevel")}</option>
+            <option value="stars"${rosterSortMode === "stars" ? " selected" : ""}>${t("ui.sortStars")}</option>
+            <option value="element"${rosterSortMode === "element" ? " selected" : ""}>${t("ui.sortElement")}</option>
+            <option value="party"${rosterSortMode === "party" ? " selected" : ""}>${t("ui.sortParty")}</option>
+          </select>
+        </label>
+        <span class="mon-roster-count" aria-label="${rosterFilled}/${rosterSlotCap}">${rosterFilled}/${rosterSlotCap}</span>
+      </div>
+      <div class="mon-book-inv mon-book-inv--rail" role="listbox" aria-label="${t("ui.fa2390684b")}">
+      ${rosterSlots
+        .map((m) => {
+          if (!m) {
+            return `<div class="mon-slot mon-slot--portrait mon-slot--empty" role="presentation" aria-hidden="true">
+        <span class="mon-slot-art">
+          <img class="mon-slot-img mon-slot-img--empty" src="/art/ui/mon-slot-empty.svg" width="56" height="56" alt="" draggable="false" />
+        </span>
+      </div>`;
+          }
+          const def = getMonster(m.monsterId);
+          const el = def?.element ?? "dark";
+          const on = m.uid === selectedEnhanceUid;
+          const starN = Math.max(1, def?.naturalStars ?? 1);
+          const starsHtml = Array.from(
+            { length: starN },
+            () => `<span class="mon-star" aria-hidden="true">&#9733;</span>`,
+          ).join("");
+          const art =
+            monsterArtImg(m.monsterId, "mon-slot-img", 56) ||
+            (def?.element?.[0]?.toUpperCase() ?? "?");
+          return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${on ? " is-active" : ""}" data-select-mon="${m.uid}" role="option" aria-selected="${on ? "true" : "false"}" title="${describeOwned(m)}">
+        <span class="mon-slot-art" aria-hidden="true">${art}</span>
+        <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
+        <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
+      </button>`;
+        })
+        .join("")}
+    </div>
+    </div>`;
+
+  const monstersPanel = `<div class="mon-book">
+    <div class="mon-book-viewer">${monBookDetail}</div>
+    ${
+      dock === "symbols"
+        ? `<div class="mon-sym-sheet" aria-live="polite">
+      <div class="mon-sym-sheet-head">
+        <strong>${t("ui.60fbf51b13")}</strong>
+        <button type="button" class="secondary mon-sym-sheet-close" data-mon-dock="roster">${t("ui.94b7dba159")}</button>
+      </div>
+      <div class="mon-sym-sheet-body">${symbolsDock}</div>
+    </div>`
+        : ""
+    }
+    ${rosterDock}
+  </div>`;
+
+  const body = `<div class="hub-panel enhance-panel enhance-panel--desk">
     ${renderForgeReveal()}
-    <div class="enhance-tabs" role="tablist" aria-label="강화 구역">
-      <button type="button" class="enhance-tab${tab === "awaken" ? " is-active" : ""}" data-enhance-tab="awaken" role="tab" aria-selected="${tab === "awaken"}">각성·트리</button>
-      <button type="button" class="enhance-tab${tab === "monsters" ? " is-active" : ""}" data-enhance-tab="monsters" role="tab" aria-selected="${tab === "monsters"}">몬스터</button>
-      <button type="button" class="enhance-tab${tab === "gear" ? " is-active" : ""}" data-enhance-tab="gear" role="tab" aria-selected="${tab === "gear"}">장비</button>
-      <button type="button" class="enhance-tab${tab === "symbols" ? " is-active" : ""}" data-enhance-tab="symbols" role="tab" aria-selected="${tab === "symbols"}">상징</button>
-    </div>
-    <div class="enhance-panels">
-      <section class="enhance-section${tab === "awaken" ? " is-active" : ""}" data-enhance-panel="awaken" ${tab === "awaken" ? "" : "hidden"}>
-        <p class="section-label">장비 드롭</p>
-        <div class="stage-list">
-          <button type="button" class="stage-card" id="btn-awaken" data-awaken ${awakenMax ? "disabled" : ""}>
-            <span class="stage-card-mark" aria-hidden="true">?</span>
-            <span class="stage-card-body">
-              <strong>각성 ${awaken}/${MAX_SUMMONER_AWAKEN}</strong>
-              <small>리더 공+${leaderPct}% · 마나·스킬 영구 보너스 · ${awakenHint}</small>
-            </span>
-          </button>
-        </div>
-        <p class="section-label">스킬 트리 (${treeUnlocked.size}/${SKILL_TREE_NODES.length})</p>
-        ${treeBoard}
-      </section>
-      <section class="enhance-section${tab === "monsters" ? " is-active" : ""}" data-enhance-panel="monsters" ${tab === "monsters" ? "" : "hidden"}>
-      <p class="section-label">로스터</p>
-        <div class="stage-list">${monstersPanel}</div>
-      </section>
-      <section class="enhance-section${tab === "gear" ? " is-active" : ""}" data-enhance-panel="gear" ${tab === "gear" ? "" : "hidden"}>
-        <p class="section-label">장비 드롭</p>
-        <div class="gear-doll" aria-label="장비 슬롯">
-          ${gearSlotBtn("weapon", weapon, "劍", "무기", `스킬+${(weapon.skillPowerBonus * 100).toFixed(0)}%`)}
-          <div class="gear-doll-core" aria-hidden="true"><span>?</span></div>
-          ${gearSlotBtn("robe", robe, "袍", "로브", `HP+${robe.summonerHpBonus} DEF+${robe.summonerDefBonus}`)}
-          ${gearSlotBtn("orb", orb, "球", "마법구", gearEnhanceCostLabel(orb.enhance))}
-          ${gearSlotBtn("accessory", acc, "飾", "장신구", gearEnhanceCostLabel(acc.enhance))}
-          ${gearSlotBtn("cloak", cloak, "氅", "망토", `HP+${cloak.summonerHpBonus}`)}
-          ${gearSlotBtn("ring", ring, "環", "반지", `스킬+${(ring.skillPowerBonus * 100).toFixed(0)}%`)}
-        </div>
-        <div class="gear-set-summary">${setSummary || `<span class="muted">세트 조각 없음</span>`}</div>
-        <p class="section-label">세트 부여 · −마나 ${GEAR_SET_AFFIX_MANA}</p>
-        <div class="gear-set-affix">${gearAffixRows}</div>
-        <p class="section-label">장비 가방 (${bagLen}/${MAX_GEAR_BAG})</p>
-        ${bagGrid}
-      </section>
-      <section class="enhance-section${tab === "symbols" ? " is-active" : ""}" data-enhance-panel="symbols" ${tab === "symbols" ? "" : "hidden"}>
-      <p class="section-label">로스터</p>
-        ${symbolsPanel}
-      </section>
-    </div>
+    ${renderSymbolDetailModal()}
+    ${renderSymbolBagExpandModal()}
+    ${monstersPanel}
   </div>`;
   queueMicrotask(() => {
     enhanceFx = null;
-    requestAnimationFrame(() => drawSkillTreeLines());
+    const slot = app.querySelector<HTMLElement>(".mon-slot.is-active");
+    const rail = app.querySelector<HTMLElement>(".mon-book-inv--rail");
+    if (slot && rail) {
+      const slotCenter = slot.offsetLeft + slot.offsetWidth / 2;
+      const nextLeft = Math.max(0, slotCenter - rail.clientWidth / 2);
+      rail.scrollTo({ left: nextLeft, behavior: "smooth" });
+    }
   });
-  return hubShell("강화진", "각성 · 스킬트리 · 장비 · 상징", body);
+  return `<div class="hub-screen enhance-screen">
+    <div class="hub-sky" aria-hidden="true">
+      <img
+        class="hub-sky-img"
+        src="/art/hub/hub-chamber-bg.webp"
+        srcset="/art/hub/hub-chamber-bg-720.webp 720w, /art/hub/hub-chamber-bg.webp 1080w"
+        sizes="(max-width: 430px) 100vw, 430px"
+        width="1080"
+        height="1920"
+        alt=""
+        decoding="async"
+      />
+      <div class="hub-sky-veil"></div>
+    </div>
+    <div class="hub-content">
+      <header class="mon-topbar">
+        ${navBackBtn({ nav: "home", label: t("ui.1a7f31cadb") })}
+        <h1 class="mon-topbar-title">${escapeHtml(t("nav.monster"))}</h1>
+        <span class="mon-topbar-spacer" aria-hidden="true"></span>
+      </header>
+      ${body}
+    </div>
+  </div>`;
 }
 
 function renderShop(): string {
@@ -2754,11 +4366,11 @@ function renderShop(): string {
           <span class="stage-card-mark" aria-hidden="true">?</span>
           <span class="stage-card-body">
             <strong>${describeSymbol(s)}</strong>
-            <small>접두어 부여/재부여 · −마나 ${SYMBOL_GRIND_MANA_COST}</small>
+            <small>${t('ui.956df04e9a')} ? ?${t('ui.dc78e6a251')} ${SYMBOL_GRIND_MANA_COST}</small>
           </span>
         </button>`;
       })
-      .join("") || `<p class="muted">연마할 상징이 없습니다</p>`;
+      .join("") || `<p class="muted">${t('ui.1d689ebc57')}</p>`;
   const imprintRows =
     save.symbols
       .map((s, i) => {
@@ -2767,61 +4379,61 @@ function renderShop(): string {
           <span class="stage-card-mark" aria-hidden="true">?</span>
           <span class="stage-card-body">
             <strong>${describeSymbol(s)}</strong>
-            <small>주옵션 재부여 · −크리스탈 ${SYMBOL_IMPRINT_CRYSTAL_COST}</small>
+            <small>${t('ui.285324164a')} ? ?${t('ui.5d0bf3b101')} ${SYMBOL_IMPRINT_CRYSTAL_COST}</small>
           </span>
         </button>`;
       })
       .join("") ||
-    `<p class="muted">각인 가능한 상징이 없습니다 (슬롯 4–6 드롭 필요)</p>`;
+    `<p class="muted">${t('ui.b9c0de06ae')} (${t('ui.81d226110c')} 4?6 ${t('ui.a05d718889')})</p>`;
   return hubShell(
-    "??",
-    `소환서 ${save.scrolls} · 마나 ${Math.floor(save.island.mana)} · 크리스탈 ${save.island.crystal}`,
+    t('ui.759f762a02'),
+    `${t('ui.fa73f3a42f')} ${save.scrolls} ? ${t('ui.dc78e6a251')} ${Math.floor(save.island.mana)} ? ${t('ui.5d0bf3b101')} ${save.island.crystal}`,
     `<div class="hub-panel">
     ${renderForgeReveal()}
-      <p class="section-label">로스터</p>
+      <p class="section-label">${t('ui.079b50d844')}</p>
     <div class="stage-list">
       <button type="button" class="stage-card shop-offer shop-scroll" id="btn-buy-scroll-1">
         <span class="stage-card-mark" aria-hidden="true">1</span>
         <span class="stage-card-body">
-          <strong>소환서 1장</strong>
-          <small>−마나 ${SCROLL_BUY_MANA_COST} · 보유 ${save.scrolls}</small>
+          <strong>${t('ui.58c8d4982d')}</strong>
+          <small>?${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST} ? ${t('ui.e41479e637')} ${save.scrolls}</small>
         </span>
       </button>
       <button type="button" class="stage-card shop-offer shop-scroll" id="btn-buy-scroll-5">
         <span class="stage-card-mark" aria-hidden="true">5</span>
         <span class="stage-card-body">
-          <strong>소환서 5장</strong>
-          <small>−마나 ${SCROLL_BUY_MANA_COST * 5}</small>
+          <strong>${t('ui.544ebe1d37')}</strong>
+          <small>?${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST * 5}</small>
         </span>
       </button>
     </div>
-    <p class="section-label">에너지 · 제작</p>
+    <p class="section-label">${t('ui.5515ca646d')}</p>
     <div class="stage-list">
       <button type="button" class="stage-card shop-offer" id="btn-buy-energy">
         <span class="stage-card-mark" aria-hidden="true">?</span>
         <span class="stage-card-body">
-          <strong>에너지 +${ENERGY_BUY_AMOUNT}</strong>
-          <small>−크리스탈 ${ENERGY_CRYSTAL_COST}</small>
+          <strong>${t('ui.7154da110a')} +${ENERGY_BUY_AMOUNT}</strong>
+          <small>?${t('ui.5d0bf3b101')} ${ENERGY_CRYSTAL_COST}</small>
         </span>
       </button>
       <button type="button" class="stage-card shop-offer" id="btn-craft-essence">
         <span class="stage-card-mark" aria-hidden="true">?</span>
         <span class="stage-card-body">
-            <strong>진액 제작</strong>
-          <small>진문석 ${ESSENCE_JINMUN_COST} → 크리스탈 ${ESSENCE_CRYSTAL_GAIN} (Lv.12)</small>
+            <strong>${t('ui.6623b135fa')}</strong>
+          <small>${t('ui.4b482b3675')} ${ESSENCE_JINMUN_COST} ? ${t('ui.5d0bf3b101')} ${ESSENCE_CRYSTAL_GAIN} (Lv.12)</small>
         </span>
       </button>
       <button type="button" class="stage-card shop-offer" id="btn-craft-scroll">
         <span class="stage-card-mark" aria-hidden="true">?</span>
         <span class="stage-card-body">
-            <strong>소환서 제작</strong>
-          <small>진문석 ${CRAFT_SCROLL_JINMUN} + 마나 ${CRAFT_SCROLL_MANA} (Lv.19)</small>
+            <strong>${t('ui.6623b135fa')}</strong>
+          <small>${t('ui.4b482b3675')} ${CRAFT_SCROLL_JINMUN} + ${t('ui.dc78e6a251')} ${CRAFT_SCROLL_MANA} (Lv.19)</small>
         </span>
       </button>
     </div>
-    <p class="section-label">상징 연마 (접두어)</p>
+    <p class="section-label">${t('ui.d3a3c215c8')} (${t('ui.49758b94ae')})</p>
     <div class="stage-list">${grindRows}</div>
-    <p class="section-label">상징 각인 (슬롯 4–6)</p>
+    <p class="section-label">${t('ui.515ca5f235')} (${t('ui.81d226110c')} 4?6)</p>
     <div class="stage-list">${imprintRows}</div>
   </div>`,
   );
@@ -2835,15 +4447,15 @@ function renderGlory(): string {
   );
   const maxTotal = GLORY_BUILDINGS.reduce((n, g) => n + g.maxLevel, 0);
   return hubShell(
-        "수정 광맥",
-    `보유 영광 ${glory}`,
+    t('ui.81e2301960'),
+    `${t('ui.14b961e9d3')} ${glory}`,
     `<div class="hub-panel">
     <div class="guild-panel glory-panel">
-        <p class="guild-panel-title">기원 현황</p>
+        <p class="guild-panel-title">${t('ui.6667aae26a')}</p>
       <div class="guild-stats">
-        <div class="guild-stat"><span>보유</span><strong>${glory}</strong></div>
-        <div class="guild-stat"><span>건물 합산</span><strong>${levels}/${maxTotal}</strong></div>
-        <div class="guild-stat"><span>종류</span><strong>${GLORY_BUILDINGS.length}</strong></div>
+        <div class="guild-stat"><span>${t('ui.e41479e637')}</span><strong>${glory}</strong></div>
+        <div class="guild-stat"><span>${t('ui.ad11613bb4')}</span><strong>${levels}/${maxTotal}</strong></div>
+        <div class="guild-stat"><span>${t('ui.29efb69b57')}</span><strong>${GLORY_BUILDINGS.length}</strong></div>
       </div>
     </div>
     <div class="stage-list">
@@ -2854,7 +4466,7 @@ function renderGlory(): string {
           <span class="stage-card-mark" aria-hidden="true">${lv}</span>
           <span class="stage-card-body">
             <strong>${g.nameKo} Lv.${lv}/${g.maxLevel}</strong>
-            <small>${g.effectKo} · ${maxed ? "MAX" : `−영광 ${g.gloryCostPerLevel}`}</small>
+            <small>${g.effectKo} ? ${maxed ? "MAX" : `?${t('ui.ba0c9e096f')} ${g.gloryCostPerLevel}`}</small>
           </span>
         </button>`;
       }).join("")}
@@ -2870,13 +4482,13 @@ function renderCaptureShop(): string {
     choice === "mana" ? "?" : choice === "amplify" ? "?" : "?";
   const hintFor = (choice: string) =>
     choice === "mana"
-      ? "서머너 마나 충전"
+      ? t('ui.9eab85fc5c')
       : choice === "amplify"
-        ? "이번 국면 Amplify"
-        : "아군 실드·정리";
+        ? t('ui.eed788cba0')
+        : t('ui.4ee49fe6c1');
   return `<div class="capture-shop">
-    <p class="capture-shop-title">사석상점</p>
-    <p class="muted capture-shop-sub">대량 따냄 보상 — 하나 선택</p>
+    <p class="capture-shop-title">${t('ui.c2646fe538')}</p>
+    <p class="muted capture-shop-sub">${t('ui.fafad3d54f')} ? ${t('ui.12ce947dc1')}</p>
     <div class="stage-list capture-shop-list">
       ${offers
         .map(
@@ -2907,15 +4519,15 @@ function renderGuild(): string {
     )
     .join("");
   return hubShell(
-        "수정 광맥",
-    name ?? "미가입 · 비동기 순위",
+    t('ui.81e2301960'),
+    name ?? t('ui.928873f927'),
     `<div class="hub-panel">
     <div class="guild-panel">
-      <p class="guild-panel-title">${name ? name : "길드 현황"}</p>
+      <p class="guild-panel-title">${name ? name : t('ui.2a1d74bcdd')}</p>
       <div class="guild-stats">
-        <div class="guild-stat"><span>기여</span><strong>${save.guildContribution ?? 0}</strong></div>
-        <div class="guild-stat"><span>레이드 최고</span><strong>+${save.guildRaidBest ?? 0}</strong></div>
-        <div class="guild-stat"><span>출석</span><strong>${save.guildCheckInDay ?? "—"}</strong></div>
+        <div class="guild-stat"><span>${t('ui.fe2c5c3e7d')}</span><strong>${save.guildContribution ?? 0}</strong></div>
+        <div class="guild-stat"><span>${t('ui.332e9eedf2')}</span><strong>+${save.guildRaidBest ?? 0}</strong></div>
+        <div class="guild-stat"><span>${t('ui.937c424f40')}</span><strong>${save.guildCheckInDay ?? "?"}</strong></div>
       </div>
     </div>
     ${
@@ -2924,26 +4536,26 @@ function renderGuild(): string {
              <button type="button" class="stage-card" id="btn-guild-checkin">
                <span class="stage-card-mark" aria-hidden="true">?</span>
                <span class="stage-card-body">
-            <strong>출석</strong>
-                 <small>기여·보상 수령</small>
+            <strong>${t('ui.b3fe16e64a')}</strong>
+                 <small>${t('ui.118337544a')}</small>
                </span>
              </button>
              <button type="button" class="stage-card" id="btn-guild-rename">
                <span class="stage-card-mark" aria-hidden="true">?</span>
                <span class="stage-card-body">
-            <strong>출석</strong>
-                 <small>최대 16자</small>
+            <strong>${t('ui.b3fe16e64a')}</strong>
+                 <small>${t('ui.e9db3b5735')}</small>
                </span>
              </button>
            </div>`
         : `<div class="guild-join">
-             <label class="guild-join-label">길드명
-               <input id="guild-name-input" maxlength="16" placeholder="예: 진문수호대" />
+             <label class="guild-join-label">${t('ui.f6d4bb4a67')}
+               <input id="guild-name-input" maxlength="16" placeholder="${t('ui.b662766cf8')}" />
              </label>
-             <button type="button" class="auth-btn-primary full" id="btn-guild-join">가입</button>
+             <button type="button" class="auth-btn-primary full" id="btn-guild-join">${t('ui.8b92576f2b')}</button>
            </div>`
     }
-    <p class="section-label">에너지 · 제작</p>
+    <p class="section-label">${t('ui.5515ca646d')}</p>
     <div class="guild-board">${board}</div>
   </div>`,
   );
@@ -2959,13 +4571,13 @@ function renderFusion(): string {
     }
   }
   return hubShell(
-    "마법진 도장",
-    `동일 종 2마리 → 진화 +1 · −마나 ${FUSION_MANA_COST}`,
+    t('ui.81e2301960'),
+    `${t('ui.df9d336285')} ? ${t('ui.d02987ca08')} +1 ? ?${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
     `<div class="hub-panel">
     ${renderFusionReveal()}
     <div class="guild-panel fusion-panel">
-        <p class="guild-panel-title">기원 현황</p>
-      <p class="muted dojo-hint">같은 종의 두 마리를 합치면 진화 +1 · 높은 레벨·스킬·상징을 유지합니다.</p>
+        <p class="guild-panel-title">${t('ui.6667aae26a')}</p>
+      <p class="muted dojo-hint">${t('ui.7882865401')}.</p>
     </div>
     <div class="stage-list">
       ${pairs.length
@@ -2982,21 +4594,83 @@ function renderFusion(): string {
                 <span class="stage-card-mark" aria-hidden="true">?</span>
                 <span class="stage-card-body">
                   <strong>${describeOwned(ma)} + ${describeOwned(mb)}</strong>
-                  <small>결과 진화 ${evo} · −마나 ${FUSION_MANA_COST}</small>
+                  <small>${t('ui.ebc3c5c656')} ${evo} ? ?${t('ui.dc78e6a251')} ${FUSION_MANA_COST}</small>
                 </span>
               </button>`;
             })
             .join("")
-        : `<p class="muted">동일 종 몬스터 2마리가 필요합니다</p>`}
+        : `<p class="muted">${t('ui.6b94c9708e')}</p>`}
     </div>
   </div>`,
   );
+}
+
+
+const STAGE_DIFFICULTIES: {
+  id: StageDifficulty;
+  labelKo: string;
+  blurb: string;
+  energyMul: number;
+}[] = [
+  { id: "normal", labelKo: t('ui.aef1a1e70e'), blurb: t('ui.2387a8e0b0'), energyMul: 1 },
+  { id: "hard", labelKo: t('ui.3dfdef02ab'), blurb: t('ui.7be5aa7542'), energyMul: 1.5 },
+  { id: "hell", labelKo: t('ui.173366486b'), blurb: t('ui.ab309da205'), energyMul: 2 },
+];
+
+function stageEnergyCost(stage: StageDef, diff: StageDifficulty): number {
+  const mul =
+    STAGE_DIFFICULTIES.find((d) => d.id === diff)?.energyMul ?? 1;
+  return Math.max(0, Math.ceil(stage.energyCost * mul));
+}
+
+function isDifficultyOpen(stage: StageDef, diff: StageDifficulty): boolean {
+  if (diff === "normal") return true;
+  const cleared = save.clearedStages.includes(stage.id);
+  if (diff === "hard") return cleared;
+  // hell: require hard clear tracked via clearedStages (same id) + optional later
+  return cleared;
+}
+
+function stageDropSlots(stage: StageDef): Array<1 | 2 | 3 | 4 | 5 | 6> {
+  if (stage.mode === "scenario") {
+    if (stage.stage >= 1 && stage.stage <= 6) {
+      return [stage.stage as 1 | 2 | 3 | 4 | 5 | 6];
+    }
+    return [1, 2, 3, 4, 5, 6];
+  }
+  const n = ((((stage.stage - 1) % 6) + 6) % 6) + 1;
+  return [n as 1 | 2 | 3 | 4 | 5 | 6];
+}
+
+function stageDropPreview(stage: StageDef, opts?: { equipWeekly?: boolean }): string {
+  const def = SYMBOL_SETS.find((x) => x.id === stage.dropSetId);
+  const name = def?.nameKo ?? stage.dropSetId;
+  const slots = stageDropSlots(stage);
+  const chips = slots
+    .map((slot) => {
+      const label = `${name}${slot}`;
+      return `<span class="stage-drop-piece" title="${label}">
+        <img class="stage-drop-piece-ico" src="/art/ui/symbol/${stage.dropSetId}-${slot}.svg" width="28" height="28" alt="${label}" draggable="false" />
+        <span class="stage-drop-piece-label">${label}</span>
+      </span>`;
+    })
+    .join("");
+  const hasGear =
+    !!opts?.equipWeekly || (stage.gearDropChance ?? 0) > 0 || stage.mode === "equip";
+  const gear = hasGear
+    ? `<span class="stage-drop-piece stage-drop-piece--gear" title="${t('ui.759f762a02')}">
+        <img class="stage-drop-piece-ico" src="/art/ui/symbol/gear.svg" width="28" height="28" alt="${t('ui.759f762a02')}" draggable="false" />
+        <span class="stage-drop-piece-label">${t('ui.e17b206052')}</span>
+      </span>`
+    : "";
+  return `<span class="stage-card-drops">${chips}${gear}</span>`;
 }
 
 function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): string {
   const vaultLeft = opts?.equipWeekly
     ? equipVaultRemaining(syncEquipVaultWeek(save))
     : null;
+  const energyNow = Math.floor(save.island.energy);
   return list
     .map((s) => {
       const label = stageUnlockLabel(save, s);
@@ -3004,27 +4678,43 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
         !isStageUnlocked(save, s.id) ||
         (vaultLeft !== null && vaultLeft <= 0);
       const done = save.clearedStages.includes(s.id);
-      const cost =
-        s.energyCost > 0 ? `에너지 ${s.energyCost}` : "에너지 0";
+      const diffOpen = isDifficultyOpen(s, stageEntryDiff);
+      const cost = stageEnergyCost(s, stageEntryDiff);
+      const canFight = !locked && diffOpen && (cost <= 0 || energyNow >= cost);
       const extra =
         s.gloryReward != null
-          ? ` · 영광 ${s.gloryReward}`
+          ? ` ? ${t('ui.ba0c9e096f')} ${s.gloryReward}`
           : s.jinmunReward != null
-            ? ` · 진문석 ${s.jinmunReward}`
+            ? ` ? ${t('ui.4b482b3675')} ${s.jinmunReward}`
             : "";
       const weekly =
-        vaultLeft !== null ? ` · 주간 ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}` : "";
-      return `<button type="button" class="stage-card${done ? " is-cleared" : ""}" data-stage="${s.id}" ${locked ? "disabled" : ""}>
-        <span class="stage-card-mark" aria-hidden="true">${done ? "?" : s.boardSize}</span>
+        vaultLeft !== null
+          ?  ` ? ${t('ui.9cbaf58b88')} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}`
+          : "";
+      const costHint = !diffOpen
+        ? t('ui.4292516afd')
+        : cost <= 0
+          ? t('ui.bc22e8e368')
+          : `${t('ui.7dcdb553c8')} ${cost}`;
+      const mark = done
+        ? "?"
+        : s.mode === "scenario"
+          ? `${s.map}-${s.stage}`
+          : String(s.boardSize);
+      return `<button type="button" class="stage-card stage-card--sortie${done ? " is-cleared" : ""}${!canFight ? " is-disabled" : ""}" data-stage="${s.id}" ${canFight ? "" : "disabled"}>
+        <span class="stage-card-mark" aria-hidden="true">${mark}</span>
         <span class="stage-card-body">
           <strong>${label} ? ${s.nameKo}</strong>
-          <small>${s.boardSize}×${s.boardSize} · 웨이브 ${s.waves} · ${cost}${extra}${weekly}</small>
+          <small>${s.boardSize}?${s.boardSize} ? ${t('ui.fe1fb24836')} ${s.waves}${extra}${weekly}</small>
+          ${stageDropPreview(s, opts)}
+        </span>
+        <span class="stage-card-cost${cost > energyNow && diffOpen ? " is-short" : ""}">
+          <strong>${costHint}</strong>
         </span>
       </button>`;
     })
     .join("");
 }
-
 type StagesRegion = {
   id: StagesRegionId;
   name: string;
@@ -3045,8 +4735,8 @@ function isMainQuestRegion(id: StagesRegionId): boolean {
 function stagesRegions(): StagesRegion[] {
   const mqRegions: StagesRegion[] = MAIN_QUEST_PIN_LAYOUT.map((pin) => ({
     id: pin.id,
-    name: `맵 ${pin.map}`,
-    blurb: `맵 ${pin.map} · ${pin.areaKo}`,
+    name: pin.areaKo,
+    blurb: `${t('ui.9d96ebc162')} ? ${pin.areaKo}`,
     x: pin.x,
     y: pin.y,
     tone: pin.tone,
@@ -3063,28 +4753,28 @@ function stagesRegions(): StagesRegion[] {
       guild?: boolean;
     }
   > = {
-    depth: { name: "심연 던전", blurb: "끝없는 층 도전", stages: DEPTH_STAGES },
-    arena: { name: "아레나", blurb: "시즌 대전", stages: ARENA_STAGES },
+    depth: { name: t('ui.cd2bb578b4'), blurb: t('ui.7316fbbfa6'), stages: DEPTH_STAGES },
+    arena: { name: t('ui.262553905b'), blurb: t('ui.be1af5568b'), stages: ARENA_STAGES },
     cadence: {
-      name: "카덴스 · 시련",
-      blurb: "요일·시련 스테이지",
+      name: t('ui.e0536c253c'),
+      blurb: t('ui.4d59148e17'),
       stages: [...WEEKDAY_STAGES, ...TRIAL_STAGES],
     },
     equip: {
-      name: "장비 던전",
-      blurb: "주간 장비 파밍",
+      name: t('ui.6003da6bd2'),
+      blurb: t('ui.e00890de86'),
       stages: EQUIP_STAGES,
       equipWeekly: true,
     },
     warena: {
-      name: "월드 아레나",
-      blurb: "대규모 대전",
+      name: t('ui.6003da6bd2'),
+      blurb: t('ui.e00890de86'),
       stages: WORLD_ARENA_STAGES,
       warena: true,
     },
     guild: {
-      name: "길드 레이드",
-      blurb: "13대13 길드 레이드",
+      name: t('ui.6003da6bd2'),
+      blurb: t('ui.e00890de86'),
       stages: GUILD_RAID_STAGES,
       guild: true,
     },
@@ -3094,7 +4784,7 @@ function stagesRegions(): StagesRegion[] {
     return {
       id: pin.id,
       name: meta.name,
-      blurb: `${meta.blurb} · ${pin.landmarkKo}`,
+      blurb: `${meta.blurb} ? ${pin.landmarkKo}`,
       x: pin.x,
       y: pin.y,
       tone: pin.id,
@@ -3117,12 +4807,87 @@ function regionProgress(stages: StageDef[]): {
   return { unlocked, cleared, total: stages.length };
 }
 
-function stagesMqPathD(): string {
-  return MAIN_QUEST_PIN_LAYOUT.map(
-    (p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`,
-  ).join(" ");
+function regionDifficultyOpen(region: StagesRegion, diff: StageDifficulty): boolean {
+  if (diff === "normal") return true;
+  return region.stages.some((s) => isDifficultyOpen(s, diff));
 }
 
+function renderStagesRegionSheet(region: StagesRegion): string {
+  const prog = regionProgress(region.stages);
+  const bans = save.arenaBanIds ?? [];
+  const seasonWins = save.arenaSeasonWins ?? 0;
+  const claimed = save.seasonRewardsClaimed ?? 0;
+  const nextTierAt = (claimed + 1) * SEASON_REWARD_WINS;
+  const energyNow = Math.floor(save.island.energy);
+  const energyMax = save.island.energyMax ?? 100;
+  const diffMeta =
+    STAGE_DIFFICULTIES.find((d) => d.id === stageEntryDiff) ??
+    STAGE_DIFFICULTIES[0]!;
+
+  const diffOptions = STAGE_DIFFICULTIES.map((d) => {
+    const open = regionDifficultyOpen(region, d.id);
+    const selected = d.id === stageEntryDiff ? "selected" : "";
+    const label = open ? d.labelKo : `${d.labelKo} (${t('ui.956f2f4243')})`;
+    return `<option value="${d.id}" ${selected} ${open ? "" : "disabled"}>${label}</option>`;
+  }).join("");
+
+  let extras = "";
+  if (region.equipWeekly) {
+    extras = `<p class="stages-note">${t('ui.e35b325054')} ${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT} ? ${t('ui.6a432402bd')}</p>`;
+  }
+  if (region.guild) {
+    extras = `<p class="stages-note">${t('ui.fe2c5c3e7d')} ${save.guildContribution ?? 0} ? ${t('ui.3ea974d72f')} +${save.guildRaidBest ?? 0}</p>`;
+  }
+  if (region.warena) {
+    const banPool = [
+      ...new Set(WORLD_ARENA_STAGES.flatMap((s) => s.enemyMonsterIds)),
+    ];
+    const banRow = banPool
+      .map((id) => {
+        const m = getMonster(id);
+        const on = bans.includes(id);
+        return `<button type="button" class="ban-chip${on ? " active" : ""}" data-ban-toggle="${id}">
+          <span class="ban-chip-mark" aria-hidden="true">${on ? "?" : "?"}</span>
+          <span class="ban-chip-body">
+            <strong>${m?.nameKo ?? id}</strong>
+            <small>${on ? t('ui.402782da6b') : t('ui.25a68ffa5c')}</small>
+          </span>
+        </button>`;
+      })
+      .join("");
+    extras = `<div class="season-panel">
+        <p class="season-panel-title">${t('ui.b78477b088')} ${seasonWins}</p>
+        <p class="muted stages-note">${t('ui.45e62f7d49')} ${nextTierAt}${t('ui.3b1908b79a')} ? ${t('ui.d18227b255')} ${claimed}</p>
+        <button type="button" class="auth-btn-primary full" id="btn-season-claim">${t('ui.8b8572eda1')}</button>
+      </div>
+      <p class="stages-note">${t('ui.ca139249b0')} ${bans.length ? bans.map((id) => getMonster(id)?.nameKo ?? id).join(", ") : t('ui.d58fa73adc')} ? ${t('ui.869e9feb1b')} 2</p>
+      <div class="ban-row">${banRow}</div>`;
+  }
+
+  return `<div class="stages-region-layer" id="stages-region-layer">
+    <button type="button" class="stages-region-backdrop" id="btn-region-close" aria-label="${t('ui.94b7dba159')}">${t('ui.94b7dba159')}</button>
+    <div class="stages-region-sheet stages-region-sheet--card stages-region-sheet--${region.tone}" role="dialog" aria-modal="true" aria-labelledby="stages-region-title">
+      <header class="stages-region-head">
+        <div class="stages-region-head-main">
+          <p class="stages-region-kicker">${region.blurb}</p>
+          <div class="stages-region-title-row">
+            <h2 class="stages-region-title" id="stages-region-title">${region.name}</h2>
+            <label class="stages-region-diff-inline">
+              <span class="sr-only">${t('ui.94b7dba159')}</span>
+              <select class="stages-region-diff-select" id="region-diff-select" aria-label="${t('ui.1a3b3223e1')}" title="${diffMeta.blurb}">
+                ${diffOptions}
+              </select>
+            </label>
+          </div>
+          <p class="stages-meta">${t('ui.330ccf22cb')} ${prog.cleared}/${prog.total}${prog.unlocked ? "" : ` ? ${t('ui.956f2f4243')}`} ? ${t('ui.7dcdb553c8')} ${energyNow}/${energyMax}</p>
+        </div>
+        <button type="button" class="secondary stages-region-x" id="btn-region-close-x" aria-label="${t('ui.94b7dba159')}">${t('ui.94b7dba159')}</button>
+      </header>
+      ${extras}
+      <div class="stage-list stage-list--expedition">${stageButtons(region.stages, { equipWeekly: region.equipWeekly })}</div>
+    </div>
+  </div>`;
+}
 function renderStages(): string {
   const cleared = save.clearedStages.length;
   const seasonWins = save.arenaSeasonWins ?? 0;
@@ -3134,7 +4899,6 @@ function renderStages(): string {
   const mqCleared = MAIN_QUEST_STAGES.filter((st) =>
     save.clearedStages.includes(st.id),
   ).length;
-  const mqPathD = stagesMqPathD();
   const mqNodes = MAIN_QUEST_PIN_LAYOUT.map(
     (p) =>
       `<span class="stages-mq-node" style="left:${p.x}%;top:${p.y}%" aria-hidden="true"><span class="stages-mq-node-core"></span></span>`,
@@ -3151,11 +4915,14 @@ function renderStages(): string {
       const sub = mq
         ? `${prog.cleared}/${STAGES_PER_AREA}`
         : `${prog.cleared}/${prog.total}`;
-      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${prog.unlocked ? "" : " is-locked"}${active ? " is-active" : ""}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" aria-label="${r.name}${prog.unlocked ? "" : " · 미해금"}" ${prog.unlocked ? "" : 'data-locked="1"'}>
+      const lockMark = prog.unlocked
+        ? ""
+        : `<span class="stages-pin-lock" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2zm-6-2a2 2 0 1 1 4 0v2h-4V7zm6 12H7v-8h10v8z"/></svg></span>`;
+      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${prog.unlocked ? "" : " is-locked"}${active ? " is-active" : ""}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" aria-label="${r.name}${prog.unlocked ? "" : ` ? ${t('ui.b35f488f01')}`}" ${prog.unlocked ? "" : 'data-locked="1"'}>
         <span class="stages-pin-dot" aria-hidden="true">${mq ? `<span class="stages-pin-mark">${mark}</span>` : ""}</span>
         <span class="stages-pin-label">
-          <strong>${r.name}</strong>
-          <small>${mq && pinLayout ? pinLayout.areaKo + " ? " : ""}${sub}</small>
+          <strong>${lockMark}${r.name}</strong>
+          <small>${prog.unlocked ? sub : t('ui.759f762a02')}</small>
         </span>
       </button>`;
     })
@@ -3173,39 +4940,18 @@ function renderStages(): string {
           draggable="false"
         />
         <div class="stages-map-veil" aria-hidden="true"></div>
-        <svg class="stages-mq-path" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <defs>
-            <filter id="mq-path-soft" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="0.55" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            <linearGradient id="mq-path-grad" x1="8%" y1="92%" x2="62%" y2="18%">
-              <stop offset="0%" stop-color="#8a6a1e" />
-              <stop offset="35%" stop-color="#c9a227" />
-              <stop offset="70%" stop-color="#f0e0a0" />
-              <stop offset="100%" stop-color="#e8d9a8" />
-            </linearGradient>
-          </defs>
-          <path class="stages-mq-path-glow" d="${mqPathD}" fill="none" />
-          <path class="stages-mq-path-rail" d="${mqPathD}" fill="none" />
-          <path class="stages-mq-path-core" d="${mqPathD}" fill="none" />
-          <path class="stages-mq-path-sheen" d="${mqPathD}" fill="none" />
-        </svg>
         <div class="stages-mq-nodes">${mqNodes}</div>
         <div class="stages-map-pins">${pins}</div>
       </div>
     </div>
     <header class="stages-map-hud">
-      <button type="button" class="stages-map-back" data-nav="home" aria-label="섬으로">
+      <button type="button" class="stages-map-back" data-nav="home" aria-label="${t('ui.d758337556')}">
         <img class="stages-map-back-ico" src="/art/ui/back-arrow.svg" width="18" height="18" alt="" draggable="false" />
-        <span>섬으로</span>
+        <span>${t('ui.d758337556')}</span>
       </button>
       <div class="stages-map-hud-text">
-        <p class="stages-title">세계 지도</p>
-        <p class="stages-meta">메인 ${mqCleared}/${mqTotal} · 전체 클리어 ${cleared} · 시즌승 ${seasonWins}</p>
+        <p class="stages-title">${t('ui.8f968f51eb')}</p>
+        <p class="stages-meta">${t('ui.3c15bd34eb')} ${mqCleared}/${mqTotal} ? ${t('ui.05873c30d3')} ${cleared} ? ${t('ui.794b55c1ef')} ${seasonWins}</p>
       </div>
     </header>
     ${selected ? renderStagesRegionSheet(selected) : ""}
@@ -3214,14 +4960,40 @@ function renderStages(): string {
 
 function renderBattleTicker(): string {
   if (!battle) return "";
+  // ASCII-safe keyword list (\u escapes) ? do not use Hangul regex literals here.
+  const keys = [
+    t('ui.f4d93d3cf8'),
+    t('ui.048b7511df'),
+    t('ui.00faa47381'),
+    t('ui.fe1fb24836'),
+    t('ui.00b2768bcc'),
+    t('ui.c1ef178866'),
+    t('ui.413147d435'),
+    "defeated",
+    t('ui.95ca12ad92'),
+    t('ui.f3d47aa42f'),
+    t('ui.b4d6128261'),
+    t('ui.aad8793826'),
+    t('ui.0898bd2315'),
+    t('ui.bf60bb0a77'),
+    t('ui.e36213525e'),
+    t('ui.bff20dc3bb'),
+    t('ui.c2646fe538'),
+    t('ui.85de958b5f'),
+    t('ui.06dd3affb3'),
+    t('ui.4d67306e14'),
+    t('ui.e480e4fefe'),
+    t('ui.b89e5dbdd6'),
+    t('ui.7311d239fd'),
+    t('ui.511fa65e38'),
+    t('ui.329b63fdf1'),
+    t('ui.d5028d9279'),
+  ];
   const lines = battle.log
-    .filter(
-      (l) =>
-        /스톤패시브|획득|스폰|웨이브|강화 진문|진문 붕괴|포석 보너스|defeated|회복|진문개방|증폭선언|쌍착수|진문청소|진문수호|형상|이벤트|사석상점|속성|필승|봉인|돌흡수|진형파괴|서머너 착수|묘수|맞마나|이중층/.test(l),
-    )
+    .filter((l) => keys.some((k) => l.includes(k)))
     .slice(-3);
   if (!lines.length) {
-    return `<div class="battle-ticker muted">전투 알림 — 따냄·아이템·패시브가 여기 표시됩니다</div>`;
+    return `<div class="battle-ticker muted">${t('ui.0fd080f51d')}</div>`;
   }
   return `<div class="battle-ticker" aria-live="polite">${lines
     .map((l) => `<span>${l}</span>`)
@@ -3232,15 +5004,11 @@ function renderBattle(manaPct: number): string {
   if (!battle || !currentStage) return "";
   const allyUnits = battle.units.filter((u) => u.team === "ally");
   const enemyUnits = battle.units.filter((u) => u.team === "enemy");
-  const allyFront = frontRow(allyUnits);
-  const enemyFront = frontRow(enemyUnits);
-  const allyBack = backSummoner(allyUnits);
-  const enemyBack = backSummoner(enemyUnits);
   const phase = battle.circle.boardPhase;
   const phaseLabel =
-    phase <= 0 ? "일반 진문" : `강화 진문 ${"I".repeat(Math.min(phase, 3))}`;
+    phase <= 0 ? t('ui.d2342783cb') : `${t('ui.00b2768bcc')} ${"I".repeat(Math.min(phase, 3))}`;
   const active = battle.activeUnitId
-    ? battle.getUnit(battle.activeUnitId)
+    ? battle.getUnit(battle.activeUnitId) ?? null
     : null;
   const awaitShop =
     battle.phase === "await_capture_shop" &&
@@ -3255,23 +5023,23 @@ function renderBattle(manaPct: number): string {
   const canGuard = !!active && battle.canUseSummonerGuard(active);
   const mission =
     battle.modules.moduleG && !battle.finishReason
-      ? ` · 묘수 ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? "✓" : ""}`
+      ? ` ? ${t('ui.511fa65e38')} ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? "?" : ""}`
       : "";
   const boardTag =
     battle.boards.length > 1 ? ` ? ${battle.boardLabel}` : "";
   const status = battle.finishReason
     ? battle.finishReason === "ally_win"
-      ? "승리! (적 소환수 전멸)"
-      : "패배... (아군 소환수 전멸)"
+      ? t('ui.ba130f3539')
+      : t('ui.8d9e9106fa')
     : `${battle.phase} ? amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} ? ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}${boardTag}`;
 
   const skillHint =
     battle.phase === "await_stone" && active?.team === "ally"
-      ? "추천 착수(1·2·3) 또는 칸 탭"
+      ? t('ui.62b39a7abd')
       : awaitShop
-        ? "사석상점 보상을 선택하세요"
+        ? t('ui.e724206861')
       : awaitSkill
-        ? "적 소환수를 탭해 대상 지정 후 스킬"
+        ? t('ui.250a3a4d15')
         : autoMode
           ? `AUTO x${battleSpeed}`
           : "";
@@ -3283,22 +5051,22 @@ function renderBattle(manaPct: number): string {
     !autoMode;
   const skillRow = awaitShop
     ? ""
-    : `<div class="skill-dock${showBoardSwitch ? " has-switch" : ""}">
+    : `<div class="skill-dock skill-dock--stage${showBoardSwitch ? " has-switch" : ""}${awaitSkill ? " is-armed" : ""}">
       <div class="skill-cluster skill-cluster--unit">
         ${renderSkillButtons(active, awaitSkill)}
       </div>
-      <div class="skill-cluster skill-cluster--summoner" aria-label="서머너 마나 스킬">
-        <button type="button" id="sk-ult" class="summoner-sk ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">開</span><span class="sk-name">개방</span></button>
-        <button type="button" id="sk-declare" class="summoner-sk declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">宣</span><span class="sk-name">증폭</span></button>
-        <button type="button" id="sk-dual" class="summoner-sk dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">雙</span><span class="sk-name">쌍착</span></button>
-        <button type="button" id="sk-clean" class="summoner-sk clean${canClean ? " ready" : ""}" ${awaitSkill && canClean ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">掃</span><span class="sk-name">청소</span></button>
-        <button type="button" id="sk-guard" class="summoner-sk guard${canGuard ? " ready" : ""}" ${awaitSkill && canGuard ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">守</span><span class="sk-name">수호</span></button>
+      <div class="skill-cluster skill-cluster--summoner" aria-label="${t('ui.5618aec54c')}">
+        <button type="button" id="sk-ult" class="summoner-sk ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.2d99fde255')}</span></button>
+        <button type="button" id="sk-declare" class="summoner-sk declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.bd1967124e')}</span></button>
+        <button type="button" id="sk-dual" class="summoner-sk dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.1fa6111a65')}</span></button>
+        <button type="button" id="sk-clean" class="summoner-sk clean${canClean ? " ready" : ""}" ${awaitSkill && canClean ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.ac2f6c7ca5')}</span></button>
+        <button type="button" id="sk-guard" class="summoner-sk guard${canGuard ? " ready" : ""}" ${awaitSkill && canGuard ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.0be109c051')}</span></button>
       </div>
       <div class="skill-cluster skill-cluster--util">
-        <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>추천</button>
+        <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>${t('ui.4b0ea2fcd0')}</button>
         ${
           showBoardSwitch
-            ? `<button type="button" class="secondary board-switch" id="btn-board-switch">쌍국 ${battle.boardLabel === "A국" ? "→B" : "→A"}</button>`
+            ? `<button type="button" class="secondary board-switch" id="btn-board-switch">${t('ui.bf185333fe')} ${battle.boardLabel === t('ui.8bbc778e36') ? "?B" : "?A"}</button>`
             : ""
         }
       </div>
@@ -3306,6 +5074,7 @@ function renderBattle(manaPct: number): string {
 
   const manaTone =
     manaPct >= 99 ? " is-full" : manaPct >= 40 ? " is-charged" : "";
+  const stageTitle = escapeHtml(currentStage.nameKo);
 
   return `<div class="battle-screen">
     <div class="battle-sky" aria-hidden="true">
@@ -3320,47 +5089,56 @@ function renderBattle(manaPct: number): string {
         decoding="async"
       />
       <div class="battle-sky-veil"></div>
+      <div class="battle-arena-floor"></div>
     </div>
-    <div class="battle-topbar">${navBackBtn({ id: "btn-back", label: "돌아가기" })}</div>
-    <div class="battle-layout battle-layout--framed">
-    <div class="battle-top">
-      <div class="battle-stage-name">${currentStage.nameKo}</div>
-      <div class="battle-wave">${currentStage.boardSize}×${currentStage.boardSize} · 웨이브 ${battle.currentWave}/${battle.totalWaves}</div>
-      <div class="battle-status">${status}</div>
+    <header class="battle-chrome">
+      ${renderBattleTicker()}
+      <div class="battle-stage-pill" title="${stageTitle}">
+        <strong class="battle-stage-name">${stageTitle}</strong>
+        <span class="battle-wave">${currentStage.boardSize}?${currentStage.boardSize} (${battle.currentWave}/${battle.totalWaves})</span>
+      </div>
+    </header>
+    <div class="battle-layout battle-layout--framed battle-layout--stage">
+    ${status ? `<div class="battle-status battle-status--overlay">${status}</div>` : ""}
+    <div class="battle-lane enemy">
+      ${renderBattleFront(enemyUnits, "enemy", { targetable: awaitSkill })}
     </div>
-    ${renderBattleTicker()}
-    <div class="item-legend">서머너 후열(무적) · 전열 소환수 전멸 시 승패</div>
-    ${renderSummonerBack(enemyBack, "enemy")}
-    <div class="team-row enemy">${enemyFront.map((u) => renderUnit(u, { targetable: awaitSkill })).join("")}</div>
-    <div class="board-wrap">
+    <div class="board-wrap board-wrap--stage">
       ${renderBoardTabs()}
       <div class="dmg-layer">${renderDmgLayer()}</div>
       ${renderBoard()}
       ${renderSuggestStrip()}
       ${renderCaptureShop()}
-      <div class="mana-block${manaTone}">
+      <div class="mana-block mana-block--compact${manaTone}">
         <div class="mana-head">
-          <span class="mana-label">서머너 마나</span>
+          <span class="mana-label">${t('ui.7ff9ee538f')}</span>
           <span class="mana-nums">${Math.floor(battle.allySummoner.mana)}<small>/${battle.allySummoner.manaMax}</small></span>
         </div>
         <div class="bar mana mana-lg"><i style="width:${manaPct}%"></i></div>
-        <div class="mana-ticks" aria-hidden="true"><i></i><i></i><i></i></div>
       </div>
     </div>
     ${skillRow}
     ${skillHint ? `<p class="skill-hint">${skillHint}</p>` : ""}
-    <div class="team-row ally">${allyFront.map((u) => renderUnit(u)).join("")}</div>
-    ${renderSummonerBack(allyBack, "ally")}
-    <div class="battle-hud">
-      <button type="button" class="secondary" id="btn-speed">x${battleSpeed}</button>
-      <button type="button" id="btn-auto-toggle" class="${autoMode ? "auto-on" : ""}">${autoMode ? "AUTO ON" : "AUTO"}</button>
+    <div class="battle-lane ally">
+      ${renderBattleFront(allyUnits, "ally")}
     </div>
-    <div class="log">${battle.log.slice(-6).map((l) => `<div>${l}</div>`).join("")}</div>
+    <div class="battle-hud battle-hud--stage">
+      ${navBackBtn({ id: "btn-back", label: t('ui.1a7f31cadb') })}
+      <div class="battle-hud-actions">
+        <button type="button" class="secondary" id="btn-speed">x${battleSpeed}</button>
+        <button type="button" id="btn-auto-toggle" class="${autoMode ? "auto-on" : ""}">${autoMode ? "AUTO ON" : "AUTO"}</button>
+      </div>
+    </div>
   </div>
   </div>`;
 }
 
 function bindAuth(): void {
+  app.querySelector("#auth-open-login")?.addEventListener("click", () => {
+    authUi.pane = "login";
+    render();
+  });
+
   app.querySelector("#auth-start")?.addEventListener("click", () => {
     startGameFromAuth();
   });
@@ -3411,7 +5189,7 @@ function bindAuth(): void {
     render();
   });
   app.querySelector("#auth-back")?.addEventListener("click", () => {
-    authUi.pane = "login";
+    authUi.pane = "gate";
     render();
   });
 
@@ -3449,10 +5227,10 @@ function bindAuth(): void {
         if (!res.ok || !body.user) {
           flash(
             body.error === "email_taken"
-        ? "데모 모드로 입장했습니다."
+        ? t('ui.0b00025fb4')
               : body.error === "invalid_credentials"
-                ? "이메일 또는 비밀번호를 확인하세요."
-                : "서버에 연결할 수 없습니다. API를 실행한 뒤 다시 시도하세요.",
+                ? t('ui.0e5bf793ef')
+                : t('ui.c17466f9ed'),
           );
           render();
           return;
@@ -3461,25 +5239,130 @@ function bindAuth(): void {
           authUi.pane === "register" ? true : readAuthPrefs().autoLogin;
         await enterWithUser(body.user, { enterGame });
       } catch {
-    flash("이전 스테이지를 먼저 클리어하세요.");
+    flash(t('ui.b72f5a4752'));
         render();
       }
     })();
   });
 }
 
+function islandMapNaturalSize(world: HTMLElement): { w: number; h: number } {
+  const img = world.querySelector<HTMLImageElement>(".island-map-img");
+  if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+    return { w: img.naturalWidth, h: img.naturalHeight };
+  }
+  return { w: ISLAND_MAP_NATURAL.w, h: ISLAND_MAP_NATURAL.h };
+}
+
+/** Min zoom that still full-bleeds the viewport (no letterbox / map-edge framing). */
+function islandZoomMin(): number {
+  const coverW = 1 / (ISLAND_WORLD_PCT.w * ISLAND_BASE_SCALE);
+  const coverH = 1 / (ISLAND_WORLD_PCT.h * ISLAND_BASE_SCALE);
+  return Math.max(coverW, coverH) * ISLAND_ZOOM_MIN_OVERSCAN;
+}
+
+/** Max zoom before the map bitmap is CSS-upsampled (blur). At least default framing (1). */
+function islandZoomMax(world: HTMLElement): number {
+  const W = world.offsetWidth;
+  const H = world.offsetHeight;
+  if (W <= 0 || H <= 0 || islandZoom <= 0) return 1;
+  const nat = islandMapNaturalSize(world);
+  // Layout size at zoom 1 (current size is proportional to islandZoom).
+  const baseW = W / islandZoom;
+  const baseH = H / islandZoom;
+  const coverAt1 = Math.max(baseW / nat.w, baseH / nat.h);
+  if (coverAt1 <= 0) return 1;
+  const sharpMax = ISLAND_ZOOM_SHARP_PAD / coverAt1;
+  const minZ = islandZoomMin();
+  return Math.min(ISLAND_ZOOM_MAX_HARD, Math.max(minZ, 1, sharpMax));
+}
+
+function islandOriginPx(world: HTMLElement): { ox: number; oy: number } {
+  return {
+    ox: world.offsetWidth * ISLAND_TRANSFORM_ORIGIN.x,
+    oy: world.offsetHeight * ISLAND_TRANSFORM_ORIGIN.y,
+  };
+}
+
 function applyIslandPan(): void {
   const world = app.querySelector<HTMLElement>("#island-world");
   if (world) {
-    world.style.transform = `translate(${islandPan.x}px, ${islandPan.y}px)`;
+    world.style.setProperty("--island-zoom", islandZoom.toFixed(4));
+    world.style.transform = `translate3d(${islandPan.x}px,${islandPan.y}px,0) rotateX(${ISLAND_ROTATE_X_DEG}deg) scale(${ISLAND_BASE_SCALE})`;
   }
 }
 
 function clampIslandPan(viewport: HTMLElement, world: HTMLElement): void {
-  const minX = Math.min(0, viewport.clientWidth - world.offsetWidth);
-  const minY = Math.min(0, viewport.clientHeight - world.offsetHeight);
-  islandPan.x = Math.min(0, Math.max(minX, islandPan.x));
-  islandPan.y = Math.min(0, Math.max(minY, islandPan.y));
+  const s = ISLAND_BASE_SCALE;
+  const W = world.offsetWidth;
+  const H = world.offsetHeight;
+  if (W <= 0 || H <= 0) return;
+  const { ox, oy } = islandOriginPx(world);
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  const maxX = -ox * (1 - s);
+  const minX = vw - W * s - ox * (1 - s);
+  const maxY = -oy * (1 - s);
+  const minY = vh - H * s - oy * (1 - s);
+  if (minX > maxX) {
+    islandPan.x = (vw - W * s) / 2 - ox * (1 - s);
+  } else {
+    islandPan.x = Math.min(maxX, Math.max(minX, islandPan.x));
+  }
+  if (minY > maxY) {
+    islandPan.y = (vh - H * s) / 2 - oy * (1 - s);
+  } else {
+    islandPan.y = Math.min(maxY, Math.max(minY, islandPan.y));
+  }
+}
+
+function zoomIslandAt(
+  viewport: HTMLElement,
+  world: HTMLElement,
+  clientX: number,
+  clientY: number,
+  nextZoom: number,
+): void {
+  const maxZ = islandZoomMax(world);
+  const minZ = islandZoomMin();
+  const z = Math.min(maxZ, Math.max(minZ, nextZoom));
+  if (Math.abs(z - islandZoom) < 1e-5) return;
+
+  const s = ISLAND_BASE_SCALE;
+  const rect = viewport.getBoundingClientRect();
+  const mx = clientX - rect.left;
+  const my = clientY - rect.top;
+  const prevW = world.offsetWidth;
+  const prevH = world.offsetHeight;
+  if (prevW <= 0 || prevH <= 0) return;
+  const { ox, oy } = islandOriginPx(world);
+  const lx = (mx - islandPan.x - ox * (1 - s)) / s;
+  const ly = (my - islandPan.y - oy * (1 - s)) / s;
+  const fx = lx / prevW;
+  const fy = ly / prevH;
+
+  islandZoom = z;
+  applyIslandPan();
+  // Reflow so offsetWidth reflects the new --island-zoom layout size.
+  const newW = world.offsetWidth;
+  const newH = world.offsetHeight;
+  const ox2 = newW * ISLAND_TRANSFORM_ORIGIN.x;
+  const oy2 = newH * ISLAND_TRANSFORM_ORIGIN.y;
+  islandPan.x = mx - fx * newW * s - ox2 * (1 - s);
+  islandPan.y = my - fy * newH * s - oy2 * (1 - s);
+  clampIslandPan(viewport, world);
+  applyIslandPan();
+}
+
+function islandPinchDistance(): number {
+  if (islandActivePointers.size < 2) return 0;
+  const pts = [...islandActivePointers.values()];
+  return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+}
+
+function islandPinchMidpoint(): { x: number; y: number } {
+  const pts = [...islandActivePointers.values()];
+  return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
 }
 
 function bindIslandPan(): void {
@@ -3487,10 +5370,29 @@ function bindIslandPan(): void {
   const world = app.querySelector<HTMLElement>("#island-world");
   if (!viewport || !world) return;
 
+  islandActivePointers.clear();
+  islandPinch = null;
+  if (islandCoverFitApplied !== ISLAND_COVER_FIT_VERSION) {
+    islandCoverFitApplied = ISLAND_COVER_FIT_VERSION;
+    islandPanCentered = false;
+    islandZoom = Math.max(islandZoomMin(), 1);
+  }
+  applyIslandPan();
+
   const finishClamp = () => {
+    const minZ = islandZoomMin();
+    const maxZ = islandZoomMax(world);
+    if (islandZoom < minZ) {
+      islandZoom = minZ;
+      islandPanCentered = false;
+    }
+    if (islandZoom > maxZ) islandZoom = maxZ;
     if (!islandPanCentered && world.offsetWidth > 0) {
-      islandPan.x = (viewport.clientWidth - world.offsetWidth) / 2;
-      islandPan.y = (viewport.clientHeight - world.offsetHeight) / 2;
+      const s = ISLAND_BASE_SCALE;
+      const { ox, oy } = islandOriginPx(world);
+      islandPan.x = (viewport.clientWidth - world.offsetWidth * s) / 2 - ox * (1 - s);
+      islandPan.y =
+        (viewport.clientHeight - world.offsetHeight * s) / 2 - oy * (1 - s) + viewport.clientHeight * 0.05;
       islandPanCentered = true;
     }
     clampIslandPan(viewport, world);
@@ -3498,9 +5400,47 @@ function bindIslandPan(): void {
   };
   finishClamp();
   requestAnimationFrame(finishClamp);
+  const mapImg = world.querySelector<HTMLImageElement>(".island-map-img");
+  if (mapImg && !mapImg.complete) {
+    mapImg.addEventListener("load", finishClamp, { once: true });
+  }
+
+  viewport.addEventListener(
+    "wheel",
+    (ev) => {
+      ev.preventDefault();
+      const factor = Math.exp(-ev.deltaY * 0.0016);
+      zoomIslandAt(viewport, world, ev.clientX, ev.clientY, islandZoom * factor);
+    },
+    { passive: false },
+  );
 
   viewport.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
+    islandActivePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+    if (islandActivePointers.size >= 2) {
+      islandPanDrag = null;
+      clearIslandLongPress();
+      const dist = islandPinchDistance();
+      if (dist > 0) {
+        islandPinch = { startDist: dist, startZoom: islandZoom };
+        viewport.setAttribute("data-pan-moved", "1");
+      }
+      try {
+        viewport.setPointerCapture(ev.pointerId);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
+    const onSpot = (ev.target as HTMLElement | null)?.closest?.("[data-b]");
+    if (islandLayoutEdit && onSpot) return;
+    if (onSpot && !islandLayoutEdit) {
+      // Long-press handler owns the gesture until cancelled.
+      return;
+    }
     islandPanDrag = {
       pointerId: ev.pointerId,
       startX: ev.clientX,
@@ -3517,6 +5457,25 @@ function bindIslandPan(): void {
   });
 
   viewport.addEventListener("pointermove", (ev) => {
+    if (islandActivePointers.has(ev.pointerId)) {
+      islandActivePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    }
+
+    if (islandPinch && islandActivePointers.size >= 2) {
+      const dist = islandPinchDistance();
+      if (dist > 0 && islandPinch.startDist > 0) {
+        const mid = islandPinchMidpoint();
+        zoomIslandAt(
+          viewport,
+          world,
+          mid.x,
+          mid.y,
+          islandPinch.startZoom * (dist / islandPinch.startDist),
+        );
+      }
+      return;
+    }
+
     if (!islandPanDrag || islandPanDrag.pointerId !== ev.pointerId) return;
     const dx = ev.clientX - islandPanDrag.startX;
     const dy = ev.clientY - islandPanDrag.startY;
@@ -3528,6 +5487,14 @@ function bindIslandPan(): void {
   });
 
   const endDrag = (ev: PointerEvent) => {
+    islandActivePointers.delete(ev.pointerId);
+    if (islandActivePointers.size < 2) {
+      islandPinch = null;
+      if (islandActivePointers.size === 0) {
+        queueMicrotask(() => viewport.removeAttribute("data-pan-moved"));
+      }
+    }
+
     if (!islandPanDrag || islandPanDrag.pointerId !== ev.pointerId) return;
     const moved = islandPanDrag.moved;
     islandPanDrag = null;
@@ -3615,6 +5582,119 @@ function bindStagesPan(): void {
   viewport.addEventListener("pointercancel", endDrag);
 }
 
+function clearIslandLongPress(): void {
+  if (islandLongPress) {
+    clearTimeout(islandLongPress.timer);
+    islandLongPress = null;
+  }
+}
+
+function bindIslandLayoutEdit(): void {
+  const viewport = app.querySelector<HTMLElement>("#island-viewport");
+  const world = app.querySelector<HTMLElement>("#island-world");
+  if (!viewport || !world) return;
+
+  app.querySelector("#btn-island-layout-done")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    exitIslandLayoutEdit(true);
+  });
+  app.querySelector("#btn-island-layout-reset")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    islandLayoutDraft = { ...ISLAND_LAYOUT_DEFAULT };
+    writeIslandLayout(islandLayoutDraft);
+    flash(t('ui.f88240ee56'));
+    render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-b]").forEach((btn) => {
+    btn.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0) return;
+      const id = btn.dataset.b;
+      if (!id) return;
+
+      if (islandLayoutEdit) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        islandPanDrag = null;
+        islandSpotDrag = { id, pointerId: ev.pointerId };
+        btn.classList.add("is-layout-focus", "is-dragging");
+        try {
+          btn.setPointerCapture(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
+      clearIslandLongPress();
+      islandLongPress = {
+        id,
+        pointerId: ev.pointerId,
+        startX: ev.clientX,
+        startY: ev.clientY,
+        timer: setTimeout(() => {
+          if (!islandLongPress || islandLongPress.id !== id) return;
+          islandLongPress = null;
+          islandPanDrag = null;
+          try {
+            navigator.vibrate?.(24);
+          } catch {
+            /* ignore */
+          }
+          enterIslandLayoutEdit(id);
+        }, 520),
+      };
+    });
+
+    btn.addEventListener("pointermove", (ev) => {
+      if (
+        islandLongPress &&
+        islandLongPress.pointerId === ev.pointerId &&
+        Math.hypot(ev.clientX - islandLongPress.startX, ev.clientY - islandLongPress.startY) > 12
+      ) {
+        clearIslandLongPress();
+        // Hand off to pan.
+        islandPanDrag = {
+          pointerId: ev.pointerId,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          origX: islandPan.x,
+          origY: islandPan.y,
+          moved: true,
+        };
+        try {
+          viewport.setPointerCapture(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
+      if (!islandSpotDrag || islandSpotDrag.pointerId !== ev.pointerId) return;
+      if (islandSpotDrag.id !== btn.dataset.b) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const pct = clientToIslandPct(ev.clientX, ev.clientY, world);
+      applyIslandSpotPosDom(islandSpotDrag.id, pct.x, pct.y);
+    });
+
+    const endSpot = (ev: PointerEvent) => {
+      if (islandLongPress && islandLongPress.pointerId === ev.pointerId) {
+        clearIslandLongPress();
+      }
+      if (!islandSpotDrag || islandSpotDrag.pointerId !== ev.pointerId) return;
+      btn.classList.remove("is-dragging");
+      islandSpotDrag = null;
+      islandLayoutSuppressClick = true;
+      queueMicrotask(() => {
+        islandLayoutSuppressClick = false;
+      });
+    };
+    btn.addEventListener("pointerup", endSpot);
+    btn.addEventListener("pointercancel", endSpot);
+  });
+}
+
 function bind(): void {
   if (view === "auth") {
     bindAuth();
@@ -3623,46 +5703,83 @@ function bind(): void {
 
   if (view === "home") {
     bindIslandPan();
-    app.querySelector("#btn-summoner-picker")?.addEventListener("click", (ev) => {
+    bindIslandLayoutEdit();
+    app.querySelector("#btn-home-chat")?.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      summonerPickerOpen = !summonerPickerOpen;
-      if (summonerPickerOpen && resMoreOpen) {
-        resMoreOpen = false;
-        applyResMoreOpen();
-      }
-      if (summonerPickerOpen && settingsOpen) {
-        settingsOpen = false;
-        const settings = app.querySelector("#settings-layer");
-        settings?.remove();
-        app.querySelector("#btn-settings")?.classList.remove("active");
-        app.querySelector("#btn-settings")?.setAttribute("aria-expanded", "false");
-      }
-      if (summonerPickerOpen && (mailboxOpen || notifOpen)) {
-        mailboxOpen = false;
-        notifOpen = false;
-        app.querySelector("#mailbox-layer")?.remove();
-        app.querySelector("#notif-layer")?.remove();
-      }
-      applySummonerPickerOpen();
+      openHomeChat();
     });
-    app
-      .querySelector("#btn-summoner-picker-close")
-      ?.addEventListener("click", () => {
-        summonerPickerOpen = false;
-        applySummonerPickerOpen();
+    app.querySelector("#btn-chat-close")?.addEventListener("click", () => {
+      chatOpen = false;
+      render();
+    });
+    app.querySelector("#chat-channel-select")?.addEventListener("change", (ev) => {
+      const sel = ev.currentTarget as HTMLSelectElement;
+      const id = Number(sel.value);
+      if (!Number.isFinite(id)) return;
+      if (!switchChatSession(id)) {
+        flash(t("chat.channelFull"));
+        sel.value = String(chatChannelId);
+        return;
+      }
+      chatLineUnread = false;
+      render();
+      queueMicrotask(() => {
+        const log = app.querySelector("#chat-log");
+        if (log) log.scrollTop = log.scrollHeight;
       });
-    app.querySelectorAll<HTMLButtonElement>("[data-summoner]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const el = btn.dataset.summoner as SummonerElement | undefined;
-        if (!el || el === (save.activeSummoner ?? "light")) return;
-        save = setActiveSummoner(save, el);
-        summonerPickerOpen = false;
-        persist();
-        flash(`${SUMMONER_ELEMENT_LABEL[el]} 서머너로 전환`);
-        render();
+    });
+    app.querySelector("#chat-compose")?.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const input = app.querySelector<HTMLInputElement>("#chat-input");
+      const text = input?.value.trim() ?? "";
+      if (!text) return;
+      if (!pushChatMessage(chatChannelId, displayNickname(), text)) return;
+      if (input) input.value = "";
+      chatLineUnread = false;
+      render();
+      queueMicrotask(() => {
+        const log = app.querySelector("#chat-log");
+        if (log) log.scrollTop = log.scrollHeight;
+        app.querySelector<HTMLInputElement>("#chat-input")?.focus();
       });
     });
   }
+
+  const toggleSummonerPicker = () => {
+    summonerPickerOpen = !summonerPickerOpen;
+    if (summonerPickerOpen) {
+      resMoreOpen = false;
+      settingsOpen = false;
+      chatOpen = false;
+      mailboxOpen = false;
+      notifOpen = false;
+      missionOpen = false;
+    }
+    render();
+  };
+
+  app.querySelector("#btn-nav-summoner")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    toggleSummonerPicker();
+  });
+  app
+    .querySelector("#btn-summoner-picker-close")
+    ?.addEventListener("click", () => {
+      summonerPickerOpen = false;
+      applySummonerPickerOpen();
+    });
+  app.querySelectorAll<HTMLButtonElement>("[data-summoner]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const el = btn.dataset.summoner as SummonerElement | undefined;
+      if (!el || el === (save.activeSummoner ?? "light")) return;
+      save = setActiveSummoner(save, el);
+      summonerPickerOpen = false;
+      persist();
+      flash(t("summonerPicker.switched", { element: elementLabel(el) }));
+      render();
+    });
+  });
+
   if (view === "stages") {
     bindStagesPan();
   }
@@ -3682,6 +5799,17 @@ function bind(): void {
     if (settingsOpen) {
       mailboxOpen = false;
       notifOpen = false;
+      missionOpen = false;
+      const hadChat = chatOpen;
+      chatOpen = false;
+      applyMailboxOpen();
+      applyNotifOpen();
+      applyMissionOpen();
+      if (hadChat) {
+        applySettingsOpen();
+        render();
+        return;
+      }
     }
     if (summonerPickerOpen) {
       summonerPickerOpen = false;
@@ -3691,11 +5819,56 @@ function bind(): void {
       resMoreOpen = false;
       applyResMoreOpen();
     }
-    render();
+    applySettingsOpen();
   });
 
   app.querySelector("#btn-settings-close")?.addEventListener("click", () => {
     settingsOpen = false;
+    applySettingsOpen();
+  });
+
+  app.querySelector("#btn-mission")?.addEventListener("click", () => {
+    missionOpen = !missionOpen;
+    if (missionOpen) {
+      settingsOpen = false;
+      mailboxOpen = false;
+      notifOpen = false;
+      summonerPickerOpen = false;
+      resMoreOpen = false;
+      applySettingsOpen();
+      applyMailboxOpen();
+      applyNotifOpen();
+      applySummonerPickerOpen();
+      applyResMoreOpen();
+    }
+    render();
+  });
+  app.querySelector("#btn-mission-close")?.addEventListener("click", () => {
+    missionOpen = false;
+    applyMissionOpen();
+  });
+  app.querySelectorAll<HTMLButtonElement>("[data-mission-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.missionTab;
+      if (tab !== "daily" && tab !== "achievements") return;
+      missionTab = tab;
+      render();
+    });
+  });
+  app.querySelectorAll<HTMLButtonElement>("[data-mission-go]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const nav = btn.dataset.missionGo;
+      if (!nav) return;
+      missionOpen = false;
+      view = nav as View;
+      render();
+    });
+  });
+
+  app.querySelector<HTMLSelectElement>("#settings-lang")?.addEventListener("change", (ev) => {
+    const next = (ev.currentTarget as HTMLSelectElement).value as LocaleId;
+    setLocale(next);
+    settingsOpen = true;
     render();
   });
 
@@ -3709,6 +5882,10 @@ function bind(): void {
     if (mailboxOpen) {
       notifOpen = false;
       settingsOpen = false;
+      missionOpen = false;
+      applyNotifOpen();
+      applySettingsOpen();
+      applyMissionOpen();
       if (summonerPickerOpen) {
         summonerPickerOpen = false;
         applySummonerPickerOpen();
@@ -3718,11 +5895,11 @@ function bind(): void {
         applyResMoreOpen();
       }
     }
-    render();
+    applyMailboxOpen();
   });
   app.querySelector("#btn-mailbox-close")?.addEventListener("click", () => {
     mailboxOpen = false;
-    render();
+    applyMailboxOpen();
   });
 
   app.querySelector("#btn-notif")?.addEventListener("click", () => {
@@ -3730,6 +5907,8 @@ function bind(): void {
     if (notifOpen) {
       mailboxOpen = false;
       settingsOpen = false;
+      applyMailboxOpen();
+      applySettingsOpen();
       if (summonerPickerOpen) {
         summonerPickerOpen = false;
         applySummonerPickerOpen();
@@ -3739,11 +5918,11 @@ function bind(): void {
         applyResMoreOpen();
       }
     }
-    render();
+    applyNotifOpen();
   });
   app.querySelector("#btn-notif-close")?.addEventListener("click", () => {
     notifOpen = false;
-    render();
+    applyNotifOpen();
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
@@ -3753,6 +5932,7 @@ function bind(): void {
       notifOpen = false;
       summonerPickerOpen = false;
       resMoreOpen = false;
+      missionOpen = false;
       const nav = btn.dataset.nav;
       if (view === "result" || view === "battle") {
         autoMode = false;
@@ -3782,7 +5962,7 @@ function bind(): void {
         const island = collectMana(save.island, "mana_pond", now);
         save = { ...save, island };
         persist();
-        flash(`진액 수집 · 마나 ${Math.floor(island.mana)}`);
+        flash(`${t('ui.e94107292d')} ${Math.floor(island.mana)}`);
         view = "home";
         partyDraft = null;
         render();
@@ -3796,6 +5976,14 @@ function bind(): void {
       if (nav !== "stages") {
         stagesRegion = null;
       }
+      if (view === "home" && nav !== "home" && islandLayoutEdit) {
+        if (islandLayoutDraft) writeIslandLayout(islandLayoutDraft);
+        islandLayoutEdit = false;
+        islandLayoutDraft = null;
+        islandSpotDrag = null;
+        clearIslandLongPress();
+      }
+      if (nav === "enhance") enhanceTab = "monsters";
       view = nav as View;
       render();
     });
@@ -3809,22 +5997,29 @@ function bind(): void {
         return;
       }
       const kind = btn.dataset.collect;
-      if (kind === "mana") {
-        const r = homeCollect(save);
-        save = r.save;
-        persist();
+      if (kind !== "mana" && kind !== "crystal") return;
+      const from = btn.getBoundingClientRect();
+      const beforeMana = Math.floor(save.island.mana);
+      const beforeCrystal = Math.floor(save.island.crystal);
+      const r = kind === "mana" ? homeCollect(save) : homeCollectCrystal(save);
+      save = r.save;
+      persist();
+      const toMana = Math.floor(save.island.mana);
+      const toCrystal = Math.floor(save.island.crystal);
+      const gained =
+        kind === "mana" ? toMana - beforeMana : toCrystal - beforeCrystal;
+      view = "home";
+      render();
+      if (gained > 0) {
+        playResourceCollectFx({
+          kind,
+          amount: gained,
+          from,
+          fromValue: kind === "mana" ? beforeMana : beforeCrystal,
+          toValue: kind === "mana" ? toMana : toCrystal,
+        });
+      } else {
         flash(r.message);
-        view = "home";
-        render();
-        return;
-      }
-      if (kind === "crystal") {
-        const r = homeCollectCrystal(save);
-        save = r.save;
-        persist();
-        flash(r.message);
-        view = "home";
-        render();
       }
     });
   });
@@ -3835,9 +6030,20 @@ function bind(): void {
         ev.preventDefault();
         return;
       }
+      if (islandLayoutEdit || islandLayoutSuppressClick) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        islandLayoutSuppressClick = false;
+        if (islandLayoutEdit && btn.dataset.b) {
+          app.querySelectorAll<HTMLElement>("[data-b]").forEach((el) => {
+            el.classList.toggle("is-layout-focus", el.dataset.b === btn.dataset.b);
+          });
+        }
+        return;
+      }
       if (btn.dataset.locked === "1") {
         const lv = btn.dataset.unlock;
-        flash(lv ? `서머너 Lv.${lv}에 해금됩니다.` : "아직 해금되지 않았습니다.");
+        flash(lv ? `${t('ui.fd3c4455cd')} Lv.${lv}${t('ui.71654c1bdc')}.` : t('ui.654ebee916'));
         return;
       }
       const id = btn.dataset.b;
@@ -3912,7 +6118,7 @@ function bind(): void {
     const uid = lastSummonUids[0];
     if (!uid) return;
     if (save.party.includes(uid)) {
-      flash("이미 파티에 있습니다.");
+      flash(t('ui.d02305abdb'));
       render();
       return;
     }
@@ -3925,6 +6131,54 @@ function bind(): void {
     persist();
     flash(r.message);
     render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-select-mon]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.selectMon;
+      if (!uid) return;
+      selectedEnhanceUid = uid;
+      monSkillPick = 0;
+      enhanceTab = "monsters";
+      monBookDock = "roster";
+      render();
+    });
+  });
+
+  app.querySelector<HTMLSelectElement>("#mon-roster-sort")?.addEventListener("change", (ev) => {
+    const raw = (ev.currentTarget as HTMLSelectElement).value;
+    const allowed: RosterSortMode[] = ["default", "level", "stars", "element", "party"];
+    if (!allowed.includes(raw as RosterSortMode)) return;
+    rosterSortMode = raw as RosterSortMode;
+    render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-mon-detail-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const raw = btn.dataset.monDetailTab;
+      if (raw === "info" || raw === "skills" || raw === "awaken" || raw === "symbols") {
+        if (monDetailTab === raw) return;
+        monDetailTab = raw;
+        enhanceTab = "monsters";
+        if (!applyMonDetailTabUi()) render();
+      }
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-mon-dock]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const raw = btn.dataset.monDock;
+      if (raw === "roster" || raw === "symbols") {
+        monBookDock = raw;
+        if (raw === "roster") {
+          equipPickSymIndex = null;
+        } else {
+          monDetailTab = "symbols";
+        }
+        enhanceTab = "monsters";
+        render();
+      }
+    });
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-enh]").forEach((btn) => {
@@ -3949,14 +6203,28 @@ function bind(): void {
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-skup]").forEach((btn) => {
+  app.querySelectorAll<HTMLButtonElement>("[data-mon-skill-pick]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const uid = btn.dataset.skup!;
-      const slot = Number(btn.dataset.skslot ?? "0");
-      const r = runSkillUp(save, uid, slot);
+      const slot = Number(btn.dataset.monSkillPick ?? "0");
+      if (slot >= 0 && slot <= 2) {
+        monSkillPick = slot;
+        monDetailTab = "skills";
+        enhanceTab = "monsters";
+        render();
+      }
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-skill-feed-fodder]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.skillFeedTarget;
+      const fodder = btn.dataset.skillFeedFodder;
+      if (!target || !fodder) return;
+      const r = runFeedSameMonster(save, target, fodder);
       save = r.save;
       persist();
       flash(r.message);
+      monDetailTab = "skills";
       render();
     });
   });
@@ -3964,12 +6232,7 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-enhance-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const raw = btn.dataset.enhanceTab;
-      if (
-        raw === "awaken" ||
-        raw === "monsters" ||
-        raw === "gear" ||
-        raw === "symbols"
-      ) {
+      if (raw === "monsters" || raw === "summoner") {
         enhanceTab = raw;
         render();
       }
@@ -3990,7 +6253,7 @@ function bind(): void {
           : "accessory";
       const r = runEnhanceGear(save, slot);
       save = r.save;
-      if (r.message.startsWith("장비 강화:")) {
+      if (r.message.startsWith(t('ui.efa49027d0'))) {
         enhanceFx = { kind: "gear", slot };
       }
       persist();
@@ -4066,7 +6329,7 @@ function bind(): void {
       const id = btn.dataset.skillNode ?? "";
       const r = runUnlockSkillNode(save, id);
       save = r.save;
-      if (id && r.message.includes("해금")) {
+      if (id && r.message.includes(t('ui.d1496ce82d'))) {
         enhanceFx = { kind: "node", id };
       }
       persist();
@@ -4075,15 +6338,84 @@ function bind(): void {
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-sym]").forEach((btn) => {
+  app.querySelectorAll<HTMLButtonElement>("[data-sym-detail]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const idx = btn.dataset.sym!;
-      const r = runEnhanceSymbol(save, idx);
-      save = r.save;
-      persist();
-      flash(r.message);
+      const idx = Number(btn.dataset.symDetail);
+      if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+      symbolDetailIndex = idx;
+      enhanceTab = "monsters";
       render();
     });
+  });
+
+  const closeSymDetail = () => {
+    symbolDetailIndex = null;
+    render();
+  };
+  app.querySelector("#btn-sym-detail-close")?.addEventListener("click", closeSymDetail);
+  app.querySelector("#btn-sym-detail-x")?.addEventListener("click", closeSymDetail);
+
+  app.querySelector("[data-sym-detail-enhance]")?.addEventListener("click", () => {
+    if (symbolDetailIndex == null) return;
+    const id = save.symbols[symbolDetailIndex]?.id;
+    const r = runEnhanceSymbol(save, String(symbolDetailIndex));
+    save = r.save;
+    persist();
+    if (id) {
+      const next = save.symbols.findIndex((x) => x.id === id);
+      symbolDetailIndex = next >= 0 ? next : null;
+    }
+    flash(r.message);
+    render();
+  });
+
+  app.querySelector("[data-sym-detail-imprint]")?.addEventListener("click", () => {
+    if (symbolDetailIndex == null) return;
+    const prev = save.symbols[symbolDetailIndex];
+    const before = prev ? describeSymbol(prev) : "";
+    const id = prev?.id;
+    const r = runImprintSymbol(save, String(symbolDetailIndex));
+    save = r.save;
+    persist();
+    const next = id ? save.symbols.find((x) => x.id === id) : undefined;
+    if (next && before && r.message.startsWith(t("ui.d48858f588"))) {
+      forgeReveal = {
+        kind: "imprint",
+        before,
+        after: describeSymbol(next),
+        cost: `?${t("ui.5d0bf3b101")} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
+      };
+    }
+    if (id) {
+      const ni = save.symbols.findIndex((x) => x.id === id);
+      symbolDetailIndex = ni >= 0 ? ni : null;
+    }
+    flash(r.message);
+    render();
+  });
+
+  app.querySelector("[data-sym-detail-unequip]")?.addEventListener("click", () => {
+    if (symbolDetailIndex == null) return;
+    const sym = save.symbols[symbolDetailIndex];
+    if (!sym) return;
+    const mon = save.roster.find((m) => (m.symbolSlots ?? []).includes(sym.id));
+    if (!mon) return;
+    const slot = (mon.symbolSlots ?? []).findIndex((id) => id === sym.id) + 1;
+    const r = runUnequipSymbol(save, mon.uid, slot);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+
+  app.querySelector("[data-sym-detail-equip]")?.addEventListener("click", () => {
+    if (symbolDetailIndex == null) return;
+    const idx = symbolDetailIndex;
+    symbolDetailIndex = null;
+    equipPickSymIndex = idx;
+    monBookDock = "symbols";
+    enhanceTab = "monsters";
+    render();
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-grind]").forEach((btn) => {
@@ -4096,12 +6428,12 @@ function bind(): void {
       save = r.save;
       persist();
       const next = id ? save.symbols.find((s) => s.id === id) : undefined;
-      if (next && before && r.message.startsWith("연마:")) {
+      if (next && before && r.message.startsWith(t('ui.d48858f588'))) {
         forgeReveal = {
           kind: "grind",
           before,
           after: describeSymbol(next),
-          cost: `−마나 ${SYMBOL_GRIND_MANA_COST}`,
+          cost: `?${t('ui.dc78e6a251')} ${SYMBOL_GRIND_MANA_COST}`,
         };
       }
       flash(r.message);
@@ -4129,12 +6461,12 @@ function bind(): void {
       save = r.save;
       persist();
       const next = id ? save.symbols.find((s) => s.id === id) : undefined;
-      if (next && before && r.message.startsWith("연마:")) {
+      if (next && before && r.message.startsWith(t('ui.d48858f588'))) {
         forgeReveal = {
           kind: "imprint",
           before,
           after: describeSymbol(next),
-          cost: `−크리스탈 ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
+          cost: `?${t('ui.5d0bf3b101')} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
         };
       }
       flash(r.message);
@@ -4176,6 +6508,29 @@ function bind(): void {
     flash(r.message);
     render();
   });
+  app.querySelector("[data-expand-sym-bag]")?.addEventListener("click", () => {
+    if (symbolBagExpandCost(save) == null) {
+      flash(t("ui.expandSymbolBagMax"));
+      return;
+    }
+    symbolBagExpandOpen = true;
+    render();
+  });
+  const closeSymBagExpand = () => {
+    if (!symbolBagExpandOpen) return;
+    symbolBagExpandOpen = false;
+    render();
+  };
+  app.querySelector("#btn-sym-bag-expand-close")?.addEventListener("click", closeSymBagExpand);
+  app.querySelector("#btn-sym-bag-expand-cancel")?.addEventListener("click", closeSymBagExpand);
+  app.querySelector("#btn-sym-bag-expand-ok")?.addEventListener("click", () => {
+    symbolBagExpandOpen = false;
+    const r = runExpandSymbolBag(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
   app.querySelector("#btn-craft-essence")?.addEventListener("click", () => {
     const r = runCraftEssence(save);
     save = r.save;
@@ -4201,13 +6556,13 @@ function bind(): void {
       const r = runFusion(save, btn.dataset.fuseA!, btn.dataset.fuseB!);
       save = r.save;
       persist();
-      if (r.message.startsWith("융합:") && keepUid) {
+      if (r.message.startsWith(t('ui.04e75ecf18')) && keepUid) {
         const kept = save.roster.find((m) => m.uid === keepUid);
         if (kept && materials) {
           fusionReveal = {
             materials,
             result: describeOwned(kept),
-            cost: `−마나 ${FUSION_MANA_COST}`,
+            cost: `?${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
           };
         }
       }
@@ -4237,13 +6592,25 @@ function bind(): void {
     });
   });
 
-  app.querySelector("#btn-pond-collect")?.addEventListener("click", () => {
+  app.querySelector("#btn-pond-collect")?.addEventListener("click", (ev) => {
+    const origin = (ev.currentTarget as HTMLElement).getBoundingClientRect();
     const now = Date.now();
+    const before = Math.floor(save.island.mana);
     const island = collectMana(tickProduction(save.island, now), "mana_pond", now);
     save = { ...save, island };
     persist();
-        flash(`진액 수집 · 마나 ${Math.floor(island.mana)}`);
+    const to = Math.floor(island.mana);
+    const gained = to - before;
     render();
+    if (gained > 0) {
+      playResourceCollectFx({
+        kind: "mana",
+        amount: gained,
+        from: origin,
+        fromValue: before,
+        toValue: to,
+      });
+    }
   });
   app.querySelector("#btn-pond-upgrade")?.addEventListener("click", () => {
     const r = runUpgradeBuilding(save, "mana_pond");
@@ -4253,12 +6620,26 @@ function bind(): void {
     render();
   });
 
-  app.querySelector("#btn-mine-collect")?.addEventListener("click", () => {
+  app.querySelector("#btn-mine-collect")?.addEventListener("click", (ev) => {
+    const origin = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+    const before = Math.floor(save.island.crystal);
     const r = homeCollectCrystal(save);
     save = r.save;
     persist();
-    flash(r.message);
+    const to = Math.floor(save.island.crystal);
+    const gained = to - before;
     render();
+    if (gained > 0) {
+      playResourceCollectFx({
+        kind: "crystal",
+        amount: gained,
+        from: origin,
+        fromValue: before,
+        toValue: to,
+      });
+    } else {
+      flash(r.message);
+    }
   });
   app.querySelector("#btn-mine-upgrade")?.addEventListener("click", () => {
     const r = runUpgradeBuilding(save, "crystal_mine");
@@ -4272,8 +6653,8 @@ function bind(): void {
     const r = runDailyWish(save);
     save = r.save;
     persist();
-    if (r.message.startsWith("소원:")) {
-      wishReveal = r.message.replace(/^소원:\s*/, "");
+    if (r.message.startsWith(t('ui.b835657896'))) {
+      wishReveal = r.message.replace(/^\uC18C\uC6D0:\s*/, "");
     }
     flash(r.message);
     render();
@@ -4289,6 +6670,10 @@ function bind(): void {
       if (!Number.isFinite(idx) || !save.symbols[idx]) return;
       slotEquipPick = null;
       equipPickSymIndex = equipPickSymIndex === idx ? null : idx;
+      if (equipPickSymIndex != null) {
+        monBookDock = "symbols";
+        enhanceTab = "monsters";
+      }
       render();
     });
   });
@@ -4322,6 +6707,8 @@ function bind(): void {
         slotEquipPick?.uid === uid && slotEquipPick.slot === slot
           ? null
           : { uid, slot };
+      enhanceTab = "monsters";
+      monBookDock = "roster";
       render();
     });
   });
@@ -4366,7 +6753,7 @@ function bind(): void {
       if (draft.has(uid)) draft.delete(uid);
       else if (draft.size < 4) draft.add(uid);
       else {
-        flash("파티는 최대 4명입니다.");
+        flash(t('ui.e44dd9cad3'));
         render();
         return;
       }
@@ -4377,7 +6764,7 @@ function bind(): void {
   app.querySelector("#btn-party-save")?.addEventListener("click", () => {
     const draft = ensurePartyDraft();
     if (draft.size === 0) {
-      flash("최소 1명을 선택하세요.");
+      flash(t('ui.bb044ada8a'));
       return;
     }
     const r = runSetParty(save, [...draft]);
@@ -4397,7 +6784,7 @@ function bind(): void {
       if (idx >= 0) cur.splice(idx, 1);
       else if (cur.length < 2) cur.push(id);
       else {
-        flash("밴은 최대 2마리입니다.");
+        flash(t('ui.522ab79351'));
         return;
       }
       const r = runSetArenaBans(save, cur);
@@ -4418,7 +6805,7 @@ function bind(): void {
 
   app.querySelector("#btn-board-switch")?.addEventListener("click", () => {
     if (!battle) return;
-    if (!battle.switchBoard("수동")) return;
+    if (!battle.switchBoard(t('ui.a9034f7e3d'))) return;
     refreshLegal();
     render();
   });
@@ -4428,7 +6815,7 @@ function bind(): void {
       if (!battle || battle.boards.length < 2) return;
       const idx = Number(btn.dataset.boardTab);
       if (!Number.isFinite(idx) || idx === battle.activeBoardIndex) return;
-    if (!battle.switchBoard("수동")) return;
+    if (!battle.switchBoard(t('ui.a9034f7e3d'))) return;
       refreshLegal();
       render();
     });
@@ -4462,7 +6849,7 @@ function bind(): void {
   });
 
   app.querySelector("#btn-guild-rename")?.addEventListener("click", () => {
-    const next = window.prompt("새 길드명", save.guildName ?? "");
+    const next = window.prompt(t('ui.b43e678315'), save.guildName ?? "");
     if (next == null) return;
     const r = runJoinGuild(save, next);
     save = r.save;
@@ -4471,10 +6858,18 @@ function bind(): void {
     render();
   });
 
+  app.querySelector("#region-diff-select")?.addEventListener("change", (ev) => {
+    const v = (ev.target as HTMLSelectElement).value as StageDifficulty;
+    if (v === "normal" || v === "hard" || v === "hell") {
+      stageEntryDiff = v;
+      render();
+    }
+  });
+
   app.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const stage = getStage(btn.dataset.stage!);
-      if (stage) startBattle(stage);
+      if (stage) startBattle(stage, stageEntryDiff);
     });
   });
 
@@ -4485,21 +6880,29 @@ function bind(): void {
       }
       const id = btn.dataset.region as StagesRegionId;
       if (btn.dataset.locked === "1") {
-      flash("이미 파티에 있습니다.");
+    flash(t('ui.b72f5a4752'));
         return;
       }
       stagesRegion = stagesRegion === id ? null : id;
+      if (stagesRegion) {
+        const region = stagesRegions().find((r) => r.id === stagesRegion);
+        if (region && !regionDifficultyOpen(region, stageEntryDiff)) {
+          stageEntryDiff = "normal";
+        }
+      }
       render();
     });
   });
 
   app.querySelector("#btn-region-close")?.addEventListener("click", () => {
     stagesRegion = null;
+    stageEntryId = null;
     render();
   });
 
   app.querySelector("#btn-region-close-x")?.addEventListener("click", () => {
     stagesRegion = null;
+    stageEntryId = null;
     render();
   });
 
@@ -4590,6 +6993,8 @@ function bind(): void {
     dmgFloats = [];
     startBattle(stage);
   });
+
+  startEnergyRegenTimer();
 }
 
 async function boot(): Promise<void> {
@@ -4604,14 +7009,15 @@ async function boot(): Promise<void> {
       return;
     }
     await hydrateSession(me.user);
-    authUi.pane = "login";
+    authUi.pane = "gate";
     view = "auth";
     render();
     return;
   }
   view = "auth";
-  authUi.pane = "login";
+  authUi.pane = "gate";
   render();
 }
 
+initI18n();
 void boot();

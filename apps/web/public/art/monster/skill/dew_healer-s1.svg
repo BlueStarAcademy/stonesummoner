@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg_dew_healer_s1" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#102028"/><stop offset="1" stop-color="#081018"/>
+    </linearGradient>
+    <linearGradient id="a1_dew_healer_s1" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8F0FF"/><stop offset=".45" stop-color="#4AA8E0"/><stop offset="1" stop-color="#185888"/>
+    </linearGradient>
+    <linearGradient id="a2_dew_healer_s1" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8F0FF"/><stop offset="1" stop-color="#4AA8E0"/>
+    </linearGradient>
+    <linearGradient id="a3_dew_healer_s1" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4AA8E0"/><stop offset="1" stop-color="#185888"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg_dew_healer_s1)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#4AA8E0" stroke-opacity=".35" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="24" fill="#4AA8E0" fill-opacity=".10"/>
+  
+      <path d="M32 10C32 10 18 28 18 40C18 48 24 54 32 54C40 54 46 48 46 40C46 28 32 10 32 10Z" fill="url(#a1_dew_healer_s1)" stroke="#C8F0FF" stroke-width="1.3"/>
+      <ellipse cx="26" cy="34" rx="4" ry="6" fill="#fff" opacity=".35"/>
+</svg>

@@ -169,6 +169,7 @@ export function rollSymbolDrop(
   rng: () => number = Math.random,
   idPrefix = "drop",
   preferredSet?: SymbolSetId,
+  preferredSlot?: 1 | 2 | 3 | 4 | 5 | 6,
 ): SymbolInstance {
   let setId: SymbolSetId;
   if (preferredSet && rng() < 0.7) {
@@ -192,6 +193,8 @@ export function rollSymbolDrop(
                     ? "bogang"
                     : "jipjung";
   }
-  const slot = ([1, 2, 3, 4, 5, 6] as const)[Math.floor(rng() * 6)]!;
+  const slot =
+    preferredSlot ??
+    ([1, 2, 3, 4, 5, 6] as const)[Math.floor(rng() * 6)]!;
   return createSymbol(setId, slot, `${idPrefix}_${setId}_${slot}`);
 }

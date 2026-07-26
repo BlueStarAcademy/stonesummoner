@@ -102,4 +102,4 @@ symbol_slots: 6
 Phase 1: `packages/data/src/monsters.ts`에 **10종** + S1/S2/S3 + `stonePassiveId`.
 `packages/combat`가 스킬·스톤 패시브 훅을 처리합니다.
 
-리더스킬은 일부만. SW처럼 서머너 장비/각성으로 이전 가능 ([summoner.md](summoner.md)).
+리더스킬은 일부만. SW처럼 소환사 장비/각성으로 이전 가능 ([summoner.md](summoner.md)).

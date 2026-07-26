@@ -1,6 +1,6 @@
 # stonesummoner-combat
 
-전투 코어: ATB → 스톤소환 → Amplify/마나 → 스킬(서머너 진문개방).
+전투 코어: ATB → 스톤소환 → Amplify/마나 → 스킬(소환사 진문개방).
 
 ```bash
 # repo root

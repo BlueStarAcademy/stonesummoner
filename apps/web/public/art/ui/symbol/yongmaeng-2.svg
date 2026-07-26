@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+  <defs>
+    
+    <radialGradient id="yongmaengs2-aura" cx="50%" cy="48%" r="50%">
+      <stop stop-color="#e07040" stop-opacity=".38"/>
+      <stop offset=".55" stop-color="#e07040" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#e07040" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="yongmaengs2-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D6"/>
+      <stop offset=".28" stop-color="#F0D878"/>
+      <stop offset=".62" stop-color="#C9A227"/>
+      <stop offset="1" stop-color="#7A5A18"/>
+    </linearGradient>
+    <linearGradient id="yongmaengs2-disc" x1="18" y1="14" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2A2216"/>
+      <stop offset="1" stop-color="#12100A"/>
+    </linearGradient>
+    <linearGradient id="yongmaengs2-ink" x1="22" y1="18" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EDD8"/>
+      <stop offset=".55" stop-color="#E8D9A8"/>
+      <stop offset="1" stop-color="#A89050"/>
+    </linearGradient>
+    <linearGradient id="yongmaengs2-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6D0" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="yongmaengs2-depth" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#000" flood-opacity=".55"/>
+    </filter>
+  </defs>
+  <g filter="url(#yongmaengs2-depth)" transform="translate(36 36) scale(0.56) translate(-36 -36)">
+    
+      <path d="M36 14 40 34h10l-8 8 3 14-9-7-9 7 3-14-8-8h10z"
+        fill="#2A1C10" stroke="url(#yongmaengs2-gold)" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M36 20 38.5 33h6.5l-5 5 2 9-4.5-4-4.5 4 2-9-5-5H33.5z"
+        fill="url(#yongmaengs2-ink)" stroke="#5A4214" stroke-width="1"/>
+      <circle cx="36" cy="36" r="2.6" fill="url(#yongmaengs2-gold)"/>
+  </g>
+</svg>

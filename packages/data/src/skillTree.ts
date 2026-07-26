@@ -120,7 +120,7 @@ export const SKILL_TREE_NODES: SkillTreeNode[] = [
     id: "leader_aura",
     nameKo: "지휘 파동",
     branch: "leader",
-    descKo: "리더 ATK +1% · 서머너 HP +40",
+    descKo: "리더 ATK +1% · 소환사 HP +40",
     manaCost: 500,
     crystalCost: 2,
     minLevel: 8,
@@ -290,7 +290,7 @@ export function canUnlockSkillNode(
   if (summonerLevel < node.minLevel) {
     return {
       ok: false,
-      reason: `서머너 Lv.${node.minLevel}+ 필요 (현재 ${summonerLevel})`,
+      reason: `소환사 Lv.${node.minLevel}+ 필요 (현재 ${summonerLevel})`,
     };
   }
   for (const req of node.requires) {

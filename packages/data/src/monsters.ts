@@ -19,6 +19,8 @@ export interface MonsterDef {
     spd: number;
     critRate: number;
     critDmg: number;
+    accuracy: number;
+    resistance: number;
   };
   /** @deprecated Prefer skills[0]; kept for fallback. */
   skillCoeff: number;
@@ -45,7 +47,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "fire",
     naturalStars: 3,
     role: "attacker",
-    baseStats: { hp: 280, atk: 130, def: 28, spd: 98, critRate: 25, critDmg: 60 },
+    baseStats: { hp: 280, atk: 130, def: 28, spd: 98, critRate: 25, critDmg: 60, accuracy: 0, resistance: 15 },
     skillCoeff: 1.2,
     skills: [
       basicStrike("할퀴기", 1.2),
@@ -70,7 +72,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "water",
     naturalStars: 3,
     role: "support",
-    baseStats: { hp: 320, atk: 70, def: 40, spd: 95, critRate: 15, critDmg: 50 },
+    baseStats: { hp: 320, atk: 70, def: 40, spd: 95, critRate: 15, critDmg: 50, accuracy: 0, resistance: 15 },
     skillCoeff: 0.9,
     skills: [
       basicStrike("물방울", 0.9),
@@ -98,7 +100,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "wind",
     naturalStars: 3,
     role: "debuffer",
-    baseStats: { hp: 260, atk: 110, def: 30, spd: 105, critRate: 20, critDmg: 55 },
+    baseStats: { hp: 260, atk: 110, def: 30, spd: 105, critRate: 20, critDmg: 55, accuracy: 0, resistance: 15 },
     skillCoeff: 1.1,
     skills: [
       basicStrike("절삭", 1.1),
@@ -123,7 +125,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "water",
     naturalStars: 4,
     role: "tank",
-    baseStats: { hp: 420, atk: 60, def: 70, spd: 85, critRate: 10, critDmg: 50 },
+    baseStats: { hp: 420, atk: 60, def: 70, spd: 85, critRate: 10, critDmg: 50, accuracy: 0, resistance: 15 },
     skillCoeff: 0.8,
     skills: [
       basicStrike("충돌", 0.8),
@@ -151,7 +153,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "fire",
     naturalStars: 4,
     role: "attacker",
-    baseStats: { hp: 270, atk: 145, def: 26, spd: 100, critRate: 35, critDmg: 70 },
+    baseStats: { hp: 270, atk: 145, def: 26, spd: 100, critRate: 35, critDmg: 70, accuracy: 0, resistance: 15 },
     skillCoeff: 1.3,
     skills: [
       basicStrike("연사", 1.3),
@@ -176,7 +178,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "wind",
     naturalStars: 4,
     role: "support",
-    baseStats: { hp: 310, atk: 85, def: 38, spd: 96, critRate: 15, critDmg: 50 },
+    baseStats: { hp: 310, atk: 85, def: 38, spd: 96, critRate: 15, critDmg: 50, accuracy: 0, resistance: 15 },
     skillCoeff: 0.95,
     skills: [
       basicStrike("안개탄", 0.95),
@@ -204,7 +206,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "light",
     naturalStars: 4,
     role: "stonesage",
-    baseStats: { hp: 300, atk: 95, def: 35, spd: 92, critRate: 15, critDmg: 50 },
+    baseStats: { hp: 300, atk: 95, def: 35, spd: 92, critRate: 15, critDmg: 50, accuracy: 0, resistance: 15 },
     skillCoeff: 1.0,
     skills: [
       basicStrike("봉인타", 1.0),
@@ -235,7 +237,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "dark",
     naturalStars: 4,
     role: "capturer",
-    baseStats: { hp: 290, atk: 120, def: 32, spd: 97, critRate: 20, critDmg: 55 },
+    baseStats: { hp: 290, atk: 120, def: 32, spd: 97, critRate: 20, critDmg: 55, accuracy: 0, resistance: 15 },
     skillCoeff: 1.15,
     skills: [
       basicStrike("물어뜯기", 1.15),
@@ -263,7 +265,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "light",
     naturalStars: 5,
     role: "attacker",
-    baseStats: { hp: 310, atk: 155, def: 34, spd: 102, critRate: 30, critDmg: 65 },
+    baseStats: { hp: 310, atk: 155, def: 34, spd: 102, critRate: 30, critDmg: 65, accuracy: 0, resistance: 15 },
     skillCoeff: 1.35,
     skills: [
       basicStrike("찌르기", 1.35),
@@ -288,7 +290,7 @@ export const MONSTERS: MonsterDef[] = [
     element: "dark",
     naturalStars: 5,
     role: "debuffer",
-    baseStats: { hp: 300, atk: 125, def: 36, spd: 94, critRate: 20, critDmg: 60 },
+    baseStats: { hp: 300, atk: 125, def: 36, spd: 94, critRate: 20, critDmg: 60, accuracy: 0, resistance: 15 },
     skillCoeff: 1.1,
     skills: [
       basicStrike("저주", 1.1),

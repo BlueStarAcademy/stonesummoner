@@ -1,4 +1,5 @@
 /**
+ * @deprecated Prefer i18n migration: keep Hangul out of main.ts (see .cursor/rules/hangul-encoding.mdc).
  * Full Hangul repair for apps/web/src/main.ts
  * Cause: some editor tools rewrite the file as legacy encoding and
  * replace unmappable UTF-8 Hangul bytes with ASCII '?'.

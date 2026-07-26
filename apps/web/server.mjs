@@ -1,10 +1,36 @@
 import express from "express";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { mountApi } from "./server/api.mjs";
 import { createStore } from "./server/store.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** Load KEY=VALUE from .env without overriding existing process.env. */
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  for (const raw of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    if (!key || process.env[key] !== undefined) continue;
+    let val = line.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    process.env[key] = val;
+  }
+}
+
+loadEnvFile(path.join(__dirname, ".env"));
+loadEnvFile(path.join(__dirname, "../../.env"));
+
 const dist = path.join(__dirname, "dist");
 const port = Number(process.env.PORT) || 8080;
 

@@ -18,6 +18,8 @@ export interface Unit {
   name: string;
   team: TeamId;
   kind: UnitKind;
+  /** Catalog id for monster portraits (monsters only). */
+  monsterId?: string;
   element: Element;
   stats: UnitStats;
   hp: number;

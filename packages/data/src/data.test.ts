@@ -221,6 +221,8 @@ describe("phase1 data", () => {
       spd: 100,
       critRate: 15,
       critDmg: 50,
+      accuracy: 0,
+      resistance: 15,
     };
     const s1 = {
       ...createStarterHwalro(1),
@@ -268,6 +270,8 @@ describe("phase1 data", () => {
       spd: 100,
       critRate: 15,
       critDmg: 50,
+      accuracy: 0,
+      resistance: 15,
     };
     const flat = {
       ...ground!,

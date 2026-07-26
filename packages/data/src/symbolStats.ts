@@ -8,6 +8,8 @@ export interface CombatStatBlock {
   spd: number;
   critRate: number;
   critDmg: number;
+  accuracy: number;
+  resistance: number;
 }
 
 /** Apply equipped symbol mains + set bonuses (Phase 1–2). */
@@ -26,6 +28,8 @@ export function applySymbolsToStats(
     stats.spd += bonus.spd + prefix.spd;
     stats.critRate += bonus.critRate + prefix.critRate;
     stats.critDmg += bonus.critDmg + prefix.critDmg;
+    stats.accuracy += bonus.accuracy + prefix.accuracy;
+    stats.resistance += bonus.resistance + prefix.resistance;
   }
 
   const counts = countSets(equipped);
@@ -83,7 +87,7 @@ export function summarizeSymbolSets(
 }
 
 function emptyBonus(): CombatStatBlock {
-  return { hp: 0, atk: 0, def: 0, spd: 0, critRate: 0, critDmg: 0 };
+  return { hp: 0, atk: 0, def: 0, spd: 0, critRate: 0, critDmg: 0, accuracy: 0, resistance: 0 };
 }
 
 function applyNamedStat(
@@ -109,6 +113,12 @@ function applyNamedStat(
       break;
     case "CRI Rate%":
       z.critRate = Math.round(value);
+      break;
+    case "ACC%":
+      z.accuracy = Math.round(value);
+      break;
+    case "RES%":
+      z.resistance = Math.round(value);
       break;
     default:
       break;

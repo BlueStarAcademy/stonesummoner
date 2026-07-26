@@ -123,7 +123,10 @@ export interface BuildingInstance {
 }
 
 export const ENERGY_MAX = 100;
-export const ENERGY_PER_HOUR = 10;
+/** Milliseconds per +1 energy while below max (3 minutes). */
+export const ENERGY_REGEN_MS = 180_000;
+/** Derived rate (1 per 3 minutes). Kept for callers that still read per-hour. */
+export const ENERGY_PER_HOUR = Math.round(3_600_000 / ENERGY_REGEN_MS);
 export const SUMMONER_EXP_PER_LEVEL = 100;
 export const MAX_BUILDING_LEVEL = 10;
 
@@ -271,18 +274,56 @@ export function syncBuildingUnlocks(
 
 function tickEnergy(island: IslandState, now: number): IslandState {
   const max = island.energyMax ?? ENERGY_MAX;
+  const cur = Math.floor(island.energy);
   const updatedAt = island.energyUpdatedAt ?? now;
-  if (island.energy >= max) {
-    return { ...island, energyMax: max, energyUpdatedAt: now };
+  if (cur >= max) {
+    return { ...island, energyMax: max, energy: max };
   }
-  const hours = Math.max(0, (now - updatedAt) / 3_600_000);
-  const gained = ENERGY_PER_HOUR * hours;
-  const energy = Math.min(max, island.energy + gained);
+  const elapsed = Math.max(0, now - updatedAt);
+  const gained = Math.floor(elapsed / ENERGY_REGEN_MS);
+  if (gained <= 0) {
+    return { ...island, energyMax: max, energy: cur };
+  }
+  const energy = Math.min(max, cur + gained);
   return {
     ...island,
     energyMax: max,
     energy,
-    energyUpdatedAt: now,
+    // Keep remainder so the next-point countdown stays continuous.
+    energyUpdatedAt: energy >= max ? now : updatedAt + gained * ENERGY_REGEN_MS,
+  };
+}
+
+/** Ms until the next +1 energy, or null when already at max. */
+export function energyRegenRemainingMs(
+  island: IslandState,
+  now = Date.now(),
+): number | null {
+  const max = island.energyMax ?? ENERGY_MAX;
+  if (Math.floor(island.energy) >= max) return null;
+  const updatedAt = island.energyUpdatedAt ?? now;
+  const elapsed = Math.max(0, now - updatedAt);
+  if (elapsed > 0 && elapsed % ENERGY_REGEN_MS === 0) return 0;
+  return ENERGY_REGEN_MS - (elapsed % ENERGY_REGEN_MS);
+}
+
+/** Spend energy; starts the regen clock only when leaving max. */
+export function spendEnergy(
+  island: IslandState,
+  cost: number,
+  now = Date.now(),
+): IslandState {
+  const max = island.energyMax ?? ENERGY_MAX;
+  const before = Math.floor(island.energy);
+  const next = before - Math.max(0, Math.floor(cost));
+  if (next < 0 || cost <= 0) {
+    return { ...island, energy: before, energyMax: max };
+  }
+  return {
+    ...island,
+    energyMax: max,
+    energy: next,
+    energyUpdatedAt: before >= max ? now : (island.energyUpdatedAt ?? now),
   };
 }
 
@@ -358,7 +399,7 @@ export function runWish(
   if (!hasBuilding(island, "wish_temple") && island.summonerLevel < 7) {
     return {
       island,
-      message: "소원의 사당 해금 필요 (서머너 Lv.7)",
+      message: "소원의 사당 해금 필요 (소환사 Lv.7)",
       scrollGain: 0,
     };
   }
@@ -366,7 +407,7 @@ export function runWish(
   if (!hasBuilding(synced, "wish_temple")) {
     return {
       island: synced,
-      message: "소원의 사당 해금 필요 (서머너 Lv.7)",
+      message: "소원의 사당 해금 필요 (소환사 Lv.7)",
       scrollGain: 0,
     };
   }
