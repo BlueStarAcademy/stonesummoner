@@ -1089,7 +1089,6 @@ function renderAuth(): string {
     <div class="auth-screen auth-screen--form">
       ${authBrand()}
       <h2 class="auth-title">${title}</h2>
-      <p class="auth-copy">클라우드에 세이브를 보관합니다.</p>
       <form id="auth-form" class="auth-form">
         <label>이메일<input name="email" type="email" autocomplete="username" required /></label>
         <label>비밀번호<input name="password" type="password" autocomplete="${pwAuto}" minlength="6" required /></label>
@@ -1101,7 +1100,6 @@ function renderAuth(): string {
   return `${authHeroLayer()}
   <div class="auth-screen">
     ${authBrand()}
-    <p class="auth-copy">상징으로 키우고, 마법진에서 싸운다.</p>
     ${
       ephemeralStore
         ? `<p class="auth-warn">서버 DB가 메모리 모드입니다. 배포 환경에서는 Postgres(DATABASE_URL)를 연결하세요.</p>`
