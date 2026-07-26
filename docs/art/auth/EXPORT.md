@@ -9,6 +9,7 @@
 | Hero PNG | `apps/web/public/art/auth/auth-hero-master.png` |
 | Safe twin | `auth-hero-safe.webp` (same bake; CSS can add extra mask) |
 | Wordmark | `apps/web/public/art/auth/logo-wordmark.svg` |
+| Title lockup | `apps/web/public/art/auth/logo-title-lockup.webp` (~300 KB, 1:1) |
 | Mark 1024/512/192 | `logo-mark-*.png` |
 | OG | `auth-og.webp` / `auth-og.png` (1200×630) |
 | PWA | `apps/web/public/icons/icon-192.png`, `icon-512.png` |

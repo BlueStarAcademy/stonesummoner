@@ -3442,96 +3442,37 @@ button.slot-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0;
-  margin: 0 auto 8px;
-  padding: 4px 8px 10px;
+  margin: 0 auto 4px;
+  padding: 0;
   text-align: center;
-  animation: auth-brand-in 1.15s ease-out both;
+  animation: auth-brand-in 1.2s ease-out both;
 }
 
-.auth-brand-ornament {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: min(100%, 300px);
-  margin-bottom: 14px;
-}
-
-.auth-brand-rule {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #c9a227aa, transparent);
-}
-
-.auth-brand-rule--left {
-  background: linear-gradient(90deg, transparent, #c9a227cc);
-}
-
-.auth-brand-rule--right {
-  background: linear-gradient(90deg, #c9a227cc, transparent);
-}
-
-.auth-brand-gem {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1px solid #e8d9a8;
-  background:
-    radial-gradient(circle at 35% 30%, #f0e0a0 0%, #c9a227 45%, #5a4010 100%);
-  box-shadow: 0 0 12px #c9a22766, inset 0 1px 0 #fff3;
-  animation: auth-gem-pulse 3.2s ease-in-out infinite;
-}
-
-@keyframes auth-gem-pulse {
-  0%, 100% { box-shadow: 0 0 10px #c9a22744, inset 0 1px 0 #fff3; }
-  50% { box-shadow: 0 0 18px #c9a22788, inset 0 1px 0 #fff5; }
-}
-
-.auth-brand-en {
+.auth-logo-wrap {
   margin: 0;
-  max-width: 100%;
-  font-family: Cinzel, "Times New Roman", Georgia, serif;
-  font-size: clamp(1.4rem, 6.6vw, 2.05rem);
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.12em;
-  text-indent: 0.12em;
-  text-transform: none;
-  color: transparent;
-  background: linear-gradient(180deg, #f5e6b8 0%, #c9a227 42%, #8a6a18 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 2px 12px #000c);
+  width: min(92vw, 340px);
+  line-height: 0;
 }
 
-.auth-brand-ko {
-  margin: 10px 0 0;
-  max-width: 100%;
-  font-family: "Apple SD Gothic Neo", "Noto Serif KR", "Noto Sans KR", Georgia, serif;
-  font-size: clamp(1rem, 4.4vw, 1.28rem);
-  font-weight: 600;
-  line-height: 1.35;
-  letter-spacing: 0.28em;
-  text-indent: 0.28em;
-  color: #e8d9a8;
-  text-shadow: 0 1px 14px #000d, 0 0 24px #c9a22733;
+.auth-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 28px #000c);
+  animation: auth-logo-glow 4s ease-in-out infinite;
 }
 
-.auth-brand-underline {
-  width: min(56%, 160px);
-  height: 2px;
-  margin-top: 12px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, #c9a227, transparent);
-  box-shadow: 0 0 10px #c9a22744;
+@keyframes auth-logo-glow {
+  0%, 100% { filter: drop-shadow(0 8px 24px #000c) drop-shadow(0 0 12px #c9a22722); }
+  50% { filter: drop-shadow(0 10px 32px #000c) drop-shadow(0 0 22px #c9a22744); }
 }
 
 @keyframes auth-brand-in {
   from {
     opacity: 0;
-    transform: translateY(14px) scale(0.96);
+    transform: translateY(18px) scale(0.94);
   }
   to {
     opacity: 1;
@@ -3647,11 +3588,12 @@ button.slot-cell {
 
 @media (prefers-reduced-motion: reduce) {
   .auth-brand-block,
-  .auth-brand-gem,
+  .auth-logo,
   .auth-screen,
   .auth-particles span {
     animation: none !important;
     opacity: 1;
+    filter: drop-shadow(0 8px 24px #000c);
   }
 }
 

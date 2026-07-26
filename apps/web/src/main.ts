@@ -1138,14 +1138,17 @@ function authHeroLayer(): string {
 
 function authBrand(): string {
   return `<header class="auth-brand-block">
-    <div class="auth-brand-ornament" aria-hidden="true">
-      <span class="auth-brand-rule auth-brand-rule--left"></span>
-      <span class="auth-brand-gem"></span>
-      <span class="auth-brand-rule auth-brand-rule--right"></span>
-    </div>
-    <p class="auth-brand-en">Stone Summoners</p>
-    <h1 class="auth-brand-ko">신비의마법석</h1>
-    <div class="auth-brand-underline" aria-hidden="true"></div>
+    <h1 class="auth-logo-wrap">
+      <img
+        class="auth-logo"
+        src="/art/auth/logo-title-lockup.webp"
+        width="1024"
+        height="1024"
+        alt="Stone Summoners — 신비의마법석"
+        decoding="async"
+        fetchpriority="high"
+      />
+    </h1>
   </header>`;
 }
 
