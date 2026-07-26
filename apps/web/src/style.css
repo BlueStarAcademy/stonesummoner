@@ -3295,6 +3295,12 @@ button.slot-cell {
   overflow: hidden;
 }
 
+.auth-main--center {
+  justify-content: center;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 .auth-hero {
   position: absolute;
   inset: 0;
@@ -3314,8 +3320,9 @@ button.slot-cell {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(to top, #0e0b16 0%, #0e0b16e6 28%, #0e0b1680 42%, transparent 62%),
-    linear-gradient(to bottom, #0e0b16aa 0%, transparent 18%);
+    linear-gradient(to top, #0e0b16f2 0%, #0e0b16aa 22%, #0e0b1655 48%, transparent 68%),
+    linear-gradient(to bottom, #0e0b16cc 0%, transparent 22%),
+    radial-gradient(ellipse at 50% 42%, #1a152866 0%, transparent 55%);
 }
 
 .auth-particles {
@@ -3364,8 +3371,65 @@ button.slot-cell {
   animation: auth-rise 0.85s ease-out both;
 }
 
-.auth-screen--form {
-  padding-top: 12px;
+.auth-screen--center {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  padding:
+    12px
+    20px
+    20px
+    20px;
+}
+
+.auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 16px 16px;
+  border-radius: 18px;
+  border: 1px solid #c9a22744;
+  background: linear-gradient(165deg, #1a1528e8 0%, #120e1cf2 100%);
+  box-shadow:
+    inset 0 1px 0 #c9a22722,
+    0 16px 40px #000a;
+  backdrop-filter: blur(8px);
+}
+
+.auth-session {
+  margin: 0;
+  text-align: center;
+  font-size: 0.88rem;
+  color: #e8d9a8;
+  letter-spacing: 0.02em;
+}
+
+.auth-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 2px 0 4px;
+}
+
+.auth-check {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  margin: 0;
+  font-size: 0.82rem !important;
+  color: #c4b8d4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth-check input {
+  width: 18px;
+  height: 18px;
+  min-height: 18px !important;
+  margin: 0;
+  accent-color: #c9a227;
+  cursor: pointer;
 }
 
 @keyframes auth-rise {
@@ -3509,7 +3573,13 @@ button.slot-cell {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 6px;
+  margin-top: 2px;
+}
+
+.auth-cta--secondary {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid #5a4e7266;
 }
 
 .auth-cta button,

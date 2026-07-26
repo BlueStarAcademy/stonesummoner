@@ -168,8 +168,39 @@ const app = document.querySelector<HTMLDivElement>("#app")!;
 const SAVE_KEY = "stonesummoner.save.v5";
 const DEMO_SAVE_KEY = "stonesummoner.save.demo.v5";
 
+const AUTH_PREFS_KEY = "stonesummoner.auth.prefs.v1";
+
+type AuthPrefs = {
+  saveId: boolean;
+  autoLogin: boolean;
+  savedEmail: string;
+};
+
+function defaultAuthPrefs(): AuthPrefs {
+  return { saveId: true, autoLogin: true, savedEmail: "" };
+}
+
+function readAuthPrefs(): AuthPrefs {
+  try {
+    const raw = localStorage.getItem(AUTH_PREFS_KEY);
+    if (!raw) return defaultAuthPrefs();
+    const parsed = JSON.parse(raw) as Partial<AuthPrefs>;
+    return {
+      saveId: parsed.saveId !== false,
+      autoLogin: parsed.autoLogin !== false,
+      savedEmail: typeof parsed.savedEmail === "string" ? parsed.savedEmail : "",
+    };
+  } catch {
+    return defaultAuthPrefs();
+  }
+}
+
+function writeAuthPrefs(next: AuthPrefs): void {
+  localStorage.setItem(AUTH_PREFS_KEY, JSON.stringify(next));
+}
+
 let sessionUser: SessionUser | null = null;
-const authUi = { pane: "menu" as "menu" | "login" | "register" };
+const authUi = { pane: "login" as "login" | "register" };
 let bootReady = false;
 let cloudTimer: ReturnType<typeof setTimeout> | null = null;
 /** False after cloud 401 — keep local play, stop PUT spam. */
@@ -364,7 +395,7 @@ function persist(): void {
   scheduleCloudSave();
 }
 
-async function enterWithUser(
+async function hydrateSession(
   user: SessionUser,
   opts?: { demo?: boolean; fresh?: boolean },
 ): Promise<void> {
@@ -379,10 +410,14 @@ async function enterWithUser(
         body: JSON.stringify({ save }),
       });
     }
-  } else if (opts?.fresh) {
+    return;
+  }
+  if (opts?.fresh) {
     save = createNewSave();
     persist();
-  } else if (!user.id.startsWith("local-")) {
+    return;
+  }
+  if (!user.id.startsWith("local-")) {
     const remote = await apiJson<{ save: unknown }>("/api/save");
     const migrated = remote?.save ? migrateSave(remote.save) : null;
     if (migrated) {
@@ -396,18 +431,52 @@ async function enterWithUser(
       });
       localStorage.setItem(localSaveKey(), JSON.stringify(save));
     }
-  } else {
-    save = loadLocalSave() ?? (opts?.demo ? createDemoSave() : createNewSave());
-    localStorage.setItem(localSaveKey(), JSON.stringify(save));
+    return;
   }
-  authUi.pane = "menu";
+  save = loadLocalSave() ?? createNewSave();
+  localStorage.setItem(localSaveKey(), JSON.stringify(save));
+}
+
+async function enterWithUser(
+  user: SessionUser,
+  opts?: { demo?: boolean; fresh?: boolean; enterGame?: boolean },
+): Promise<void> {
+  await hydrateSession(user, opts);
+  authUi.pane = "login";
+  const enterGame =
+    opts?.enterGame ??
+    (opts?.demo === true ||
+      opts?.fresh === true ||
+      readAuthPrefs().autoLogin);
+  if (enterGame) {
+    view = "home";
+    flash(
+      user.kind === "demo"
+        ? "데모 모드로 입장했습니다."
+        : user.kind === "guest"
+          ? "게스트로 플레이합니다."
+          : `환영합니다${user.email ? ` · ${user.email}` : ""}`,
+    );
+  } else {
+    view = "auth";
+    flash(
+      user.email
+        ? `로그인됨 · ${user.email}`
+        : "로그인되었습니다. 게임시작을 눌러 주세요.",
+    );
+  }
+  render();
+}
+
+function startGameFromAuth(): void {
+  if (!sessionUser) return;
   view = "home";
   flash(
-    user.kind === "demo"
+    sessionUser.kind === "demo"
       ? "데모 모드로 입장했습니다."
-      : user.kind === "guest"
+      : sessionUser.kind === "guest"
         ? "게스트로 플레이합니다."
-        : `환영합니다${user.email ? ` · ${user.email}` : ""}`,
+        : `환영합니다${sessionUser.email ? ` · ${sessionUser.email}` : ""}`,
   );
   render();
 }
@@ -421,7 +490,7 @@ async function logout(): Promise<void> {
   currentStage = null;
   autoMode = false;
   clearAutoTimer();
-  authUi.pane = "menu";
+  authUi.pane = "login";
   view = "auth";
   save = createNewSave();
   flash("로그아웃했습니다.");
@@ -1081,36 +1150,77 @@ function authBrand(): string {
 }
 
 function renderAuth(): string {
+  const prefs = readAuthPrefs();
   const pane = authUi.pane;
-  if (pane === "login" || pane === "register") {
-    const title = pane === "login" ? "로그인" : "회원가입";
-    const pwAuto = pane === "login" ? "current-password" : "new-password";
+  const loggedIn = !!sessionUser;
+
+  if (loggedIn) {
+    const label =
+      sessionUser!.email ??
+      (sessionUser!.kind === "demo"
+        ? "데모"
+        : sessionUser!.kind === "guest"
+          ? "게스트"
+          : "모험가");
     return `${authHeroLayer()}
-    <div class="auth-screen auth-screen--form">
+    <div class="auth-screen auth-screen--center">
       ${authBrand()}
-      <h2 class="auth-title">${title}</h2>
-      <form id="auth-form" class="auth-form">
-        <label>이메일<input name="email" type="email" autocomplete="username" required /></label>
-        <label>비밀번호<input name="password" type="password" autocomplete="${pwAuto}" minlength="6" required /></label>
-        <button type="submit" class="auth-btn-primary">${title}</button>
-      </form>
-      <button type="button" class="secondary full auth-btn-ghost" id="auth-back">뒤로</button>
+      <div class="auth-panel">
+        <p class="auth-session">로그인 · ${label}</p>
+        <div class="auth-cta">
+          <button type="button" class="auth-btn-primary" id="auth-start">게임시작</button>
+          <button type="button" class="secondary auth-btn-ghost" id="auth-logout">로그아웃</button>
+        </div>
+      </div>
     </div>`;
   }
+
+  if (pane === "register") {
+    return `${authHeroLayer()}
+    <div class="auth-screen auth-screen--center">
+      ${authBrand()}
+      <div class="auth-panel">
+        <h2 class="auth-title">회원가입</h2>
+        <form id="auth-form" class="auth-form">
+          <label>이메일<input name="email" type="email" autocomplete="username" required /></label>
+          <label>비밀번호<input name="password" type="password" autocomplete="new-password" minlength="6" required /></label>
+          <button type="submit" class="auth-btn-primary">회원가입</button>
+        </form>
+        <button type="button" class="secondary full auth-btn-ghost" id="auth-back">로그인으로</button>
+      </div>
+    </div>`;
+  }
+
+  const savedEmail = prefs.saveId ? prefs.savedEmail : "";
+  const emailAttr = savedEmail
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
   return `${authHeroLayer()}
-  <div class="auth-screen">
+  <div class="auth-screen auth-screen--center">
     ${authBrand()}
+    <div class="auth-panel">
+      <h2 class="auth-title">로그인</h2>
+      <form id="auth-form" class="auth-form">
+        <label>이메일<input name="email" type="email" autocomplete="username" value="${emailAttr}" required /></label>
+        <label>비밀번호<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
+        <div class="auth-checks">
+          <label class="auth-check"><input type="checkbox" name="saveId" ${prefs.saveId ? "checked" : ""} /> 아이디 저장</label>
+          <label class="auth-check"><input type="checkbox" name="autoLogin" ${prefs.autoLogin ? "checked" : ""} /> 자동 로그인</label>
+        </div>
+        <button type="submit" class="auth-btn-primary">로그인</button>
+      </form>
+      <div class="auth-cta auth-cta--secondary">
+        <button type="button" class="secondary auth-btn-ghost" id="auth-register">회원가입</button>
+        <button type="button" class="secondary auth-btn-ghost" id="auth-demo">데모 플레이</button>
+        <button type="button" class="secondary auth-btn-ghost" id="auth-guest">게스트로 계속</button>
+      </div>
+    </div>
     ${
       ephemeralStore
         ? `<p class="auth-warn">서버 DB가 메모리 모드입니다. 배포 환경에서는 Postgres(DATABASE_URL)를 연결하세요.</p>`
         : ""
     }
-    <div class="auth-cta">
-      <button type="button" class="auth-btn-primary" id="auth-demo">데모 플레이</button>
-      <button type="button" class="secondary auth-btn-ghost" id="auth-login">로그인</button>
-      <button type="button" class="secondary auth-btn-ghost" id="auth-register">회원가입</button>
-      <button type="button" class="secondary auth-btn-ghost" id="auth-guest">게스트로 계속</button>
-    </div>
   </div>`;
 }
 
@@ -1154,8 +1264,8 @@ function mainContent(manaPct: number): string {
 function render(): void {
   if (!bootReady) {
     app.classList.add("auth-mode");
-    app.innerHTML = `<main class="auth-main auth-main--boot">${authHeroLayer()}
-      <div class="auth-screen">
+    app.innerHTML = `<main class="auth-main auth-main--center">${authHeroLayer()}
+      <div class="auth-screen auth-screen--center">
         ${authBrand()}
         <p class="auth-copy">불러오는 중…</p>
       </div>
@@ -1177,7 +1287,7 @@ function render(): void {
   if (view === "auth") {
     app.classList.add("auth-mode");
     app.innerHTML = `
-      <main class="auth-main">${renderAuth()}</main>
+      <main class="auth-main auth-main--center">${renderAuth()}</main>
       ${toast ? `<p class="toast auth-toast">${toast}</p>` : ""}
     `;
     bind();
@@ -2617,6 +2727,14 @@ function renderBattle(manaPct: number): string {
 }
 
 function bindAuth(): void {
+  app.querySelector("#auth-start")?.addEventListener("click", () => {
+    startGameFromAuth();
+  });
+
+  app.querySelector("#auth-logout")?.addEventListener("click", () => {
+    void logout();
+  });
+
   app.querySelector("#auth-demo")?.addEventListener("click", () => {
     void (async () => {
       const res = await apiJson<{ user: SessionUser }>("/api/auth/demo", {
@@ -2624,12 +2742,12 @@ function bindAuth(): void {
         body: "{}",
       });
       if (res?.user) {
-        await enterWithUser(res.user, { demo: true });
+        await enterWithUser(res.user, { demo: true, enterGame: true });
         return;
       }
       await enterWithUser(
         { id: "local-demo", email: null, kind: "demo" },
-        { demo: true },
+        { demo: true, enterGame: true },
       );
     })();
   });
@@ -2641,26 +2759,25 @@ function bindAuth(): void {
         body: "{}",
       });
       if (res?.user) {
-        await enterWithUser(res.user, { fresh: !loadLocalSave() });
+        await enterWithUser(res.user, {
+          fresh: !loadLocalSave(),
+          enterGame: true,
+        });
         return;
       }
       await enterWithUser(
         { id: "local-guest", email: null, kind: "guest" },
-        { fresh: !loadLocalSave() },
+        { fresh: !loadLocalSave(), enterGame: true },
       );
     })();
   });
 
-  app.querySelector("#auth-login")?.addEventListener("click", () => {
-    authUi.pane = "login";
-    render();
-  });
   app.querySelector("#auth-register")?.addEventListener("click", () => {
     authUi.pane = "register";
     render();
   });
   app.querySelector("#auth-back")?.addEventListener("click", () => {
-    authUi.pane = "menu";
+    authUi.pane = "login";
     render();
   });
 
@@ -2668,10 +2785,21 @@ function bindAuth(): void {
     ev.preventDefault();
     const form = ev.target as HTMLFormElement;
     const fd = new FormData(form);
-    const email = String(fd.get("email") ?? "");
+    const email = String(fd.get("email") ?? "").trim();
     const password = String(fd.get("password") ?? "");
+    const saveId = fd.get("saveId") === "on";
+    const autoLogin = fd.get("autoLogin") === "on";
     const path =
       authUi.pane === "register" ? "/api/auth/register" : "/api/auth/login";
+
+    if (authUi.pane === "login") {
+      writeAuthPrefs({
+        saveId,
+        autoLogin,
+        savedEmail: saveId ? email : "",
+      });
+    }
+
     void (async () => {
       try {
         const res = await fetch(path, {
@@ -2695,7 +2823,9 @@ function bindAuth(): void {
           render();
           return;
         }
-        await enterWithUser(body.user);
+        const enterGame =
+          authUi.pane === "register" ? true : readAuthPrefs().autoLogin;
+        await enterWithUser(body.user, { enterGame });
       } catch {
         flash("서버에 연결할 수 없습니다.");
         render();
@@ -3512,10 +3642,19 @@ async function boot(): Promise<void> {
   const me = await apiJson<{ user: SessionUser }>("/api/me");
   bootReady = true;
   if (me?.user) {
-    await enterWithUser(me.user);
+    const prefs = readAuthPrefs();
+    if (prefs.autoLogin) {
+      await enterWithUser(me.user, { enterGame: true });
+      return;
+    }
+    await hydrateSession(me.user);
+    authUi.pane = "login";
+    view = "auth";
+    render();
     return;
   }
   view = "auth";
+  authUi.pane = "login";
   render();
 }
 
