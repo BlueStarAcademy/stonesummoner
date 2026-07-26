@@ -32,118 +32,162 @@ export interface StageDef {
   gearDropChance?: number;
 }
 
-/** 가렌숲 chapter 1 — boards grow 5→7→9. */
-export const CHAPTER1_STAGES: StageDef[] = [
-  {
-    id: "garen_1_1",
-    nameKo: "가렌숲 1-1",
-    map: 1,
-    stage: 1,
-    boardSize: 5,
-    energyCost: 3,
-    enemyMonsterIds: ["gale_scout"],
-    dropSetId: "hwalro",
-    waves: 1,
-    mode: "scenario",
-  },
-  {
-    id: "garen_1_2",
-    nameKo: "가렌숲 1-2",
-    map: 1,
-    stage: 2,
-    boardSize: 5,
-    energyCost: 3,
-    enemyMonsterIds: ["gale_scout", "dew_healer"],
-    dropSetId: "hwalro",
-    waves: 2,
-    mode: "scenario",
-  },
-  {
-    id: "garen_1_3",
-    nameKo: "가렌숲 1-3",
-    map: 1,
-    stage: 3,
-    boardSize: 7,
-    energyCost: 4,
-    enemyMonsterIds: ["fire_fang", "shield_tortoise"],
-    dropSetId: "hwalro",
-    waves: 2,
-    mode: "scenario",
-  },
-  {
-    id: "garen_1_4",
-    nameKo: "가렌숲 1-4",
-    map: 1,
-    stage: 4,
-    boardSize: 7,
-    energyCost: 5,
-    enemyMonsterIds: ["ash_archer", "capture_hound", "gale_scout"],
-    dropSetId: "hwalro",
-    waves: 3,
-    mode: "scenario",
-  },
-  {
-    id: "garen_1_5",
-    nameKo: "가렌숲 1-5 · 진문시련",
-    map: 1,
-    stage: 5,
-    boardSize: 9,
-    energyCost: 6,
-    enemyMonsterIds: [
-      "thunder_lancer",
-      "capture_hound",
-      "ash_archer",
-      "shield_tortoise",
-    ],
-    dropSetId: "hwalro",
-    waves: 3,
-    mode: "scenario",
-  },
+export const MAIN_QUEST_AREA_COUNT = 13;
+export const STAGES_PER_AREA = 7;
+
+type MainQuestAreaDef = {
+  map: number;
+  slug: string;
+  areaKo: string;
+  tone: string;
+  dropSetId: SymbolSetId;
+  x: number;
+  y: number;
+};
+
+/** 13 scenario areas — each opens an N-1…N-7 sortie list.
+ * Pins sit on atlas landmarks (calibrated in game-box cover space).
+ */
+const MAIN_QUEST_AREAS: MainQuestAreaDef[] = [
+  { map: 1, slug: "garen", areaKo: "월영숲", tone: "forest", dropSetId: "hwalro", x: 47, y: 88 },
+  { map: 2, slug: "tower", areaKo: "용맹의 탑", tone: "tower", dropSetId: "yongmaeng", x: 40, y: 77 },
+  { map: 3, slug: "ruins", areaKo: "고대 유적", tone: "ruins", dropSetId: "haengma", x: 51, y: 69 },
+  { map: 4, slug: "mist", areaKo: "안개 습지", tone: "cadence", dropSetId: "gunhim", x: 44, y: 65 },
+  { map: 5, slug: "flame", areaKo: "화염 협곡", tone: "arena", dropSetId: "chimtu", x: 61, y: 58 },
+  { map: 6, slug: "frost", areaKo: "서리 고원", tone: "cadence", dropSetId: "bogang", x: 38, y: 53 },
+  { map: 7, slug: "thunder", areaKo: "천둥 산맥", tone: "tower", dropSetId: "mussang", x: 42, y: 48 },
+  { map: 8, slug: "abyss", areaKo: "심연 해안", tone: "depth", dropSetId: "jipjung", x: 30, y: 45 },
+  { map: 9, slug: "seal", areaKo: "봉인 성채", tone: "ruins", dropSetId: "haengma", x: 50, y: 44 },
+  { map: 10, slug: "dune", areaKo: "황금 사막", tone: "equip", dropSetId: "yongmaeng", x: 60, y: 42 },
+  { map: 11, slug: "star", areaKo: "별빛 정글", tone: "forest", dropSetId: "hwalro", x: 34, y: 41 },
+  { map: 12, slug: "obsidian", areaKo: "흑요 지하", tone: "depth", dropSetId: "chimtu", x: 52, y: 37 },
+  { map: 13, slug: "end", areaKo: "종언의 신전", tone: "warena", dropSetId: "mussang", x: 50, y: 33 },
 ];
 
-/** 용맹의 탑 chapter 2 — Fatal-focused drops. */
-export const CHAPTER2_STAGES: StageDef[] = [
-  {
-    id: "tower_2_1",
-    nameKo: "용맹의 탑 2-1",
-    map: 2,
-    stage: 1,
-    boardSize: 7,
-    energyCost: 5,
-    enemyMonsterIds: ["fire_fang", "ash_archer"],
-    dropSetId: "yongmaeng",
-    waves: 2,
-    mode: "scenario",
-  },
-  {
-    id: "tower_2_2",
-    nameKo: "용맹의 탑 2-2",
-    map: 2,
-    stage: 2,
-    boardSize: 7,
-    energyCost: 5,
-    enemyMonsterIds: ["thunder_lancer", "capture_hound", "gale_scout"],
-    dropSetId: "yongmaeng",
-    waves: 2,
-    mode: "scenario",
-  },
-  {
-    id: "tower_2_3",
-    nameKo: "용맹의 탑 2-3",
-    map: 2,
-    stage: 3,
-    boardSize: 9,
-    energyCost: 6,
-    enemyMonsterIds: [
-      "mist_shaman",
-      "abyss_priest",
-      "shield_tortoise",
-      "fire_fang",
-    ],
-    dropSetId: "chimtu",
-    waves: 3,
-    mode: "scenario",
-  },
+const MQ_ENEMY_POOL = [
+  "gale_scout",
+  "dew_healer",
+  "fire_fang",
+  "shield_tortoise",
+  "ash_archer",
+  "capture_hound",
+  "thunder_lancer",
+  "mist_shaman",
+  "abyss_priest",
+  "seal_scholar",
+] as const;
+
+function mqBoardSize(map: number, stage: number): CombatBoardSize {
+  if (map === 1 && stage <= 2) return 5;
+  if (map <= 2 && stage <= 4) return 7;
+  return 9;
+}
+
+function mqEnergy(map: number, stage: number): number {
+  return Math.min(12, 2 + map + Math.floor(stage / 2));
+}
+
+function mqWaves(stage: number): number {
+  if (stage <= 1) return 1;
+  if (stage <= 3) return 2;
+  return 3;
+}
+
+function mqEnemies(map: number, stage: number): string[] {
+  const count = Math.min(4, 1 + Math.floor((stage - 1) / 2) + (map >= 8 ? 1 : 0));
+  const start = (map * 3 + stage) % MQ_ENEMY_POOL.length;
+  return Array.from({ length: count }, (_, i) => {
+    return MQ_ENEMY_POOL[(start + i) % MQ_ENEMY_POOL.length]!;
+  });
+}
+
+function buildAreaStages(area: MainQuestAreaDef): StageDef[] {
+  return Array.from({ length: STAGES_PER_AREA }, (_, i) => {
+    const stage = i + 1;
+    const boss = stage === STAGES_PER_AREA;
+    return {
+      id: `${area.slug}_${area.map}_${stage}`,
+      nameKo: boss
+        ? `${area.areaKo} ${area.map}-${stage} · 시련`
+        : `${area.areaKo} ${area.map}-${stage}`,
+      map: area.map,
+      stage,
+      boardSize: mqBoardSize(area.map, stage),
+      energyCost: mqEnergy(area.map, stage) + (boss ? 1 : 0),
+      enemyMonsterIds: mqEnemies(area.map, stage),
+      dropSetId: area.dropSetId,
+      waves: mqWaves(stage),
+      mode: "scenario" as const,
+    };
+  });
+}
+
+/** Per-area stage lists (map 1…13). */
+export const MAIN_QUEST_CHAPTERS: StageDef[][] = MAIN_QUEST_AREAS.map(buildAreaStages);
+
+export function stagesForMap(map: number): StageDef[] {
+  return MAIN_QUEST_CHAPTERS[map - 1] ?? [];
+}
+
+export const CHAPTER1_STAGES = MAIN_QUEST_CHAPTERS[0]!;
+export const CHAPTER2_STAGES = MAIN_QUEST_CHAPTERS[1]!;
+export const CHAPTER3_STAGES = MAIN_QUEST_CHAPTERS[2]!;
+
+/** Ordered main-quest scenario chain (13 areas × 7). */
+export const MAIN_QUEST_STAGES: StageDef[] = MAIN_QUEST_CHAPTERS.flat();
+
+export type MainQuestPinId =
+  | "mq1"
+  | "mq2"
+  | "mq3"
+  | "mq4"
+  | "mq5"
+  | "mq6"
+  | "mq7"
+  | "mq8"
+  | "mq9"
+  | "mq10"
+  | "mq11"
+  | "mq12"
+  | "mq13";
+
+/**
+ * World-map pins for main-quest areas (not individual sorties).
+ * Clicking a pin opens the N-1…N-7 stage list sheet.
+ */
+export const MAIN_QUEST_PIN_LAYOUT: {
+  id: MainQuestPinId;
+  map: number;
+  nameKo: string;
+  areaKo: string;
+  x: number;
+  y: number;
+  tone: string;
+}[] = MAIN_QUEST_AREAS.map((area) => ({
+  id: `mq${area.map}` as MainQuestPinId,
+  map: area.map,
+  nameKo: `스테이지 ${area.map}`,
+  areaKo: area.areaKo,
+  x: area.x,
+  y: area.y,
+  tone: area.tone,
+}));
+
+/**
+ * Side-content hubs on dedicated atlas islands (off the MQ corridor).
+ */
+export const SIDE_CONTENT_PIN_LAYOUT: {
+  id: "depth" | "arena" | "cadence" | "equip" | "warena" | "guild";
+  x: number;
+  y: number;
+  landmarkKo: string;
+}[] = [
+  { id: "cadence", x: 12, y: 50, landmarkKo: "룬스톤 시련림" },
+  { id: "depth", x: 85, y: 39, landmarkKo: "심층 공허 동굴" },
+  { id: "warena", x: 87, y: 57, landmarkKo: "의식 투기 칼데라" },
+  { id: "equip", x: 74, y: 47, landmarkKo: "황금 금고 유적" },
+  { id: "arena", x: 86, y: 74, landmarkKo: "콜로세움" },
+  { id: "guild", x: 87, y: 86, landmarkKo: "길드 요새" },
 ];
 
 /** 상징 심층 (Kairos stub) — high drop rate, set-focused. */
@@ -397,8 +441,7 @@ export const EQUIP_STAGES: StageDef[] = [
 ];
 
 export const ALL_STAGES: StageDef[] = [
-  ...CHAPTER1_STAGES,
-  ...CHAPTER2_STAGES,
+  ...MAIN_QUEST_STAGES,
   ...DEPTH_STAGES,
   ...ARENA_STAGES,
   ...WEEKDAY_STAGES,

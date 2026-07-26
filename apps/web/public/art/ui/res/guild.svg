@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="gubg" x1="12" y1="8" x2="52" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#102818"/>
+      <stop offset="1" stop-color="#081410"/>
+    </linearGradient>
+    <linearGradient id="gush" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8F5D8"/>
+      <stop offset=".5" stop-color="#6AD08A"/>
+      <stop offset="1" stop-color="#2A6B48"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#gubg)"/>
+  <path d="M32 12c7 5 12.5 7 16 8v12c0 10-7 17-16 20-9-3-16-10-16-20V20c3.5-1 9-3 16-8Z" fill="url(#gush)" stroke="#B8F0C8" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M32 19c5 3.5 9 5 11.5 5.5V32c0 7-4.5 12-11.5 14V19Z" fill="#FFFFFF" fill-opacity=".18"/>
+  <circle cx="32" cy="30" r="4.5" fill="#F5FFE8"/>
+  <path d="M25 40c2-3.2 12-3.2 14 0" stroke="#F5FFE8" stroke-width="2" stroke-linecap="round"/>
+</svg>

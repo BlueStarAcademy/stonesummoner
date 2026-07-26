@@ -49,7 +49,7 @@ describe("Phase1 island", () => {
     island = { ...island, mana: 5000 };
     const cost = buildingUpgradeManaCost(1);
     const r = upgradeBuilding(island, "mana_pond");
-    assert.match(r.message, /진액 연못 Lv\.2/);
+    assert.match(r.message, /골드 연못 Lv\.2/);
     assert.equal(r.island.mana, 5000 - cost);
     const pond = r.island.buildings.find((b) => b.id === "mana_pond")!;
     assert.equal(pond.level, 2);

@@ -47,6 +47,7 @@ import {
   SYMBOL_GRIND_MANA_COST,
   summarizeSymbolSets,
   ALL_STAGES,
+  type Element,
   type GearPiece,
   type GearSetId,
   type GearSlot,
@@ -88,12 +89,19 @@ import {
   skillUpMinMonsterLevel,
   defaultSkillLevels,
   SCROLL_BUY_MANA_COST,
+  SCROLL_PREMIUM_BUY_MANA_COST,
+  SCROLL_MYSTIC_BUY_CRYSTAL_COST,
+  SCROLL_KIND_BLURB,
+  SCROLL_KIND_LABEL,
+  SCROLL_KINDS,
+  SUMMON_MULTI_COUNT,
   SUMMON_SCROLL_COST,
   type OwnedMonster,
+  type ScrollKind,
 } from "./roster.js";
 import { expForStage, isStageUnlocked, stageUnlockLabel } from "./progress.js";
 
-export type { OwnedMonster } from "./roster.js";
+export type { OwnedMonster, ScrollKind } from "./roster.js";
 export {
   describeOwned,
   enhanceManaCost,
@@ -107,6 +115,12 @@ export {
   skillUpManaCost,
   skillUpMinMonsterLevel,
   SCROLL_BUY_MANA_COST,
+  SCROLL_PREMIUM_BUY_MANA_COST,
+  SCROLL_MYSTIC_BUY_CRYSTAL_COST,
+  SCROLL_KIND_BLURB,
+  SCROLL_KIND_LABEL,
+  SCROLL_KINDS,
+  SUMMON_MULTI_COUNT,
   SUMMON_SCROLL_COST,
 } from "./roster.js";
 export { isStageUnlocked, stageUnlockLabel } from "./progress.js";
@@ -154,6 +168,123 @@ export function equipVaultRemaining(
   );
 }
 
+export const SUMMONER_ELEMENTS: Element[] = [
+  "fire",
+  "water",
+  "wind",
+  "light",
+  "dark",
+];
+
+export type SummonerElement = Element;
+
+export interface ElementSummonerProfile {
+  level: number;
+  exp: number;
+  awaken: number;
+}
+
+export const SUMMONER_ELEMENT_LABEL: Record<SummonerElement, string> = {
+  fire: "화염",
+  water: "심해",
+  wind: "질풍",
+  light: "신성",
+  dark: "심연",
+};
+
+export function createSummonerRoster(
+  seed?: Partial<ElementSummonerProfile>,
+): Record<SummonerElement, ElementSummonerProfile> {
+  const light: ElementSummonerProfile = {
+    level: Math.max(1, Math.floor(seed?.level ?? 1)),
+    exp: Math.max(0, Math.floor(seed?.exp ?? 0)),
+    awaken: Math.max(0, Math.floor(seed?.awaken ?? 0)),
+  };
+  const blank = (): ElementSummonerProfile => ({ level: 1, exp: 0, awaken: 0 });
+  return {
+    fire: blank(),
+    water: blank(),
+    wind: blank(),
+    light,
+    dark: blank(),
+  };
+}
+
+export function accountSummonerLevel(
+  summoners: Record<SummonerElement, ElementSummonerProfile>,
+): number {
+  return Math.max(
+    1,
+    ...SUMMONER_ELEMENTS.map((e) => summoners[e]?.level ?? 1),
+  );
+}
+
+export function getActiveSummoner(save: PlayerSave): ElementSummonerProfile {
+  const el = save.activeSummoner ?? "light";
+  return (
+    save.summoners?.[el] ?? {
+      level: save.island.summonerLevel,
+      exp: save.island.summonerExp ?? 0,
+      awaken: save.summonerAwaken ?? 0,
+    }
+  );
+}
+
+/** Mirror active awaken + account max level onto legacy island/awaken fields. */
+export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
+  const summoners = save.summoners ?? createSummonerRoster({
+    level: save.island.summonerLevel,
+    exp: save.island.summonerExp ?? 0,
+    awaken: save.summonerAwaken ?? 0,
+  });
+  const activeSummoner = save.activeSummoner ?? "light";
+  const active = summoners[activeSummoner] ?? summoners.light;
+  return {
+    ...save,
+    summoners,
+    activeSummoner,
+    summonerAwaken: active.awaken,
+    island: {
+      ...save.island,
+      summonerLevel: accountSummonerLevel(summoners),
+      summonerExp: active.exp,
+    },
+  };
+}
+
+export function setActiveSummoner(
+  save: PlayerSave,
+  element: SummonerElement,
+): PlayerSave {
+  if (!SUMMONER_ELEMENTS.includes(element)) return save;
+  return syncSummonerMirrors({ ...save, activeSummoner: element });
+}
+
+export function addActiveSummonerExp(
+  save: PlayerSave,
+  amount: number,
+): { save: PlayerSave; levelsGained: number } {
+  const synced = syncSummonerMirrors(save);
+  const el = synced.activeSummoner;
+  const cur = synced.summoners[el];
+  let exp = cur.exp + amount;
+  let level = cur.level;
+  let levelsGained = 0;
+  while (exp >= 100) {
+    exp -= 100;
+    level += 1;
+    levelsGained += 1;
+  }
+  const summoners = {
+    ...synced.summoners,
+    [el]: { ...cur, level, exp },
+  };
+  return {
+    save: syncSummonerMirrors({ ...synced, summoners }),
+    levelsGained,
+  };
+}
+
 export interface PlayerSave {
   island: IslandState;
   symbols: SymbolInstance[];
@@ -161,12 +292,21 @@ export interface PlayerSave {
   roster: OwnedMonster[];
   /** Up to 4 owned monster uids for battle. */
   party: string[];
+  /** 일반 소환서. */
   scrolls: number;
+  /** 고급 소환서. */
+  scrollsPremium: number;
+  /** 신성/심연 소환서. */
+  scrollsMystic: number;
   gear: SummonerGear;
   /** Unequipped gear drops (equip vault bag). */
   gearBag: GearPiece[];
-  /** Summoner awaken/transcend stub (0..MAX_SUMMONER_AWAKEN). */
+  /** @deprecated Mirror of active summoner awaken — prefer summoners[active]. */
   summonerAwaken: number;
+  /** Per-element summoner progression. */
+  summoners: Record<SummonerElement, ElementSummonerProfile>;
+  /** Currently selected summoner element. */
+  activeSummoner: SummonerElement;
   /** Unlocked summoner skill-tree node ids. */
   skillTree: string[];
   /** Phase 2: arena glory currency. */
@@ -424,7 +564,8 @@ function unitFromMonsterId(
 }
 
 export function createNewSave(now = Date.now()): PlayerSave {
-  const { roster, party, scrolls } = createStarterRoster();
+  const { roster, party, scrolls, scrollsPremium, scrollsMystic } =
+    createStarterRoster();
   const gear = createStarterGear();
   const s1 = { ...createStarterHwalro(1), id: "starter_sym_1" };
   const s2 = { ...createStarterHwalro(2), id: "starter_sym_2" };
@@ -432,6 +573,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     ...roster[0]!,
     symbolSlots: [s1.id, s2.id, null, null, null, null],
   };
+  const summoners = createSummonerRoster();
   return {
     island: createStarterIsland(now),
     symbols: [s1, s2],
@@ -439,9 +581,13 @@ export function createNewSave(now = Date.now()): PlayerSave {
     roster,
     party,
     scrolls,
+    scrollsPremium,
+    scrollsMystic,
     gear,
     gearBag: [],
     summonerAwaken: 0,
+    summoners,
+    activeSummoner: "light",
     skillTree: [],
     gloryPoints: 0,
     jinmunStones: 0,
@@ -462,24 +608,25 @@ export function createNewSave(now = Date.now()): PlayerSave {
 /** Prefixed demo save for test entry (extra mana/scrolls/levels). */
 export function createDemoSave(now = Date.now()): PlayerSave {
   const save = createNewSave(now);
-  return {
+  return syncSummonerMirrors({
     ...save,
     scrolls: 20,
+    scrollsPremium: 5,
+    scrollsMystic: 3,
     gloryPoints: 120,
     jinmunStones: 5,
+    summoners: createSummonerRoster({ level: 10, exp: 40 }),
     island: {
       ...save.island,
       mana: 5000,
       crystal: 30,
       energy: save.island.energyMax,
-      summonerLevel: 10,
-      summonerExp: 40,
     },
     roster: save.roster.map((m, i) =>
       i === 0 ? { ...m, level: 8, evolve: 0 } : { ...m, level: 5 },
     ),
     clearedStages: ["garen_1_1", "garen_1_2", "garen_1_3", "garen_1_4", "garen_1_5"],
-  };
+  });
 }
 
 export function homeCollect(save: PlayerSave, now = Date.now()): LoopStepResult {
@@ -489,7 +636,7 @@ export function homeCollect(save: PlayerSave, now = Date.now()): LoopStepResult 
   const gained = Math.floor(island.mana - before);
   return {
     save: { ...save, island },
-    message: `진액 연못 수집: 마나 +${gained} (보유 ${Math.floor(island.mana)})`,
+    message: `골드 연못 수집: 골드 +${gained} (보유 ${Math.floor(island.mana)})`,
   };
 }
 
@@ -583,7 +730,7 @@ export function runBuyGlory(
 export const FUSION_MANA_COST = 800;
 export const ENERGY_CRYSTAL_COST = 10;
 export const ENERGY_BUY_AMOUNT = 20;
-/** 제작소: 진문석 + 마나 → 소환서 */
+/** 제작소: 진문석 + 골드 → 소환서 */
 export const CRAFT_SCROLL_JINMUN = 2;
 export const CRAFT_SCROLL_MANA = 300;
 /** 정수 공방: 진문석 → 크리스탈 */
@@ -622,7 +769,7 @@ export function runFusion(
   if (island.mana < FUSION_MANA_COST) {
     return {
       save: { ...save, island },
-      message: `마나 부족 (필요 ${FUSION_MANA_COST}, 보유 ${Math.floor(island.mana)})`,
+      message: `골드 부족 (필요 ${FUSION_MANA_COST}, 보유 ${Math.floor(island.mana)})`,
     };
   }
   const keepEvolve = Math.min(
@@ -669,7 +816,7 @@ export function runFusion(
       roster,
       party,
     },
-    message: `융합: ${describeOwned(kept)} (−마나 ${FUSION_MANA_COST}, 재료 1소모)`,
+    message: `융합: ${describeOwned(kept)} (−골드 ${FUSION_MANA_COST}, 재료 1소모)`,
   };
 }
 
@@ -723,7 +870,7 @@ export function runCraftScroll(save: PlayerSave): LoopStepResult {
   if (island.mana < CRAFT_SCROLL_MANA) {
     return {
       save: { ...save, island },
-      message: `마나 부족 (필요 ${CRAFT_SCROLL_MANA}, 보유 ${Math.floor(island.mana)})`,
+      message: `골드 부족 (필요 ${CRAFT_SCROLL_MANA}, 보유 ${Math.floor(island.mana)})`,
     };
   }
   return {
@@ -731,9 +878,9 @@ export function runCraftScroll(save: PlayerSave): LoopStepResult {
       ...save,
       island: { ...island, mana: island.mana - CRAFT_SCROLL_MANA },
       jinmunStones: (save.jinmunStones ?? 0) - CRAFT_SCROLL_JINMUN,
-      scrolls: save.scrolls + 1,
+      scrollsMystic: scrollCount(save, "mystic") + 1,
     },
-    message: `제작: 소환서 +1 (−진문석 ${CRAFT_SCROLL_JINMUN} · −마나 ${CRAFT_SCROLL_MANA})`,
+    message: `제작: ${SCROLL_KIND_LABEL.mystic} +1 (−진문석 ${CRAFT_SCROLL_JINMUN} · −골드 ${CRAFT_SCROLL_MANA})`,
   };
 }
 
@@ -791,7 +938,7 @@ export function runSellSymbol(
       symbols,
       island: { ...save.island, mana: save.island.mana + gain },
     },
-    message: `상징 판매: ${describeSymbol(sym)} · 마나 +${gain}`,
+    message: `상징 판매: ${describeSymbol(sym)} · 골드 +${gain}`,
   };
 }
 
@@ -810,9 +957,10 @@ export function runPracticeDojo(
       message: "마법진 도장 해금 필요 (서머너 Lv.8)",
     };
   }
-  const manaGain = 120 + island.summonerLevel * 8;
+  const active = getActiveSummoner({ ...save, island });
+  const manaGain = 120 + active.level * 8;
   island = { ...island, mana: island.mana + manaGain };
-  const leveled = addSummonerExp(island, 15);
+  const leveled = addActiveSummonerExp({ ...save, island }, 15);
   const dojoDrills = (save.dojoDrills ?? 0) + 1;
   let jinmunStones = save.jinmunStones ?? 0;
   let missionNote = "";
@@ -820,16 +968,16 @@ export function runPracticeDojo(
     jinmunStones += 1;
     missionNote = " · 묘수 미션 클리어 진문석 +1";
   }
+  const nextActive = getActiveSummoner(leveled.save);
   return {
     save: {
-      ...save,
-      island: leveled.island,
+      ...leveled.save,
       dojoDrills,
       jinmunStones,
     },
-    message: `도장 수련: 마나 +${manaGain} · EXP +15 · 수련 ${dojoDrills}회${
+    message: `도장 수련: 골드 +${manaGain} · EXP +15 · 수련 ${dojoDrills}회${
       leveled.levelsGained > 0
-        ? ` · 서머너 Lv.${leveled.island.summonerLevel}`
+        ? ` · 서머너 Lv.${nextActive.level}`
         : ""
     }${missionNote}`,
   };
@@ -1047,37 +1195,81 @@ export function runSetParty(
 /**
  * Summon at 소환진 — spend 1 scroll, add random monster to roster.
  */
+export function scrollCount(save: PlayerSave, kind: ScrollKind): number {
+  if (kind === "premium") return Math.max(0, Math.floor(save.scrollsPremium ?? 0));
+  if (kind === "mystic") return Math.max(0, Math.floor(save.scrollsMystic ?? 0));
+  return Math.max(0, Math.floor(save.scrolls ?? 0));
+}
+
+export function totalScrollCount(save: PlayerSave): number {
+  return (
+    scrollCount(save, "normal") +
+    scrollCount(save, "premium") +
+    scrollCount(save, "mystic")
+  );
+}
+
+export function withScrollDelta(
+  save: PlayerSave,
+  kind: ScrollKind,
+  delta: number,
+): PlayerSave {
+  const next = Math.max(0, scrollCount(save, kind) + Math.floor(delta));
+  if (kind === "premium") return { ...save, scrollsPremium: next };
+  if (kind === "mystic") return { ...save, scrollsMystic: next };
+  return { ...save, scrolls: next };
+}
+
 export function runSummon(
   save: PlayerSave,
+  kind: ScrollKind = "normal",
   rng: () => number = Math.random,
+  count = 1,
 ): LoopStepResult {
-  if (save.scrolls < SUMMON_SCROLL_COST) {
+  const label = SCROLL_KIND_LABEL[kind];
+  const pulls = Math.max(1, Math.min(50, Math.floor(count)));
+  const cost = SUMMON_SCROLL_COST * pulls;
+  const have = scrollCount(save, kind);
+  if (have < cost) {
     return {
       save,
-      message: `소환서 부족 (필요 ${SUMMON_SCROLL_COST}, 보유 ${save.scrolls})`,
+      message: `${label} 부족 (필요 ${cost}, 보유 ${have})`,
     };
   }
-  const def = pickSummonMonster(rng);
-  const owned: OwnedMonster = {
-    uid: nextUid("sum"),
-    monsterId: def.id,
-    level: 1,
-    symbolSlots: emptySymbolSlots(),
-    evolve: 0,
-    skillLevels: defaultSkillLevels(),
-  };
-  const roster = [...save.roster, owned];
+
+  const summoned: OwnedMonster[] = [];
+  for (let i = 0; i < pulls; i++) {
+    const def = pickSummonMonster(rng, kind);
+    summoned.push({
+      uid: nextUid("sum"),
+      monsterId: def.id,
+      level: 1,
+      symbolSlots: emptySymbolSlots(),
+      evolve: 0,
+      skillLevels: defaultSkillLevels(),
+    });
+  }
+
+  const roster = [...save.roster, ...summoned];
   let party = [...save.party];
-  if (party.length < 4) party.push(owned.uid);
+  for (const owned of summoned) {
+    if (party.length >= 4) break;
+    party.push(owned.uid);
+  }
+  const nextSave = withScrollDelta(save, kind, -cost);
+  const left = scrollCount(nextSave, kind);
+  const message =
+    pulls === 1
+      ? `소환 성공: ${describeOwned(summoned[0]!)} (${label} ${left})`
+      : `${pulls}연 소환 성공 (${label} −${cost} · 잔여 ${left})`;
 
   return {
     save: {
-      ...save,
-      scrolls: save.scrolls - SUMMON_SCROLL_COST,
+      ...nextSave,
       roster,
       party,
     },
-    message: `소환 성공: ${describeOwned(owned)} (소환서 ${save.scrolls - 1})`,
+    message,
   };
 }
 
@@ -1103,7 +1295,7 @@ export function runEnhance(
   if (save.island.mana < cost) {
     return {
       save,
-      message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
 
@@ -1115,7 +1307,7 @@ export function runEnhance(
 
   return {
     save: { ...save, island, roster },
-    message: `강화: ${describeOwned({ ...owned, level: nextLevel })} (−마나 ${cost})`,
+    message: `강화: ${describeOwned({ ...owned, level: nextLevel })} (−골드 ${cost})`,
   };
 }
 
@@ -1150,7 +1342,7 @@ export function runEvolve(
   if (save.island.mana < manaCost) {
     return {
       save,
-      message: `마나 부족 (필요 ${manaCost}, 보유 ${Math.floor(save.island.mana)})`,
+      message: `골드 부족 (필요 ${manaCost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
   if (save.island.crystal < crystalCost) {
@@ -1171,8 +1363,8 @@ export function runEvolve(
   };
   const costNote =
     crystalCost > 0
-      ? `−마나 ${manaCost} · −크리스탈 ${crystalCost}`
-      : `−마나 ${manaCost}`;
+      ? `−골드 ${manaCost} · −크리스탈 ${crystalCost}`
+      : `−골드 ${manaCost}`;
 
   return {
     save: { ...save, island, roster },
@@ -1215,7 +1407,7 @@ export function runSkillUp(
   if (save.island.mana < cost) {
     return {
       save,
-      message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
 
@@ -1233,7 +1425,7 @@ export function runSkillUp(
 
   return {
     save: { ...save, island, roster },
-    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[idx]} (−마나 ${cost})`,
+    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[idx]} (−골드 ${cost})`,
   };
 }
 
@@ -1254,7 +1446,7 @@ export function runEnhanceGear(
   if (save.island.mana < cost) {
     return {
       save: { ...save, gear: gearNorm },
-      message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
   if ((save.island.crystal ?? 0) < crystalCost) {
@@ -1272,8 +1464,8 @@ export function runEnhanceGear(
   };
   const costNote =
     crystalCost > 0
-      ? `−마나 ${cost} · −크리스탈 ${crystalCost}`
-      : `−마나 ${cost}`;
+      ? `−골드 ${cost} · −크리스탈 ${crystalCost}`
+      : `−골드 ${cost}`;
   return {
     save: { ...save, island, gear },
     message: `장비 강화: ${describeGear(next)} (${costNote})`,
@@ -1297,7 +1489,7 @@ export function runAffixGearSet(
   if (save.island.mana < GEAR_SET_AFFIX_MANA) {
     return {
       save: { ...save, gear: gearNorm },
-      message: `마나 부족 (필요 ${GEAR_SET_AFFIX_MANA}, 보유 ${Math.floor(save.island.mana)})`,
+      message: `골드 부족 (필요 ${GEAR_SET_AFFIX_MANA}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
   const next = { ...piece, setId };
@@ -1315,7 +1507,7 @@ export function runAffixGearSet(
     .join("·");
   return {
     save: { ...save, island, gear },
-    message: `세트 부여: ${describeGear(next)} (−마나 ${GEAR_SET_AFFIX_MANA})${active ? ` · 활성 ${active}` : ""}`,
+    message: `세트 부여: ${describeGear(next)} (−골드 ${GEAR_SET_AFFIX_MANA})${active ? ` · 활성 ${active}` : ""}`,
   };
 }
 
@@ -1360,8 +1552,8 @@ export function runSellGearBag(
   };
   const note =
     crystalGain > 0
-      ? `+마나 ${gain} · +크리스탈 ${crystalGain}`
-      : `+마나 ${gain}`;
+      ? `+골드 ${gain} · +크리스탈 ${crystalGain}`
+      : `+골드 ${gain}`;
   return {
     save: { ...save, island, gearBag: bag },
     message: `장비 판매: ${describeGear(piece)} (${note})`,
@@ -1370,46 +1562,53 @@ export function runSellGearBag(
 
 /** Summoner awaken/transcend stub: permanent mana/skill/leader bonuses. */
 export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
-  const cur = save.summonerAwaken ?? 0;
+  const synced = syncSummonerMirrors(save);
+  const el = synced.activeSummoner;
+  const active = synced.summoners[el];
+  const cur = active.awaken;
   if (cur >= MAX_SUMMONER_AWAKEN) {
     return {
-      save,
-      message: `서머너 각성 이미 최대(+${MAX_SUMMONER_AWAKEN})`,
+      save: synced,
+      message: `${SUMMONER_ELEMENT_LABEL[el]} 서머너 각성 이미 최대(+${MAX_SUMMONER_AWAKEN})`,
     };
   }
   const needLv = awakenMinLevel(cur);
-  if (save.island.summonerLevel < needLv) {
+  if (active.level < needLv) {
     return {
-      save,
-      message: `각성 해금: 서머너 Lv.${needLv}+ 필요 (현재 ${save.island.summonerLevel})`,
+      save: synced,
+      message: `각성 해금: 서머너 Lv.${needLv}+ 필요 (현재 ${active.level})`,
     };
   }
   const manaCost = awakenManaCost(cur);
   const crystalCost = awakenCrystalCost(cur);
-  if (save.island.mana < manaCost) {
+  if (synced.island.mana < manaCost) {
     return {
-      save,
-      message: `마나 부족 (필요 ${manaCost}, 보유 ${Math.floor(save.island.mana)})`,
+      save: synced,
+      message: `골드 부족 (필요 ${manaCost}, 보유 ${Math.floor(synced.island.mana)})`,
     };
   }
-  if (save.island.crystal < crystalCost) {
+  if (synced.island.crystal < crystalCost) {
     return {
-      save,
-      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${save.island.crystal})`,
+      save: synced,
+      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${synced.island.crystal})`,
     };
   }
   const next = cur + 1;
+  const summoners = {
+    ...synced.summoners,
+    [el]: { ...active, awaken: next },
+  };
   return {
-    save: {
-      ...save,
-      summonerAwaken: next,
+    save: syncSummonerMirrors({
+      ...synced,
+      summoners,
       island: {
-        ...save.island,
-        mana: save.island.mana - manaCost,
-        crystal: save.island.crystal - crystalCost,
+        ...synced.island,
+        mana: synced.island.mana - manaCost,
+        crystal: synced.island.crystal - crystalCost,
       },
-    },
-    message: `서머너 각성 +${next} (−마나 ${manaCost} · −크리스탈 ${crystalCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
+    }),
+    message: `${SUMMONER_ELEMENT_LABEL[el]} 서머너 각성 +${next} (−골드 ${manaCost} · −크리스탈 ${crystalCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
   };
 }
 
@@ -1434,7 +1633,7 @@ export function runUnlockSkillNode(
   if (save.island.mana < node.manaCost) {
     return {
       save,
-      message: `마나 부족 (필요 ${node.manaCost}, 보유 ${Math.floor(save.island.mana)})`,
+      message: `골드 부족 (필요 ${node.manaCost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
   if (save.island.crystal < node.crystalCost) {
@@ -1454,7 +1653,7 @@ export function runUnlockSkillNode(
         crystal: save.island.crystal - node.crystalCost,
       },
     },
-    message: `스킬 트리: ${node.nameKo} 해금 (−마나 ${node.manaCost}${node.crystalCost > 0 ? ` · −크리스탈 ${node.crystalCost}` : ""})`,
+    message: `스킬 트리: ${node.nameKo} 해금 (−골드 ${node.manaCost}${node.crystalCost > 0 ? ` · −크리스탈 ${node.crystalCost}` : ""})`,
   };
 }
 
@@ -1476,7 +1675,7 @@ export function runEnhanceSymbol(
   if (save.island.mana < cost) {
     return {
       save,
-      message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
   const next = bumpSymbolEnhance(sym);
@@ -1484,28 +1683,47 @@ export function runEnhanceSymbol(
   const island = { ...save.island, mana: save.island.mana - cost };
   return {
     save: { ...save, island, symbols },
-    message: `상징 강화: ${describeSymbol(next)} (−마나 ${cost})`,
+    message: `상징 강화: ${describeSymbol(next)} (−골드 ${cost})`,
   };
 }
 
-/** Buy summon scrolls at magic shop stub (mana). */
+/** Buy summon scrolls at magic shop stub. */
 export function runBuyScroll(
   save: PlayerSave,
   count = 1,
+  kind: ScrollKind = "normal",
 ): LoopStepResult {
   const n = Math.max(1, Math.min(20, Math.floor(count)));
-  const cost = SCROLL_BUY_MANA_COST * n;
+  const label = SCROLL_KIND_LABEL[kind];
+  if (kind === "mystic") {
+    const cost = SCROLL_MYSTIC_BUY_CRYSTAL_COST * n;
+    if (save.island.crystal < cost) {
+      return {
+        save,
+        message: `크리스탈 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.crystal)})`,
+      };
+    }
+    const island = { ...save.island, crystal: save.island.crystal - cost };
+    const next = withScrollDelta({ ...save, island }, kind, n);
+    return {
+      save: next,
+      message: `상점: ${label} ${n}장 구매 (−크리스탈 ${cost}) · 보유 ${scrollCount(next, kind)}`,
+    };
+  }
+  const unit =
+    kind === "premium" ? SCROLL_PREMIUM_BUY_MANA_COST : SCROLL_BUY_MANA_COST;
+  const cost = unit * n;
   if (save.island.mana < cost) {
     return {
       save,
-      message: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
   const island = { ...save.island, mana: save.island.mana - cost };
-  const scrolls = save.scrolls + n;
+  const next = withScrollDelta({ ...save, island }, kind, n);
   return {
-    save: { ...save, island, scrolls },
-    message: `상점: 소환서 ${n}장 구매 (−마나 ${cost}) · 보유 ${scrolls}`,
+    save: next,
+    message: `상점: ${label} ${n}장 구매 (−골드 ${cost}) · 보유 ${scrollCount(next, kind)}`,
   };
 }
 
@@ -1566,7 +1784,7 @@ export function runGrindSymbol(
   if (save.island.mana < SYMBOL_GRIND_MANA_COST) {
     return {
       save,
-      message: `마나 부족 (필요 ${SYMBOL_GRIND_MANA_COST}, 보유 ${Math.floor(save.island.mana)})`,
+      message: `골드 부족 (필요 ${SYMBOL_GRIND_MANA_COST}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
   const next = grindSymbolPrefix(sym, rng);
@@ -1580,7 +1798,7 @@ export function runGrindSymbol(
   };
   return {
     save: { ...save, island, symbols },
-    message: `연마: ${describeSymbol(sym)} → ${describeSymbol(next)} (−마나 ${SYMBOL_GRIND_MANA_COST})`,
+    message: `연마: ${describeSymbol(sym)} → ${describeSymbol(next)} (−골드 ${SYMBOL_GRIND_MANA_COST})`,
   };
 }
 
@@ -1673,7 +1891,12 @@ export function previewOwnedCombatStats(
 export function createStageBattle(
   stage: StageDef,
   save?: PlayerSave,
-  opts?: { banEnemyIds?: string[]; rng?: () => number },
+  opts?: {
+    banEnemyIds?: string[];
+    rng?: () => number;
+    /** Scenario difficulty — scales enemy levels. */
+    difficulty?: "normal" | "hard" | "hell";
+  },
 ): Battle {
   const gear = normalizeSummonerGear(save?.gear ?? createStarterGear());
   const allyMonsters: Unit[] = [];
@@ -1690,8 +1913,12 @@ export function createStageBattle(
     );
   }
 
-  const lvl = save?.island.summonerLevel ?? 1;
-  const awaken = save?.summonerAwaken ?? 0;
+  const activeEl = save?.activeSummoner ?? "light";
+  const activeProfile = save
+    ? getActiveSummoner(save)
+    : { level: 1, exp: 0, awaken: 0 };
+  const lvl = activeProfile.level;
+  const awaken = activeProfile.awaken;
   const treeIds = save?.skillTree ?? [];
   const tree = skillTreeBonuses(treeIds);
   const robeHp =
@@ -1719,10 +1946,10 @@ export function createStageBattle(
   }
   const allySummonerUnit = makeUnit({
     id: "a-sum",
-    name: `서머너 Lv.${lvl}${awaken > 0 ? ` · 각성${awaken}` : ""}`,
+    name: `${SUMMONER_ELEMENT_LABEL[activeEl]} 서머너 Lv.${lvl}${awaken > 0 ? ` · 각성${awaken}` : ""}`,
     team: "ally",
     kind: "summoner",
-    element: "light",
+    element: activeEl,
     stats: {
       hp:
         500 +
@@ -1753,8 +1980,13 @@ export function createStageBattle(
     enemyIds = filtered.length > 0 ? filtered : enemyIds.slice(0, 1);
   }
 
+  const diffBonus =
+    opts?.difficulty === "hell" ? 4 : opts?.difficulty === "hard" ? 2 : 0;
+  const enemyLevel = () =>
+    1 + Math.floor(stage.stage / 2) + Math.floor(stage.map / 3) + diffBonus;
+
   const enemyMonsters = enemyIds.map((id, i) =>
-    unitFromMonsterId(id, "enemy", `e-w1-${i}`, 1 + Math.floor(stage.stage / 2)),
+    unitFromMonsterId(id, "enemy", `e-w1-${i}`, enemyLevel()),
   );
 
   const enemyUnits: Unit[] = [
@@ -1764,7 +1996,14 @@ export function createStageBattle(
       team: "enemy",
       kind: "summoner",
       element: "dark",
-      stats: { hp: 480, atk: 80, def: 42, spd: 88, critRate: 12, critDmg: 50 },
+      stats: {
+        hp: 480 + diffBonus * 40,
+        atk: 80 + diffBonus * 8,
+        def: 42 + diffBonus * 4,
+        spd: 88,
+        critRate: 12,
+        critDmg: 50,
+      },
       skillCoeff: 1,
     }),
     ...enemyMonsters,
@@ -1787,7 +2026,7 @@ export function createStageBattle(
       "e-sum",
       createStarterGear(),
       enemyProfile.weakBoard,
-      enemyProfile.awaken,
+      Math.min(5, enemyProfile.awaken + Math.floor(diffBonus / 2)),
       enemyProfile.skillTree,
     ),
     powerGapAmplifyCap: powerGapCap,
@@ -1800,7 +2039,7 @@ export function createStageBattle(
           id,
           "enemy",
           `e-w${wave}-${i}`,
-          1 + Math.floor(stage.stage / 2) + (wave - 1),
+          enemyLevel() + (wave - 1),
         ),
       ),
   });
@@ -1857,13 +2096,17 @@ export function applyRewards(
   const dropChance = stage.dropChance ?? 0.65;
   const expGain = expForStage(stage);
 
-  let island = {
-    ...save.island,
-    mana: save.island.mana + manaGain,
-    crystal: save.island.crystal + crystalGain,
-  };
-  const leveled = addSummonerExp(island, expGain);
-  island = leveled.island;
+  let working = syncSummonerMirrors({
+    ...save,
+    island: {
+      ...save.island,
+      mana: save.island.mana + manaGain,
+      crystal: save.island.crystal + crystalGain,
+    },
+  });
+  const leveled = addActiveSummonerExp(working, expGain);
+  working = leveled.save;
+  let island = working.island;
 
   const symbols = [...save.symbols];
   let symbol: SymbolInstance | undefined;
@@ -1906,7 +2149,13 @@ export function applyRewards(
   }
 
   let scrolls = save.scrolls;
-  if (rng() < (stage.mode === "weekday" ? 0.55 : 0.4)) scrolls += 1;
+  let scrollsPremium = save.scrollsPremium ?? 0;
+  const dropRoll = rng();
+  if (dropRoll < (stage.mode === "weekday" ? 0.08 : 0.05)) {
+    scrollsPremium += 1;
+  } else if (dropRoll < (stage.mode === "weekday" ? 0.55 : 0.4)) {
+    scrolls += 1;
+  }
 
   const cleared = save.clearedStages.includes(stage.id)
     ? save.clearedStages
@@ -1938,36 +2187,40 @@ export function applyRewards(
   if (contributionGain > 0) extras.push(`기여도 +${contributionGain}`);
   if (stage.mode === "world_arena") extras.push(`시즌승 ${arenaSeasonWins}`);
   if (gearDrop) extras.push(`장비 ${describeGear(gearDrop)} → 가방`);
+  if (scrollsPremium > (save.scrollsPremium ?? 0))
+    extras.push(`${SCROLL_KIND_LABEL.premium} +1`);
+  else if (scrolls > save.scrolls) extras.push(`${SCROLL_KIND_LABEL.normal} +1`);
+  const activeAfter = getActiveSummoner({ ...working, island });
   const levelNote =
     leveled.levelsGained > 0
-      ? ` · 서머너 Lv.${island.summonerLevel}(+${leveled.levelsGained})`
+      ? ` · 서머너 Lv.${activeAfter.level}(+${leveled.levelsGained})`
       : "";
 
   return {
-    save: {
-      ...save,
+    save: syncSummonerMirrors({
+      ...working,
       island,
       symbols,
       gear,
       gearBag,
       clearedStages: cleared,
       scrolls,
+      scrollsPremium,
       gloryPoints,
       jinmunStones,
-      gloryLevels: save.gloryLevels ?? {},
-      arenaBanIds: save.arenaBanIds ?? [],
+      gloryLevels: working.gloryLevels ?? {},
+      arenaBanIds: working.arenaBanIds ?? [],
       arenaSeasonWins,
       guildContribution,
-      dojoDrills: save.dojoDrills ?? 0,
-      guildName: save.guildName ?? null,
-      guildCheckInDay: save.guildCheckInDay ?? null,
+      dojoDrills: working.dojoDrills ?? 0,
+      guildName: working.guildName ?? null,
+      guildCheckInDay: working.guildCheckInDay ?? null,
       guildRaidBest,
-      seasonRewardsClaimed: save.seasonRewardsClaimed ?? 0,
-      summonerAwaken: save.summonerAwaken ?? 0,
-      skillTree: save.skillTree ?? [],
-      equipVaultWeekKey: save.equipVaultWeekKey ?? null,
-      equipVaultWeekEntries: save.equipVaultWeekEntries ?? 0,
-    },
+      seasonRewardsClaimed: working.seasonRewardsClaimed ?? 0,
+      skillTree: working.skillTree ?? [],
+      equipVaultWeekKey: working.equipVaultWeekKey ?? null,
+      equipVaultWeekEntries: working.equipVaultWeekEntries ?? 0,
+    }),
     reward: {
       mana: manaGain,
       crystal: crystalGain,
@@ -2089,7 +2342,7 @@ export function runDemoLoop(rng: () => number = () => 0.2): LoopStepResult[] {
   steps.push(c1);
   save = c1.save;
 
-  const sum = runSummon(save, rng);
+  const sum = runSummon(save, "normal", rng);
   steps.push(sum);
   save = sum.save;
 

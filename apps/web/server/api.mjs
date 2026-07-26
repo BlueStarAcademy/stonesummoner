@@ -1,4 +1,5 @@
 import cookieParser from "cookie-parser";
+import { validateNickname } from "../shared/nickname.mjs";
 
 const COOKIE = "ss_session";
 
@@ -22,6 +23,10 @@ function setSession(res, req, token) {
 
 function clearSession(res, req) {
   res.clearCookie(COOKIE, { ...cookieOpts(req), maxAge: 0 });
+}
+
+function isValidEmail(email) {
+  return Boolean(email) && email.includes("@") && email.length <= 254;
 }
 
 async function requireUser(store, req, res) {
@@ -54,12 +59,40 @@ export function mountApi(app, store) {
     }
   });
 
+  app.post("/api/auth/check-email", async (req, res) => {
+    const email = String(req.body?.email ?? "")
+      .trim()
+      .toLowerCase();
+    if (!isValidEmail(email)) {
+      res.status(400).json({ available: false, error: "email_invalid" });
+      return;
+    }
+    const taken = await store.isEmailTaken(email);
+    res.json({ available: !taken, error: taken ? "email_taken" : null });
+  });
+
+  app.post("/api/auth/check-nickname", async (req, res) => {
+    const parsed = validateNickname(req.body?.nickname);
+    if (!parsed.ok) {
+      res.status(400).json({ available: false, error: parsed.error });
+      return;
+    }
+    const token = req.cookies?.[COOKIE];
+    const me = token ? await store.userFromToken(token) : null;
+    const taken = await store.isNicknameTaken(parsed.nickname, me?.id ?? null);
+    res.json({
+      available: !taken,
+      error: taken ? "nickname_taken" : null,
+      nickname: parsed.nickname,
+    });
+  });
+
   app.post("/api/auth/register", async (req, res) => {
     const email = String(req.body?.email ?? "")
       .trim()
       .toLowerCase();
     const password = String(req.body?.password ?? "");
-    if (!email || !email.includes("@") || password.length < 6) {
+    if (!isValidEmail(email) || password.length < 6) {
       res.status(400).json({ error: "invalid_credentials" });
       return;
     }
@@ -92,10 +125,39 @@ export function mountApi(app, store) {
       res.status(401).json({ error: "invalid_credentials" });
       return;
     }
-    const user = { id: userRow.id, email: userRow.email, kind: userRow.kind };
+    const user = await store.getUser(userRow.id);
     const { token } = await store.createSession(user.id);
     setSession(res, req, token);
     res.json({ user });
+  });
+
+  app.post("/api/auth/nickname", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    if (user.kind !== "user") {
+      res.status(400).json({ error: "nickname_not_allowed" });
+      return;
+    }
+    const parsed = validateNickname(req.body?.nickname);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    try {
+      const updated = await store.setNickname(user.id, parsed.nickname);
+      res.json({ user: updated });
+    } catch (e) {
+      if (e.message === "NICKNAME_TAKEN") {
+        res.status(409).json({ error: "nickname_taken" });
+        return;
+      }
+      if (e.message === "NICKNAME_LOCKED") {
+        res.status(409).json({ error: "nickname_locked" });
+        return;
+      }
+      console.error(e);
+      res.status(500).json({ error: "server_error" });
+    }
   });
 
   app.post("/api/auth/guest", async (req, res) => {

@@ -49,8 +49,8 @@ export const PHASE_BUILDINGS: BuildingDef[] = [
   },
   {
     id: "mana_pond",
-    nameKo: "진액 연못",
-    swName: "Pond of Mana",
+    nameKo: "골드 연못",
+    swName: "Pond of Gold",
     kind: "production",
     resource: "mana",
     manaPerHour: 441,
@@ -214,7 +214,7 @@ export function canUpgradeBuilding(
   if (island.mana < cost) {
     return {
       ok: false,
-      reason: `마나 부족 (필요 ${cost}, 보유 ${Math.floor(island.mana)})`,
+      reason: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(island.mana)})`,
     };
   }
   return { ok: true };
@@ -243,7 +243,7 @@ export function upgradeBuilding(
       : `생산 ${productionManaPerHour(def, lv, island.manaProdBonus ?? 0)}/hr · 저장 ${productionStorageCap(def, lv)}`;
   return {
     island: next,
-    message: `${def.nameKo} Lv.${lv} (−마나 ${cost}) · ${detail}`,
+    message: `${def.nameKo} Lv.${lv} (−골드 ${cost}) · ${detail}`,
   };
 }
 
@@ -381,7 +381,7 @@ export function runWish(
   if (r < 0.4) {
     const mana = 800 + Math.floor(rng() * 400);
     next = { ...next, mana: next.mana + mana };
-    message = `소원: 마나 +${mana}`;
+    message = `소원: 골드 +${mana}`;
   } else if (r < 0.75) {
     const crystal = 5 + Math.floor(rng() * 6);
     next = { ...next, crystal: next.crystal + crystal };

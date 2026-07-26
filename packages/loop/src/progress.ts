@@ -1,10 +1,10 @@
 import {
   ALL_STAGES,
-  CHAPTER1_STAGES,
-  CHAPTER2_STAGES,
   EQUIP_STAGES,
+  MAIN_QUEST_AREA_COUNT,
   WORLD_ARENA_STAGES,
   getStage,
+  stagesForMap,
   type StageDef,
 } from "stonesummoner-data";
 import type { PlayerSave } from "./loop.js";
@@ -20,8 +20,14 @@ function chainUnlocked(
   return save.clearedStages.includes(stages[idx - 1]!.id);
 }
 
+function mapBossId(map: number): string | undefined {
+  const stages = stagesForMap(map);
+  return stages[stages.length - 1]?.id;
+}
+
 function chapter2Cleared(save: PlayerSave): boolean {
-  return save.clearedStages.includes("tower_2_3");
+  const boss = mapBossId(2);
+  return boss ? save.clearedStages.includes(boss) : false;
 }
 
 /** Content unlock rules (Phase 1–2+). */
@@ -30,13 +36,14 @@ export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
   if (!stage) return false;
 
   switch (stage.mode) {
-    case "scenario":
-      if (stage.map === 1) return chainUnlocked(save, CHAPTER1_STAGES, stageId);
-      if (stage.map === 2) {
-        if (!save.clearedStages.includes("garen_1_5")) return false;
-        return chainUnlocked(save, CHAPTER2_STAGES, stageId);
+    case "scenario": {
+      if (stage.map < 1 || stage.map > MAIN_QUEST_AREA_COUNT) return false;
+      if (stage.map > 1) {
+        const prevBoss = mapBossId(stage.map - 1);
+        if (!prevBoss || !save.clearedStages.includes(prevBoss)) return false;
       }
-      return false;
+      return chainUnlocked(save, stagesForMap(stage.map), stageId);
+    }
     case "depth":
       return save.clearedStages.includes("garen_1_5");
     case "arena":
@@ -68,7 +75,7 @@ export function stageUnlockLabel(save: PlayerSave, stage: StageDef): string {
 }
 
 export function expForStage(stage: StageDef): number {
-  const base = 40 + stage.stage * 25;
+  const base = 40 + stage.map * 8 + stage.stage * 20;
   if (stage.mode === "depth") return base + 30;
   if (stage.mode === "arena") return Math.floor(base * 0.5);
   if (stage.mode === "trial") return base + 20;

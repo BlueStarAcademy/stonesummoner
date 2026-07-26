@@ -5,6 +5,10 @@ import {
   canGrindSymbol,
   canImprintSymbol,
   CHAPTER1_STAGES,
+  MAIN_QUEST_AREA_COUNT,
+  MAIN_QUEST_PIN_LAYOUT,
+  MAIN_QUEST_STAGES,
+  STAGES_PER_AREA,
   createStarterGear,
   createStarterHwalro,
   createSymbol,
@@ -47,16 +51,35 @@ describe("phase1 data", () => {
   });
 
   it("chapter1 boards progress 5 → 7 → 9", () => {
-    assert.equal(CHAPTER1_STAGES.length, 5);
+    assert.equal(CHAPTER1_STAGES.length, 7);
     assert.equal(getStage("garen_1_1")?.boardSize, 5);
     assert.equal(getStage("garen_1_4")?.boardSize, 7);
     assert.equal(getStage("garen_1_5")?.boardSize, 9);
+    assert.equal(getStage("garen_1_7")?.boardSize, 9);
     assert.equal(getStage("depth_hwalro")?.mode, "depth");
     assert.equal(getStage("arena_rookie")?.mode, "arena");
     assert.equal(getStage("guild_raid_boss")?.boardSize, 13);
     assert.equal(getStage("warena_qual")?.mode, "world_arena");
     assert.equal(getStage("equip_vault_1")?.mode, "equip");
     assert.equal(getStage("equip_vault_boss")?.gearDropChance, 1);
+  });
+
+  it("main quest has 13 area pins with 7 stages each", () => {
+    assert.equal(MAIN_QUEST_AREA_COUNT, 13);
+    assert.equal(STAGES_PER_AREA, 7);
+    assert.equal(MAIN_QUEST_STAGES.length, 13 * 7);
+    assert.equal(MAIN_QUEST_PIN_LAYOUT.length, 13);
+    assert.equal(CHAPTER1_STAGES.length, 7);
+    assert.ok(getStage("garen_1_7"));
+    assert.ok(getStage("tower_2_7"));
+    assert.ok(getStage("ruins_3_7"));
+    assert.ok(getStage("end_13_7"));
+    assert.equal(
+      MAIN_QUEST_PIN_LAYOUT.every((p) =>
+        MAIN_QUEST_STAGES.some((s) => s.map === p.map),
+      ),
+      true,
+    );
   });
 
   it("rolls equip dungeon gear drops", () => {

@@ -59,10 +59,10 @@ function printStatus(save: PlayerSave): void {
     `서머너 Lv.${island.summonerLevel} (${Math.floor(island.summonerExp ?? 0)}/100 EXP) · 각성 ${save.summonerAwaken ?? 0} · 트리 ${(save.skillTree ?? []).length}/${SKILL_TREE_NODES.length}`,
   );
   console.log(
-    `마나 ${Math.floor(island.mana)} · 크리스탈 ${island.crystal} · 에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}`,
+    `골드 ${Math.floor(island.mana)} · 크리스탈 ${island.crystal} · 에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}`,
   );
   console.log(
-    `영광 ${save.gloryPoints ?? 0} · 진문석 ${save.jinmunStones ?? 0} · 기여 ${save.guildContribution ?? 0} · 시즌승 ${save.arenaSeasonWins ?? 0} · 소환서 ${scrolls} · 로스터 ${roster.length} · 상징 ${symbols.length} · 클리어 ${clearedStages.length}`,
+    `영광 ${save.gloryPoints ?? 0} · 진문석 ${save.jinmunStones ?? 0} · 기여 ${save.guildContribution ?? 0} · 시즌승 ${save.arenaSeasonWins ?? 0} · 소환서 일${scrolls}/고${save.scrollsPremium ?? 0}/신${save.scrollsMystic ?? 0} · 로스터 ${roster.length} · 상징 ${symbols.length} · 클리어 ${clearedStages.length}`,
   );
   if ((save.arenaBanIds ?? []).length) {
     console.log(`월드아레나 밴: ${(save.arenaBanIds ?? []).join(", ")}`);
@@ -203,7 +203,14 @@ async function interactive(): Promise<void> {
     }
 
     if (cmd === "summon" || cmd === "sum") {
-      const r = runSummon(save);
+      const kindRaw = (arg ?? "normal").toLowerCase();
+      const kind =
+        kindRaw === "premium" || kindRaw === "p" || kindRaw === "고급"
+          ? "premium"
+          : kindRaw === "mystic" || kindRaw === "m" || kindRaw === "신성"
+            ? "mystic"
+            : "normal";
+      const r = runSummon(save, kind);
       save = r.save;
       console.log(r.message);
       printStatus(save);
@@ -212,7 +219,14 @@ async function interactive(): Promise<void> {
 
     if (cmd === "buy-scroll" || cmd === "buy" || cmd === "bs") {
       const n = Number(arg ?? "1");
-      const r = runBuyScroll(save, Number.isFinite(n) ? n : 1);
+      const kindRaw = (arg2 ?? "normal").toLowerCase();
+      const kind =
+        kindRaw === "premium" || kindRaw === "p"
+          ? "premium"
+          : kindRaw === "mystic" || kindRaw === "m"
+            ? "mystic"
+            : "normal";
+      const r = runBuyScroll(save, Number.isFinite(n) ? n : 1, kind);
       save = r.save;
       console.log(r.message);
       printStatus(save);
@@ -339,7 +353,7 @@ async function interactive(): Promise<void> {
       for (const n of SKILL_TREE_NODES) {
         const mark = unlocked.has(n.id) ? "✓" : "·";
         console.log(
-          `${mark} ${n.id} ${n.nameKo} — ${n.descKo} (Lv.${n.minLevel}+ · 마나 ${n.manaCost}${n.crystalCost ? ` · 크리스탈 ${n.crystalCost}` : ""})`,
+          `${mark} ${n.id} ${n.nameKo} — ${n.descKo} (Lv.${n.minLevel}+ · 골드 ${n.manaCost}${n.crystalCost ? ` · 크리스탈 ${n.crystalCost}` : ""})`,
         );
       }
       continue;

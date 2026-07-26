@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" fill="none">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="52%" r="52%">
+      <stop offset="0%" stop-color="#f0a070" stop-opacity=".42"/>
+      <stop offset="45%" stop-color="#e07040" stop-opacity=".16"/>
+      <stop offset="100%" stop-color="#1a1008" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="40" y1="40" x2="280" y2="280">
+      <stop offset="0%" stop-color="#f5e6b8"/>
+      <stop offset="40%" stop-color="#e07040"/>
+      <stop offset="100%" stop-color="#c9a227"/>
+    </linearGradient>
+    <linearGradient id="ember" x1="160" y1="70" x2="160" y2="210">
+      <stop offset="0%" stop-color="#ffe08a"/>
+      <stop offset="55%" stop-color="#e07040"/>
+      <stop offset="100%" stop-color="#8a2810"/>
+    </linearGradient>
+    <linearGradient id="anvil" x1="90" y1="140" x2="230" y2="210">
+      <stop offset="0%" stop-color="#e8d9a8"/>
+      <stop offset="100%" stop-color="#8a6a40"/>
+    </linearGradient>
+  </defs>
+  <circle cx="160" cy="160" r="150" fill="url(#glow)"/>
+  <circle cx="160" cy="160" r="138" stroke="url(#ring)" stroke-width="1.5" opacity=".92"/>
+  <circle cx="160" cy="160" r="122" stroke="#c9a227" stroke-width="0.8" opacity=".5" stroke-dasharray="4 6"/>
+  <circle cx="160" cy="160" r="104" stroke="#e07040" stroke-width="1.2" opacity=".72"/>
+  <circle cx="160" cy="160" r="78" stroke="#f5e6b8" stroke-width="1" opacity=".45"/>
+  <circle cx="160" cy="160" r="52" stroke="#f0a070" stroke-width="1.4" opacity=".75"/>
+  <g stroke="#f5e6b8" stroke-width="1" opacity=".5">
+    <path d="M160 22 L160 48"/>
+    <path d="M160 272 L160 298"/>
+    <path d="M22 160 L48 160"/>
+    <path d="M272 160 L298 160"/>
+    <path d="M55 55 L74 74"/>
+    <path d="M246 246 L265 265"/>
+    <path d="M265 55 L246 74"/>
+    <path d="M74 246 L55 265"/>
+  </g>
+  <path d="M160 58 L236 188 H84 Z" stroke="#e07040" stroke-width="1.1" opacity=".5"/>
+  <path d="M160 262 L84 132 H236 Z" stroke="#c9a227" stroke-width="1" opacity=".35"/>
+  <g opacity=".95">
+    <path d="M108 168 H212 L198 196 H122 Z" fill="url(#anvil)"/>
+    <rect x="148" y="118" width="24" height="52" rx="3" fill="#e8d9a8" opacity=".92"/>
+    <path d="M136 126 H184" stroke="#c9a227" stroke-width="5" stroke-linecap="round"/>
+    <path d="M128 98 C148 78 172 78 192 98" stroke="url(#ember)" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+    <path d="M142 108 C154 96 166 96 178 108" stroke="#ffe08a" stroke-width="1.6" fill="none" opacity=".7"/>
+  </g>
+  <g fill="#f5e6b8">
+    <circle cx="160" cy="58" r="3.2"/>
+    <circle cx="236" cy="188" r="3.2"/>
+    <circle cx="84" cy="188" r="3.2"/>
+    <circle cx="160" cy="160" r="3.6" fill="#f0a070"/>
+  </g>
+</svg>

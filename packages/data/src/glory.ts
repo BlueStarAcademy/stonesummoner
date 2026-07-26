@@ -27,11 +27,11 @@ export interface GloryBuildingDef {
 export const GLORY_BUILDINGS: GloryBuildingDef[] = [
   {
     id: "mana_fountain",
-    nameKo: "마나 분천",
+    nameKo: "골드 분천",
     swName: "Mana Fountain",
     gloryCostPerLevel: 40,
     maxLevel: 10,
-    effectKo: "진액 연못 생산 +3%/Lv",
+    effectKo: "골드 연못 생산 +3%/Lv",
     manaProdPct: 0.03,
   },
   {

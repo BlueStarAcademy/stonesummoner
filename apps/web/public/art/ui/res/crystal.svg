@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="cbg" x1="12" y1="8" x2="52" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0e2438"/>
+      <stop offset="1" stop-color="#081420"/>
+    </linearGradient>
+    <linearGradient id="ccr" x1="18" y1="10" x2="48" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8FBFF"/>
+      <stop offset=".4" stop-color="#7ED7F2"/>
+      <stop offset="1" stop-color="#2A7FA8"/>
+    </linearGradient>
+    <linearGradient id="cshine" x1="24" y1="14" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#7ED7F2" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#cbg)"/>
+  <path d="M32 10L48 26L32 54L16 26Z" fill="url(#ccr)" stroke="#C8F0FF" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M32 10L40 26H24L32 10Z" fill="#FFFFFF" fill-opacity=".28"/>
+  <path d="M24 26L32 54L16 26H24Z" fill="#1E5F82" fill-opacity=".22"/>
+  <path d="M27 20L32 14L35 22L30 28Z" fill="url(#cshine)"/>
+</svg>

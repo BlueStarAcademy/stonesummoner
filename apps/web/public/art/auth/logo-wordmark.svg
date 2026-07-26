@@ -16,10 +16,10 @@
     x="360"
     y="88"
     text-anchor="middle"
-    font-family="Cinzel, 'Times New Roman', Georgia, serif"
+    font-family="Outfit, 'Pretendard', 'Apple SD Gothic Neo', sans-serif"
     font-size="52"
     font-weight="700"
-    letter-spacing="0.12em"
+    letter-spacing="0.04em"
     fill="url(#gold)"
     filter="url(#etch)"
   >STONESUMMONER</text>

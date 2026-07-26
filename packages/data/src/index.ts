@@ -63,6 +63,14 @@ export {
   ARENA_STAGES,
   CHAPTER1_STAGES,
   CHAPTER2_STAGES,
+  CHAPTER3_STAGES,
+  MAIN_QUEST_AREA_COUNT,
+  MAIN_QUEST_CHAPTERS,
+  MAIN_QUEST_STAGES,
+  MAIN_QUEST_PIN_LAYOUT,
+  SIDE_CONTENT_PIN_LAYOUT,
+  STAGES_PER_AREA,
+  stagesForMap,
   DEPTH_STAGES,
   EQUIP_STAGES,
   GUILD_RAID_STAGES,
@@ -72,7 +80,7 @@ export {
   getStage,
   stagesByMode,
 } from "./scenario.js";
-export type { ContentMode, StageDef } from "./scenario.js";
+export type { ContentMode, MainQuestPinId, StageDef } from "./scenario.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";
 export {
   canUnlockSkillNode,

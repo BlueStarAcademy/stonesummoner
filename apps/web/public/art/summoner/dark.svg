@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="dbg" x1="12" y1="8" x2="52" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1a1028"/>
+      <stop offset="1" stop-color="#0c0814"/>
+    </linearGradient>
+    <linearGradient id="dface" x1="22" y1="18" x2="42" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c8b8e0"/>
+      <stop offset="1" stop-color="#786098"/>
+    </linearGradient>
+    <linearGradient id="dmoon" x1="40" y1="8" x2="52" y2="24" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e8d8ff"/>
+      <stop offset="1" stop-color="#7050a8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#dbg)"/>
+  <path d="M44 10a10 10 0 1 0 8 14 8 8 0 1 1-8-14z" fill="url(#dmoon)" opacity=".9"/>
+  <ellipse cx="32" cy="36" rx="13" ry="15" fill="url(#dface)"/>
+  <path d="M19 32c2-10 8-14 13-14s11 4 13 14c-3-4-8-6-13-6s-10 2-13 6z" fill="#2a1838"/>
+  <path d="M22 52c3 6 7 9 10 9s7-3 10-9c-4 2-8 3-10 3s-6-1-10-3z" fill="#3a2850"/>
+  <circle cx="27" cy="36" r="1.6" fill="#181028"/>
+  <circle cx="37" cy="36" r="1.6" fill="#181028"/>
+  <path d="M28 42c2 1.4 6 1.4 8 0" stroke="#604878" stroke-width="1.4" stroke-linecap="round"/>
+</svg>

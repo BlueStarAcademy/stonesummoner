@@ -16,9 +16,37 @@ export const MAX_MONSTER_LEVEL = 15;
 export const MAX_EVOLVE = 2;
 export const MAX_SKILL_LEVEL = 3;
 export const SUMMON_SCROLL_COST = 1;
+/** Multi-summon pull count (10연). */
+export const SUMMON_MULTI_COUNT = 10;
 export const STARTER_SCROLLS = 5;
-/** Mana to buy one summon scroll at the shop stub. */
+export const STARTER_SCROLLS_PREMIUM = 1;
+export const STARTER_SCROLLS_MYSTIC = 0;
+/** Mana to buy one normal summon scroll at the shop stub. */
 export const SCROLL_BUY_MANA_COST = 450;
+/** Mana to buy one premium summon scroll. */
+export const SCROLL_PREMIUM_BUY_MANA_COST = 1500;
+/** Crystal to buy one sacred/abyss summon scroll. */
+export const SCROLL_MYSTIC_BUY_CRYSTAL_COST = 100;
+
+export type ScrollKind = "normal" | "premium" | "mystic";
+
+export const SCROLL_KINDS: readonly ScrollKind[] = [
+  "normal",
+  "premium",
+  "mystic",
+] as const;
+
+export const SCROLL_KIND_LABEL: Record<ScrollKind, string> = {
+  normal: "일반 소환서",
+  premium: "고급 소환서",
+  mystic: "신성/심연 소환서",
+};
+
+export const SCROLL_KIND_BLURB: Record<ScrollKind, string> = {
+  normal: "불·물·바람 3성",
+  premium: "불·물·바람 3~4성",
+  mystic: "신성·심연 전용",
+};
 
 /** Mana to raise level → level+1 */
 export function enhanceManaCost(level: number): number {
@@ -94,8 +122,22 @@ const STARTER_IDS = [
   "seal_scholar",
 ] as const;
 
-/** 3★ pool for Phase 1 summons */
-const SUMMON_POOL = MONSTERS.filter((m) => m.naturalStars <= 4);
+const ELEMENTAL = new Set(["fire", "water", "wind"]);
+
+/** 일반: 속성(불·물·바람) 3성 */
+const NORMAL_POOL = MONSTERS.filter(
+  (m) => m.naturalStars === 3 && ELEMENTAL.has(m.element),
+);
+/** 고급: 속성 3성 */
+const PREMIUM_3_POOL = NORMAL_POOL;
+/** 고급: 속성 4성 */
+const PREMIUM_4_POOL = MONSTERS.filter(
+  (m) => m.naturalStars === 4 && ELEMENTAL.has(m.element),
+);
+/** 신성/심연: 빛·어둠 */
+const MYSTIC_POOL = MONSTERS.filter(
+  (m) => m.element === "light" || m.element === "dark",
+);
 
 let uidSeq = 0;
 export function nextUid(prefix = "m"): string {
@@ -111,6 +153,8 @@ export function createStarterRoster(): {
   roster: OwnedMonster[];
   party: string[];
   scrolls: number;
+  scrollsPremium: number;
+  scrollsMystic: number;
 } {
   uidSeq = 0;
   const roster: OwnedMonster[] = STARTER_IDS.map((id, i) => ({
@@ -125,12 +169,27 @@ export function createStarterRoster(): {
     roster,
     party: roster.map((m) => m.uid),
     scrolls: STARTER_SCROLLS,
+    scrollsPremium: STARTER_SCROLLS_PREMIUM,
+    scrollsMystic: STARTER_SCROLLS_MYSTIC,
   };
 }
 
-export function pickSummonMonster(rng: () => number): MonsterDef {
-  const idx = Math.floor(rng() * SUMMON_POOL.length) % SUMMON_POOL.length;
-  return SUMMON_POOL[idx]!;
+function pickFrom(pool: MonsterDef[], rng: () => number): MonsterDef {
+  if (pool.length === 0) return MONSTERS[0]!;
+  const idx = Math.floor(rng() * pool.length) % pool.length;
+  return pool[idx]!;
+}
+
+export function pickSummonMonster(
+  rng: () => number = Math.random,
+  kind: ScrollKind = "normal",
+): MonsterDef {
+  if (kind === "mystic") return pickFrom(MYSTIC_POOL, rng);
+  if (kind === "premium") {
+    const useFour = rng() < 0.45 && PREMIUM_4_POOL.length > 0;
+    return pickFrom(useFour ? PREMIUM_4_POOL : PREMIUM_3_POOL, rng);
+  }
+  return pickFrom(NORMAL_POOL, rng);
 }
 
 export function describeOwned(m: OwnedMonster): string {

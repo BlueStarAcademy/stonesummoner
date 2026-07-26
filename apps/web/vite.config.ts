@@ -28,7 +28,7 @@ export default defineConfig({
         background_color: "#0e0b16",
         display: "standalone",
         orientation: "portrait",
-        start_url: "/",
+        start_url: "/island",
         icons: [
           {
             src: "icons/icon-192.svg",

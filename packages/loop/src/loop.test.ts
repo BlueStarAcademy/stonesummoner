@@ -23,6 +23,7 @@ import {
   runEquipGearBag,
   runSellGearBag,
   runAwakenSummoner,
+  setActiveSummoner,
   runUnlockSkillNode,
   awakenManaCost,
   awakenCrystalCost,
@@ -55,7 +56,7 @@ describe("game loop", () => {
     const save = createNewSave(0);
     const r = homeCollect(save, 3_600_000);
     assert.ok(r.save.island.mana > save.island.mana);
-    assert.match(r.message, /진액 연못/);
+    assert.match(r.message, /골드 연못/);
   });
 
   it("upgrades mana pond and grants crystal on clear", () => {
@@ -93,7 +94,15 @@ describe("game loop", () => {
     let save = createNewSave(0);
     save = {
       ...save,
-      clearedStages: ["garen_1_1", "garen_1_2", "garen_1_3", "garen_1_4", "garen_1_5"],
+      clearedStages: [
+        "garen_1_1",
+        "garen_1_2",
+        "garen_1_3",
+        "garen_1_4",
+        "garen_1_5",
+        "garen_1_6",
+        "garen_1_7",
+      ],
       island: { ...save.island, mana: 8000, energy: 80, summonerLevel: 10 },
       gloryPoints: 100,
     };
@@ -163,6 +172,32 @@ describe("game loop", () => {
     assert.match(locked.message, /잠김/);
   });
 
+  it("unlocks chapter 3 after tower_2_7 clear", () => {
+    const base = createNewSave(0);
+    assert.equal(isStageUnlocked(base, "ruins_3_1"), false);
+    const save = {
+      ...base,
+      clearedStages: [
+        "garen_1_1",
+        "garen_1_2",
+        "garen_1_3",
+        "garen_1_4",
+        "garen_1_5",
+        "garen_1_6",
+        "garen_1_7",
+        "tower_2_1",
+        "tower_2_2",
+        "tower_2_3",
+        "tower_2_4",
+        "tower_2_5",
+        "tower_2_6",
+        "tower_2_7",
+      ],
+    };
+    assert.equal(isStageUnlocked(save, "ruins_3_1"), true);
+    assert.equal(isStageUnlocked(save, "ruins_3_2"), false);
+  });
+
   it("fuses same-species and unlocks guild raid 13x13", () => {
     let save = createNewSave(0);
     const id = save.roster[0]!.monsterId;
@@ -185,9 +220,15 @@ describe("game loop", () => {
         "garen_1_3",
         "garen_1_4",
         "garen_1_5",
+        "garen_1_6",
+        "garen_1_7",
         "tower_2_1",
         "tower_2_2",
         "tower_2_3",
+        "tower_2_4",
+        "tower_2_5",
+        "tower_2_6",
+        "tower_2_7",
       ],
     };
     assert.equal(isStageUnlocked(save, "guild_raid_boss"), true);
@@ -252,7 +293,7 @@ describe("game loop", () => {
 
     const craft = runCraftScroll(save);
     assert.match(craft.message, /제작/);
-    assert.equal(craft.save.scrolls, save.scrolls + 1);
+    assert.equal(craft.save.scrollsMystic, (save.scrollsMystic ?? 0) + 1);
   });
 
   it("sells symbols and runs practice dojo", () => {
@@ -406,17 +447,36 @@ describe("game loop", () => {
     assert.equal(save.roster.length, 4);
     assert.equal(save.scrolls, 5);
 
-    const sum = runSummon(save, () => 0.1);
+    const sum = runSummon(save, "normal", () => 0.1);
     assert.match(sum.message, /소환 성공/);
     assert.equal(sum.save.scrolls, 4);
     assert.equal(sum.save.roster.length, 5);
     save = sum.save;
+
+    const premBefore = save.scrollsPremium ?? 0;
+    const prem = runSummon(save, "premium", () => 0.2);
+    assert.match(prem.message, /소환 성공/);
+    assert.equal(prem.save.scrollsPremium, premBefore - 1);
+    save = prem.save;
 
     const before = save.roster[0]!.level;
     const enh = runEnhance(save, "0");
     assert.match(enh.message, /강화/);
     assert.equal(enh.save.roster[0]!.level, before + 1);
     assert.ok(enh.save.island.mana < save.island.mana);
+  });
+
+  it("runs a 10-pull summon when scrolls allow", () => {
+    let save = createNewSave(0);
+    save = { ...save, scrolls: 12 };
+    const multi = runSummon(save, "normal", () => 0.15, 10);
+    assert.match(multi.message, /10연 소환/);
+    assert.equal(multi.save.scrolls, 2);
+    assert.equal(multi.save.roster.length, save.roster.length + 10);
+
+    const short = runSummon(multi.save, "normal", () => 0.2, 10);
+    assert.match(short.message, /부족/);
+    assert.equal(short.save.scrolls, 2);
   });
 
   it("enhances gear and symbols, equips drops", () => {
@@ -539,21 +599,28 @@ describe("game loop", () => {
       ...save,
       island: {
         ...save.island,
-        summonerLevel: 5,
         mana: 2000,
         crystal: 20,
+      },
+      summoners: {
+        ...save.summoners,
+        light: { ...save.summoners.light, level: 5 },
       },
     };
     const ok = runAwakenSummoner(save);
     assert.match(ok.message, /각성 \+1/);
     assert.equal(ok.save.summonerAwaken, 1);
+    assert.equal(ok.save.summoners.light.awaken, 1);
     assert.equal(ok.save.island.mana, 2000 - 500);
     assert.equal(ok.save.island.crystal, 20 - 3);
     save = ok.save;
 
     const battle = createStageBattle(getStage("garen_1_1")!, {
       ...save,
-      summonerAwaken: 3,
+      summoners: {
+        ...save.summoners,
+        light: { ...save.summoners.light, awaken: 3 },
+      },
     });
     const allySum = battle.units.find(
       (u) => u.kind === "summoner" && u.team === "ally",
@@ -564,12 +631,42 @@ describe("game loop", () => {
 
     save = {
       ...save,
-      summonerAwaken: MAX_SUMMONER_AWAKEN,
-      island: { ...save.island, summonerLevel: 99, mana: 99999, crystal: 99 },
+      island: { ...save.island, mana: 99999, crystal: 99 },
+      summoners: {
+        ...save.summoners,
+        light: {
+          ...save.summoners.light,
+          level: 99,
+          awaken: MAX_SUMMONER_AWAKEN,
+        },
+      },
     };
     const maxed = runAwakenSummoner(save);
     assert.match(maxed.message, /최대/);
     assert.equal(maxed.save.summonerAwaken, MAX_SUMMONER_AWAKEN);
+  });
+
+  it("switches active summoner per element", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      summoners: {
+        ...save.summoners,
+        fire: { level: 4, exp: 20, awaken: 1 },
+        light: { level: 2, exp: 10, awaken: 0 },
+      },
+    };
+    save = setActiveSummoner(save, "fire");
+    assert.equal(save.activeSummoner, "fire");
+    assert.equal(save.summonerAwaken, 1);
+    assert.equal(save.island.summonerExp, 20);
+    assert.equal(save.island.summonerLevel, 4);
+    const battle = createStageBattle(getStage("garen_1_1")!, save);
+    const allySum = battle.units.find(
+      (u) => u.kind === "summoner" && u.team === "ally",
+    )!;
+    assert.match(allySum.name, /화염/);
+    assert.equal(allySum.element, "fire");
   });
 
   it("unlocks summoner skill tree nodes with gates", () => {
@@ -635,12 +732,12 @@ describe("game loop", () => {
   it("demo loop completes full home cycle", () => {
     const steps = runDemoLoop(() => 0.1);
     assert.equal(steps.length, 7);
-    assert.match(steps[0]!.message, /진액/);
+    assert.match(steps[0]!.message, /골드/);
     assert.match(steps[1]!.message, /소환/);
     assert.match(steps[2]!.message, /강화/);
     assert.match(steps[3]!.message, /장비/);
     assert.match(steps[4]!.message, /상징/);
     assert.match(steps[5]!.message, /승리|패배/);
-    assert.match(steps[6]!.message, /진액/);
+    assert.match(steps[6]!.message, /골드/);
   });
 });

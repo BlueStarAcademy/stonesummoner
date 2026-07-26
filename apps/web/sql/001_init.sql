@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY,
   email TEXT UNIQUE,
   password_hash TEXT,
+  nickname TEXT,
   kind TEXT NOT NULL CHECK (kind IN ('user', 'guest', 'demo')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

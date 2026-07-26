@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none">
+  <defs>
+    <radialGradient id="mine-aura" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#5ac0f0" stop-opacity=".55"/>
+      <stop offset="42%" stop-color="#5ac0f0" stop-opacity=".18"/>
+      <stop offset="100%" stop-color="#5ac0f0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mine-gold" x1="48" y1="36" x2="192" y2="204">
+      <stop offset="0%" stop-color="#fff8d6"/>
+      <stop offset="28%" stop-color="#f0d878"/>
+      <stop offset="62%" stop-color="#c9a227"/>
+      <stop offset="100%" stop-color="#7a5a18"/>
+    </linearGradient>
+    <linearGradient id="mine-metal" x1="70" y1="50" x2="170" y2="190">
+      <stop offset="0%" stop-color="#fff4c8"/>
+      <stop offset="45%" stop-color="#8ec8f0"/>
+      <stop offset="100%" stop-color="#5a4010"/>
+    </linearGradient>
+    <filter id="mine-depth" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="4" stdDeviation="3.5" flood-color="#000" flood-opacity=".55"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#5ac0f0" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <circle cx="120" cy="120" r="112" fill="url(#mine-aura)"/>
+  <g filter="url(#mine-depth)" fill="none">
+    <circle cx="120" cy="120" r="86" stroke="url(#mine-gold)" stroke-width="2.2" opacity=".95"/>
+    <circle cx="120" cy="120" r="76" stroke="#fff4c8" stroke-width="0.8" opacity=".28" stroke-dasharray="3 7"/>
+    <circle cx="120" cy="120" r="66" stroke="url(#mine-gold)" stroke-width="1.3" opacity=".55"/>
+    <g stroke="url(#mine-gold)" stroke-width="1.4" opacity=".7" stroke-linecap="round">
+      <path d="M120 28 L120 42"/>
+      <path d="M120 198 L120 212"/>
+      <path d="M28 120 L42 120"/>
+      <path d="M198 120 L212 120"/>
+      <path d="M52 52 L64 64"/>
+      <path d="M176 176 L188 188"/>
+      <path d="M188 52 L176 64"/>
+      <path d="M64 176 L52 188"/>
+    </g>
+    <path d="M120 62 L164 158 H76 Z" fill="url(#mine-metal)" stroke="url(#mine-gold)" stroke-width="1.6"/>
+     <path d="M120 84 L146 146 H94 Z" fill="#3a88b888"/>
+     <path d="M102 128 H138" stroke="#fff4c8" stroke-width="1.8" opacity=".65"/>
+     <circle cx="120" cy="104" r="5" fill="#fff4c8"/>
+  </g>
+</svg>
