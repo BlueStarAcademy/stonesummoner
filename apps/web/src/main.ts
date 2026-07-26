@@ -883,9 +883,12 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
     opts?.targetable && u.alive
       ? `type="button" data-target="${u.id}"`
       : "";
-  return `<${tag} class="unit-card el-${u.element}${active}${targeted}${dead}" ${attrs}>
+  return `<${tag} class="unit-card el-${u.element}${active}${targeted}${dead}${shield ? " has-shield" : ""}" ${attrs}>
     <div class="name">${u.name}</div>
-    <div class="hp-num">${Math.max(0, Math.round(u.hp))}${shield ? `+${shield}` : ""}</div>
+    <div class="hp-num">
+      <span>${Math.max(0, Math.round(u.hp))}</span>
+      ${shield ? `<span class="shield-badge" title="실드">+${shield}</span>` : ""}
+    </div>
     <div class="bar hp"><i style="width:${hpPct}%"></i></div>
     <div class="bar atb"><i style="width:${atbPct}%"></i></div>
   </${tag}>`;
@@ -1238,13 +1241,19 @@ function renderHome(): string {
     mark: string,
     title: string,
     sub: string,
-    opts?: { disabled?: boolean; bubble?: string; bubbleKind?: "mana" | "crystal" },
+    opts?: {
+      disabled?: boolean;
+      bubble?: string;
+      bubbleKind?: "mana" | "crystal";
+      tone?: "summon" | "forge" | "shop" | "gate" | "pond" | "mine" | "wish" | "glory" | "dojo" | "guild" | "fusion" | "party";
+    },
   ) => {
     const bubble =
       opts?.bubble && opts.bubbleKind
         ? `<button type="button" class="res-bubble res-bubble--${opts.bubbleKind}" data-collect="${opts.bubbleKind}" aria-label="${opts.bubble} 수집">${opts.bubble}</button>`
         : "";
-    return `<div class="building${opts?.disabled ? " is-locked" : ""}">
+    const tone = opts?.tone ? ` building--${opts.tone}` : "";
+    return `<div class="building${tone}${opts?.disabled ? " is-locked" : ""}">
       <button type="button" class="building-main" data-b="${id}" ${opts?.disabled ? "disabled" : ""}>
         <span class="building-mark" aria-hidden="true">${mark}</span>
         <span class="building-body"><strong>${title}</strong><small>${sub}</small></span>
@@ -1275,12 +1284,14 @@ function renderHome(): string {
       </div>
       <p class="home-meta">EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
     </div>
+    <div class="island-plateau">
     <div class="island-grid">
-      ${tile("summon_hearth", "召", "소환진", `소환서 ${save.scrolls}장`)}
-      ${tile("power_circle", "强", "강화진", "레벨 · 각성 · 장비")}
-      ${tile("shop", "商", "마법상점", "소환서 · 연마 · 각인")}
-      ${tile("gateway", "門", "출정문", "시나리오 · 장비금고 · 아레나")}
+      ${tile("summon_hearth", "召", "소환진", `소환서 ${save.scrolls}장`, { tone: "summon" })}
+      ${tile("power_circle", "强", "강화진", "레벨 · 각성 · 장비", { tone: "forge" })}
+      ${tile("shop", "商", "마법상점", "소환서 · 연마 · 각인", { tone: "shop" })}
+      ${tile("gateway", "門", "출정문", "시나리오 · 장비금고 · 아레나", { tone: "gate" })}
       ${tile("mana_pond", "池", `진액 연못 Lv.${pondLv}`, `대기 ${storedMana} / ${pondCap}`, {
+        tone: "pond",
         bubble: storedMana > 0 ? String(storedMana) : undefined,
         bubbleKind: storedMana > 0 ? "mana" : undefined,
       })}
@@ -1290,16 +1301,19 @@ function renderHome(): string {
         "수정 광맥",
         mine ? `대기 ${storedCrystal}` : "Lv.10 해금",
         {
+          tone: "mine",
           disabled: !mineOk,
           bubble: mine && storedCrystal > 0 ? String(storedCrystal) : undefined,
           bubbleKind: mine && storedCrystal > 0 ? "crystal" : undefined,
         },
       )}
       ${tile("wish", "願", "소원의 사당", hasWish ? "일 1회 소원" : "Lv.7 해금", {
+        tone: "wish",
         disabled: !hasWish,
       })}
-      ${tile("glory", "榮", "영광 건물", `영광 ${save.gloryPoints ?? 0}`)}
+      ${tile("glory", "榮", "영광 건물", `영광 ${save.gloryPoints ?? 0}`, { tone: "glory" })}
       ${tile("dojo", "道", "마법진 도장", dojoOk ? `수련 ${save.dojoDrills ?? 0}회` : "Lv.8 해금", {
+        tone: "dojo",
         disabled: !dojoOk,
       })}
       ${tile(
@@ -1307,12 +1321,14 @@ function renderHome(): string {
         "會",
         "길드 홀",
         save.guildName ? save.guildName : guildOk ? "가입·출석" : "Lv.12 해금",
-        { disabled: !guildOk },
+        { tone: "guild", disabled: !guildOk },
       )}
       ${tile("fusion", "融", "융합의 별", fusionOk ? "동일종 융합" : "Lv.17 해금", {
+        tone: "fusion",
         disabled: !fusionOk,
       })}
-      ${tile("party", "伍", "파티", "출전 몬스터 편성")}
+      ${tile("party", "伍", "파티", "출전 몬스터 편성", { tone: "party" })}
+    </div>
     </div>
   </div>`;
 }
@@ -1335,6 +1351,7 @@ function hubShell(title: string, subtitle: string, body: string): string {
     <div class="hub-content">
       <header class="hub-hud">
         <p class="hub-title">${title}</p>
+        <div class="hub-title-rule" aria-hidden="true"></div>
         <p class="hub-meta">${subtitle}</p>
       </header>
       ${body}
@@ -2490,32 +2507,36 @@ function renderBattle(manaPct: number): string {
           ? `AUTO x${battleSpeed}`
           : "";
 
+  const showBoardSwitch =
+    battle.boards.length > 1 &&
+    battle.phase === "await_stone" &&
+    active?.team === "ally" &&
+    !autoMode;
   const skillRow = awaitShop
     ? ""
-    : `<div class="skill-row${
-        battle.boards.length > 1 &&
-        battle.phase === "await_stone" &&
-        active?.team === "ally" &&
-        !autoMode
-          ? " has-switch"
-          : ""
-      }">
-      ${renderSkillButtons(active, awaitSkill)}
-      <button type="button" id="sk-ult" class="ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>진문개방</button>
-      <button type="button" id="sk-declare" class="declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}>증폭선언</button>
-      <button type="button" id="sk-dual" class="dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}>쌍착수</button>
-      <button type="button" id="sk-clean" class="clean${canClean ? " ready" : ""}" ${awaitSkill && canClean ? "" : "disabled"}>진문청소</button>
-      <button type="button" id="sk-guard" class="guard${canGuard ? " ready" : ""}" ${awaitSkill && canGuard ? "" : "disabled"}>진문수호</button>
-      <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>추천</button>
-      ${
-        battle.boards.length > 1 &&
-        battle.phase === "await_stone" &&
-        active?.team === "ally" &&
-        !autoMode
-          ? `<button type="button" class="secondary board-switch" id="btn-board-switch">쌍국 ${battle.boardLabel === "A국" ? "→B" : "→A"}</button>`
-          : ""
-      }
+    : `<div class="skill-dock${showBoardSwitch ? " has-switch" : ""}">
+      <div class="skill-cluster skill-cluster--unit">
+        ${renderSkillButtons(active, awaitSkill)}
+      </div>
+      <div class="skill-cluster skill-cluster--summoner" aria-label="서머너 마나 스킬">
+        <button type="button" id="sk-ult" class="summoner-sk ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">開</span><span class="sk-name">개방</span></button>
+        <button type="button" id="sk-declare" class="summoner-sk declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">宣</span><span class="sk-name">증폭</span></button>
+        <button type="button" id="sk-dual" class="summoner-sk dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">雙</span><span class="sk-name">쌍착</span></button>
+        <button type="button" id="sk-clean" class="summoner-sk clean${canClean ? " ready" : ""}" ${awaitSkill && canClean ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">掃</span><span class="sk-name">청소</span></button>
+        <button type="button" id="sk-guard" class="summoner-sk guard${canGuard ? " ready" : ""}" ${awaitSkill && canGuard ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">守</span><span class="sk-name">수호</span></button>
+      </div>
+      <div class="skill-cluster skill-cluster--util">
+        <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>추천</button>
+        ${
+          showBoardSwitch
+            ? `<button type="button" class="secondary board-switch" id="btn-board-switch">쌍국 ${battle.boardLabel === "A국" ? "→B" : "→A"}</button>`
+            : ""
+        }
+      </div>
     </div>`;
+
+  const manaTone =
+    manaPct >= 99 ? " is-full" : manaPct >= 40 ? " is-charged" : "";
 
   return `<div class="battle-screen">
     <div class="battle-sky" aria-hidden="true">
@@ -2534,11 +2555,11 @@ function renderBattle(manaPct: number): string {
     <div class="battle-layout battle-layout--framed">
     <div class="battle-top">
       <div class="battle-stage-name">${currentStage.nameKo}</div>
-      <div class="muted">${currentStage.boardSize}×${currentStage.boardSize} · 웨이브 ${battle.currentWave}/${battle.totalWaves}</div>
-      <div class="muted battle-status">${status}</div>
+      <div class="battle-wave">${currentStage.boardSize}×${currentStage.boardSize} · 웨이브 ${battle.currentWave}/${battle.totalWaves}</div>
+      <div class="battle-status">${status}</div>
     </div>
     ${renderBattleTicker()}
-    <div class="muted item-legend">서머너 후열(무적) · 전열 소환수 전멸 시 승패</div>
+    <div class="item-legend">서머너 후열(무적) · 전열 소환수 전멸 시 승패</div>
     ${renderSummonerBack(enemyBack, "enemy")}
     <div class="team-row enemy">${enemyFront.map((u) => renderUnit(u, { targetable: awaitSkill })).join("")}</div>
     <div class="board-wrap">
@@ -2547,13 +2568,17 @@ function renderBattle(manaPct: number): string {
       ${renderBoard()}
       ${renderSuggestStrip()}
       ${renderCaptureShop()}
-      <div class="mana-block">
-        <div class="muted">서머너 마나 ${Math.floor(battle.allySummoner.mana)}/${battle.allySummoner.manaMax}</div>
+      <div class="mana-block${manaTone}">
+        <div class="mana-head">
+          <span class="mana-label">서머너 마나</span>
+          <span class="mana-nums">${Math.floor(battle.allySummoner.mana)}<small>/${battle.allySummoner.manaMax}</small></span>
+        </div>
         <div class="bar mana mana-lg"><i style="width:${manaPct}%"></i></div>
+        <div class="mana-ticks" aria-hidden="true"><i></i><i></i><i></i></div>
       </div>
     </div>
     ${skillRow}
-    ${skillHint ? `<p class="muted skill-hint">${skillHint}</p>` : ""}
+    ${skillHint ? `<p class="skill-hint">${skillHint}</p>` : ""}
     <div class="team-row ally">${allyFront.map((u) => renderUnit(u)).join("")}</div>
     ${renderSummonerBack(allyBack, "ally")}
     <div class="battle-hud">
