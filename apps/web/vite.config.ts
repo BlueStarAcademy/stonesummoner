@@ -46,6 +46,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,ico,png,woff2}"],
+        // stages-world-map.png (~3.3 MB) and auth heroes exceed Workbox's 2 MiB default
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
   ],
