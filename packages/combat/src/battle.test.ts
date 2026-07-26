@@ -232,6 +232,35 @@ describe("Battle flow", () => {
     assert.equal(b.phase, "resolved");
   });
 
+  it("circle guard shields wounded ally monsters", () => {
+    const units = roster();
+    const monSeed = units.find((u) => u.id === "a-m1")!;
+    monSeed.hp = Math.floor(monSeed.stats.hp * 0.4);
+    const b = new Battle({
+      boardSize: 5,
+      units,
+      allySummoner: summonerState("a-sum", 40),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) {
+      u.atb = u.id === "a-sum" ? 100 : 0;
+    }
+    b.tickUntilReady();
+    b.autoStone();
+    const unit = b.getUnit("a-sum")!;
+    const mon = b.getUnit("a-m1")!;
+    assert.equal(b.canUseSummonerGuard(unit), true);
+    assert.equal(b.allyMonstersWounded("ally", 0.55), true);
+    const beforeShield = mon.shieldHp ?? 0;
+    const hits = b.useSkill({ summonerSkill: "guard" });
+    assert.equal(hits.length, 0);
+    assert.ok((mon.shieldHp ?? 0) > beforeShield);
+    assert.ok(b.allySummoner.mana < 40);
+    assert.match(b.log.join("\n"), /진문수호/);
+    assert.equal(b.phase, "resolved");
+  });
+
   it("wiping enemy summons wins; summoners are not targets", () => {
     const units = roster();
     const enemyMon = units.find((u) => u.id === "e-m1")!;

@@ -2088,6 +2088,13 @@ button.unit-card {
   box-shadow: 0 0 12px #6b5a4a33;
 }
 
+.skill-row button.guard.ready {
+  background: linear-gradient(180deg, #3a5a6a, #1e3440);
+  border-color: #7aa8b8;
+  color: #e8f4f8;
+  box-shadow: 0 0 12px #3a5a6a33;
+}
+
 .skill-row button.smart {
   border-color: #c9a22766;
   color: #f5e6b8;

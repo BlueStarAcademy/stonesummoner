@@ -1066,6 +1066,23 @@ export class Battle {
     return sm.mana >= need;
   }
 
+  /** 진문수호: 40% mana — shield ally monsters. */
+  canUseSummonerGuard(unit: Unit): boolean {
+    if (unit.kind !== "summoner") return false;
+    const sm = this.summonerOf(unit.team);
+    const need = sm.manaMax * 0.4;
+    return sm.mana >= need;
+  }
+
+  /** True if any ally monster is below the HP ratio threshold. */
+  allyMonstersWounded(team: TeamId, ratio = 0.55): boolean {
+    const allies = this.units.filter(
+      (u) => u.alive && u.team === team && u.kind === "monster",
+    );
+    if (allies.length === 0) return false;
+    return allies.some((u) => u.hp / u.stats.hp < ratio);
+  }
+
   /** Enemy stone count on the active board (for AUTO clean gating). */
   countEnemyStones(team: TeamId): number {
     const enemy = teamStoneColor(team === "ally" ? "enemy" : "ally");
@@ -1134,14 +1151,14 @@ export class Battle {
   }
 
   /**
-   * Skill phase. Summoner skills: 진문개방 / 증폭선언 / 쌍착수 / 진문청소.
+   * Skill phase. Summoner skills: 진문개방 / 증폭선언 / 쌍착수 / 진문청소 / 진문수호.
    * Otherwise cast S1/S2/S3 (or fallback basic) on target.
    */
   useSkill(opts?: {
     targetId?: string;
     useSummonerSkill?: boolean;
-    /** open / declare / dual / clean */
-    summonerSkill?: "open" | "declare" | "dual" | "clean";
+    /** open / declare / dual / clean / guard */
+    summonerSkill?: "open" | "declare" | "dual" | "clean" | "guard";
     skillIndex?: number;
   }): SkillResult[] {
     if (this.phase !== "await_skill" || !this.activeUnitId) return [];
@@ -1203,6 +1220,22 @@ export class Battle {
       }
       this.log.push(
         `${unit.name} 진문청소 (${center.x},${center.y}) 제거 ${removed}`,
+      );
+    } else if (summonerSkill === "guard" && this.canUseSummonerGuard(unit)) {
+      const sm = this.summonerOf(unit.team);
+      const cost = sm.manaMax * 0.4;
+      sm.mana = Math.max(0, sm.mana - cost);
+      let shielded = 0;
+      let totalShield = 0;
+      for (const u of this.units) {
+        if (!u.alive || u.team !== unit.team || u.kind !== "monster") continue;
+        const amount = Math.round(u.stats.hp * 0.18);
+        u.shieldHp = (u.shieldHp ?? 0) + amount;
+        shielded += 1;
+        totalShield += amount;
+      }
+      this.log.push(
+        `${unit.name} 진문수호 (아군 ${shielded} · 실드 +${totalShield})`,
       );
     } else if (summonerSkill === "open" && this.canUseSummonerSkill(unit)) {
       const sm = this.summonerOf(unit.team);
@@ -1482,6 +1515,12 @@ export class Battle {
       this.countEnemyStones(unit.team) >= cleanNeed
     ) {
       return this.useSkill({ summonerSkill: "clean" });
+    }
+    if (
+      this.canUseSummonerGuard(unit) &&
+      this.allyMonstersWounded(unit.team, 0.55)
+    ) {
+      return this.useSkill({ summonerSkill: "guard" });
     }
     if (this.canUseSummonerDeclare(unit)) {
       return this.useSkill({ summonerSkill: "declare" });
