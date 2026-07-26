@@ -1068,13 +1068,16 @@ function authHeroLayer(): string {
 }
 
 function authBrand(): string {
-  return `<img
-    class="auth-brand"
-    src="/art/auth/logo-wordmark.svg"
-    width="720"
-    height="140"
-    alt="StoneSummoner"
-  />`;
+  return `<header class="auth-brand-block">
+    <div class="auth-brand-ornament" aria-hidden="true">
+      <span class="auth-brand-rule auth-brand-rule--left"></span>
+      <span class="auth-brand-gem"></span>
+      <span class="auth-brand-rule auth-brand-rule--right"></span>
+    </div>
+    <p class="auth-brand-en">Stone Summoners</p>
+    <h1 class="auth-brand-ko">신비의마법석</h1>
+    <div class="auth-brand-underline" aria-hidden="true"></div>
+  </header>`;
 }
 
 function renderAuth(): string {
