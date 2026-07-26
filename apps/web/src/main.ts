@@ -196,6 +196,12 @@ let slotEquipPick: { uid: string; slot: number } | null = null;
 let forgeReveal: ForgeReveal | null = null;
 /** Fusion success reveal card. */
 let fusionReveal: FusionReveal | null = null;
+/** Enhance hub section tab. */
+type EnhanceTab = "awaken" | "monsters" | "gear" | "symbols";
+let enhanceTab: EnhanceTab = "awaken";
+/** One-shot pulse/flash on next enhance paint. */
+let enhanceFx: { kind: "node"; id: string } | { kind: "gear"; slot: string } | null =
+  null;
 /** Daily wish result card. */
 let wishReveal: string | null = null;
 /** Party editor draft (uid set); null means mirror save.party. */
@@ -1700,13 +1706,13 @@ function renderSymbolLoadout(uid: string): string {
     .join("");
   const preview = previewOwnedCombatStats(save, uid);
   const stats = preview
-    ? `<div class="loadout-stats">
-        <span>HP ${preview.final.hp}</span>
-        <span>ATK ${preview.final.atk}</span>
-        <span>DEF ${preview.final.def}</span>
-        <span>SPD ${preview.final.spd}</span>
-        <span>치확 ${preview.final.critRate}%</span>
-        <span>치피 ${preview.final.critDmg}%</span>
+    ? `<div class="loadout-stats loadout-stats--bars">
+        <div class="stat-cell"><span class="stat-cell-k">HP</span><span class="stat-cell-v">${preview.final.hp}</span></div>
+        <div class="stat-cell"><span class="stat-cell-k">ATK</span><span class="stat-cell-v">${preview.final.atk}</span></div>
+        <div class="stat-cell"><span class="stat-cell-k">DEF</span><span class="stat-cell-v">${preview.final.def}</span></div>
+        <div class="stat-cell"><span class="stat-cell-k">SPD</span><span class="stat-cell-v">${preview.final.spd}</span></div>
+        <div class="stat-cell"><span class="stat-cell-k">치확</span><span class="stat-cell-v">${preview.final.critRate}%</span></div>
+        <div class="stat-cell"><span class="stat-cell-k">치피</span><span class="stat-cell-v">${preview.final.critDmg}%</span></div>
       </div>
       ${
         preview.sets.length
@@ -1754,88 +1760,131 @@ function renderEnhance(): string {
       : `각성 +${awaken + 1} (−마나 ${awakenMana} · −크리스탈 ${awakenCrystal})`;
   const leaderPct = (awakenLeaderAtkPct(awaken) * 100).toFixed(1);
   const treeUnlocked = new Set(save.skillTree ?? []);
-  const body = `<div class="hub-panel">
-    ${renderForgeReveal()}
-    <p class="section-label">서머너 각성</p>
-    <div class="stage-list">
-      <button type="button" class="stage-card" id="btn-awaken" data-awaken ${awakenMax ? "disabled" : ""}>
-        <span class="stage-card-mark" aria-hidden="true">覺</span>
-        <span class="stage-card-body">
-          <strong>각성 ${awaken}/${MAX_SUMMONER_AWAKEN}</strong>
-          <small>리더 공+${leaderPct}% · 마나·스킬 영구 보너스 · ${awakenHint}</small>
-        </span>
-      </button>
-    </div>
-    <p class="section-label">스킬 트리 (${treeUnlocked.size}/${SKILL_TREE_NODES.length})</p>
-    <div class="stage-list skill-tree-list">
-      ${SKILL_TREE_NODES.map((n) => {
-        const done = treeUnlocked.has(n.id);
-        const missReq = n.requires.some((r) => !treeUnlocked.has(r));
-        const lvLock = save.island.summonerLevel < n.minLevel;
-        const cost =
-          n.crystalCost > 0
-            ? `−마나 ${n.manaCost} · −크리스탈 ${n.crystalCost}`
-            : `−마나 ${n.manaCost}`;
-        const hint = done
-          ? "해금됨"
-          : lvLock
-            ? `Lv.${n.minLevel}+`
-            : missReq
-              ? "선행 필요"
-              : cost;
-        return `<button type="button" class="stage-card${done ? " is-unlocked" : ""}" data-skill-node="${n.id}" ${done ? "disabled" : ""}>
-          <span class="stage-card-mark" aria-hidden="true">${n.branch[0]!.toUpperCase()}</span>
-          <span class="stage-card-body">
-            <strong>${n.nameKo}</strong>
-            <small>${n.descKo} · ${hint}</small>
-          </span>
-        </button>`;
-      }).join("")}
-    </div>
-    <p class="section-label">몬스터</p>
-    <div class="stage-list">
-      ${save.roster
-        .map((m) => {
-          const cost = enhanceManaCost(m.level);
-          const maxed = m.level >= MAX_MONSTER_LEVEL;
-          const evo = m.evolve ?? 0;
-          const evoMax = evo >= MAX_EVOLVE;
-          const evoNeed = evolveMinLevel(evo);
-          const evoMana = evolveManaCost(evo);
-          const evoCrystal = evolveCrystalCost(evo);
-          const evoCost =
-            evoCrystal > 0
-              ? `−마나 ${evoMana} · −크리스탈 ${evoCrystal}`
-              : `−마나 ${evoMana}`;
-          const evoHint = evoMax
-            ? "최대 진화"
-            : m.level < evoNeed
-              ? `진화 Lv.${evoNeed}+`
-              : `진화 ${evoCost}`;
-          const levels = (m.skillLevels ?? [1, 1, 1]) as [
-            number,
-            number,
-            number,
-          ];
-          const def = getMonster(m.monsterId);
-          const skillBtns = [0, 1, 2]
-            .map((si) => {
-              const lv = levels[si]!;
-              const maxSk = lv >= MAX_SKILL_LEVEL;
-              const need = skillUpMinMonsterLevel(lv);
-              const skCost = skillUpManaCost(si, lv);
-              const name = def?.skills[si]?.nameKo ?? `S${si + 1}`;
-              const hint = maxSk
-                ? `${name} MAX`
-                : m.level < need
-                  ? `${name} Lv.${need}+`
-                  : `${name}+ (−${skCost})`;
-              return `<button type="button" class="secondary sk-up" data-skup="${m.uid}" data-skslot="${si}" ${maxSk ? "disabled" : ""}>${hint}</button>`;
-            })
-            .join("");
-          const inParty = save.party.includes(m.uid);
-          const preview = previewOwnedCombatStats(save, m.uid);
-          return `<div class="enhance-mon el-${def?.element ?? "dark"}">
+  const branchMeta: {
+    id: (typeof SKILL_TREE_NODES)[number]["branch"];
+    label: string;
+    mark: string;
+  }[] = [
+    { id: "mana", label: "마나", mark: "液" },
+    { id: "sense", label: "감응", mark: "感" },
+    { id: "power", label: "위력", mark: "核" },
+    { id: "leader", label: "지휘", mark: "揮" },
+    { id: "mastery", label: "숙련", mark: "熟" },
+  ];
+  const fxNode =
+    enhanceFx?.kind === "node" ? enhanceFx.id : null;
+  const fxGear =
+    enhanceFx?.kind === "gear" ? enhanceFx.slot : null;
+  const tab: EnhanceTab =
+    equipPickSymIndex != null || forgeReveal
+      ? "symbols"
+      : slotEquipPick
+        ? "monsters"
+        : enhanceTab;
+
+  const gearSlotBtn = (
+    slot: "weapon" | "robe" | "accessory" | "orb" | "cloak" | "ring",
+    piece: typeof weapon,
+    mark: string,
+    label: string,
+    detail: string,
+  ): string => {
+    const maxed = piece.enhance >= MAX_GEAR_ENHANCE;
+    const setName =
+      GEAR_SETS.find((s) => s.id === piece.setId)?.nameKo ?? piece.setId;
+    return `<button type="button" class="gear-slot${fxGear === slot ? " is-flash" : ""}${maxed ? " is-max" : ""}" data-gear="${slot}" ${maxed ? "disabled" : ""} title="${detail}">
+      <span class="gear-slot-mark" aria-hidden="true">${mark}</span>
+      <span class="gear-slot-label">${label}</span>
+      <span class="gear-slot-plus">+${piece.enhance}</span>
+      <span class="gear-slot-set">${setName}</span>
+      <span class="gear-slot-cost">${maxed ? "MAX" : gearEnhanceCostLabel(piece.enhance)}</span>
+    </button>`;
+  };
+
+  const setSummary = summarizeGearSets(gear)
+    .filter((s) => s.count > 0)
+    .map(
+      (s) =>
+        `<span class="set-chip${s.active2 || s.active4 || s.active6 ? " active" : ""}">${s.nameKo} ${s.count}${s.active6 ? " ·6" : s.active4 ? " ·4" : s.active2 ? " ·2" : ""}</span>`,
+    )
+    .join("");
+
+  const treeBoard = branchMeta
+    .map((br) => {
+      const nodes = SKILL_TREE_NODES.filter((n) => n.branch === br.id);
+      const tiles = nodes
+        .map((n) => {
+          const done = treeUnlocked.has(n.id);
+          const missReq = n.requires.some((r) => !treeUnlocked.has(r));
+          const lvLock = save.island.summonerLevel < n.minLevel;
+          const ready = !done && !missReq && !lvLock;
+          const cost =
+            n.crystalCost > 0
+              ? `−마나 ${n.manaCost} · −크 ${n.crystalCost}`
+              : `−마나 ${n.manaCost}`;
+          const hint = done
+            ? "해금"
+            : lvLock
+              ? `Lv.${n.minLevel}+`
+              : missReq
+                ? "선행"
+                : cost;
+          const state = done
+            ? "is-unlocked"
+            : ready
+              ? "is-ready"
+              : "is-locked";
+          return `<button type="button" class="tree-node ${state}${fxNode === n.id ? " is-pulse" : ""}" data-skill-node="${n.id}" ${done ? "disabled" : ""} title="${n.descKo}">
+            <span class="tree-node-name">${n.nameKo}</span>
+            <span class="tree-node-hint">${hint}</span>
+          </button>`;
+        })
+        .join("");
+      return `<div class="tree-branch tree-branch--${br.id}">
+        <p class="tree-branch-label"><span aria-hidden="true">${br.mark}</span>${br.label}</p>
+        <div class="tree-branch-nodes">${tiles}</div>
+      </div>`;
+    })
+    .join("");
+
+  const monstersPanel = save.roster
+    .map((m) => {
+      const cost = enhanceManaCost(m.level);
+      const maxed = m.level >= MAX_MONSTER_LEVEL;
+      const evo = m.evolve ?? 0;
+      const evoMax = evo >= MAX_EVOLVE;
+      const evoNeed = evolveMinLevel(evo);
+      const evoMana = evolveManaCost(evo);
+      const evoCrystal = evolveCrystalCost(evo);
+      const evoCost =
+        evoCrystal > 0
+          ? `−마나 ${evoMana} · −크리스탈 ${evoCrystal}`
+          : `−마나 ${evoMana}`;
+      const evoHint = evoMax
+        ? "최대 진화"
+        : m.level < evoNeed
+          ? `진화 Lv.${evoNeed}+`
+          : `진화 ${evoCost}`;
+      const levels = (m.skillLevels ?? [1, 1, 1]) as [number, number, number];
+      const def = getMonster(m.monsterId);
+      const skillBtns = [0, 1, 2]
+        .map((si) => {
+          const lv = levels[si]!;
+          const maxSk = lv >= MAX_SKILL_LEVEL;
+          const need = skillUpMinMonsterLevel(lv);
+          const skCost = skillUpManaCost(si, lv);
+          const name = def?.skills[si]?.nameKo ?? `S${si + 1}`;
+          const hint = maxSk
+            ? `${name} MAX`
+            : m.level < need
+              ? `${name} Lv.${need}+`
+              : `${name}+ (−${skCost})`;
+          return `<button type="button" class="secondary sk-up" data-skup="${m.uid}" data-skslot="${si}" ${maxSk ? "disabled" : ""}>${hint}</button>`;
+        })
+        .join("");
+      const inParty = save.party.includes(m.uid);
+      const preview = previewOwnedCombatStats(save, m.uid);
+      return `<div class="enhance-mon el-${def?.element ?? "dark"}">
             <div class="enhance-mon-head">
               <button type="button" class="stage-card enhance-main" data-enh="${m.uid}" ${maxed ? "disabled" : ""}>
                 <span class="stage-card-mark" aria-hidden="true">${def?.element?.[0]?.toUpperCase() ?? "·"}</span>
@@ -1851,117 +1900,57 @@ function renderEnhance(): string {
             ${renderSymbolLoadout(m.uid)}
             <div class="skill-up-row">${skillBtns}</div>
           </div>`;
-        })
-        .join("")}
-    </div>
-    <p class="section-label">서머너 장비</p>
-    <div class="stage-list">
-      <button type="button" class="stage-card" data-gear="weapon" ${weapon.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
-        <span class="stage-card-mark" aria-hidden="true">劍</span>
-        <span class="stage-card-body">
-          <strong>${describeGear(weapon)}</strong>
-          <small>스킬+${(weapon.skillPowerBonus * 100).toFixed(0)}% · ${weapon.enhance >= MAX_GEAR_ENHANCE ? "MAX" : gearEnhanceCostLabel(weapon.enhance)}</small>
-        </span>
-      </button>
-      <button type="button" class="stage-card" data-gear="robe" ${robe.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
-        <span class="stage-card-mark" aria-hidden="true">袍</span>
-        <span class="stage-card-body">
-          <strong>${describeGear(robe)}</strong>
-          <small>HP+${robe.summonerHpBonus} DEF+${robe.summonerDefBonus} · ${robe.enhance >= MAX_GEAR_ENHANCE ? "MAX" : gearEnhanceCostLabel(robe.enhance)}</small>
-        </span>
-      </button>
-      <button type="button" class="stage-card" data-gear="accessory" ${acc.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
-        <span class="stage-card-mark" aria-hidden="true">飾</span>
-        <span class="stage-card-body">
-          <strong>${describeGear(acc)}</strong>
-          <small>${acc.enhance >= MAX_GEAR_ENHANCE ? "최대" : gearEnhanceCostLabel(acc.enhance)}</small>
-        </span>
-      </button>
-      <button type="button" class="stage-card" data-gear="orb" ${orb.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
-        <span class="stage-card-mark" aria-hidden="true">球</span>
-        <span class="stage-card-body">
-          <strong>${describeGear(orb)}</strong>
-          <small>${orb.enhance >= MAX_GEAR_ENHANCE ? "최대" : gearEnhanceCostLabel(orb.enhance)}</small>
-        </span>
-      </button>
-      <button type="button" class="stage-card" data-gear="cloak" ${cloak.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
-        <span class="stage-card-mark" aria-hidden="true">氅</span>
-        <span class="stage-card-body">
-          <strong>${describeGear(cloak)}</strong>
-          <small>HP+${cloak.summonerHpBonus} 리더+${(cloak.leaderAtkBonus * 100).toFixed(1)}% · ${cloak.enhance >= MAX_GEAR_ENHANCE ? "MAX" : gearEnhanceCostLabel(cloak.enhance)}</small>
-        </span>
-      </button>
-      <button type="button" class="stage-card" data-gear="ring" ${ring.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>
-        <span class="stage-card-mark" aria-hidden="true">環</span>
-        <span class="stage-card-body">
-          <strong>${describeGear(ring)}</strong>
-          <small>스킬+${(ring.skillPowerBonus * 100).toFixed(0)}% 리더+${(ring.leaderAtkBonus * 100).toFixed(1)}% · ${ring.enhance >= MAX_GEAR_ENHANCE ? "MAX" : gearEnhanceCostLabel(ring.enhance)}</small>
-        </span>
-      </button>
-    </div>
-    <p class="section-label">장비 세트</p>
-    <p class="muted">
-      ${
-        summarizeGearSets(gear)
-          .filter((s) => s.count > 0)
-          .map(
-            (s) =>
-              `${s.nameKo} ${s.count}${s.active6 ? " · 6세트" : s.active4 ? " · 4세트" : s.active2 ? " · 2세트" : ""}`,
-          )
-          .join(" · ") || "세트 조각 없음"
-      }
-      · 부여 −마나 ${GEAR_SET_AFFIX_MANA}
-    </p>
-    <div class="gear-set-affix">
-      ${(
-        [
-          ["weapon", "무기", weapon],
-          ["robe", "로브", robe],
-          ["accessory", "장신구", acc],
-          ["orb", "마법구", orb],
-          ["cloak", "망토", cloak],
-          ["ring", "반지", ring],
-        ] as const
-      )
-        .map(
-          ([slot, label, piece]) => `<div class="gear-set-row">
+    })
+    .join("");
+
+  const gearAffixRows = (
+    [
+      ["weapon", "무기", weapon],
+      ["robe", "로브", robe],
+      ["accessory", "장신구", acc],
+      ["orb", "마법구", orb],
+      ["cloak", "망토", cloak],
+      ["ring", "반지", ring],
+    ] as const
+  )
+    .map(
+      ([slot, label, piece]) => `<div class="gear-set-row">
             <span class="gear-set-slot">${label}</span>
-            <div class="skill-up-row">
-              ${GEAR_SETS.map(
-                (s) =>
-                  `<button type="button" class="secondary" data-gear-set="${slot}" data-set-id="${s.id}" ${piece.setId === s.id ? "disabled" : ""}>${s.nameKo}</button>`,
-              ).join("")}
+            <div class="gear-set-chips">
+              ${GEAR_SETS.map((s) => {
+                const active = piece.setId === s.id;
+                return `<button type="button" class="set-chip-btn${active ? " is-active" : ""}" data-gear-set="${slot}" data-set-id="${s.id}" ${active ? "disabled" : ""}>${s.nameKo}</button>`;
+              }).join("")}
             </div>
           </div>`,
-        )
-        .join("")}
-    </div>
-    <p class="section-label">장비 가방 (${(save.gearBag ?? []).length}/${MAX_GEAR_BAG})</p>
-    <div class="stage-list gear-bag">
-      ${(save.gearBag ?? []).length === 0
-        ? `<p class="muted">가방이 비어 있습니다. 장비 금고에서 드롭을 획득하세요.</p>`
-        : (save.gearBag ?? [])
-            .map(
-              (p, i) => `<div class="sym-card">
-            <button type="button" class="sym-card-main" data-gear-equip="${i}">
-              <span class="stage-card-mark" aria-hidden="true">${p.slot[0]?.toUpperCase() ?? "裝"}</span>
-              <span class="stage-card-body">
+    )
+    .join("");
+
+  const bagLen = (save.gearBag ?? []).length;
+  const bagGrid =
+    bagLen === 0
+      ? `<p class="muted">가방이 비어 있습니다. 장비 금고에서 드롭을 획득하세요.</p>`
+      : `<div class="gear-bag-grid">${(save.gearBag ?? [])
+          .map((p, i) => {
+            const setName =
+              GEAR_SETS.find((s) => s.id === p.setId)?.nameKo ?? "";
+            return `<div class="gear-tile">
+              <button type="button" class="gear-tile-main" data-gear-equip="${i}">
+                <span class="gear-tile-mark" aria-hidden="true">${p.slot[0]?.toUpperCase() ?? "裝"}</span>
                 <strong>${describeGear(p)}</strong>
-                <small>${p.slot} · 장착 시 기존 장비 → 가방</small>
-              </span>
-            </button>
-            <div class="sym-card-actions">
-              <button type="button" class="secondary" data-gear-equip="${i}">장착</button>
-              <button type="button" class="secondary" data-gear-sell="${i}">+${gearSellMana(p)}${gearSellCrystal(p) > 0 ? ` · +크${gearSellCrystal(p)}` : ""}</button>
-            </div>
-          </div>`,
-            )
-            .join("")}
-    </div>
-    <p class="section-label">상징</p>
-    ${
-      equipPickSymIndex != null && save.symbols[equipPickSymIndex]
-        ? `<div class="equip-picker" aria-live="polite">
+                <small>+${p.enhance}${setName ? ` · ${setName}` : ""}</small>
+              </button>
+              <div class="gear-tile-actions">
+                <button type="button" class="secondary" data-gear-equip="${i}">장착</button>
+                <button type="button" class="secondary" data-gear-sell="${i}">+${gearSellMana(p)}${gearSellCrystal(p) > 0 ? ` · +크${gearSellCrystal(p)}` : ""}</button>
+              </div>
+            </div>`;
+          })
+          .join("")}</div>`;
+
+  const symbolsPanel = `${
+    equipPickSymIndex != null && save.symbols[equipPickSymIndex]
+      ? `<div class="equip-picker" aria-live="polite">
             <p class="equip-picker-title">장착 대상 선택</p>
             <p class="muted">${describeSymbol(save.symbols[equipPickSymIndex]!)}</p>
             <div class="stage-list">
@@ -1983,8 +1972,8 @@ function renderEnhance(): string {
             </div>
             <button type="button" class="secondary full auth-btn-ghost" id="btn-equip-cancel">취소</button>
           </div>`
-        : ""
-    }
+      : ""
+  }
     <div class="stage-list sym-inventory">
       ${save.symbols
         .map((s, i) => {
@@ -2010,9 +1999,62 @@ function renderEnhance(): string {
           </div>`;
         })
         .join("")}
+    </div>`;
+
+  const body = `<div class="hub-panel enhance-panel">
+    ${renderForgeReveal()}
+    <div class="enhance-tabs" role="tablist" aria-label="강화 구역">
+      <button type="button" class="enhance-tab${tab === "awaken" ? " is-active" : ""}" data-enhance-tab="awaken" role="tab" aria-selected="${tab === "awaken"}">각성·트리</button>
+      <button type="button" class="enhance-tab${tab === "monsters" ? " is-active" : ""}" data-enhance-tab="monsters" role="tab" aria-selected="${tab === "monsters"}">몬스터</button>
+      <button type="button" class="enhance-tab${tab === "gear" ? " is-active" : ""}" data-enhance-tab="gear" role="tab" aria-selected="${tab === "gear"}">장비</button>
+      <button type="button" class="enhance-tab${tab === "symbols" ? " is-active" : ""}" data-enhance-tab="symbols" role="tab" aria-selected="${tab === "symbols"}">상징</button>
+    </div>
+    <div class="enhance-panels">
+      <section class="enhance-section${tab === "awaken" ? " is-active" : ""}" data-enhance-panel="awaken" ${tab === "awaken" ? "" : "hidden"}>
+        <p class="section-label">서머너 각성</p>
+        <div class="stage-list">
+          <button type="button" class="stage-card" id="btn-awaken" data-awaken ${awakenMax ? "disabled" : ""}>
+            <span class="stage-card-mark" aria-hidden="true">覺</span>
+            <span class="stage-card-body">
+              <strong>각성 ${awaken}/${MAX_SUMMONER_AWAKEN}</strong>
+              <small>리더 공+${leaderPct}% · 마나·스킬 영구 보너스 · ${awakenHint}</small>
+            </span>
+          </button>
+        </div>
+        <p class="section-label">스킬 트리 (${treeUnlocked.size}/${SKILL_TREE_NODES.length})</p>
+        <div class="skill-tree-board">${treeBoard}</div>
+      </section>
+      <section class="enhance-section${tab === "monsters" ? " is-active" : ""}" data-enhance-panel="monsters" ${tab === "monsters" ? "" : "hidden"}>
+        <p class="section-label">몬스터</p>
+        <div class="stage-list">${monstersPanel}</div>
+      </section>
+      <section class="enhance-section${tab === "gear" ? " is-active" : ""}" data-enhance-panel="gear" ${tab === "gear" ? "" : "hidden"}>
+        <p class="section-label">서머너 장비</p>
+        <div class="gear-doll" aria-label="장비 슬롯">
+          ${gearSlotBtn("weapon", weapon, "劍", "무기", `스킬+${(weapon.skillPowerBonus * 100).toFixed(0)}%`)}
+          <div class="gear-doll-core" aria-hidden="true"><span>召</span></div>
+          ${gearSlotBtn("robe", robe, "袍", "로브", `HP+${robe.summonerHpBonus} DEF+${robe.summonerDefBonus}`)}
+          ${gearSlotBtn("orb", orb, "球", "마법구", gearEnhanceCostLabel(orb.enhance))}
+          ${gearSlotBtn("accessory", acc, "飾", "장신구", gearEnhanceCostLabel(acc.enhance))}
+          ${gearSlotBtn("cloak", cloak, "氅", "망토", `HP+${cloak.summonerHpBonus}`)}
+          ${gearSlotBtn("ring", ring, "環", "반지", `스킬+${(ring.skillPowerBonus * 100).toFixed(0)}%`)}
+        </div>
+        <div class="gear-set-summary">${setSummary || `<span class="muted">세트 조각 없음</span>`}</div>
+        <p class="section-label">세트 부여 · −마나 ${GEAR_SET_AFFIX_MANA}</p>
+        <div class="gear-set-affix">${gearAffixRows}</div>
+        <p class="section-label">장비 가방 (${bagLen}/${MAX_GEAR_BAG})</p>
+        ${bagGrid}
+      </section>
+      <section class="enhance-section${tab === "symbols" ? " is-active" : ""}" data-enhance-panel="symbols" ${tab === "symbols" ? "" : "hidden"}>
+        <p class="section-label">상징</p>
+        ${symbolsPanel}
+      </section>
     </div>
     <button type="button" class="secondary full auth-btn-ghost" data-nav="home" style="margin-top:10px">섬으로</button>
   </div>`;
+  queueMicrotask(() => {
+    enhanceFx = null;
+  });
   return hubShell("강화진", "각성 · 스킬트리 · 장비 · 상징", body);
 }
 
@@ -2808,6 +2850,21 @@ function bind(): void {
     });
   });
 
+  app.querySelectorAll<HTMLButtonElement>("[data-enhance-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const raw = btn.dataset.enhanceTab;
+      if (
+        raw === "awaken" ||
+        raw === "monsters" ||
+        raw === "gear" ||
+        raw === "symbols"
+      ) {
+        enhanceTab = raw;
+        render();
+      }
+    });
+  });
+
   app.querySelectorAll<HTMLButtonElement>("[data-gear]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const raw = btn.dataset.gear;
@@ -2822,6 +2879,9 @@ function bind(): void {
           : "accessory";
       const r = runEnhanceGear(save, slot);
       save = r.save;
+      if (r.message.startsWith("장비 강화:")) {
+        enhanceFx = { kind: "gear", slot };
+      }
       persist();
       flash(r.message);
       render();
@@ -2895,6 +2955,9 @@ function bind(): void {
       const id = btn.dataset.skillNode ?? "";
       const r = runUnlockSkillNode(save, id);
       save = r.save;
+      if (id && r.message.includes("해금")) {
+        enhanceFx = { kind: "node", id };
+      }
       persist();
       flash(r.message);
       render();
