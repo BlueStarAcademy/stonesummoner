@@ -1604,6 +1604,14 @@ export function runFeedSameMonster(
     };
   }
 
+  const cost = enhanceManaCost(target.level);
+  if (save.island.mana < cost) {
+    return {
+      save,
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+
   const nextLevels: [number, number, number] = [
     levels[0]!,
     levels[1]!,
@@ -1620,10 +1628,11 @@ export function runFeedSameMonster(
     );
   const party = save.party.filter((uid) => uid !== fodder.uid);
   const updated = { ...target, skillLevels: nextLevels };
+  const island = { ...save.island, mana: save.island.mana - cost };
 
   return {
-    save: { ...save, roster, party },
-    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[skillIdx]} (−${describeOwned(fodder)})`,
+    save: { ...save, island, roster, party },
+    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[skillIdx]} (−${describeOwned(fodder)}, −골드 ${cost})`,
   };
 }
 

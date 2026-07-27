@@ -265,14 +265,6 @@ function glyph(setId, uid) {
       <path d="M24 48h24" stroke="${g}" stroke-width="2.4" stroke-linecap="round"/>
       <path d="M28 54h16" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>
       <circle cx="36" cy="34" r="2.2" fill="${g}"/>`;
-    case "chimtu":
-      // Piercing diamond / rage
-      return `
-      <path d="M36 12 50 36 36 60 22 36Z" fill="#241018" stroke="${g}" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M36 20 44 36 36 52 28 36Z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <circle cx="36" cy="36" r="4.2" fill="#1A140C" stroke="${g}" stroke-width="1.5"/>
-      <circle cx="36" cy="36" r="1.8" fill="${g}"/>
-      <path d="M36 14v6M36 52v6" stroke="${g}" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>`;
     default:
       return `<circle cx="36" cy="36" r="10" fill="${ink}" stroke="${g}" stroke-width="1.6"/>`;
   }
@@ -280,9 +272,9 @@ function glyph(setId, uid) {
 
 function sharedDefs(uid, accent) {
   return `
-    <radialGradient id="${uid}-aura" cx="50%" cy="48%" r="50%">
-      <stop stop-color="${accent}" stop-opacity=".38"/>
-      <stop offset=".55" stop-color="${accent}" stop-opacity=".1"/>
+    <radialGradient id="${uid}-aura" cx="50%" cy="42%" r="58%">
+      <stop stop-color="${accent}" stop-opacity=".55"/>
+      <stop offset=".42" stop-color="${accent}" stop-opacity=".18"/>
       <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="${uid}-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
@@ -292,20 +284,21 @@ function sharedDefs(uid, accent) {
       <stop offset="1" stop-color="#7A5A18"/>
     </linearGradient>
     <linearGradient id="${uid}-disc" x1="18" y1="14" x2="54" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2A2216"/>
-      <stop offset="1" stop-color="#12100A"/>
+      <stop stop-color="#3A2E1A"/>
+      <stop offset="1" stop-color="#14100A"/>
     </linearGradient>
-    <linearGradient id="${uid}-ink" x1="22" y1="18" x2="50" y2="54" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#F5EDD8"/>
-      <stop offset=".55" stop-color="#E8D9A8"/>
-      <stop offset="1" stop-color="#A89050"/>
+    <linearGradient id="${uid}-ink" x1="22" y1="16" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6E0"/>
+      <stop offset=".35" stop-color="${accent}"/>
+      <stop offset=".75" stop-color="#E8D9A8"/>
+      <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="${uid}-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".85"/>
-      <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
     </linearGradient>
-    <filter id="${uid}-depth" x="-25%" y="-25%" width="150%" height="150%">
-      <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#000" flood-opacity=".55"/>
+    <filter id="${uid}-depth" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>`;
 }
 
@@ -314,14 +307,14 @@ function plateSvg(rarity, slot) {
   const { outer, inner } = SLOT[slot];
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
   <defs>
-    <radialGradient id="${uid}-aura" cx="50%" cy="48%" r="50%">
-      <stop stop-color="${rarity.aura}" stop-opacity=".42"/>
-      <stop offset=".55" stop-color="${rarity.aura}" stop-opacity=".12"/>
+    <radialGradient id="${uid}-aura" cx="50%" cy="42%" r="55%">
+      <stop stop-color="${rarity.aura}" stop-opacity=".55"/>
+      <stop offset=".5" stop-color="${rarity.aura}" stop-opacity=".16"/>
       <stop offset="1" stop-color="${rarity.aura}" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="${uid}-face" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+    <linearGradient id="${uid}-face" x1="14" y1="8" x2="58" y2="64" gradientUnits="userSpaceOnUse">
       <stop stop-color="${rarity.faceHi}"/>
-      <stop offset=".45" stop-color="${rarity.faceMid}"/>
+      <stop offset=".4" stop-color="${rarity.faceMid}"/>
       <stop offset="1" stop-color="${rarity.faceLo}"/>
     </linearGradient>
     <linearGradient id="${uid}-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
@@ -330,21 +323,27 @@ function plateSvg(rarity, slot) {
       <stop offset=".62" stop-color="#C9A227"/>
       <stop offset="1" stop-color="#7A5A18"/>
     </linearGradient>
-    <linearGradient id="${uid}-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".75"/>
+    <linearGradient id="${uid}-shine" x1="18" y1="12" x2="42" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6D0" stop-opacity=".85"/>
       <stop offset="1" stop-color="${rarity.aura}" stop-opacity="0"/>
     </linearGradient>
-    <filter id="${uid}-depth" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="1.4" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/>
+    <radialGradient id="${uid}-gem" cx="38%" cy="32%" r="70%">
+      <stop stop-color="${rarity.faceHi}" stop-opacity=".9"/>
+      <stop offset=".55" stop-color="${rarity.well}"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".85"/>
+    </radialGradient>
+    <filter id="${uid}-depth" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="1.6" stdDeviation="1.3" flood-color="#000" flood-opacity=".55"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="26" fill="url(#${uid}-aura)"/>
+  <circle cx="36" cy="36" r="28" fill="url(#${uid}-aura)"/>
   <g filter="url(#${uid}-depth)">
-    <path d="${outer}" fill="none" stroke="#0A0806" stroke-width="5.2" stroke-linejoin="round" opacity=".9"/>
-    <path d="${outer}" fill="url(#${uid}-face)" stroke="url(#${uid}-gold)" stroke-width="2.8" stroke-linejoin="round"/>
-    <path d="${outer}" fill="none" stroke="#FFF8D6" stroke-width="1.1" opacity=".28" transform="translate(0 .55)"/>
-    <path d="${inner}" fill="${rarity.well}" fill-opacity=".92" stroke="${rarity.dash}" stroke-width=".85" stroke-opacity=".4" stroke-dasharray="2 4"/>
-    <ellipse cx="26" cy="20" rx="7" ry="3.2" fill="url(#${uid}-shine)" transform="rotate(-24 26 20)" opacity=".75"/>
+    <path d="${outer}" fill="none" stroke="#0A0806" stroke-width="5.4" stroke-linejoin="round" opacity=".92"/>
+    <path d="${outer}" fill="url(#${uid}-face)" stroke="url(#${uid}-gold)" stroke-width="3" stroke-linejoin="round"/>
+    <path d="${outer}" fill="none" stroke="#FFF8D6" stroke-width="1.15" opacity=".32" transform="translate(0 .6)"/>
+    <path d="${inner}" fill="url(#${uid}-gem)" stroke="${rarity.dash}" stroke-width="1" stroke-opacity=".55"/>
+    <path d="${inner}" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".18" transform="translate(0 .4)"/>
+    <ellipse cx="26" cy="19" rx="8" ry="3.4" fill="url(#${uid}-shine)" transform="rotate(-26 26 19)" opacity=".8"/>
   </g>
 </svg>
 `;
@@ -357,29 +356,27 @@ function equippedSvg(set, slot) {
   <defs>
     ${sharedDefs(uid, set.accent)}
   </defs>
-  <g filter="url(#${uid}-depth)" transform="translate(36 36) scale(0.56) translate(-36 -36)">
+  <circle cx="36" cy="36" r="20" fill="url(#${uid}-aura)" opacity=".85"/>
+  <g filter="url(#${uid}-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
     ${glyph(set.id, uid)}
   </g>
 </svg>
 `;
 }
 
+/** Soft equip hint — frame wells already draw the socket; keep this light. */
 function emptySvg(slot) {
   const uid = `emptys${slot}`;
-  const { outer, inner } = SLOT[slot];
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
   <defs>
-    ${sharedDefs(uid, "#c9a227")}
+    <linearGradient id="${uid}-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D6"/>
+      <stop offset=".4" stop-color="#C9A227"/>
+      <stop offset="1" stop-color="#7A5A18"/>
+    </linearGradient>
   </defs>
-  <g filter="url(#${uid}-depth)">
-    <path d="${outer}" fill="none" stroke="#0A0806" stroke-width="5" stroke-linejoin="round" opacity=".88"/>
-    <path d="${outer}" fill="url(#${uid}-disc)" stroke="url(#${uid}-gold)" stroke-width="2.6" stroke-linejoin="round"/>
-    <path d="${inner}" fill="#070605" stroke="#7A6A3A" stroke-opacity=".55" stroke-width="1.5"/>
-    <path d="${inner}" fill="none" stroke="#C9A227" stroke-opacity=".28" stroke-width="1.6" transform="translate(0 .5)"/>
-    <circle cx="36" cy="36" r="7" fill="#000" fill-opacity=".45" stroke="url(#${uid}-gold)" stroke-width="1.5" stroke-opacity=".5"/>
-    <circle cx="36" cy="36" r="2.2" fill="url(#${uid}-gold)" fill-opacity=".32"/>
-    <ellipse cx="26" cy="20" rx="6.5" ry="2.8" fill="url(#${uid}-shine)" opacity=".5" transform="rotate(-24 26 20)"/>
-  </g>
+  <circle cx="36" cy="36" r="14" fill="#050402" fill-opacity=".35" stroke="url(#${uid}-gold)" stroke-width="1.2" opacity=".55"/>
+  <path d="M36 28v16M28 36h16" stroke="url(#${uid}-gold)" stroke-width="2.2" stroke-linecap="round" opacity=".7"/>
 </svg>
 `;
 }
@@ -398,7 +395,7 @@ function sealSvg(set) {
   <g stroke="url(#${uid}-gold)" stroke-width="1.5" stroke-linecap="round" opacity=".8">
     <path d="M36 10.5v4.2"/><path d="M36 57.3v4.2"/><path d="M10.5 36h4.2"/><path d="M57.3 36h4.2"/>
   </g>
-  <g filter="url(#${uid}-depth)" transform="translate(36 36) scale(0.62) translate(-36 -36)">
+  <g filter="url(#${uid}-depth)" transform="translate(36 36) scale(0.7) translate(-36 -36)">
     ${glyph(set.id, uid)}
   </g>
 </svg>
@@ -406,8 +403,7 @@ function sealSvg(set) {
 }
 
 function circleFrameSvg() {
-  // Cool slate socket board — contrast to warm bronze/gold medal slots.
-  // Well centers match CSS .rune-slot--N (28% size on 240 board).
+  // Warm bronze / gold socket board — matches game gold UI language.
   const wells = [
     [43.2, 76.8],
     [120, 38.4],
@@ -416,16 +412,17 @@ function circleFrameSvg() {
     [120, 201.6],
     [196.8, 163.2],
   ];
-  const wellR = 34;
+  const wellR = 33;
   const wellsXml = wells
     .map(
-      ([cx, cy]) => `
+      ([cx, cy], i) => `
     <g>
-      <circle cx="${cx}" cy="${cy}" r="${wellR + 4}" fill="url(#cfWellOuter)" stroke="url(#cfSteel)" stroke-width="1.6" opacity=".95"/>
-      <circle cx="${cx}" cy="${cy}" r="${wellR}" fill="url(#cfWell)" stroke="#050608" stroke-width="2.2"/>
-      <circle cx="${cx}" cy="${cy}" r="${wellR - 3}" fill="none" stroke="#6a7a88" stroke-width="1" opacity=".35"/>
-      <circle cx="${cx}" cy="${cy}" r="${wellR - 8}" fill="#030406" fill-opacity=".55"/>
-      <ellipse cx="${cx - 8}" cy="${cy - 10}" rx="14" ry="6" fill="#9ab0c0" opacity=".08" transform="rotate(-28 ${cx} ${cy})"/>
+      <circle cx="${cx}" cy="${cy}" r="${wellR + 5}" fill="url(#cfWellRim)" stroke="url(#cfGold)" stroke-width="1.8"/>
+      <circle cx="${cx}" cy="${cy}" r="${wellR}" fill="url(#cfWell)" stroke="#0A0806" stroke-width="2.4"/>
+      <circle cx="${cx}" cy="${cy}" r="${wellR - 4}" fill="none" stroke="#C9A227" stroke-width="1" opacity=".28" stroke-dasharray="2.5 4"/>
+      <circle cx="${cx}" cy="${cy}" r="${wellR - 9}" fill="#050402" fill-opacity=".65"/>
+      <ellipse cx="${cx - 7}" cy="${cy - 9}" rx="13" ry="5.5" fill="#FFF6D0" opacity=".07" transform="rotate(-28 ${cx} ${cy})"/>
+      <text x="${cx}" y="${cy + 4}" text-anchor="middle" fill="#C9A227" fill-opacity=".22" font-family="Georgia, serif" font-size="11" font-weight="700">${i + 1}</text>
     </g>`,
     )
     .join("");
@@ -433,55 +430,54 @@ function circleFrameSvg() {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none" aria-hidden="true">
   <defs>
     <radialGradient id="cfMist" cx="50%" cy="48%" r="58%">
-      <stop stop-color="#6a8498" stop-opacity=".28"/>
-      <stop offset=".45" stop-color="#3a4a58" stop-opacity=".1"/>
-      <stop offset="1" stop-color="#1a2030" stop-opacity="0"/>
+      <stop stop-color="#C9A227" stop-opacity=".22"/>
+      <stop offset=".45" stop-color="#8A6A28" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#1a1408" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="cfBoard" cx="42%" cy="32%" r="78%">
-      <stop stop-color="#3a4654"/>
-      <stop offset=".45" stop-color="#1e2630"/>
-      <stop offset="1" stop-color="#0c1016"/>
+    <radialGradient id="cfBoard" cx="42%" cy="30%" r="78%">
+      <stop stop-color="#3A2E1C"/>
+      <stop offset=".48" stop-color="#1C160E"/>
+      <stop offset="1" stop-color="#0A0805"/>
     </radialGradient>
-    <linearGradient id="cfSteel" x1="40" y1="24" x2="200" y2="210" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#D8E4F0"/>
-      <stop offset=".35" stop-color="#8AA0B4"/>
-      <stop offset=".7" stop-color="#4A5A6A"/>
-      <stop offset="1" stop-color="#1A2430"/>
+    <linearGradient id="cfGold" x1="36" y1="20" x2="210" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D6"/>
+      <stop offset=".3" stop-color="#E8C84A"/>
+      <stop offset=".65" stop-color="#C9A227"/>
+      <stop offset="1" stop-color="#6A4A14"/>
     </linearGradient>
-    <linearGradient id="cfEdge" x1="50" y1="20" x2="190" y2="220" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#A8BCC8"/>
-      <stop offset=".5" stop-color="#5A6E7E"/>
-      <stop offset="1" stop-color="#2A3848"/>
+    <linearGradient id="cfEdge" x1="50" y1="24" x2="190" y2="210" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0D878"/>
+      <stop offset=".5" stop-color="#A88840"/>
+      <stop offset="1" stop-color="#5A4218"/>
     </linearGradient>
-    <radialGradient id="cfWell" cx="38%" cy="32%" r="70%">
-      <stop stop-color="#141a22"/>
-      <stop offset=".55" stop-color="#080a0e"/>
-      <stop offset="1" stop-color="#020304"/>
+    <radialGradient id="cfWell" cx="38%" cy="30%" r="72%">
+      <stop stop-color="#1A140C"/>
+      <stop offset=".55" stop-color="#0A0805"/>
+      <stop offset="1" stop-color="#020100"/>
     </radialGradient>
-    <radialGradient id="cfWellOuter" cx="40%" cy="30%" r="70%">
-      <stop stop-color="#4a5a68"/>
-      <stop offset="1" stop-color="#1a222c"/>
+    <radialGradient id="cfWellRim" cx="40%" cy="28%" r="70%">
+      <stop stop-color="#5A4820"/>
+      <stop offset="1" stop-color="#2A1C0C"/>
     </radialGradient>
     <filter id="cfDepth" x="-15%" y="-15%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity=".55"/>
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
   <circle cx="120" cy="120" r="118" fill="url(#cfMist)"/>
   <g filter="url(#cfDepth)">
-    <circle cx="120" cy="120" r="108" fill="url(#cfBoard)" stroke="url(#cfSteel)" stroke-width="3.4"/>
-    <circle cx="120" cy="120" r="102" fill="none" stroke="#0a0c10" stroke-width="2" opacity=".7"/>
-    <circle cx="120" cy="120" r="96" fill="none" stroke="url(#cfEdge)" stroke-width="1.2" opacity=".55"/>
-    <circle cx="120" cy="120" r="88" fill="none" stroke="#8aa0b4" stroke-width=".7" opacity=".18" stroke-dasharray="2.5 5.5"/>
-    <!-- carved channels between sockets -->
-    <g stroke="#6a7a88" stroke-width="1.1" stroke-linecap="round" opacity=".22">
-      <path d="M70 70 Q120 100 170 70"/>
-      <path d="M70 170 Q120 140 170 170"/>
-      <path d="M55 100 Q120 120 55 140"/>
-      <path d="M185 100 Q120 120 185 140"/>
+    <circle cx="120" cy="120" r="108" fill="url(#cfBoard)" stroke="url(#cfGold)" stroke-width="3.6"/>
+    <circle cx="120" cy="120" r="102" fill="none" stroke="#0A0805" stroke-width="2.2" opacity=".75"/>
+    <circle cx="120" cy="120" r="96" fill="none" stroke="url(#cfEdge)" stroke-width="1.3" opacity=".65"/>
+    <circle cx="120" cy="120" r="88" fill="none" stroke="#F0D878" stroke-width=".75" opacity=".2" stroke-dasharray="3 6"/>
+    <g stroke="#C9A227" stroke-width="1.15" stroke-linecap="round" opacity=".28">
+      <path d="M72 72 Q120 104 168 72"/>
+      <path d="M72 168 Q120 136 168 168"/>
+      <path d="M58 102 Q120 120 58 138"/>
+      <path d="M182 102 Q120 120 182 138"/>
     </g>
-    <circle cx="120" cy="120" r="22" fill="#06080c" stroke="url(#cfSteel)" stroke-width="1.8" opacity=".9"/>
-    <circle cx="120" cy="120" r="12" fill="#0c1016" stroke="#8aa0b4" stroke-width="1" opacity=".45"/>
-    <circle cx="120" cy="120" r="3.5" fill="#a8bcc8" fill-opacity=".55"/>
+    <circle cx="120" cy="120" r="24" fill="#080604" stroke="url(#cfGold)" stroke-width="2"/>
+    <circle cx="120" cy="120" r="14" fill="#120E08" stroke="#F0D878" stroke-width="1.1" opacity=".55"/>
+    <circle cx="120" cy="120" r="4" fill="#F0D878" fill-opacity=".7"/>
     ${wellsXml}
   </g>
 </svg>

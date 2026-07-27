@@ -91,6 +91,7 @@ import {
   symbolEnhanceManaCost,
   type MainQuestPinId,
   type StageDef,
+  type SymbolSetId,
 } from "stonesummoner-data";
 import {
   buildingUpgradeManaCost,
@@ -519,6 +520,8 @@ type MonDetailTab = "info" | "skills" | "awaken" | "symbols";
 let monDetailTab: MonDetailTab = "info";
 /** Skill-feed material picker modal (same-species fodder). */
 let skillFeedModalOpen = false;
+/** Selected fodder uid inside the skill-feed modal (confirm to consume). */
+let skillFeedFodderUid: string | null = null;
 /** Monster book / skill-feed inventory slot capacity (two-row rail). */
 const ROSTER_SLOT_CAP = 60;
 
@@ -537,6 +540,48 @@ function applyMonDetailTabUi(): boolean {
   return true;
 }
 
+/** Soft-update skill icon selection + detail pane (no full re-render). */
+function applyMonSkillPickUi(): boolean {
+  const pane = app.querySelector<HTMLElement>('.mon-pane[data-mon-pane="skills"]');
+  if (!pane) return false;
+  const owned = selectedEnhanceUid
+    ? save.roster.find((m) => m.uid === selectedEnhanceUid)
+    : null;
+  if (!owned) return false;
+  const def = getMonster(owned.monsterId);
+  const levels = (owned.skillLevels ?? [1, 1, 1]) as [number, number, number];
+  if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
+  const focusSk = def?.skills[monSkillPick];
+  const focusLv = levels[monSkillPick] ?? 1;
+
+  pane.querySelectorAll<HTMLButtonElement>("[data-mon-skill-pick]").forEach((btn) => {
+    const slot = Number(btn.dataset.monSkillPick ?? "0");
+    const on = slot === monSkillPick;
+    btn.classList.toggle("is-active", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+
+  const nameEl = pane.querySelector(".mon-skill-detail-name");
+  if (nameEl) {
+    nameEl.textContent = focusSk?.nameKo ?? `S${monSkillPick + 1}`;
+  }
+  const lvEl = pane.querySelector(".mon-skill-detail-lv");
+  if (lvEl) {
+    lvEl.textContent = `Lv.${focusLv}${focusLv >= MAX_SKILL_LEVEL ? " MAX" : ""}`;
+  }
+  const descEl = pane.querySelector(".mon-skill-detail-desc");
+  if (descEl) {
+    descEl.innerHTML = monsterSkillDescLines(focusSk)
+      .map((line) => `<li>${escapeHtml(line)}</li>`)
+      .join("");
+  }
+  const upEl = pane.querySelector(".mon-skill-upgrades");
+  if (upEl) {
+    upEl.innerHTML = monsterSkillUpgradeRows(focusSk, focusLv);
+  }
+  return true;
+}
+
 /** Selected skill slot (0..2) on skills tab detail pane. */
 let monSkillPick = 0;
 /** Selected monster uid on the monsters book screen. */
@@ -548,6 +593,12 @@ let rosterSortMode: RosterSortMode = "default";
 let symbolDetailIndex: number | null = null;
 /** Symbol bag expand confirm modal. */
 let symbolBagExpandOpen = false;
+/** Symbol inventory set-filter dropdown open. */
+let symbolInvFilterOpen = false;
+/** Enabled symbol set ids in inventory filter (all selected = show everything). */
+let symbolInvFilterSets: Set<SymbolSetId> = new Set(
+  SYMBOL_SETS.map((s) => s.id),
+);
 /** One-shot pulse/flash on next enhance paint. */
 let enhanceFx: { kind: "node"; id: string } | { kind: "gear"; slot: string } | null =
   null;
@@ -4793,6 +4844,26 @@ function skillFeedFodderList(targetUid: string | null): typeof save.roster {
   );
 }
 
+function skillFeedEnhanceCost(targetUid: string | null): number {
+  const target = targetUid
+    ? save.roster.find((m) => m.uid === targetUid)
+    : null;
+  return target ? enhanceManaCost(target.level) : 0;
+}
+
+function skillFeedConfirmBtnHtml(targetUid: string | null): string {
+  const cost = skillFeedEnhanceCost(targetUid);
+  const selected =
+    !!skillFeedFodderUid &&
+    skillFeedFodderList(targetUid).some((m) => m.uid === skillFeedFodderUid);
+  const canPay = Math.floor(save.island.mana) >= cost;
+  const disabled = !selected || !canPay || cost <= 0;
+  return `<button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--cost skill-feed-confirm" id="btn-skill-feed-confirm" ${disabled ? "disabled" : ""}>
+    <span class="mon-enh-label">${escapeHtml(t("ui.3e1a337d93"))}</span>
+    <span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(cost)}</strong></span>
+  </button>`;
+}
+
 function skillFeedSlotsHtml(targetUid: string | null): string {
   const fodderList = skillFeedFodderList(targetUid);
   const slots = Array.from(
@@ -4811,6 +4882,7 @@ function skillFeedSlotsHtml(targetUid: string | null): string {
       const def = getMonster(m.monsterId);
       const el = def?.element ?? "dark";
       const inParty = save.party.includes(m.uid);
+      const on = skillFeedFodderUid === m.uid;
       const starN = Math.max(1, def?.naturalStars ?? 1);
       const starsHtml = Array.from(
         { length: starN },
@@ -4822,7 +4894,7 @@ function skillFeedSlotsHtml(targetUid: string | null): string {
       const title = inParty
         ? `${describeOwned(m)} · ${t("ui.7b191a9f9f")}`
         : describeOwned(m);
-      return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${inParty ? " is-party" : ""}" data-skill-feed-target="${targetUid}" data-skill-feed-fodder="${m.uid}" role="option" title="${escapeHtml(title)}">
+      return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${inParty ? " is-party" : ""}${on ? " is-on" : ""}" data-skill-feed-fodder="${m.uid}" role="option" aria-selected="${on}" title="${escapeHtml(title)}">
         <span class="mon-slot-art" aria-hidden="true">${art}</span>
         <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
         <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
@@ -4834,6 +4906,7 @@ function skillFeedSlotsHtml(targetUid: string | null): string {
 function refreshSkillFeedModalDom(): void {
   const inv = app.querySelector<HTMLElement>("#skill-feed-inv");
   const empty = app.querySelector<HTMLElement>("#skill-feed-empty");
+  const foot = app.querySelector<HTMLElement>("#skill-feed-foot");
   if (inv) {
     inv.innerHTML = skillFeedSlotsHtml(selectedEnhanceUid);
     dematteArtInTree(inv, "img.mon-slot-img");
@@ -4841,6 +4914,9 @@ function refreshSkillFeedModalDom(): void {
   if (empty) {
     const hasFodder = skillFeedFodderList(selectedEnhanceUid).length > 0;
     empty.hidden = hasFodder;
+  }
+  if (foot) {
+    foot.innerHTML = skillFeedConfirmBtnHtml(selectedEnhanceUid);
   }
 }
 
@@ -4857,6 +4933,7 @@ function renderSkillFeedModal(): string {
         ${skillFeedSlotsHtml(selectedEnhanceUid)}
       </div>
       <p class="skill-feed-empty muted" id="skill-feed-empty"${fodderCount > 0 ? " hidden" : ""}>${escapeHtml(t("ui.skillFeedEmpty"))}</p>
+      <div class="skill-feed-foot" id="skill-feed-foot">${skillFeedConfirmBtnHtml(selectedEnhanceUid)}</div>
     </div>
   </div>`;
 }
@@ -5088,10 +5165,11 @@ function renderMonsterRuneCircle(uid: string): string {
       if (sym) {
         const symIdx = findSymbolIndexById(sym.id);
         const rarity = symbolQualityMeta(sym.quality);
-        return `<button type="button" class="rune-slot rune-slot--${slotNum} filled rarity--${rarity.id}${picking}" data-sym-detail="${symIdx}" title="${describeSymbol(sym)}">
+        return `<button type="button" class="rune-slot rune-slot--${slotNum} filled rarity--${rarity.id}${picking}" data-sym-detail="${symIdx}" style="--sym-accent:${symbolSetAccent(sym.setId)}" title="${describeSymbol(sym)}">
           <span class="rune-slot-face">
             <img class="rune-slot-plate" src="${symbolPlateSrc(rarity.id, slotNum)}" width="72" height="72" alt="" aria-hidden="true" draggable="false" />
             <img class="rune-slot-art" src="${symbolArtSrc(sym.setId, slotNum)}" width="72" height="72" alt="" draggable="false" />
+            <span class="rune-slot-plus">+${sym.enhance}</span>
           </span>
         </button>`;
       }
@@ -5112,22 +5190,37 @@ function renderMonsterRuneCircle(uid: string): string {
   </div>${picker}`;
 }
 
-/** Compact symbol bag grid (SW inventory) for the symbols tab left column. */
+/** Compact symbol bag grid (SW inventory) for the symbols tab. */
+function symbolInvFilterIsAll(): boolean {
+  return SYMBOL_SETS.every((s) => symbolInvFilterSets.has(s.id));
+}
+
+function symbolInvFilterLabel(): string {
+  if (symbolInvFilterIsAll()) return t("ui.symFilterAll");
+  if (symbolInvFilterSets.size === 0) return t("ui.symFilterNone");
+  if (symbolInvFilterSets.size === 1) {
+    const id = [...symbolInvFilterSets][0]!;
+    return SYMBOL_SETS.find((s) => s.id === id)?.nameKo ?? id;
+  }
+  return t("ui.symFilterN", { n: symbolInvFilterSets.size });
+}
+
 function renderSymbolInventoryGrid(): string {
   const cap = symbolBagCapacity(save);
-  const filled = Math.min(save.symbols.length, cap);
   const expandCost = symbolBagExpandCost(save);
   const atMax = expandCost == null;
   const expandTitle = atMax
     ? t("ui.expandSymbolBagMax")
     : t("ui.expandSymbolBag", { cost: expandCost! });
+  const filterAll = symbolInvFilterIsAll();
+  const visible = save.symbols
+    .map((sym, i) => ({ sym, i }))
+    .filter(({ sym }) => symbolInvFilterSets.has(sym.setId));
   const tiles: string[] = [];
-  for (let i = 0; i < cap; i++) {
-    const sym = i < filled ? save.symbols[i] : null;
-    if (sym) {
-      const worn = symbolWearer(sym.id);
-      const rarity = symbolQualityMeta(sym.quality);
-      tiles.push(`<div class="mon-sym-inv-cell">
+  for (const { sym, i } of visible) {
+    const worn = symbolWearer(sym.id);
+    const rarity = symbolQualityMeta(sym.quality);
+    tiles.push(`<div class="mon-sym-inv-cell">
         <button type="button" class="mon-sym-inv-tile rarity--${rarity.id}${worn ? " is-worn" : ""}" data-sym-detail="${i}" title="${describeSymbol(sym)}">
           <span class="mon-sym-inv-ico" aria-hidden="true">
             <img class="mon-sym-inv-plate" src="${symbolPlateSrc(rarity.id, sym.slot)}" alt="" draggable="false" />
@@ -5137,7 +5230,10 @@ function renderSymbolInventoryGrid(): string {
           ${worn ? `<span class="mon-sym-inv-worn">E</span>` : ""}
         </button>
       </div>`);
-    } else {
+  }
+  if (filterAll) {
+    const emptyCount = Math.max(0, cap - save.symbols.length);
+    for (let e = 0; e < emptyCount; e++) {
       tiles.push(`<div class="mon-sym-inv-cell" aria-hidden="true">
         <div class="mon-sym-inv-tile is-empty">
           <span class="mon-sym-inv-empty-face"></span>
@@ -5145,16 +5241,45 @@ function renderSymbolInventoryGrid(): string {
       </div>`);
     }
   }
+  const filterRows = [
+    `<label class="mon-sym-filter-row">
+      <input type="checkbox" data-sym-filter-set="all" ${filterAll ? "checked" : ""} />
+      <span>${escapeHtml(t("ui.symFilterAll"))}</span>
+    </label>`,
+    ...SYMBOL_SETS.map(
+      (s) => `<label class="mon-sym-filter-row">
+      <input type="checkbox" data-sym-filter-set="${s.id}" ${symbolInvFilterSets.has(s.id) ? "checked" : ""} />
+      <img class="mon-sym-filter-ico" src="${symbolSetArtSrc(s.id)}" width="16" height="16" alt="" draggable="false" />
+      <span>${escapeHtml(s.nameKo)}</span>
+    </label>`,
+    ),
+  ].join("");
+  const filterMenu = symbolInvFilterOpen
+    ? `<div class="mon-sym-filter-menu" role="group" aria-label="${escapeHtml(t("ui.symFilter"))}">${filterRows}</div>`
+    : "";
+  const gridBody =
+    tiles.length > 0
+      ? tiles.join("")
+      : `<p class="mon-sym-inv-empty muted">${escapeHtml(t("ui.symFilterEmpty"))}</p>`;
   return `<div class="mon-sym-inv" aria-label="${t("ui.60fbf51b13")}">
     <div class="mon-sym-inv-head">
       <div class="mon-sym-inv-head-title">
         <strong>${t("ui.60fbf51b13")}</strong>
         <button type="button" class="mon-sym-inv-expand" data-expand-sym-bag ${atMax ? "disabled" : ""} title="${escapeHtml(expandTitle)}" aria-label="${escapeHtml(expandTitle)}">+</button>
       </div>
+      <div class="mon-sym-inv-head-meta">
+        <div class="mon-sym-filter">
+          <button type="button" class="mon-sym-filter-btn" data-sym-filter-toggle aria-expanded="${symbolInvFilterOpen ? "true" : "false"}" title="${escapeHtml(t("ui.symFilter"))}">
+            <span class="mon-sym-filter-btn-label">${escapeHtml(symbolInvFilterLabel())}</span>
+            <span class="mon-sym-filter-caret" aria-hidden="true">${ARROW_DOWN}</span>
+          </button>
+          ${filterMenu}
+        </div>
+      </div>
     </div>
-    <div class="mon-sym-inv-grid">${tiles.join("")}</div>
+    <div class="mon-sym-inv-grid mon-sym-inv-grid--rail">${gridBody}</div>
     <div class="mon-sym-inv-foot">
-      <span class="mon-sym-inv-count">${filled}/${cap}</span>
+      <span class="mon-sym-inv-count">${visible.length}/${cap}</span>
     </div>
   </div>`;
 }
@@ -5277,7 +5402,6 @@ function renderEnhance(): string {
         ).join("");
 
         const roleLabel = monsterRoleLabel(def?.role, def?.baseStats);
-        const enhCost = enhanceManaCost(m.level);
         if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
         const focusSk = def?.skills[monSkillPick];
         const focusLv = levels[monSkillPick] ?? 1;
@@ -5301,11 +5425,7 @@ function renderEnhance(): string {
         <div class="mon-skill-rail">
           <div class="mon-skill-icos" role="tablist" aria-label="skills">${skillIcons}</div>
           <button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--rail" data-skill-feed-open="${m.uid}" ${skillsMaxed ? "disabled" : ""}>
-            ${
-              skillsMaxed
-                ? `<span class="mon-enh-label">MAX</span>`
-                : `<span class="mon-enh-label">${escapeHtml(t("ui.3e1a337d93"))}</span><span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(enhCost)}</strong></span>`
-            }
+            <span class="mon-enh-label">${skillsMaxed ? "MAX" : escapeHtml(t("ui.3e1a337d93"))}</span>
           </button>
         </div>
         <div class="mon-skill-main">
@@ -5327,7 +5447,7 @@ function renderEnhance(): string {
       </div>`;
 
         const symbolsPanel = `<div class="mon-pane mon-pane--symbols">
-        <div class="mon-sym-viewer">
+        <div class="mon-sym-viewer mon-sym-viewer--stack">
           <div class="mon-sym-viewer-equip">
             ${renderMonsterRuneCircle(m.uid)}
             <div class="rune-effect-block">
@@ -7814,6 +7934,7 @@ function bind(): void {
       enhanceTab = "monsters";
       monBookDock = "roster";
       skillFeedModalOpen = false;
+      skillFeedFodderUid = null;
       render();
     });
   });
@@ -7832,6 +7953,7 @@ function bind(): void {
       if (raw === "info" || raw === "skills" || raw === "awaken" || raw === "symbols") {
         if (monDetailTab === raw) return;
         monDetailTab = raw;
+        if (raw !== "symbols") symbolInvFilterOpen = false;
         enhanceTab = "monsters";
         if (!applyMonDetailTabUi()) render();
       }
@@ -7870,6 +7992,7 @@ function bind(): void {
       const uid = btn.dataset.skillFeedOpen;
       if (!uid) return;
       selectedEnhanceUid = uid;
+      skillFeedFodderUid = null;
       skillFeedModalOpen = true;
       monDetailTab = "skills";
       applyMonDetailTabUi();
@@ -7881,6 +8004,7 @@ function bind(): void {
   const closeSkillFeed = (): void => {
     if (!skillFeedModalOpen) return;
     skillFeedModalOpen = false;
+    skillFeedFodderUid = null;
     applySkillFeedOpen();
   };
   app.querySelector("#btn-skill-feed-close")?.addEventListener("click", closeSkillFeed);
@@ -7889,18 +8013,30 @@ function bind(): void {
     ?.addEventListener("click", closeSkillFeed);
 
   app.querySelector("#skill-feed-layer")?.addEventListener("click", (ev) => {
-    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+    const fodderBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
       "[data-skill-feed-fodder]",
     );
-    if (!btn || !app.contains(btn)) return;
-    const target = btn.dataset.skillFeedTarget;
-    const fodder = btn.dataset.skillFeedFodder;
+    if (fodderBtn && app.contains(fodderBtn)) {
+      const fodder = fodderBtn.dataset.skillFeedFodder;
+      if (!fodder) return;
+      skillFeedFodderUid = skillFeedFodderUid === fodder ? null : fodder;
+      refreshSkillFeedModalDom();
+      return;
+    }
+
+    const confirm = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+      "#btn-skill-feed-confirm",
+    );
+    if (!confirm || !app.contains(confirm) || confirm.disabled) return;
+    const target = selectedEnhanceUid;
+    const fodder = skillFeedFodderUid;
     if (!target || !fodder) return;
     const r = runFeedSameMonster(save, target, fodder);
     save = r.save;
     persist();
     flash(r.message);
     monDetailTab = "skills";
+    skillFeedFodderUid = null;
     const owned = save.roster.find((m) => m.uid === target);
     const levels = (owned?.skillLevels ?? [1, 1, 1]) as [number, number, number];
     const hasFodder =
@@ -7928,12 +8064,12 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-mon-skill-pick]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const slot = Number(btn.dataset.monSkillPick ?? "0");
-      if (slot >= 0 && slot <= 2) {
-        monSkillPick = slot;
-        monDetailTab = "skills";
-        enhanceTab = "monsters";
-        render();
-      }
+      if (slot < 0 || slot > 2 || slot === monSkillPick) return;
+      monSkillPick = slot;
+      monDetailTab = "skills";
+      enhanceTab = "monsters";
+      applyMonDetailTabUi();
+      if (!applyMonSkillPickUi()) render();
     });
   });
 
@@ -8222,6 +8358,32 @@ function bind(): void {
     }
     symbolBagExpandOpen = true;
     render();
+  });
+  app.querySelector("[data-sym-filter-toggle]")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    symbolInvFilterOpen = !symbolInvFilterOpen;
+    render();
+  });
+  app.querySelector(".mon-sym-filter-menu")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+  });
+  app.querySelectorAll<HTMLInputElement>("[data-sym-filter-set]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.symFilterSet ?? "";
+      if (key === "all") {
+        if (input.checked) {
+          symbolInvFilterSets = new Set(SYMBOL_SETS.map((s) => s.id));
+        } else {
+          symbolInvFilterSets = new Set();
+        }
+      } else if (SYMBOL_SETS.some((s) => s.id === key)) {
+        const id = key as SymbolSetId;
+        if (input.checked) symbolInvFilterSets.add(id);
+        else symbolInvFilterSets.delete(id);
+      }
+      symbolInvFilterOpen = true;
+      render();
+    });
   });
   const closeSymBagExpand = () => {
     if (!symbolBagExpandOpen) return;

@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
   <defs>
-    <radialGradient id="pltrares1-aura" cx="50%" cy="48%" r="50%">
-      <stop stop-color="#4d97ff" stop-opacity=".42"/>
-      <stop offset=".55" stop-color="#4d97ff" stop-opacity=".12"/>
+    <radialGradient id="pltrares1-aura" cx="50%" cy="42%" r="55%">
+      <stop stop-color="#4d97ff" stop-opacity=".55"/>
+      <stop offset=".5" stop-color="#4d97ff" stop-opacity=".16"/>
       <stop offset="1" stop-color="#4d97ff" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="pltrares1-face" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+    <linearGradient id="pltrares1-face" x1="14" y1="8" x2="58" y2="64" gradientUnits="userSpaceOnUse">
       <stop stop-color="#284868"/>
-      <stop offset=".45" stop-color="#142838"/>
+      <stop offset=".4" stop-color="#142838"/>
       <stop offset="1" stop-color="#081018"/>
     </linearGradient>
     <linearGradient id="pltrares1-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
@@ -16,20 +16,26 @@
       <stop offset=".62" stop-color="#C9A227"/>
       <stop offset="1" stop-color="#7A5A18"/>
     </linearGradient>
-    <linearGradient id="pltrares1-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".75"/>
+    <linearGradient id="pltrares1-shine" x1="18" y1="12" x2="42" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6D0" stop-opacity=".85"/>
       <stop offset="1" stop-color="#4d97ff" stop-opacity="0"/>
     </linearGradient>
-    <filter id="pltrares1-depth" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="1.4" stdDeviation="1.1" flood-color="#000" flood-opacity=".5"/>
+    <radialGradient id="pltrares1-gem" cx="38%" cy="32%" r="70%">
+      <stop stop-color="#284868" stop-opacity=".9"/>
+      <stop offset=".55" stop-color="#060c14"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".85"/>
+    </radialGradient>
+    <filter id="pltrares1-depth" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="1.6" stdDeviation="1.3" flood-color="#000" flood-opacity=".55"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="26" fill="url(#pltrares1-aura)"/>
+  <circle cx="36" cy="36" r="28" fill="url(#pltrares1-aura)"/>
   <g filter="url(#pltrares1-depth)">
-    <path d="M18 12 L60 10 L64 36 L60 62 L18 60 L8 36 Z" fill="none" stroke="#0A0806" stroke-width="5.2" stroke-linejoin="round" opacity=".9"/>
-    <path d="M18 12 L60 10 L64 36 L60 62 L18 60 L8 36 Z" fill="url(#pltrares1-face)" stroke="url(#pltrares1-gold)" stroke-width="2.8" stroke-linejoin="round"/>
-    <path d="M18 12 L60 10 L64 36 L60 62 L18 60 L8 36 Z" fill="none" stroke="#FFF8D6" stroke-width="1.1" opacity=".28" transform="translate(0 .55)"/>
-    <path d="M24 20 L56 18 L58 36 L56 54 L24 52 L18 36 Z" fill="#060c14" fill-opacity=".92" stroke="#a8d0ff" stroke-width=".85" stroke-opacity=".4" stroke-dasharray="2 4"/>
-    <ellipse cx="26" cy="20" rx="7" ry="3.2" fill="url(#pltrares1-shine)" transform="rotate(-24 26 20)" opacity=".75"/>
+    <path d="M18 12 L60 10 L64 36 L60 62 L18 60 L8 36 Z" fill="none" stroke="#0A0806" stroke-width="5.4" stroke-linejoin="round" opacity=".92"/>
+    <path d="M18 12 L60 10 L64 36 L60 62 L18 60 L8 36 Z" fill="url(#pltrares1-face)" stroke="url(#pltrares1-gold)" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M18 12 L60 10 L64 36 L60 62 L18 60 L8 36 Z" fill="none" stroke="#FFF8D6" stroke-width="1.15" opacity=".32" transform="translate(0 .6)"/>
+    <path d="M24 20 L56 18 L58 36 L56 54 L24 52 L18 36 Z" fill="url(#pltrares1-gem)" stroke="#a8d0ff" stroke-width="1" stroke-opacity=".55"/>
+    <path d="M24 20 L56 18 L58 36 L56 54 L24 52 L18 36 Z" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".18" transform="translate(0 .4)"/>
+    <ellipse cx="26" cy="19" rx="8" ry="3.4" fill="url(#pltrares1-shine)" transform="rotate(-26 26 19)" opacity=".8"/>
   </g>
 </svg>

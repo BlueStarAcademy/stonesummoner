@@ -9433,7 +9433,7 @@ span.stage-drop-info-tab {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
+  height: auto;
 }
 
 .mon-sym-inv-head {
@@ -9641,6 +9641,41 @@ span.stage-drop-info-tab {
   overscroll-behavior: contain;
 }
 
+/* Two-row horizontal rail under the equip row. */
+.mon-sym-inv-grid--rail {
+  container-type: normal;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-rows: repeat(2, 58px);
+  grid-auto-flow: column;
+  grid-auto-columns: 58px;
+  grid-template-columns: none;
+  gap: 6px;
+  height: calc(58px * 2 + 6px + 12px);
+  max-height: calc(58px * 2 + 6px + 12px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  align-content: start;
+  justify-items: stretch;
+}
+
+.mon-sym-inv-grid--rail .mon-sym-inv-cell {
+  width: 58px;
+  height: 58px;
+  max-height: 58px;
+}
+
+.mon-sym-inv-grid--rail .mon-sym-inv-empty {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  align-self: center;
+  justify-self: center;
+  margin: 0;
+  padding: 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
 /*
  * Square cells sized from container width — NOT from image intrinsic size.
  * height = (grid content width - 2 gaps) / 3
@@ -9725,16 +9760,23 @@ span.stage-drop-info-tab {
 
 .mon-sym-inv-enh {
   position: absolute;
-  right: 3px;
+  right: 2px;
   bottom: 2px;
   z-index: 2;
+  min-width: 1.05em;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: #0a0806cc;
+  border: 1px solid #c9a22755;
   font-size: 9px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
-  color: #fff8e8;
+  color: #fff4d0;
+  text-align: center;
   text-shadow: 0 1px 2px #000e;
-  line-height: 1;
+  line-height: 1.15;
   pointer-events: none;
+  box-shadow: 0 1px 2px #000a;
 }
 
 .mon-sym-inv-tile.rarity--magic { border-color: #a3da5866; }
@@ -10178,8 +10220,8 @@ span.stage-drop-info-tab {
 }
 
 .mon-sym-viewer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   align-items: stretch;
   min-height: 0;
@@ -10187,15 +10229,21 @@ span.stage-drop-info-tab {
   width: 100%;
 }
 
+.mon-sym-viewer--stack {
+  gap: 10px;
+}
+
 .mon-sym-viewer-equip {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 10px;
   align-items: center;
+  justify-content: center;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
 .mon-sym-viewer-inv {
@@ -10203,43 +10251,49 @@ span.stage-drop-info-tab {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  flex: 0 0 auto;
+  overflow: visible;
   border-radius: 12px;
   border: 1px solid #7a6a3a44;
   background: #0e0b08cc;
 }
 
 .mon-inspect-shell .mon-pane--symbols .rune-circle {
-  flex: 1 1 auto;
-  width: min(100%, 240px);
-  max-width: 240px;
+  flex: 0 0 auto;
+  width: min(46%, 200px);
+  max-width: 200px;
   height: auto;
-  max-height: 240px;
+  max-height: 200px;
   aspect-ratio: 1;
-  margin: 4px auto;
+  margin: 0;
   min-height: 0;
 }
 
 .mon-inspect-shell .mon-pane--symbols .rune-effect-block {
-  flex: 0 0 auto;
-  margin-top: auto;
-  width: 100%;
+  flex: 1 1 auto;
+  margin-top: 0;
+  width: auto;
+  min-width: 0;
+  max-width: 52%;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: center;
   gap: 6px;
-  padding: 4px 4px 2px;
-  text-align: center;
+  padding: 4px 2px;
+  text-align: left;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mon-inspect-shell .mon-pane--symbols .rune-effect-head {
-  justify-content: center;
+  justify-content: flex-start;
   width: 100%;
   margin: 0;
 }
 
 .mon-inspect-shell .mon-pane--symbols .loadout-sets {
-  justify-content: center;
+  justify-content: flex-start;
   width: 100%;
   margin: 0;
 }
@@ -10247,7 +10301,7 @@ span.stage-drop-info-tab {
 .mon-inspect-shell .mon-pane--symbols .loadout-sets-empty {
   width: 100%;
   margin: 0;
-  text-align: center;
+  text-align: left;
 }
 
 .mon-inspect-shell .mon-pane--symbols .rune-meta {
@@ -10836,6 +10890,21 @@ span.stage-drop-info-tab {
   font-size: 0.72rem;
 }
 
+.skill-feed-foot {
+  margin-top: 4px;
+  flex: 0 0 auto;
+}
+
+.skill-feed-confirm {
+  width: 100%;
+}
+
+.skill-feed-inv .mon-slot.is-on {
+  outline: 2px solid #c9a227;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px #c9a22755 inset, 0 0 12px #c9a22744;
+}
+
 .mon-enh-label {
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -11024,23 +11093,31 @@ span.stage-drop-info-tab {
   pointer-events: none;
 }
 
-/* SW rune hex: cool slate socket board + warm medal faces seated in wells */
+/* Warm gold hex board — medals seat into bronze wells */
 .rune-circle {
   position: relative;
   width: min(100%, 220px);
   aspect-ratio: 1;
   margin: 4px auto 8px;
-  filter: drop-shadow(0 10px 18px #000b);
+  filter: drop-shadow(0 12px 22px #000c) drop-shadow(0 0 18px #c9a22722);
 }
 
 .rune-circle::before {
   content: "";
   position: absolute;
-  inset: 6%;
+  inset: 4%;
   border-radius: 50%;
-  background: radial-gradient(circle, #6a849822 0%, transparent 68%);
+  background:
+    radial-gradient(circle at 50% 42%, #c9a22728 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, transparent 58%, #0006 100%);
   pointer-events: none;
   z-index: 0;
+  animation: rune-board-breathe 5.5s ease-in-out infinite;
+}
+
+@keyframes rune-board-breathe {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
 
 .rune-circle-frame {
@@ -11065,6 +11142,19 @@ span.stage-drop-info-tab {
   cursor: pointer;
   z-index: 1;
   -webkit-tap-highlight-color: transparent;
+  transition: transform 0.16s ease, filter 0.16s ease;
+}
+
+.rune-slot:hover,
+.rune-slot:focus-visible {
+  transform: scale(1.08);
+  filter: brightness(1.08);
+  outline: none;
+  z-index: 2;
+}
+
+.rune-slot:active {
+  transform: scale(0.97);
 }
 
 .rune-slot-face {
@@ -11077,27 +11167,28 @@ span.stage-drop-info-tab {
   box-shadow: none;
 }
 
-/* Cool socket lip under the warm medal — reads as set into stone */
+/* Soft seat glow — frame SVG already draws the well */
 .rune-slot-face::before {
   content: "";
   position: absolute;
-  inset: 6%;
+  inset: 10%;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 40% 32%, #4a5a6888 0%, #121820ee 55%, #05070acc 100%);
-  box-shadow:
-    inset 0 3px 7px #000d,
-    inset 0 -1px 0 #8aa0b433,
-    0 0 0 1px #1a243088;
+  background: radial-gradient(circle at 50% 45%, #c9a22718 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
+  opacity: 0.7;
+}
+
+.rune-slot.filled .rune-slot-face::before {
+  background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--sym-accent, #c9a227) 35%, transparent) 0%, transparent 72%);
+  opacity: 1;
 }
 
 .rune-slot-plate,
 .rune-slot-art {
   grid-area: 1 / 1;
-  width: 78%;
-  height: 78%;
+  width: 84%;
+  height: 84%;
   object-fit: contain;
   display: block;
   pointer-events: none;
@@ -11106,41 +11197,47 @@ span.stage-drop-info-tab {
 }
 
 .rune-slot-plate {
-  filter: drop-shadow(0 3px 4px #000c) drop-shadow(0 1px 0 #0008);
+  filter: drop-shadow(0 3px 5px #000c) drop-shadow(0 0 6px #c9a22733);
   z-index: 1;
 }
 
 .rune-slot-art {
   z-index: 2;
-  filter: none;
+  filter: drop-shadow(0 1px 1px #0008);
 }
 
 .rune-slot.empty .rune-slot-art {
-  opacity: 0.88;
-  width: 72%;
-  height: 72%;
+  opacity: 0.85;
+  width: 52%;
+  height: 52%;
 }
 
-.rune-slot.filled.rarity--magic .rune-slot-plate { filter: drop-shadow(0 0 5px #a3da5866) drop-shadow(0 3px 4px #000c); }
-.rune-slot.filled.rarity--rare .rune-slot-plate { filter: drop-shadow(0 0 5px #4d97ff66) drop-shadow(0 3px 4px #000c); }
-.rune-slot.filled.rarity--epic .rune-slot-plate { filter: drop-shadow(0 0 6px #b46bff66) drop-shadow(0 3px 4px #000c); }
-.rune-slot.filled.rarity--legendary .rune-slot-plate { filter: drop-shadow(0 0 7px #ff4d4d77) drop-shadow(0 3px 4px #000c); }
-.rune-slot.filled.rarity--mythic .rune-slot-plate { filter: drop-shadow(0 0 8px #ffd70088) drop-shadow(0 3px 4px #000c); }
+.rune-slot.empty:hover .rune-slot-art,
+.rune-slot.empty:focus-visible .rune-slot-art {
+  opacity: 1;
+}
+
+.rune-slot.filled.rarity--normal .rune-slot-plate { filter: drop-shadow(0 0 4px #9a9a9a55) drop-shadow(0 3px 5px #000c); }
+.rune-slot.filled.rarity--magic .rune-slot-plate { filter: drop-shadow(0 0 7px #a3da5888) drop-shadow(0 3px 5px #000c); }
+.rune-slot.filled.rarity--rare .rune-slot-plate { filter: drop-shadow(0 0 8px #4d97ff99) drop-shadow(0 3px 5px #000c); }
+.rune-slot.filled.rarity--epic .rune-slot-plate { filter: drop-shadow(0 0 9px #b46bff99) drop-shadow(0 3px 5px #000c); }
+.rune-slot.filled.rarity--legendary .rune-slot-plate { filter: drop-shadow(0 0 10px #ff4d4daa) drop-shadow(0 3px 5px #000c); }
+.rune-slot.filled.rarity--mythic .rune-slot-plate { filter: drop-shadow(0 0 12px #ffd700bb) drop-shadow(0 3px 5px #000c); }
 
 .rune-slot.is-picking .rune-slot-face::after {
   content: "";
   position: absolute;
-  inset: 4%;
+  inset: 2%;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px #a8bcc8, 0 0 14px #6a849888;
+  box-shadow: 0 0 0 2px #f0d878, 0 0 16px #c9a227aa;
   pointer-events: none;
   animation: rune-pick-pulse 1.1s ease-in-out infinite;
   z-index: 3;
 }
 
 @keyframes rune-pick-pulse {
-  0%, 100% { opacity: 0.85; }
-  50% { opacity: 1; }
+  0%, 100% { opacity: 0.75; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
 }
 
 .rune-slot-num,
@@ -11148,25 +11245,30 @@ span.stage-drop-info-tab {
   display: none !important;
 }
 
-/* Enhance number only on inventory / modal — not on equipped circle */
-.rune-circle .rune-slot-plus {
-  display: none !important;
-}
-
 .rune-slot-plus {
   position: absolute;
-  right: 8%;
-  bottom: 8%;
+  right: 6%;
+  bottom: 6%;
   left: auto;
-  z-index: 2;
-  font-size: 0.68rem;
+  z-index: 3;
+  min-width: 1.1em;
+  padding: 1px 3px;
+  border-radius: 4px;
+  background: #0a0806cc;
+  border: 1px solid #c9a22766;
+  font-size: 0.58rem;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
-  color: #fff8e8;
-  text-align: right;
-  text-shadow: 0 1px 3px #000e, 0 0 5px #000c;
-  line-height: 1;
+  color: #fff4d0;
+  text-align: center;
+  text-shadow: 0 1px 2px #000e;
+  line-height: 1.15;
   pointer-events: none;
+  box-shadow: 0 1px 3px #000a;
+}
+
+.rune-circle .rune-slot-plus {
+  display: block;
 }
 
 /* Slot placement (SW hex ring) — centers spaced for 28% faces */
@@ -11626,18 +11728,30 @@ span.stage-drop-info-tab {
     gap: 3px;
   }
   .mon-sym-viewer {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-    gap: 6px;
+    gap: 8px;
   }
   .mon-inspect-shell .mon-pane--symbols .rune-circle {
-    width: min(100%, 168px);
+    width: min(44%, 168px);
     max-width: 168px;
     max-height: 168px;
   }
-  .mon-sym-inv-grid {
+  .mon-sym-inv-grid:not(.mon-sym-inv-grid--rail) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 5px;
     padding: 4px;
+  }
+  .mon-sym-inv-grid--rail {
+    grid-template-rows: repeat(2, 52px);
+    grid-auto-columns: 52px;
+    height: calc(52px * 2 + 5px + 8px);
+    max-height: calc(52px * 2 + 5px + 8px);
+    gap: 5px;
+    padding: 4px;
+  }
+  .mon-sym-inv-grid--rail .mon-sym-inv-cell {
+    width: 52px;
+    height: 52px;
+    max-height: 52px;
   }
   .rune-circle {
     width: min(100%, 168px);

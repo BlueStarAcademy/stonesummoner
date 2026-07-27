@@ -466,17 +466,20 @@ describe("game loop", () => {
     };
     save = {
       ...save,
+      island: { ...save.island, mana: 5000 },
       roster: [
         { ...base, skillLevels: [1, 1, 1] as [number, number, number] },
         fodder,
         ...save.roster.slice(1),
       ],
     };
+    const manaBefore = save.island.mana;
     const r = runFeedSameMonster(save, base.uid, fodder.uid);
     assert.match(r.message, /스킬업/);
     assert.equal(r.save.roster.some((m) => m.uid === fodder.uid), false);
     const t = r.save.roster.find((m) => m.uid === base.uid)!;
     assert.ok(t.skillLevels.some((lv) => lv > 1));
+    assert.ok(r.save.island.mana < manaBefore);
   });
 
   it("skills up S2 when level and mana met", () => {
