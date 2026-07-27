@@ -61,7 +61,7 @@ function units(): Unit[] {
 
 describe("Modules E/F/G/H", () => {
   it("maps stage modes to module flags (H)", () => {
-    const depth = getStage("depth_hwalro");
+    const depth = getStage("giant_b1");
     const trial = getStage("trial_jinmun");
     const arena = getStage("arena_rookie");
     const raid = getStage("guild_raid_boss");

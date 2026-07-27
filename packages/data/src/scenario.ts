@@ -1,4 +1,5 @@
 import type { SymbolSetId } from "./symbols.js";
+import type { SymbolQuality, SymbolStars } from "./symbolTables.js";
 import type { CombatBoardSize } from "./scenarioTypes.js";
 
 export type ContentMode =
@@ -11,6 +12,8 @@ export type ContentMode =
   | "guild_raid"
   | "equip";
 
+export type CairosDungeon = "giant" | "dragon" | "necro";
+
 export interface StageDef {
   id: string;
   nameKo: string;
@@ -22,14 +25,15 @@ export interface StageDef {
   dropSetId: SymbolSetId;
   waves: number;
   mode: ContentMode;
-  /** Override default drop chance (0–1). */
   dropChance?: number;
-  /** Arena / trial glory points on win. */
   gloryReward?: number;
-  /** Magic-circle trial: 진문석. */
   jinmunReward?: number;
-  /** Equip dungeon: chance to drop wearable gear (0–1). */
   gearDropChance?: number;
+  /** Cairos: weighted set pool (uniform pick among these). */
+  dropSetPool?: SymbolSetId[];
+  starWeights?: { value: SymbolStars; w: number }[];
+  qualityWeights?: { value: SymbolQuality; w: number }[];
+  cairosDungeon?: CairosDungeon;
 }
 
 export const MAIN_QUEST_AREA_COUNT = 13;
@@ -45,38 +49,34 @@ type MainQuestAreaDef = {
   y: number;
 };
 
-/** 13 scenario areas — each opens an N-1…N-7 sortie list.
- * Pin x/y are percentages of the full atlas image
- * (`apps/web/public/art/stages/stages-world-map.png`, 1080×1920).
- * The stages world keeps that aspect ratio so coordinates stay stable across devices.
- */
+/** SW scenario order: Energy → Destroy (maps 1–13). */
 const MAIN_QUEST_AREAS: MainQuestAreaDef[] = [
   { map: 1, slug: "garen", areaKo: "월영숲", tone: "forest", dropSetId: "hwalro", x: 47, y: 88 },
   { map: 2, slug: "tower", areaKo: "용맹의 탑", tone: "tower", dropSetId: "yongmaeng", x: 40, y: 77 },
-  { map: 3, slug: "ruins", areaKo: "고대 유적", tone: "ruins", dropSetId: "haengma", x: 51, y: 69 },
-  { map: 4, slug: "mist", areaKo: "안개 습지", tone: "cadence", dropSetId: "gunhim", x: 44, y: 65 },
-  { map: 5, slug: "flame", areaKo: "화염 협곡", tone: "arena", dropSetId: "chimtu", x: 61, y: 58 },
-  { map: 6, slug: "frost", areaKo: "서리 고원", tone: "cadence", dropSetId: "bogang", x: 38, y: 53 },
-  { map: 7, slug: "thunder", areaKo: "천둥 산맥", tone: "tower", dropSetId: "mussang", x: 42, y: 48 },
-  { map: 8, slug: "abyss", areaKo: "심연 해안", tone: "depth", dropSetId: "jipjung", x: 30, y: 45 },
-  { map: 9, slug: "seal", areaKo: "봉인 성채", tone: "ruins", dropSetId: "haengma", x: 50, y: 44 },
-  { map: 10, slug: "dune", areaKo: "황금 사막", tone: "equip", dropSetId: "yongmaeng", x: 60, y: 42 },
-  { map: 11, slug: "star", areaKo: "별빛 정글", tone: "forest", dropSetId: "hwalro", x: 34, y: 41 },
-  { map: 12, slug: "obsidian", areaKo: "흑요 지하", tone: "depth", dropSetId: "chimtu", x: 52, y: 37 },
-  { map: 13, slug: "end", areaKo: "종언의 신전", tone: "warena", dropSetId: "mussang", x: 50, y: 33 },
+  { map: 3, slug: "ruins", areaKo: "고대 유적", tone: "ruins", dropSetId: "mussang", x: 51, y: 69 },
+  { map: 4, slug: "mist", areaKo: "안개 습지", tone: "cadence", dropSetId: "haengma", x: 44, y: 65 },
+  { map: 5, slug: "flame", areaKo: "화염 협곡", tone: "arena", dropSetId: "jipjung", x: 61, y: 58 },
+  { map: 6, slug: "frost", areaKo: "서리 고원", tone: "cadence", dropSetId: "gunhim", x: 38, y: 53 },
+  { map: 7, slug: "thunder", areaKo: "천둥 산맥", tone: "tower", dropSetId: "yeongyeol", x: 42, y: 48 },
+  { map: 8, slug: "abyss", areaKo: "심연 해안", tone: "depth", dropSetId: "bogang", x: 30, y: 45 },
+  { map: 9, slug: "seal", areaKo: "봉인 성채", tone: "ruins", dropSetId: "hwangyeok", x: 50, y: 44 },
+  { map: 10, slug: "dune", areaKo: "황금 사막", tone: "equip", dropSetId: "ssangnip", x: 60, y: 42 },
+  { map: 11, slug: "star", areaKo: "별빛 정글", tone: "forest", dropSetId: "eungjing", x: 34, y: 41 },
+  { map: 12, slug: "obsidian", areaKo: "흑요 지하", tone: "depth", dropSetId: "tagae", x: 52, y: 37 },
+  { map: 13, slug: "end", areaKo: "종언의 신전", tone: "warena", dropSetId: "pamyeol", x: 50, y: 33 },
 ];
 
 const MQ_ENEMY_POOL = [
-  "gale_scout",
-  "dew_healer",
-  "fire_fang",
-  "shield_tortoise",
-  "ash_archer",
-  "capture_hound",
-  "thunder_lancer",
-  "mist_shaman",
-  "abyss_priest",
-  "seal_scholar",
+  "cheokhu_wind",
+  "yeonhwa_water",
+  "seokrang_fire",
+  "cheolgap_water",
+  "myeongsa_fire",
+  "pohwagyeon_dark",
+  "changsu_light",
+  "yeongmae_wind",
+  "jegwan_dark",
+  "jinmunsa_light",
 ] as const;
 
 function mqBoardSize(map: number, stage: number): CombatBoardSize {
@@ -124,7 +124,6 @@ function buildAreaStages(area: MainQuestAreaDef): StageDef[] {
   });
 }
 
-/** Per-area stage lists (map 1…13). */
 export const MAIN_QUEST_CHAPTERS: StageDef[][] = MAIN_QUEST_AREAS.map(buildAreaStages);
 
 export function stagesForMap(map: number): StageDef[] {
@@ -135,7 +134,6 @@ export const CHAPTER1_STAGES = MAIN_QUEST_CHAPTERS[0]!;
 export const CHAPTER2_STAGES = MAIN_QUEST_CHAPTERS[1]!;
 export const CHAPTER3_STAGES = MAIN_QUEST_CHAPTERS[2]!;
 
-/** Ordered main-quest scenario chain (13 areas × 7). */
 export const MAIN_QUEST_STAGES: StageDef[] = MAIN_QUEST_CHAPTERS.flat();
 
 export type MainQuestPinId =
@@ -153,10 +151,6 @@ export type MainQuestPinId =
   | "mq12"
   | "mq13";
 
-/**
- * World-map pins for main-quest areas (not individual sorties).
- * Clicking a pin opens the N-1…N-7 stage list sheet.
- */
 export const MAIN_QUEST_PIN_LAYOUT: {
   id: MainQuestPinId;
   map: number;
@@ -175,9 +169,6 @@ export const MAIN_QUEST_PIN_LAYOUT: {
   tone: area.tone,
 }));
 
-/**
- * Side-content hubs on dedicated atlas islands (off the MQ corridor).
- */
 export const SIDE_CONTENT_PIN_LAYOUT: {
   id: "depth" | "arena" | "cadence" | "equip" | "warena" | "guild";
   x: number;
@@ -185,70 +176,163 @@ export const SIDE_CONTENT_PIN_LAYOUT: {
   landmarkKo: string;
 }[] = [
   { id: "cadence", x: 12, y: 50, landmarkKo: "룬스톤 시련림" },
-  { id: "depth", x: 85, y: 39, landmarkKo: "심층 공허 동굴" },
+  { id: "depth", x: 85, y: 39, landmarkKo: "카이로스 심층" },
   { id: "warena", x: 87, y: 57, landmarkKo: "의식 투기 칼데라" },
   { id: "equip", x: 74, y: 47, landmarkKo: "황금 금고 유적" },
   { id: "arena", x: 86, y: 74, landmarkKo: "콜로세움" },
   { id: "guild", x: 87, y: 86, landmarkKo: "길드 요새" },
 ];
 
-/** 상징 심층 (Kairos stub) — high drop rate, set-focused. */
-export const DEPTH_STAGES: StageDef[] = [
-  {
-    id: "depth_hwalro",
-    nameKo: "심층 · 활로",
-    map: 90,
-    stage: 1,
-    boardSize: 9,
-    energyCost: 7,
-    enemyMonsterIds: ["shield_tortoise", "dew_healer", "gale_scout"],
-    dropSetId: "hwalro",
-    waves: 2,
-    mode: "depth",
-    dropChance: 0.92,
-  },
-  {
-    id: "depth_yongmaeng",
-    nameKo: "심층 · 용맹",
-    map: 90,
-    stage: 2,
-    boardSize: 9,
-    energyCost: 7,
-    enemyMonsterIds: ["fire_fang", "ash_archer", "thunder_lancer"],
-    dropSetId: "yongmaeng",
-    waves: 2,
-    mode: "depth",
-    dropChance: 0.92,
-  },
-  {
-    id: "depth_haengma",
-    nameKo: "심층 · 행마",
-    map: 90,
-    stage: 3,
-    boardSize: 9,
-    energyCost: 8,
-    enemyMonsterIds: ["gale_scout", "capture_hound", "mist_shaman"],
-    dropSetId: "haengma",
-    waves: 3,
-    mode: "depth",
-    dropChance: 0.92,
-  },
-  {
-    id: "depth_gunhim",
-    nameKo: "심층 · 굳힘",
-    map: 90,
-    stage: 4,
-    boardSize: 9,
-    energyCost: 8,
-    enemyMonsterIds: ["shield_tortoise", "abyss_priest", "seal_scholar"],
-    dropSetId: "gunhim",
-    waves: 3,
-    mode: "depth",
-    dropChance: 0.9,
-  },
+const CAIROS_GIANT_POOL: SymbolSetId[] = [
+  "hwalro",
+  "yongmaeng",
+  "mussang",
+  "haengma",
+  "jipjung",
+  "myosu",
+];
+const CAIROS_DRAGON_POOL: SymbolSetId[] = [
+  "gunhim",
+  "yeongyeol",
+  "bogang",
+  "hwangyeok",
+  "gyeongno",
+];
+const CAIROS_NECRO_POOL: SymbolSetId[] = [
+  "chimtu",
+  "ssangnip",
+  "eungjing",
+  "tagae",
+  "pamyeol",
 ];
 
-/** 아레나 stub — glory points, no energy (daily-ish stub uses energy 0). */
+function cairosWeights(floor: number): {
+  starWeights: { value: SymbolStars; w: number }[];
+  qualityWeights: { value: SymbolQuality; w: number }[];
+} {
+  if (floor <= 3) {
+    return {
+      starWeights: [
+        { value: 2, w: 15 },
+        { value: 3, w: 55 },
+        { value: 4, w: 25 },
+        { value: 5, w: 5 },
+      ],
+      qualityWeights: [
+        { value: "normal", w: 30 },
+        { value: "advanced", w: 40 },
+        { value: "rare", w: 25 },
+        { value: "epic", w: 5 },
+      ],
+    };
+  }
+  if (floor <= 6) {
+    return {
+      starWeights: [
+        { value: 3, w: 15 },
+        { value: 4, w: 50 },
+        { value: 5, w: 30 },
+        { value: 6, w: 5 },
+      ],
+      qualityWeights: [
+        { value: "advanced", w: 20 },
+        { value: "rare", w: 45 },
+        { value: "epic", w: 30 },
+        { value: "legend", w: 5 },
+      ],
+    };
+  }
+  if (floor <= 9) {
+    return {
+      starWeights: [
+        { value: 4, w: 15 },
+        { value: 5, w: 60 },
+        { value: 6, w: 25 },
+      ],
+      qualityWeights: [
+        { value: "rare", w: 25 },
+        { value: "epic", w: 55 },
+        { value: "legend", w: 20 },
+      ],
+    };
+  }
+  return {
+    starWeights: [
+      { value: 5, w: 45 },
+      { value: 6, w: 55 },
+    ],
+    qualityWeights: [
+      { value: "epic", w: 55 },
+      { value: "legend", w: 45 },
+    ],
+  };
+}
+
+function buildCairosDungeon(
+  dungeon: CairosDungeon,
+  nameKo: string,
+  map: number,
+  pool: SymbolSetId[],
+  primaryDrop: SymbolSetId,
+): StageDef[] {
+  return Array.from({ length: 10 }, (_, i) => {
+    const floor = i + 1;
+    const w = cairosWeights(floor);
+    return {
+      id: `${dungeon}_b${floor}`,
+      nameKo: `${nameKo} B${floor}`,
+      map,
+      stage: floor,
+      boardSize: 9 as CombatBoardSize,
+      energyCost: 5 + Math.floor(floor / 2),
+      enemyMonsterIds: mqEnemies(map % 10, floor),
+      dropSetId: primaryDrop,
+      dropSetPool: pool,
+      starWeights: w.starWeights,
+      qualityWeights: w.qualityWeights,
+      waves: floor >= 8 ? 3 : 2,
+      mode: "depth" as const,
+      dropChance: 0.85 + floor * 0.01,
+      cairosDungeon: dungeon,
+    };
+  });
+}
+
+export const CAIROS_GIANT_STAGES = buildCairosDungeon(
+  "giant",
+  "거인의 탑",
+  91,
+  CAIROS_GIANT_POOL,
+  "myosu",
+);
+export const CAIROS_DRAGON_STAGES = buildCairosDungeon(
+  "dragon",
+  "용의 둥지",
+  92,
+  CAIROS_DRAGON_POOL,
+  "gyeongno",
+);
+export const CAIROS_NECRO_STAGES = buildCairosDungeon(
+  "necro",
+  "네크로폴리스",
+  93,
+  CAIROS_NECRO_POOL,
+  "chimtu",
+);
+
+/** All Cairos floors (replaces per-set depth stub). */
+export const DEPTH_STAGES: StageDef[] = [
+  ...CAIROS_GIANT_STAGES,
+  ...CAIROS_DRAGON_STAGES,
+  ...CAIROS_NECRO_STAGES,
+];
+
+export function cairosStagesFor(dungeon: CairosDungeon): StageDef[] {
+  if (dungeon === "giant") return CAIROS_GIANT_STAGES;
+  if (dungeon === "dragon") return CAIROS_DRAGON_STAGES;
+  return CAIROS_NECRO_STAGES;
+}
+
 export const ARENA_STAGES: StageDef[] = [
   {
     id: "arena_rookie",
@@ -257,7 +341,7 @@ export const ARENA_STAGES: StageDef[] = [
     stage: 1,
     boardSize: 7,
     energyCost: 0,
-    enemyMonsterIds: ["gale_scout", "dew_healer", "fire_fang"],
+    enemyMonsterIds: ["cheokhu_wind", "yeonhwa_water", "seokrang_fire"],
     dropSetId: "hwalro",
     waves: 1,
     mode: "arena",
@@ -272,10 +356,10 @@ export const ARENA_STAGES: StageDef[] = [
     boardSize: 9,
     energyCost: 0,
     enemyMonsterIds: [
-      "thunder_lancer",
-      "ash_archer",
-      "capture_hound",
-      "shield_tortoise",
+      "changsu_light",
+      "myeongsa_fire",
+      "pohwagyeon_dark",
+      "cheolgap_water",
     ],
     dropSetId: "mussang",
     waves: 1,
@@ -285,7 +369,6 @@ export const ARENA_STAGES: StageDef[] = [
   },
 ];
 
-/** 요일 던전 stub — materials via crystal/scroll bias. */
 export const WEEKDAY_STAGES: StageDef[] = [
   {
     id: "weekday_evolve",
@@ -294,7 +377,7 @@ export const WEEKDAY_STAGES: StageDef[] = [
     stage: 1,
     boardSize: 7,
     energyCost: 5,
-    enemyMonsterIds: ["fire_fang", "shield_tortoise"],
+    enemyMonsterIds: ["seokrang_fire", "cheolgap_water"],
     dropSetId: "gunhim",
     waves: 2,
     mode: "weekday",
@@ -307,7 +390,7 @@ export const WEEKDAY_STAGES: StageDef[] = [
     stage: 2,
     boardSize: 7,
     energyCost: 5,
-    enemyMonsterIds: ["mist_shaman", "seal_scholar"],
+    enemyMonsterIds: ["yeongmae_wind", "jinmunsa_light"],
     dropSetId: "jipjung",
     waves: 2,
     mode: "weekday",
@@ -315,7 +398,6 @@ export const WEEKDAY_STAGES: StageDef[] = [
   },
 ];
 
-/** 마법진 시련 — 진문석, low symbol drop. */
 export const TRIAL_STAGES: StageDef[] = [
   {
     id: "trial_jinmun",
@@ -325,10 +407,10 @@ export const TRIAL_STAGES: StageDef[] = [
     boardSize: 9,
     energyCost: 6,
     enemyMonsterIds: [
-      "abyss_priest",
-      "mist_shaman",
-      "thunder_lancer",
-      "capture_hound",
+      "jegwan_dark",
+      "yeongmae_wind",
+      "changsu_light",
+      "pohwagyeon_dark",
     ],
     dropSetId: "haengma",
     waves: 2,
@@ -339,7 +421,6 @@ export const TRIAL_STAGES: StageDef[] = [
   },
 ];
 
-/** 월드아레나 stub — higher glory, ban-pick feel via tougher foe. */
 export const WORLD_ARENA_STAGES: StageDef[] = [
   {
     id: "warena_qual",
@@ -349,10 +430,10 @@ export const WORLD_ARENA_STAGES: StageDef[] = [
     boardSize: 9,
     energyCost: 0,
     enemyMonsterIds: [
-      "thunder_lancer",
-      "mist_shaman",
-      "ash_archer",
-      "abyss_priest",
+      "changsu_light",
+      "yeongmae_wind",
+      "myeongsa_fire",
+      "jegwan_dark",
     ],
     dropSetId: "mussang",
     waves: 1,
@@ -368,10 +449,10 @@ export const WORLD_ARENA_STAGES: StageDef[] = [
     boardSize: 9,
     energyCost: 0,
     enemyMonsterIds: [
-      "abyss_priest",
-      "mist_shaman",
-      "thunder_lancer",
-      "capture_hound",
+      "jegwan_dark",
+      "yeongmae_wind",
+      "changsu_light",
+      "pohwagyeon_dark",
     ],
     dropSetId: "chimtu",
     waves: 1,
@@ -381,7 +462,6 @@ export const WORLD_ARENA_STAGES: StageDef[] = [
   },
 ];
 
-/** 길드 레이드 stub — 13×13 boss board. */
 export const GUILD_RAID_STAGES: StageDef[] = [
   {
     id: "guild_raid_boss",
@@ -391,10 +471,10 @@ export const GUILD_RAID_STAGES: StageDef[] = [
     boardSize: 13,
     energyCost: 10,
     enemyMonsterIds: [
-      "abyss_priest",
-      "mist_shaman",
-      "thunder_lancer",
-      "shield_tortoise",
+      "jegwan_dark",
+      "yeongmae_wind",
+      "changsu_light",
+      "cheolgap_water",
     ],
     dropSetId: "bogang",
     waves: 3,
@@ -405,7 +485,6 @@ export const GUILD_RAID_STAGES: StageDef[] = [
   },
 ];
 
-/** 주간 장비 금고 — 소환사 장비 드롭 스텁. */
 export const EQUIP_STAGES: StageDef[] = [
   {
     id: "equip_vault_1",
@@ -414,7 +493,7 @@ export const EQUIP_STAGES: StageDef[] = [
     stage: 1,
     boardSize: 7,
     energyCost: 6,
-    enemyMonsterIds: ["shield_tortoise", "seal_scholar"],
+    enemyMonsterIds: ["cheolgap_water", "jinmunsa_light"],
     dropSetId: "hwalro",
     waves: 2,
     mode: "equip",
@@ -429,10 +508,10 @@ export const EQUIP_STAGES: StageDef[] = [
     boardSize: 9,
     energyCost: 8,
     enemyMonsterIds: [
-      "thunder_lancer",
-      "mist_shaman",
-      "shield_tortoise",
-      "ash_archer",
+      "changsu_light",
+      "yeongmae_wind",
+      "cheolgap_water",
+      "myeongsa_fire",
     ],
     dropSetId: "yongmaeng",
     waves: 3,

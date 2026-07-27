@@ -141,10 +141,10 @@ export function scaledMonsterStats(
 }
 
 const STARTER_IDS = [
-  "fire_fang",
-  "dew_healer",
-  "gale_scout",
-  "seal_scholar",
+  "seokrang_fire",
+  "yeonhwa_water",
+  "cheokhu_wind",
+  "jinmunsa_light",
 ] as const;
 
 const ELEMENTAL = new Set(["fire", "water", "wind"]);

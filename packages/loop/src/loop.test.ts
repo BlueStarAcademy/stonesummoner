@@ -113,7 +113,7 @@ describe("game loop", () => {
       island: { ...save.island, mana: 8000, energy: 80, summonerLevel: 10 },
       gloryPoints: 100,
     };
-    assert.equal(isStageUnlocked(save, "depth_hwalro"), true);
+    assert.equal(isStageUnlocked(save, "giant_b1"), true);
     assert.equal(isStageUnlocked(save, "tower_2_1"), true);
     assert.equal(isStageUnlocked(save, "arena_rookie"), true);
 
@@ -258,10 +258,10 @@ describe("game loop", () => {
       assert.ok((raid.reward.contribution ?? 0) > 0);
     }
 
-    const banned = runSetArenaBans(raid.save, ["thunder_lancer", "mist_shaman"]);
+    const banned = runSetArenaBans(raid.save, ["changsu_light", "yeongmae_wind"]);
     assert.deepEqual(banned.save.arenaBanIds, [
-      "thunder_lancer",
-      "mist_shaman",
+      "changsu_light",
+      "yeongmae_wind",
     ]);
     const battle = createStageBattle(
       getStage("warena_qual")!,

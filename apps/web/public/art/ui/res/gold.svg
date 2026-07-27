@@ -1,22 +1,72 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
   <defs>
-    <linearGradient id="gbg" x1="12" y1="8" x2="52" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2a200c"/>
-      <stop offset="1" stop-color="#120e08"/>
+    <radialGradient id="gGlow" cx="32" cy="34" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0D878" stop-opacity=".5"/>
+      <stop offset=".48" stop-color="#C9A227" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gFace" cx="25" cy="22" r="24" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFCE8"/>
+      <stop offset=".22" stop-color="#F5E09A"/>
+      <stop offset=".55" stop-color="#D4A820"/>
+      <stop offset="1" stop-color="#5A3C08"/>
+    </radialGradient>
+    <linearGradient id="gRim" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D0"/>
+      <stop offset=".35" stop-color="#E8C84A"/>
+      <stop offset="1" stop-color="#4A3408"/>
     </linearGradient>
-    <linearGradient id="gcoin" x1="14" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+    <linearGradient id="gInner" x1="20" y1="14" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6C8"/>
+      <stop offset=".5" stop-color="#C9A227"/>
+      <stop offset="1" stop-color="#7A5410"/>
+    </linearGradient>
+    <linearGradient id="gStar" x1="26" y1="18" x2="38" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF2"/>
+      <stop offset=".55" stop-color="#F0D878"/>
+      <stop offset="1" stop-color="#A87818"/>
+    </linearGradient>
+    <linearGradient id="gShine" x1="16" y1="12" x2="34" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".96"/>
+      <stop offset="1" stop-color="#F0D878" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="gStack" x1="18" y1="40" x2="50" y2="58" gradientUnits="userSpaceOnUse">
       <stop stop-color="#F5E6B8"/>
       <stop offset=".45" stop-color="#C9A227"/>
-      <stop offset="1" stop-color="#7A5A10"/>
-    </linearGradient>
-    <linearGradient id="gshine" x1="22" y1="16" x2="38" y2="36" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
-      <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
+      <stop offset="1" stop-color="#5A3C08"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#gbg)"/>
-  <circle cx="32" cy="32" r="18" fill="url(#gcoin)" stroke="#E8D9A8" stroke-width="1.8"/>
-  <circle cx="32" cy="32" r="12" fill="none" stroke="#8A6A18" stroke-width="1.3" opacity=".55"/>
-  <path d="M32 20v24M25 26c2.8-3.2 11.2-3.2 14 0M25 38c2.8 3.2 11.2 3.2 14 0" stroke="#FFF1C0" stroke-width="2" stroke-linecap="round"/>
-  <ellipse cx="24" cy="24" rx="6" ry="3.5" fill="url(#gshine)" transform="rotate(-28 24 24)"/>
+
+  <circle cx="32" cy="32" r="27" fill="url(#gGlow)"/>
+
+  <!-- coin stack -->
+  <ellipse cx="41" cy="47.2" rx="13.5" ry="4.8" fill="#5A3C08" opacity=".35"/>
+  <ellipse cx="41" cy="45.4" rx="13.5" ry="4.8" fill="url(#gStack)"/>
+  <ellipse cx="41" cy="44" rx="13.5" ry="4.8" fill="url(#gFace)" stroke="#E8D9A8" stroke-width=".85"/>
+  <ellipse cx="22.5" cy="48.4" rx="12.5" ry="4.5" fill="#5A3C08" opacity=".3"/>
+  <ellipse cx="22.5" cy="46.7" rx="12.5" ry="4.5" fill="url(#gStack)"/>
+  <ellipse cx="22.5" cy="45.4" rx="12.5" ry="4.5" fill="url(#gFace)" stroke="#E8D9A8" stroke-width=".85"/>
+
+  <!-- main coin -->
+  <circle cx="32" cy="27.5" r="19.2" fill="none" stroke="url(#gRim)" stroke-width="3"/>
+  <circle cx="32" cy="27.5" r="16.9" fill="url(#gFace)" stroke="#FFF4C8" stroke-width="1.15"/>
+  <circle cx="32" cy="27.5" r="13.6" fill="none" stroke="url(#gInner)" stroke-width="1.4" opacity=".75"/>
+  <circle cx="32" cy="27.5" r="12.2" fill="none" stroke="#FFF8D0" stroke-width=".65" opacity=".4"/>
+
+  <!-- ornate crest -->
+  <path
+    d="M32 16.2l2.1 5.2 5.5.3-4.3 3.5 1.5 5.3L32 27.8l-4.8 2.7 1.5-5.3-4.3-3.5 5.5-.3L32 16.2Z"
+    fill="url(#gStar)"
+    stroke="#FFF8D0"
+    stroke-width=".7"
+    stroke-linejoin="round"
+  />
+  <circle cx="32" cy="27.5" r="3.2" fill="#6A4810" fill-opacity=".25"/>
+  <circle cx="32" cy="27.5" r="2.1" fill="url(#gStar)" stroke="#FFF8D0" stroke-width=".6"/>
+
+  <!-- gloss + sparks -->
+  <ellipse cx="23.5" cy="19.5" rx="6.2" ry="3.4" fill="url(#gShine)" transform="rotate(-32 23.5 19.5)"/>
+  <circle cx="42.5" cy="17.5" r="1.4" fill="#FFFFFF" fill-opacity=".95"/>
+  <circle cx="45" cy="32" r="0.95" fill="#FFF6C8" fill-opacity=".88"/>
+  <circle cx="20.5" cy="35.5" r="0.8" fill="#FFFFFF" fill-opacity=".72"/>
 </svg>

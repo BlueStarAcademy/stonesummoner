@@ -1355,6 +1355,27 @@
     "ko": "ⓒ2026 에코스톤 All rights reserved.",
     "en": "ⓒ2026 Ecostone All rights reserved."
   },
+  "auth.pwa.install": {
+    "ko": "홈 화면 추가",
+    "en": "Add to Home"
+  },
+  "auth.pwa.installAria": {
+    "ko": "앱을 홈 화면에 설치",
+    "en": "Install app to home screen"
+  },
+  "auth.pwa.iosHint": {
+    "ko": "공유 버튼에서 '홈 화면에 추가'를 선택하세요.",
+    "en": "Tap Share, then Add to Home Screen."
+  },
+  "auth.pwa.installed": {
+    "ko": "홈 화면에 추가되었습니다.",
+    "en": "Added to home screen."
+  },
+  "auth.pwa.unavailable": {
+    "ko": "이 브라우저에서는 설치를 지원하지 않습니다.",
+    "en": "Install is not available in this browser."
+  },
+
   "ui.tabInfo": {
     "ko": "정보",
     "en": "Info"
@@ -1387,9 +1408,9 @@
     "ko": "희귀",
     "en": "Rare"
   },
-  "ui.rarityMagic": {
-    "ko": "마법",
-    "en": "Magic"
+  "ui.rarityAdvanced": {
+    "ko": "고급",
+    "en": "Advanced"
   },
   "ui.rarityNormal": {
     "ko": "일반",
@@ -1638,6 +1659,10 @@
   "ui.skillFeedUse": {
     "ko": "재료",
     "en": "Feed"
+  },
+  "ui.skillFeedClose": {
+    "ko": "스킬 강화 닫기",
+    "en": "Close skill enhance"
   },
   "ui.skillEnhanceHint": {
     "ko": "강화 시 스킬이 랜덤으로 상승합니다",

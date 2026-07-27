@@ -1,5 +1,8 @@
 import {
   ALL_STAGES,
+  CAIROS_DRAGON_STAGES,
+  CAIROS_GIANT_STAGES,
+  CAIROS_NECRO_STAGES,
   EQUIP_STAGES,
   MAIN_QUEST_AREA_COUNT,
   WORLD_ARENA_STAGES,
@@ -30,6 +33,13 @@ function chapter2Cleared(save: PlayerSave): boolean {
   return boss ? save.clearedStages.includes(boss) : false;
 }
 
+function cairosChainFor(stageId: string): StageDef[] | null {
+  if (stageId.startsWith("giant_")) return CAIROS_GIANT_STAGES;
+  if (stageId.startsWith("dragon_")) return CAIROS_DRAGON_STAGES;
+  if (stageId.startsWith("necro_")) return CAIROS_NECRO_STAGES;
+  return null;
+}
+
 /** Content unlock rules (Phase 1–2+). */
 export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
   const stage = getStage(stageId);
@@ -44,8 +54,12 @@ export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
       }
       return chainUnlocked(save, stagesForMap(stage.map), stageId);
     }
-    case "depth":
-      return save.clearedStages.includes("garen_1_5");
+    case "depth": {
+      if (!save.clearedStages.includes("garen_1_5")) return false;
+      const chain = cairosChainFor(stageId);
+      if (!chain) return true;
+      return chainUnlocked(save, chain, stageId);
+    }
     case "arena":
       return (
         save.island.summonerLevel >= 5 ||

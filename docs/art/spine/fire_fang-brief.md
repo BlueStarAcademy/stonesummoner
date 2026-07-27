@@ -1,4 +1,7 @@
-# Spine pilot brief — `fire_fang` (불꽃잡이)
+# Spine pilot brief — `fire_fang` artKey (석랑 패밀리)
+
+Pilot Spine pack shared by **석랑** (`seokrang_*`) via `artKey: "fire_fang"`.
+Catalog display name is **석랑** (element-neutral); attribute variants differ in skills, not species name.
 
 **Status:** runtime registered · Spine 4.2 pack shipped (full-body front/back regions + bone clips)  
 **Date:** 2026-07-27  

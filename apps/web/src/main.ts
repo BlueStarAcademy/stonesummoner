@@ -46,6 +46,9 @@ import {
 import {
   ARENA_STAGES,
   DEPTH_STAGES,
+  CAIROS_GIANT_STAGES,
+  CAIROS_DRAGON_STAGES,
+  CAIROS_NECRO_STAGES,
   EQUIP_STAGES,
   GLORY_BUILDINGS,
   GUILD_RAID_STAGES,
@@ -67,13 +70,17 @@ import {
   GEAR_SET_AFFIX_MANA,
   GEAR_SETS,
   getMonster,
+  getMonsterArtKey,
+  resolveMonsterId,
   getStage,
   MAX_GEAR_BAG,
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
   normalizeGearPiece,
   normalizeSummonerGear,
+  qualityToPlateId,
   SKILL_TREE_NODES,
+  skillTreeBonuses,
   SYMBOL_SETS,
   stagesForMap,
   summarizeGearSets,
@@ -377,6 +384,105 @@ function applyIslandSpotPosDom(id: string, x: number, y: number): void {
 let sessionUser: SessionUser | null = null;
 /** gate = brand + CTA; login/register = form panel. */
 const authUi = { pane: "gate" as "gate" | "login" | "register" };
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+let deferredPwaInstall: BeforeInstallPromptEvent | null = null;
+let pwaJustInstalled = false;
+
+function isPwaInstalled(): boolean {
+  if (pwaJustInstalled) return true;
+  if (window.matchMedia("(display-mode: standalone)").matches) return true;
+  if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
+  if (window.matchMedia("(display-mode: minimal-ui)").matches) return true;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  return !!nav.standalone;
+}
+
+function isIosSafariForPwa(): boolean {
+  const ua = navigator.userAgent;
+  const isIos =
+    /iPad|iPhone|iPod/i.test(ua) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (!isIos) return false;
+  return /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+}
+
+function canOfferPwaInstall(): boolean {
+  if (isPwaInstalled()) return false;
+  if (deferredPwaInstall) return true;
+  return isIosSafariForPwa();
+}
+
+function authPwaInstallBtn(): string {
+  if (!canOfferPwaInstall()) return "";
+  return `<button type="button" class="auth-pwa-install" id="auth-pwa-install" aria-label="${escapeHtml(t("auth.pwa.installAria"))}">
+    <svg class="auth-pwa-install-ico" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42L11 12.59V4a1 1 0 0 1 1-1Zm-7 14a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1Z"/>
+    </svg>
+    <span>${escapeHtml(t("auth.pwa.install"))}</span>
+  </button>`;
+}
+
+function refreshAuthPwaInstallBtn(): void {
+  if (view !== "auth") return;
+  const existing = app.querySelector("#auth-pwa-install");
+  if (!canOfferPwaInstall()) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  const main = app.querySelector(".auth-main");
+  if (!main) return;
+  main.insertAdjacentHTML("afterbegin", authPwaInstallBtn());
+  bindAuthPwaInstall();
+}
+
+function bindAuthPwaInstall(): void {
+  app.querySelector("#auth-pwa-install")?.addEventListener("click", () => {
+    void (async () => {
+      if (deferredPwaInstall) {
+        const evt = deferredPwaInstall;
+        deferredPwaInstall = null;
+        try {
+          await evt.prompt();
+          const choice = await evt.userChoice;
+          if (choice.outcome === "accepted") {
+            pwaJustInstalled = true;
+            toast = t("auth.pwa.installed");
+          }
+        } catch {
+          /* user dismissed or browser blocked */
+        }
+        render();
+        return;
+      }
+      if (isIosSafariForPwa()) {
+        toast = t("auth.pwa.iosHint");
+        render();
+        return;
+      }
+      toast = t("auth.pwa.unavailable");
+      render();
+    })();
+  });
+}
+
+window.addEventListener("beforeinstallprompt", (ev) => {
+  ev.preventDefault();
+  deferredPwaInstall = ev as BeforeInstallPromptEvent;
+  refreshAuthPwaInstallBtn();
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredPwaInstall = null;
+  pwaJustInstalled = true;
+  refreshAuthPwaInstallBtn();
+});
+
 let bootReady = false;
 let cloudTimer: ReturnType<typeof setTimeout> | null = null;
 /** False after cloud 401 — keep local play, stop PUT spam. */
@@ -411,6 +517,10 @@ let monBookDock: "roster" | "symbols" = "roster";
 /** Selected monster detail side-tab. */
 type MonDetailTab = "info" | "skills" | "awaken" | "symbols";
 let monDetailTab: MonDetailTab = "info";
+/** Skill-feed material picker modal (same-species fodder). */
+let skillFeedModalOpen = false;
+/** Monster book / skill-feed inventory slot capacity (two-row rail). */
+const ROSTER_SLOT_CAP = 60;
 
 /** Swap inspect panes without full app re-render (keeps roster dock intact). */
 function applyMonDetailTabUi(): boolean {
@@ -759,6 +869,7 @@ function migrateSave(raw: unknown): PlayerSave | null {
   const base = createNewSave();
   const roster = (p.roster?.length ? p.roster : base.roster).map((m) => ({
     ...m,
+    monsterId: resolveMonsterId(m.monsterId),
     evolve: m.evolve ?? 0,
     skillLevels: (m.skillLevels ?? [1, 1, 1]) as [number, number, number],
     symbolSlots: m.symbolSlots ?? [null, null, null, null, null, null],
@@ -785,7 +896,12 @@ function migrateSave(raw: unknown): PlayerSave | null {
     gloryPoints: typeof p.gloryPoints === "number" ? p.gloryPoints : 0,
     jinmunStones: typeof p.jinmunStones === "number" ? p.jinmunStones : 0,
     gloryLevels: p.gloryLevels ?? {},
-    arenaBanIds: Array.isArray(p.arenaBanIds) ? p.arenaBanIds.slice(0, 2) : [],
+    arenaBanIds: Array.isArray(p.arenaBanIds)
+      ? p.arenaBanIds
+          .map((id) => (typeof id === "string" ? resolveMonsterId(id) : ""))
+          .filter(Boolean)
+          .slice(0, 2)
+      : [],
     arenaSeasonWins:
       typeof p.arenaSeasonWins === "number" ? p.arenaSeasonWins : 0,
     guildContribution:
@@ -1377,7 +1493,7 @@ function renderStageEntryModal(): string {
       <header class="stage-prep-top stage-prep-top--board">
         <h2 class="stage-prep-title" id="stage-entry-title">${escapeHtml(titleText)}</h2>
         <div class="stage-prep-energy">
-          <img class="res-ico" src="/art/ui/res/energy.svg" width="16" height="16" alt="" draggable="false" />
+          <img class="res-ico" src="/art/ui/res/energy.svg" width="18" height="18" alt="" draggable="false" />
           <strong>${energyNow}/${energyMax}</strong>
           <button type="button" class="stage-prep-energy-buy" id="btn-stage-prep-buy-energy" title="${escapeHtml(t("ui.stagePrepEnergyBuy"))}" aria-label="${escapeHtml(t("ui.stagePrepEnergyBuy"))}">+</button>
         </div>
@@ -1433,7 +1549,7 @@ function renderStageEntryModal(): string {
 
       <footer class="stage-prep-footer">
         <button type="button" class="stage-prep-start" id="btn-stage-entry-start" ${canStart ? "" : "disabled"}>
-          <span class="stage-prep-start-cost" aria-hidden="true"><img src="/art/ui/res/energy.svg" width="14" height="14" alt="" draggable="false" />${cost}</span>
+          <span class="stage-prep-start-cost" aria-hidden="true"><img src="/art/ui/res/energy.svg" width="15" height="15" alt="" draggable="false" />${cost}</span>
           <span>${escapeHtml(t("ui.stagePrepStart"))}</span>
         </button>
       </footer>
@@ -2554,6 +2670,19 @@ function renderAuth(): string {
   </div>`;
 }
 
+function isFacilityView(v: View = view): boolean {
+  return (
+    v === "summon" ||
+    v === "pond" ||
+    v === "mine" ||
+    v === "wish" ||
+    v === "glory" ||
+    v === "fusion" ||
+    v === "party" ||
+    v === "dojo"
+  );
+}
+
 function mainContent(manaPct: number): string {
   switch (view) {
     case "auth":
@@ -2591,6 +2720,69 @@ function mainContent(manaPct: number): string {
   }
 }
 
+/** Island stays mounted under facility hubs; backdrop blocks spot clicks. */
+function renderFacilityLayerHtml(manaPct: number): string {
+  return `<div class="facility-layer" id="facility-layer">
+    <button type="button" class="facility-backdrop" data-nav="home" aria-label="${escapeHtml(t("ui.d758337556"))}"></button>
+    <div class="facility-modal" role="dialog" aria-modal="true">
+      ${mainContent(manaPct)}
+    </div>
+  </div>`;
+}
+
+function renderMainArea(manaPct: number): string {
+  if (view === "home") return renderHome();
+  if (isFacilityView()) {
+    return `${renderHome()}
+    ${renderFacilityLayerHtml(manaPct)}`;
+  }
+  return mainContent(manaPct);
+}
+
+/** When true, bind() skips island listeners (live island DOM is transplanted after render). */
+let preserveIslandDom = false;
+
+/** Open shop/community overlays without a full screen re-render. */
+function openShopModalSoft(): void {
+  shopOpen = true;
+  communityOpen = false;
+  missionOpen = false;
+  settingsOpen = false;
+  mailboxOpen = false;
+  notifOpen = false;
+  summonerPickerOpen = false;
+  resMoreOpen = false;
+  closeChatOverlay();
+  applyShopOpen();
+  applyCommunityOpen();
+  applyMissionOpen();
+  applySettingsOpen();
+  applyMailboxOpen();
+  applyNotifOpen();
+  applySummonerPickerOpen();
+  applyResMoreOpen();
+}
+
+function openCommunityModalSoft(): void {
+  communityOpen = true;
+  shopOpen = false;
+  missionOpen = false;
+  settingsOpen = false;
+  mailboxOpen = false;
+  notifOpen = false;
+  summonerPickerOpen = false;
+  resMoreOpen = false;
+  closeChatOverlay();
+  applyCommunityOpen();
+  applyShopOpen();
+  applyMissionOpen();
+  applySettingsOpen();
+  applyMailboxOpen();
+  applyNotifOpen();
+  applySummonerPickerOpen();
+  applyResMoreOpen();
+}
+
 /** Compact display for wallet amounts in the app bar. */
 function fmtRes(n: number): string {
   const v = Math.floor(n);
@@ -2626,6 +2818,42 @@ function modalCloseX(ariaLabel: string, closeBtnId: string): string {
   return `<button type="button" class="modal-x" data-modal-x-for="${closeBtnId}" aria-label="${escapeHtml(ariaLabel)}"></button>`;
 }
 
+/** One-time capture delegate so soft-injected modals (chat, drop-info, …) keep a working X. */
+let modalXDelegateBound = false;
+function ensureModalXDelegate(): void {
+  if (modalXDelegateBound) return;
+  modalXDelegateBound = true;
+  app.addEventListener(
+    "click",
+    (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const btn = t.closest<HTMLButtonElement>("[data-modal-x-for]");
+      if (!btn || !app.contains(btn)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const id = btn.dataset.modalXFor;
+      if (!id) return;
+      const closeBtn = app.querySelector<HTMLButtonElement>(`#${CSS.escape(id)}`);
+      if (!closeBtn) return;
+      // Swallow the trailing trusted click that can land on UI under the modal after it hides.
+      const swallow = (e: Event) => {
+        if (!e.isTrusted) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      };
+      document.addEventListener("click", swallow, true);
+      document.addEventListener("pointerup", swallow, true);
+      closeBtn.click();
+      window.setTimeout(() => {
+        document.removeEventListener("click", swallow, true);
+        document.removeEventListener("pointerup", swallow, true);
+      }, 400);
+    },
+    true,
+  );
+}
+
 /** Short display name for profile overlays. */
 function displayNickname(): string {
   const email = sessionUser?.email?.trim();
@@ -2659,11 +2887,22 @@ function applyResMoreOpen(): void {
 
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
-  const sheet = layer?.querySelector<HTMLElement>(".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal");
+  const sheet = layer?.querySelector<HTMLElement>(
+    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet",
+  );
   if (!sheet) return;
   sheet.style.animation = "none";
   void sheet.offsetWidth;
   sheet.style.animation = "";
+}
+
+/** Toggle skill-feed modal without a full screen re-render. */
+function applySkillFeedOpen(): void {
+  const layer = app.querySelector<HTMLElement>("#skill-feed-layer");
+  if (!layer) return;
+  layer.hidden = !skillFeedModalOpen;
+  layer.setAttribute("aria-hidden", skillFeedModalOpen ? "false" : "true");
+  if (skillFeedModalOpen) replayModalPop(layer);
 }
 
 /** Toggle settings modal without a full screen re-render. */
@@ -3045,7 +3284,18 @@ function openHomeChat(): void {
   missionOpen = false;
   communityOpen = false;
   shopOpen = false;
-  render();
+  applyMailboxOpen();
+  applyNotifOpen();
+  applySettingsOpen();
+  applySummonerPickerOpen();
+  applyMissionOpen();
+  applyCommunityOpen();
+  applyShopOpen();
+  // Inject chat sheet without remounting the island / map.
+  app.querySelector("#chat-layer")?.remove();
+  app.insertAdjacentHTML("beforeend", renderChatModal());
+  applyHomeChatRail();
+  bindChatUi();
   queueMicrotask(() => {
     const log = app.querySelector("#chat-log");
     if (log) log.scrollTop = log.scrollHeight;
@@ -3061,10 +3311,14 @@ function closeChatOverlay(): void {
 }
 
 function bindChatUi(): void {
-  app.querySelector("#btn-home-chat")?.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    openHomeChat();
-  });
+  const railBtn = app.querySelector<HTMLButtonElement>("#btn-home-chat");
+  if (railBtn && railBtn.dataset.chatBound !== "1") {
+    railBtn.dataset.chatBound = "1";
+    railBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      openHomeChat();
+    });
+  }
   app.querySelector("#btn-chat-close")?.addEventListener("click", () => {
     closeChatOverlay();
   });
@@ -3078,11 +3332,7 @@ function bindChatUi(): void {
       return;
     }
     chatLineUnread = false;
-    render();
-    queueMicrotask(() => {
-      const log = app.querySelector("#chat-log");
-      if (log) log.scrollTop = log.scrollHeight;
-    });
+    refreshChatModalSoft();
   });
   app.querySelector("#chat-compose")?.addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -3092,12 +3342,22 @@ function bindChatUi(): void {
     if (!pushChatMessage(chatChannelId, displayNickname(), text)) return;
     if (input) input.value = "";
     chatLineUnread = false;
-    render();
+    refreshChatModalSoft();
     queueMicrotask(() => {
-      const log = app.querySelector("#chat-log");
-      if (log) log.scrollTop = log.scrollHeight;
       app.querySelector<HTMLInputElement>("#chat-input")?.focus();
     });
+  });
+}
+
+function refreshChatModalSoft(): void {
+  if (!chatOpen) return;
+  app.querySelector("#chat-layer")?.remove();
+  app.insertAdjacentHTML("beforeend", renderChatModal());
+  applyHomeChatRail();
+  bindChatUi();
+  queueMicrotask(() => {
+    const log = app.querySelector("#chat-log");
+    if (log) log.scrollTop = log.scrollHeight;
   });
 }
 
@@ -3299,6 +3559,28 @@ function renderMissionModal(): string {
 }
 
 function render(): void {
+  const keepIsland =
+    !islandLayoutEdit && (view === "home" || isFacilityView(view))
+      ? app.querySelector<HTMLElement>(".home-island")
+      : null;
+  preserveIslandDom = Boolean(keepIsland);
+  try {
+    renderScreen();
+  } finally {
+    preserveIslandDom = false;
+  }
+  if (keepIsland) {
+    const next = app.querySelector<HTMLElement>(".home-island");
+    if (next && next !== keepIsland) next.replaceWith(keepIsland);
+  }
+}
+
+/** Full re-render; island DOM is preserved by render() when staying on the island. */
+function renderPreservingIsland(): void {
+  render();
+}
+
+function renderScreen(): void {
   clearEnergyRegenTimer();
   if (!bootReady) {
     app.classList.add("auth-mode");
@@ -3359,10 +3641,11 @@ function render(): void {
     app.classList.remove("combat-mode");
     app.classList.remove("monster-mode");
     app.innerHTML = `
-      <main class="auth-main auth-main--center">${renderAuth()}${authFooter()}</main>
+      <main class="auth-main auth-main--center">${authPwaInstallBtn()}${renderAuth()}${authFooter()}</main>
       ${toast ? `<p class="toast auth-toast">${toast}</p>` : ""}
     `;
     bind();
+
     if (toast) {
       const toastText = toast;
       toast = "";
@@ -3380,6 +3663,7 @@ function render(): void {
   const activeSum = getActiveSummoner(save);
   const activeEl = save.activeSummoner ?? "light";
   const isHome = view === "home";
+  const onIsland = isHome || isFacilityView();
   const isStages = view === "stages";
   const nick = escapeHtml(displayNickname());
   const userLv = island.summonerLevel;
@@ -3407,12 +3691,12 @@ function render(): void {
   }).join("");
 
   app.classList.remove("auth-mode");
-  app.classList.toggle("home-mode", view === "home");
+  app.classList.toggle("home-mode", onIsland);
   app.classList.toggle("expedition-mode", isStages);
   app.classList.toggle("combat-mode", view === "battle" || view === "result");
   app.classList.toggle("monster-mode", view === "enhance");
   app.innerHTML = `
-    <header class="app-bar app-bar--hud${isHome ? " app-bar--home" : ""}${isStages ? " app-bar--expedition" : ""}">
+    <header class="app-bar app-bar--hud${onIsland ? " app-bar--home" : ""}${isStages ? " app-bar--expedition" : ""}">
       <div class="app-bar-hud">
         <div class="hud-profile" title="${nick}">
           <div class="user-profile" aria-label="Lv.${userLv}">
@@ -3427,7 +3711,7 @@ function render(): void {
           <div class="user-profile-info">
             <p class="user-profile-nick">${nick}${demoTag ? ` ${demoTag}` : ""}</p>
             ${
-              isHome
+              onIsland
                 ? ""
                 : `<p class="user-profile-sub">${escapeHtml(elementLabel(activeEl))} Lv.${activeSum.level}${
                     activeSum.awaken > 0 ? ` - ${escapeHtml(t("summonerPicker.awaken", { n: activeSum.awaken }))}` : ""
@@ -3439,7 +3723,7 @@ function render(): void {
           <div class="res-item res-item--energy${Math.floor(island.energy) < (island.energyMax ?? 100) ? " has-timer" : ""}" title="${escapeHtml(t("res.energy"))}">
             <div class="res-energy-row">
               <span class="res-energy-ico-wrap">
-                <img class="res-ico" src="/art/ui/res/energy.svg" width="14" height="14" alt="" draggable="false" />
+                <img class="res-ico" src="/art/ui/res/energy.svg" width="18" height="18" alt="" draggable="false" />
               </span>
               <strong class="res-val" id="res-energy-val">${Math.floor(island.energy)}<small>/${island.energyMax ?? 100}</small></strong>
             </div>
@@ -3450,11 +3734,11 @@ function render(): void {
             }</span>
           </div>
           <div class="res-item res-item--gold" title="${escapeHtml(t("res.gold"))}">
-            <img class="res-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" />
+            <img class="res-ico" src="/art/ui/res/gold.svg" width="18" height="18" alt="" draggable="false" />
             <strong class="res-val">${fmtRes(island.mana)}</strong>
           </div>
           <div class="res-item res-item--crystal" title="${escapeHtml(t("res.crystal"))}">
-            <img class="res-ico" src="/art/ui/res/crystal.svg" width="14" height="14" alt="" draggable="false" />
+            <img class="res-ico" src="/art/ui/res/crystal.svg" width="18" height="18" alt="" draggable="false" />
             <strong class="res-val">${fmtRes(island.crystal)}</strong>
           </div>
           <button type="button" class="res-more-btn${resMoreOpen ? " is-open" : ""}" id="btn-res-more" aria-expanded="${resMoreOpen ? "true" : "false"}" aria-controls="res-more-panel" title="${escapeHtml(resMoreOpen ? t("res.moreClose") : t("res.moreOpen"))}" aria-label="${escapeHtml(resMoreOpen ? t("res.moreClose") : t("res.moreOpen"))}">
@@ -3492,7 +3776,7 @@ function render(): void {
           </div>
         </div>
       </div>
-      ${isHome ? "" : renderHomeChatRail()}
+      ${onIsland ? "" : renderHomeChatRail()}
       ${
         isStages
           ? `<button type="button" class="stages-map-back" data-nav="home" aria-label="${t("ui.d758337556")}">
@@ -3503,7 +3787,7 @@ function render(): void {
       }
       ${toast ? `<p class="toast">${toast}</p>` : ""}
     </header>
-    <main>${mainContent(manaPct)}</main>
+    <main class="${isFacilityView() ? "has-facility-modal" : ""}">${renderMainArea(manaPct)}</main>
     <div class="settings-layer" id="settings-layer" ${settingsOpen ? "" : "hidden"} aria-hidden="${settingsOpen ? "false" : "true"}">
       <button type="button" class="settings-backdrop" id="btn-settings-close" aria-label="${escapeHtml(t("settings.close"))}"></button>
       <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -3534,7 +3818,7 @@ function render(): void {
     </div>`
     }
     ${
-      isHome
+      onIsland
         ? `<aside class="side-quick" aria-label="${escapeHtml(t("side.quick"))}">
       <button type="button" class="side-quick-btn${mailboxOpen ? " is-open" : ""}" id="btn-mailbox" aria-expanded="${mailboxOpen ? "true" : "false"}" aria-controls="mailbox-layer" title="${escapeHtml(t("mailbox.title"))}">
         <span class="side-quick-glow" aria-hidden="true"></span>
@@ -4089,7 +4373,7 @@ function monsterElementLabel(el: string | undefined): string {
 function monsterElementArtSrc(el: string | undefined | null): string | null {
   if (!el) return null;
   if (!(SUMMONER_ELEMENTS as readonly string[]).includes(el)) return null;
-  return `/art/ui/element/${el}.webp`;
+  return `/art/ui/element/${el}.svg`;
 }
 
 function monsterSkillArtSrc(
@@ -4100,7 +4384,8 @@ function monsterSkillArtSrc(
   } | null,
 ): string {
   if (monsterId && skillIndex >= 0 && skillIndex <= 2) {
-    return `/art/monster/skill/${monsterId}-s${skillIndex + 1}.webp`;
+    const artKey = getMonsterArtKey(monsterId) ?? monsterId;
+    return `/art/monster/skill/${artKey}-s${skillIndex + 1}.webp`;
   }
   const kind = skill?.effects?.[0]?.kind;
   if (kind === "heal") return "/art/ui/skill/heal.svg";
@@ -4202,8 +4487,9 @@ function scrollArtSrc(kind: ScrollKind): string {
 }
 
 function monsterArtSrc(monsterId: string | undefined | null): string | null {
-  if (!monsterId) return null;
-  return `/art/monster/${monsterId}.webp`;
+  const artKey = getMonsterArtKey(monsterId);
+  if (!artKey) return null;
+  return `/art/monster/${artKey}.webp`;
 }
 
 function summonerArtSrc(element: string | undefined | null): string {
@@ -4401,12 +4687,20 @@ function symbolPlateSrc(rarityId: string, slot: number): string {
 const SYMBOL_SET_ACCENTS: Record<string, string> = {
   hwalro: "#6cbc7a",
   yongmaeng: "#e07040",
-  haengma: "#4aa0d0",
-  gunhim: "#c9a227",
   mussang: "#d0b070",
-  chimtu: "#c04070",
-  bogang: "#8ec8f0",
+  haengma: "#4aa0d0",
   jipjung: "#9a70d0",
+  gunhim: "#c9a227",
+  yeongyeol: "#70b8a0",
+  bogang: "#8ec8f0",
+  hwangyeok: "#e09050",
+  ssangnip: "#e8e0c8",
+  eungjing: "#c05040",
+  tagae: "#a03050",
+  pamyeol: "#5a4068",
+  myosu: "#6060a8",
+  gyeongno: "#e05030",
+  chimtu: "#c04070",
 };
 
 function symbolSetAccent(setId: string): string {
@@ -4419,23 +4713,39 @@ function renderSymIco(opts: {
   slot: number;
   enhance: number;
   rarityId: string;
+  stars?: number;
   size?: "sm" | "md" | "lg";
 }): string {
   const size = opts.size ?? "md";
+  const starsBadge =
+    opts.stars != null
+      ? `<span class="sym-ico-stars">${STAR}${opts.stars}</span>`
+      : "";
   return `<span class="sym-ico sym-ico--${size} rarity--${opts.rarityId}">
     <img class="sym-ico-plate" src="${symbolPlateSrc(opts.rarityId, opts.slot)}" width="72" height="72" alt="" aria-hidden="true" draggable="false" />
     <img class="sym-ico-art" src="${symbolArtSrc(opts.setId, opts.slot)}" width="64" height="64" alt="" draggable="false" />
+    ${starsBadge}
     <span class="sym-ico-plus">${opts.enhance}</span>
   </span>`;
 }
 
-function symbolRarity(stars: number): { id: string; label: string } {
-  if (stars >= 6) return { id: "mythic", label: t("ui.rarityMythic") };
-  if (stars >= 5) return { id: "legendary", label: t("ui.rarityLegendary") };
-  if (stars >= 4) return { id: "epic", label: t("ui.rarityEpic") };
-  if (stars >= 3) return { id: "rare", label: t("ui.rarityRare") };
-  if (stars >= 2) return { id: "magic", label: t("ui.rarityMagic") };
-  return { id: "normal", label: t("ui.rarityNormal") };
+function symbolQualityMeta(quality: string | undefined): { id: string; label: string } {
+  const q = quality ?? "legend";
+  switch (q) {
+    case "normal":
+      return { id: qualityToPlateId("normal"), label: t("ui.rarityNormal") };
+    case "advanced":
+    case "magic": // legacy
+      return { id: qualityToPlateId("advanced"), label: t("ui.rarityAdvanced") };
+    case "rare":
+      return { id: qualityToPlateId("rare"), label: t("ui.rarityRare") };
+    case "epic":
+    case "hero": // legacy
+      return { id: qualityToPlateId("epic"), label: t("ui.rarityEpic") };
+    case "legend":
+    default:
+      return { id: qualityToPlateId("legend"), label: t("ui.rarityLegendary") };
+  }
 }
 
 function symbolStatLabelKo(stat: string): string {
@@ -4458,8 +4768,8 @@ function formatSymbolStatLine(stat: string, value: number): string {
   return `${symbolStatLabelKo(stat)} +${n}${pct ? "%" : ""}`;
 }
 
-function symbolMainDisplayValue(sym: { mainValue: number; enhance: number }): number {
-  return sym.mainValue * (1 + sym.enhance * 0.08);
+function symbolMainDisplayValue(sym: { mainValue: number; enhance?: number }): number {
+  return sym.mainValue;
 }
 
 function symbolSubstatCapacity(stars: number): number {
@@ -4473,22 +4783,103 @@ function findSymbolIndexById(id: string): number {
   return save.symbols.findIndex((x) => x.id === id);
 }
 
+/** Same-species fodder only (excludes the skill-up target). */
+function skillFeedFodderList(targetUid: string | null): typeof save.roster {
+  if (!targetUid) return [];
+  const target = save.roster.find((m) => m.uid === targetUid);
+  if (!target) return [];
+  return sortRosterForSlots(save.roster, rosterSortMode).filter(
+    (x) => x.monsterId === target.monsterId && x.uid !== target.uid,
+  );
+}
+
+function skillFeedSlotsHtml(targetUid: string | null): string {
+  const fodderList = skillFeedFodderList(targetUid);
+  const slots = Array.from(
+    { length: ROSTER_SLOT_CAP },
+    (_, i) => fodderList[i] ?? null,
+  );
+  return slots
+    .map((m) => {
+      if (!m || !targetUid) {
+        return `<div class="mon-slot mon-slot--portrait mon-slot--empty" role="presentation" aria-hidden="true">
+        <span class="mon-slot-art">
+          <img class="mon-slot-img mon-slot-img--empty" src="/art/ui/mon-slot-empty.svg" width="56" height="56" alt="" draggable="false" />
+        </span>
+      </div>`;
+      }
+      const def = getMonster(m.monsterId);
+      const el = def?.element ?? "dark";
+      const inParty = save.party.includes(m.uid);
+      const starN = Math.max(1, def?.naturalStars ?? 1);
+      const starsHtml = Array.from(
+        { length: starN },
+        () => `<span class="mon-star" aria-hidden="true">&#9733;</span>`,
+      ).join("");
+      const art =
+        monsterArtImg(m.monsterId, "mon-slot-img", 56) ||
+        (def?.element?.[0]?.toUpperCase() ?? "?");
+      const title = inParty
+        ? `${describeOwned(m)} · ${t("ui.7b191a9f9f")}`
+        : describeOwned(m);
+      return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${inParty ? " is-party" : ""}" data-skill-feed-target="${targetUid}" data-skill-feed-fodder="${m.uid}" role="option" title="${escapeHtml(title)}">
+        <span class="mon-slot-art" aria-hidden="true">${art}</span>
+        <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
+        <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
+      </button>`;
+    })
+    .join("");
+}
+
+function refreshSkillFeedModalDom(): void {
+  const inv = app.querySelector<HTMLElement>("#skill-feed-inv");
+  const empty = app.querySelector<HTMLElement>("#skill-feed-empty");
+  if (inv) {
+    inv.innerHTML = skillFeedSlotsHtml(selectedEnhanceUid);
+    dematteArtInTree(inv, "img.mon-slot-img");
+  }
+  if (empty) {
+    const hasFodder = skillFeedFodderList(selectedEnhanceUid).length > 0;
+    empty.hidden = hasFodder;
+  }
+}
+
+function renderSkillFeedModal(): string {
+  const fodderCount = skillFeedFodderList(selectedEnhanceUid).length;
+  return `<div class="settings-layer skill-feed-layer" id="skill-feed-layer" ${skillFeedModalOpen ? "" : "hidden"} aria-hidden="${skillFeedModalOpen ? "false" : "true"}">
+    <button type="button" class="settings-backdrop" id="btn-skill-feed-close" aria-label="${escapeHtml(t("ui.skillFeedClose"))}"></button>
+    <div class="settings-sheet skill-feed-sheet" role="dialog" aria-modal="true" aria-labelledby="skill-feed-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.skillFeedClose"), "btn-skill-feed-close")}
+      <h2 class="settings-title" id="skill-feed-title">${escapeHtml(t("ui.skillFeedTitle"))}</h2>
+      <p class="skill-feed-hint muted">${escapeHtml(t("ui.skillEnhanceHint"))}</p>
+      <div class="mon-book-inv mon-book-inv--rail skill-feed-inv" id="skill-feed-inv" role="listbox" aria-label="${escapeHtml(t("ui.skillFeedTitle"))}">
+        ${skillFeedSlotsHtml(selectedEnhanceUid)}
+      </div>
+      <p class="skill-feed-empty muted" id="skill-feed-empty"${fodderCount > 0 ? " hidden" : ""}>${escapeHtml(t("ui.skillFeedEmpty"))}</p>
+    </div>
+  </div>`;
+}
+
 function renderSymbolDetailModal(): string {
   if (symbolDetailIndex == null) return "";
   const sym = save.symbols[symbolDetailIndex];
   if (!sym) return "";
   const set = SYMBOL_SETS.find((x) => x.id === sym.setId);
-  const rarity = symbolRarity(sym.stars);
+  const rarity = symbolQualityMeta(sym.quality);
   const wornUid =
     save.roster.find((m) => (m.symbolSlots ?? []).includes(sym.id))?.uid ?? null;
   const wornMon = wornUid ? save.roster.find((m) => m.uid === wornUid) : null;
   const wornName = wornMon ? describeOwned(wornMon) : null;
   const mainLine = formatSymbolStatLine(sym.mainStat, symbolMainDisplayValue(sym));
   const subs: string[] = [];
+  for (const sub of sym.substats ?? []) {
+    subs.push(formatSymbolStatLine(sub.stat, sub.value));
+  }
   if (sym.prefixStat && sym.prefixValue) {
     subs.push(formatSymbolStatLine(sym.prefixStat, sym.prefixValue));
   }
-  const cap = symbolSubstatCapacity(sym.stars);
+  const cap = Math.max(symbolSubstatCapacity(sym.stars), QUALITY_SUBSTAT_COUNT_SAFE(sym.quality));
   while (subs.length < cap) subs.push("");
   const subHtml = subs
     .map((line) =>
@@ -4502,7 +4893,7 @@ function renderSymbolDetailModal(): string {
     : "";
   const imprintable = canImprintSymbol(sym);
   const maxed = sym.enhance >= MAX_SYMBOL_ENHANCE;
-  const title = `${set?.nameKo ?? sym.setId} (${t("ui.slotN", { n: sym.slot })}) - ${rarity.label}`;
+  const title = `${set?.nameKo ?? sym.setId} ${STAR}${sym.stars} (${t("ui.slotN", { n: sym.slot })}) - ${rarity.label}`;
   const thirdBtn = wornUid
     ? `<button type="button" class="sym-detail-act" data-sym-detail-unequip>${t("ui.unequip")}</button>`
     : `<button type="button" class="sym-detail-act" data-sym-detail-equip>${t("ui.818a75cd98")}</button>`;
@@ -4519,6 +4910,7 @@ function renderSymbolDetailModal(): string {
               slot: sym.slot,
               enhance: sym.enhance,
               rarityId: rarity.id,
+              stars: sym.stars,
               size: "lg",
             })}
             <div class="sym-detail-main-wrap">
@@ -4537,6 +4929,24 @@ function renderSymbolDetailModal(): string {
       </div>
     </div>
   </div>`;
+}
+
+function QUALITY_SUBSTAT_COUNT_SAFE(q: string | undefined): number {
+  switch (q) {
+    case "normal":
+      return 0;
+    case "advanced":
+    case "magic":
+      return 1;
+    case "rare":
+      return 2;
+    case "epic":
+    case "hero":
+      return 3;
+    case "legend":
+    default:
+      return 4;
+  }
 }
 
 function renderSymbolBagExpandModal(): string {
@@ -4587,9 +4997,9 @@ function renderSlotSymbolPicker(uid: string, slot: number): string {
           ? candidates
               .map(({ s, i }) => {
                 const worn = symbolWearer(s.id);
-                const rarity = symbolRarity(s.stars);
+                const rarity = symbolQualityMeta(s.quality);
                 return `<button type="button" class="stage-card stage-card--sym" data-slot-equip-sym="${i}">
-                  ${renderSymIco({ setId: s.setId, slot: s.slot, enhance: s.enhance, rarityId: rarity.id, size: "sm" })}
+                  ${renderSymIco({ setId: s.setId, slot: s.slot, enhance: s.enhance, rarityId: rarity.id, stars: s.stars, size: "sm" })}
                   <span class="stage-card-body">
                     <strong>${describeSymbol(s)}</strong>
                     <small>${worn ? `${t('ui.ebe035bf0f')} ${worn} / ${t('ui.c686d05434')}` : t('ui.43d54a7358')}</small>
@@ -4677,7 +5087,7 @@ function renderMonsterRuneCircle(uid: string): string {
       const picking = pickingSlot === slotNum ? " is-picking" : "";
       if (sym) {
         const symIdx = findSymbolIndexById(sym.id);
-        const rarity = symbolRarity(sym.stars);
+        const rarity = symbolQualityMeta(sym.quality);
         return `<button type="button" class="rune-slot rune-slot--${slotNum} filled rarity--${rarity.id}${picking}" data-sym-detail="${symIdx}" title="${describeSymbol(sym)}">
           <span class="rune-slot-face">
             <img class="rune-slot-plate" src="${symbolPlateSrc(rarity.id, slotNum)}" width="72" height="72" alt="" aria-hidden="true" draggable="false" />
@@ -4716,7 +5126,7 @@ function renderSymbolInventoryGrid(): string {
     const sym = i < filled ? save.symbols[i] : null;
     if (sym) {
       const worn = symbolWearer(sym.id);
-      const rarity = symbolRarity(sym.stars);
+      const rarity = symbolQualityMeta(sym.quality);
       tiles.push(`<div class="mon-sym-inv-cell">
         <button type="button" class="mon-sym-inv-tile rarity--${rarity.id}${worn ? " is-worn" : ""}" data-sym-detail="${i}" title="${describeSymbol(sym)}">
           <span class="mon-sym-inv-ico" aria-hidden="true">
@@ -4847,7 +5257,7 @@ function renderEnhance(): string {
 
   if (slotEquipPick) monDetailTab = "symbols";
 
-  const rosterSlotCap = 60;
+  const rosterSlotCap = ROSTER_SLOT_CAP;
   const sortedRoster = sortRosterForSlots(save.roster, rosterSortMode);
   const rosterFilled = Math.min(sortedRoster.length, rosterSlotCap);
   const rosterSlots = Array.from(
@@ -4868,7 +5278,6 @@ function renderEnhance(): string {
 
         const roleLabel = monsterRoleLabel(def?.role, def?.baseStats);
         const enhCost = enhanceManaCost(m.level);
-        const enhMaxed = m.level >= MAX_MONSTER_LEVEL;
         if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
         const focusSk = def?.skills[monSkillPick];
         const focusLv = levels[monSkillPick] ?? 1;
@@ -4880,33 +5289,24 @@ function renderEnhance(): string {
             const on = monSkillPick === si;
             const maxSk = lv >= MAX_SKILL_LEVEL;
             return `<button type="button" class="mon-skill-ico${on ? " is-active" : ""}${maxSk ? " is-max" : ""}" data-mon-skill-pick="${si}" aria-pressed="${on}" title="${sk?.nameKo ?? `S${si + 1}`}">
-            <img class="mon-skill-ico-img" src="${monsterSkillArtSrc(m.monsterId, si, sk)}" width="56" height="56" alt="" draggable="false" />
+            <img class="mon-skill-ico-img" src="${monsterSkillArtSrc(m.monsterId, si, sk)}" width="44" height="44" alt="" draggable="false" />
             <span class="mon-skill-ico-lv">${maxSk ? "MAX" : `Lv.${lv}`}</span>
           </button>`;
           })
           .join("");
 
-        const fodderList = save.roster.filter(
-          (x) => x.monsterId === m.monsterId && x.uid !== m.uid,
-        );
-        const feedRows = fodderList
-          .map((f) => {
-            const thumb =
-              monsterArtImg(f.monsterId, "mon-skill-feed-img", 36) || "?";
-            return `<button type="button" class="mon-skill-feed" data-skill-feed-target="${m.uid}" data-skill-feed-fodder="${f.uid}">
-              <span class="mon-skill-feed-art">${thumb}</span>
-              <span class="mon-skill-feed-body">
-                <strong>Lv.${f.level}</strong>
-                <small>${t("ui.skillFeedUse")}</small>
-              </span>
-            </button>`;
-          })
-          .join("");
-
+        const skillsMaxed = levels.every((lv) => lv >= MAX_SKILL_LEVEL);
         const skillDescLines = monsterSkillDescLines(focusSk);
         const skillsPanel = `<div class="mon-pane mon-pane--skills">
         <div class="mon-skill-rail">
           <div class="mon-skill-icos" role="tablist" aria-label="skills">${skillIcons}</div>
+          <button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--rail" data-skill-feed-open="${m.uid}" ${skillsMaxed ? "disabled" : ""}>
+            ${
+              skillsMaxed
+                ? `<span class="mon-enh-label">MAX</span>`
+                : `<span class="mon-enh-label">${escapeHtml(t("ui.3e1a337d93"))}</span><span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(enhCost)}</strong></span>`
+            }
+          </button>
         </div>
         <div class="mon-skill-main">
           <div class="mon-skill-detail mon-skill-detail--tall">
@@ -4918,15 +5318,6 @@ function renderEnhance(): string {
               ${skillDescLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}
             </ul>
             <div class="mon-skill-upgrades">${monsterSkillUpgradeRows(focusSk, focusLv)}</div>
-          </div>
-          <div class="mon-skill-footer">
-            <button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--cost" data-enh="${m.uid}" ${enhMaxed ? "disabled" : ""}>${
-              enhMaxed
-                ? "MAX"
-                : `<span class="mon-enh-label">${escapeHtml(t("ui.3e1a337d93"))}</span><span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(enhCost)}</strong></span>`
-            }</button>
-            <p class="mon-skill-feed-caption">${escapeHtml(t("ui.skillFeedTitle"))}</p>
-            ${feedRows ? `<div class="mon-skill-feed-list">${feedRows}</div>` : ""}
           </div>
         </div>
       </div>`;
@@ -4993,11 +5384,15 @@ function renderEnhance(): string {
         );
 
         const previewArt =
-          monsterBattleArtImg(m.monsterId, "mon-preview-img", 160) ||
+          monsterBattleArtImg(m.monsterId, "mon-preview-img", 120) ||
           `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
+        const levelPct = Math.max(
+          0,
+          Math.min(100, Math.round((m.level / MAX_MONSTER_LEVEL) * 100)),
+        );
         const heroBlock = `<div class="mon-inspect-hero">
-            <div class="mon-inspect-preview" data-mon-preview="${m.monsterId}" role="img" aria-label="${def?.nameKo ?? m.monsterId}">
-              <div class="mon-preview-turntable">
+            <div class="mon-inspect-preview" data-mon-preview="${m.monsterId}">
+              <div class="mon-preview-turntable" role="img" aria-label="${def?.nameKo ?? m.monsterId}">
                 <div class="mon-preview-art">${previewArt}</div>
               </div>
             </div>
@@ -5007,10 +5402,15 @@ function renderEnhance(): string {
                   <img class="mon-el-ico-img" src="${monsterElementArtSrc(selectedEl) ?? ""}" width="24" height="24" alt="" draggable="false" />
                 </span>
                 <strong class="mon-inspect-name">${def?.nameKo ?? m.monsterId}</strong>
+                <span class="mon-inspect-type" title="${roleLabel}">${roleLabel}</span>
               </div>
               <div class="mon-inspect-meta-row">
                 <span class="mon-inspect-lv">Lv.${m.level}</span>
-                <span class="mon-inspect-type">${roleLabel}</span>
+                <div class="mon-inspect-exp" aria-hidden="true">
+                  <div class="mon-inspect-exp-track">
+                    <div class="mon-inspect-exp-fill" style="width:${levelPct}%"></div>
+                  </div>
+                </div>
               </div>
               <div class="mon-inspect-stars-row" aria-label="${def?.naturalStars ?? 0}">
                 <span class="mon-inspect-stars">${starsHtml}</span>${selectedEvo > 0 ? `<span class="mon-evo">+${selectedEvo}</span>` : ""}
@@ -5019,8 +5419,8 @@ function renderEnhance(): string {
           </div>`;
 
         return `<div class="mon-inspect el-${selectedEl}">
+      ${heroBlock}
       <div class="mon-inspect-shell">
-        ${heroBlock}
         <div class="mon-inspect-tabs mon-inspect-tabs--row mon-inspect-tabs--4 mon-inspect-tabs--compact" role="tablist" aria-label="detail">
           <button type="button" class="mon-side-tab${monDetailTab === "info" ? " is-active" : ""}" data-mon-detail-tab="info" role="tab" aria-selected="${monDetailTab === "info"}">${t("ui.tabInfo")}</button>
           <button type="button" class="mon-side-tab${monDetailTab === "skills" ? " is-active" : ""}" data-mon-detail-tab="skills" role="tab" aria-selected="${monDetailTab === "skills"}">${t("ui.2b47128fd2")}</button>
@@ -5070,7 +5470,7 @@ function renderEnhance(): string {
               const grindable = canGrindSymbol(sym);
               const picking = equipPickSymIndex === i;
               const worn = symbolWearer(sym.id);
-              const rarity = symbolRarity(sym.stars);
+              const rarity = symbolQualityMeta(sym.quality);
               const setDef = SYMBOL_SETS.find((x) => x.id === sym.setId);
               return `<div class="mon-sym-tile${picking ? " is-picking" : ""}">
             <button type="button" class="mon-sym-main" data-sym-detail="${i}" title="${describeSymbol(sym)}">
@@ -5079,6 +5479,7 @@ function renderEnhance(): string {
                 slot: sym.slot,
                 enhance: sym.enhance,
                 rarityId: rarity.id,
+                stars: sym.stars,
                 size: "sm",
               })}
               <span class="mon-sym-main-text">
@@ -5163,12 +5564,13 @@ function renderEnhance(): string {
     ${renderForgeReveal()}
     ${renderSymbolDetailModal()}
     ${renderSymbolBagExpandModal()}
+    ${renderSkillFeedModal()}
     ${monstersPanel}
   </div>`;
   queueMicrotask(() => {
     enhanceFx = null;
-    const slot = app.querySelector<HTMLElement>(".mon-slot.is-active");
-    const rail = app.querySelector<HTMLElement>(".mon-book-inv--rail");
+    const slot = app.querySelector<HTMLElement>(".mon-roster-dock .mon-slot.is-active");
+    const rail = app.querySelector<HTMLElement>(".mon-roster-dock .mon-book-inv--rail");
     if (slot && rail) {
       const slotCenter = slot.offsetLeft + slot.offsetWidth / 2;
       const nextLeft = Math.max(0, slotCenter - rail.clientWidth / 2);
@@ -5738,15 +6140,7 @@ function applyStagesRegionOpen(opts?: { animate?: boolean }): void {
 function bindStagesRegionSheet(): void {
   const host = app.querySelector("#stages-region-host");
   if (!host) return;
-
-  host.querySelectorAll<HTMLButtonElement>("[data-modal-x-for]").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const id = btn.dataset.modalXFor;
-      if (!id) return;
-      host.querySelector<HTMLButtonElement>(`#${CSS.escape(id)}`)?.click();
-    });
-  });
+  ensureModalXDelegate();
 
   host.querySelector("#btn-region-close")?.addEventListener("click", () => {
     stagesRegion = null;
@@ -6015,13 +6409,18 @@ function renderStagesRegionSheet(region: StagesRegion): string {
     ? `<span class="stages-pin-num" aria-hidden="true">${mqPin.map}</span>${region.name}`
     : region.name;
 
+  const clearPct =
+    prog.total > 0 ? Math.round((prog.cleared / prog.total) * 100) : 0;
+
   return `<div class="stages-region-layer" id="stages-region-layer">
     <button type="button" class="stages-region-backdrop" id="btn-region-close" aria-label="${t('ui.94b7dba159')}"></button>
     <div class="stages-region-sheet stages-region-sheet--card stages-region-sheet--sortie stages-region-sheet--${region.tone}" data-diff="${stageEntryDiff}" role="dialog" aria-modal="true" aria-labelledby="stages-region-title">
       ${modalCloseX(t("ui.94b7dba159"), "btn-region-close")}
       <header class="stages-region-head stages-region-head--sortie">
         <div class="stages-region-banner">
+          <span class="stages-region-banner-ornament" aria-hidden="true"></span>
           <h2 class="stages-region-title" id="stages-region-title">${regionTitle}</h2>
+          <span class="stages-region-banner-ornament stages-region-banner-ornament--flip" aria-hidden="true"></span>
         </div>
         <div class="stages-region-tools">
           <button type="button" class="stages-region-drop-btn${stagesDropInfoOpen ? " is-on" : ""}" id="btn-region-drop-info" aria-pressed="${stagesDropInfoOpen ? "true" : "false"}">${t("ui.stageDropInfo")}</button>
@@ -6032,7 +6431,21 @@ function renderStagesRegionSheet(region: StagesRegion): string {
             </select>
           </label>
         </div>
-        <p class="stages-meta">${t('ui.330ccf22cb')} ${prog.cleared}/${prog.total}${prog.unlocked ? "" : ` ${MIDDOT} ${t('ui.956f2f4243')}`} ${MIDDOT} ${t('ui.7dcdb553c8')} ${energyNow}/${energyMax}</p>
+        <div class="stages-region-status">
+          <div class="stages-region-status-row">
+            <span class="stages-region-status-chip">
+              <span class="stages-region-status-label">${t("ui.330ccf22cb")}</span>
+              <strong>${prog.cleared}/${prog.total}</strong>${prog.unlocked ? "" : ` <em>${t("ui.956f2f4243")}</em>`}
+            </span>
+            <span class="stages-region-status-chip stages-region-status-chip--energy">
+              <img class="res-ico" src="/art/ui/res/energy.svg" width="16" height="16" alt="" draggable="false" />
+              <strong>${energyNow}/${energyMax}</strong>
+            </span>
+          </div>
+          <div class="stages-region-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${prog.total}" aria-valuenow="${prog.cleared}" aria-label="${t("ui.330ccf22cb")} ${prog.cleared}/${prog.total}">
+            <span class="stages-region-progress-fill" style="width:${clearPct}%"></span>
+          </div>
+        </div>
       </header>
       ${extras}
       <div class="stage-list stage-list--expedition">${stageButtons(region.stages, { equipWeekly: region.equipWeekly })}</div>
@@ -6271,10 +6684,13 @@ function renderBattle(manaPct: number): string {
 }
 
 function bindAuth(): void {
+  bindAuthPwaInstall();
+
   app.querySelector("#auth-open-login")?.addEventListener("click", () => {
     authUi.pane = "login";
     render();
   });
+
 
   app.querySelector("#auth-start")?.addEventListener("click", () => {
     startGameFromAuth();
@@ -6852,23 +7268,18 @@ function bindIslandLayoutEdit(): void {
 }
 
 function bind(): void {
-  app.querySelectorAll<HTMLButtonElement>("[data-modal-x-for]").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const id = btn.dataset.modalXFor;
-      if (!id) return;
-      app.querySelector<HTMLButtonElement>(`#${CSS.escape(id)}`)?.click();
-    });
-  });
+  ensureModalXDelegate();
 
   if (view === "auth") {
     bindAuth();
     return;
   }
 
-  if (view === "home") {
-    bindIslandPan();
-    bindIslandLayoutEdit();
+  if (view === "home" || isFacilityView()) {
+    if (!preserveIslandDom) {
+      bindIslandPan();
+      bindIslandLayoutEdit();
+    }
   }
   bindChatUi();
 
@@ -6991,6 +7402,14 @@ function bind(): void {
       const tab = btn.dataset.missionTab;
       if (tab !== "daily" && tab !== "achievements") return;
       missionTab = tab;
+      const layer = app.querySelector("#mission-layer");
+      if (layer && (view === "home" || isFacilityView())) {
+        // Soft-refresh mission body only — keep island mounted.
+        renderPreservingIsland();
+        missionOpen = true;
+        applyMissionOpen();
+        return;
+      }
       render();
     });
   });
@@ -6999,20 +7418,27 @@ function bind(): void {
       const nav = btn.dataset.missionGo;
       if (!nav) return;
       missionOpen = false;
+      applyMissionOpen();
       if (nav === "guild") {
-        openCommunityModal();
-        render();
+        openCommunityModalSoft();
         return;
       }
       if (nav === "shop") {
-        openShopModal();
-        render();
+        openShopModalSoft();
         return;
       }
       communityOpen = false;
       shopOpen = false;
-      view = nav as View;
-      render();
+      applyCommunityOpen();
+      applyShopOpen();
+      const next = nav as View;
+      const stayOnIsland =
+        (view === "home" || isFacilityView(view)) &&
+        (next === "home" || isFacilityView(next)) &&
+        Boolean(app.querySelector(".home-island"));
+      view = next;
+      if (stayOnIsland) renderPreservingIsland();
+      else render();
     });
   });
 
@@ -7148,10 +7574,18 @@ function bind(): void {
       missionOpen = false;
       communityOpen = false;
       shopOpen = false;
+      applySettingsOpen();
+      applyMailboxOpen();
+      applyNotifOpen();
+      applySummonerPickerOpen();
+      applyResMoreOpen();
+      applyMissionOpen();
+      applyCommunityOpen();
+      applyShopOpen();
+      closeChatOverlay();
       const nav = btn.dataset.nav;
       if (nav === "guild") {
-        openCommunityModal();
-        render();
+        openCommunityModalSoft();
         return;
       }
       if (nav === "shop") {
@@ -7161,9 +7595,9 @@ function bind(): void {
           battle = null;
           dmgFloats = [];
           view = "home";
+          render();
         }
-        openShopModal();
-        render();
+        openShopModalSoft();
         return;
       }
       if (view === "result" || view === "battle") {
@@ -7208,7 +7642,7 @@ function bind(): void {
       if (nav !== "stages") {
         stagesRegion = null;
       }
-      if (view === "home" && nav !== "home" && islandLayoutEdit) {
+      if ((view === "home" || isFacilityView()) && nav !== "home" && islandLayoutEdit) {
         if (islandLayoutDraft) writeIslandLayout(islandLayoutDraft);
         islandLayoutEdit = false;
         islandLayoutDraft = null;
@@ -7216,12 +7650,19 @@ function bind(): void {
         clearIslandLongPress();
       }
       if (nav === "enhance") enhanceTab = "monsters";
-      view = nav as View;
-      render();
+      const next = nav as View;
+      const stayOnIsland =
+        (view === "home" || isFacilityView(view)) &&
+        (next === "home" || isFacilityView(next)) &&
+        Boolean(app.querySelector(".home-island"));
+      view = next;
+      if (stayOnIsland) renderPreservingIsland();
+      else render();
     });
   });
 
   app.querySelectorAll<HTMLElement>("[data-collect]").forEach((btn) => {
+    if (preserveIslandDom) return;
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
       ev.preventDefault();
@@ -7257,6 +7698,7 @@ function bind(): void {
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-b]").forEach((btn) => {
+    if (preserveIslandDom) return;
     btn.addEventListener("click", (ev) => {
       if (app.querySelector("#island-viewport")?.getAttribute("data-pan-moved") === "1") {
         ev.preventDefault();
@@ -7284,39 +7726,37 @@ function bind(): void {
         render();
       } else if (id === "mana_pond") {
         view = "pond";
-        render();
+        renderPreservingIsland();
       } else if (id === "crystal_mine") {
         view = "mine";
-        render();
+        renderPreservingIsland();
       } else if (id === "wish") {
         wishReveal = null;
         view = "wish";
-        render();
+        renderPreservingIsland();
       } else if (id === "glory") {
         view = "glory";
-        render();
+        renderPreservingIsland();
       } else if (id === "dojo") {
         view = "dojo";
-        render();
+        renderPreservingIsland();
       } else if (id === "guild") {
-        openCommunityModal();
-        render();
+        openCommunityModalSoft();
       } else if (id === "fusion") {
         view = "fusion";
-        render();
+        renderPreservingIsland();
       } else if (id === "summon_hearth") {
         view = "summon";
-        render();
+        renderPreservingIsland();
       } else if (id === "power_circle") {
         view = "enhance";
         render();
       } else if (id === "shop") {
-        openShopModal();
-        render();
+        openShopModalSoft();
       } else if (id === "party") {
         view = "party";
         partyDraft = new Set(save.party);
-        render();
+        renderPreservingIsland();
       }
     });
   });
@@ -7373,6 +7813,7 @@ function bind(): void {
       monSkillPick = 0;
       enhanceTab = "monsters";
       monBookDock = "roster";
+      skillFeedModalOpen = false;
       render();
     });
   });
@@ -7424,6 +7865,55 @@ function bind(): void {
     });
   });
 
+  app.querySelectorAll<HTMLButtonElement>("[data-skill-feed-open]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.skillFeedOpen;
+      if (!uid) return;
+      selectedEnhanceUid = uid;
+      skillFeedModalOpen = true;
+      monDetailTab = "skills";
+      applyMonDetailTabUi();
+      refreshSkillFeedModalDom();
+      applySkillFeedOpen();
+    });
+  });
+
+  const closeSkillFeed = (): void => {
+    if (!skillFeedModalOpen) return;
+    skillFeedModalOpen = false;
+    applySkillFeedOpen();
+  };
+  app.querySelector("#btn-skill-feed-close")?.addEventListener("click", closeSkillFeed);
+  app
+    .querySelector("#skill-feed-layer .settings-backdrop")
+    ?.addEventListener("click", closeSkillFeed);
+
+  app.querySelector("#skill-feed-layer")?.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+      "[data-skill-feed-fodder]",
+    );
+    if (!btn || !app.contains(btn)) return;
+    const target = btn.dataset.skillFeedTarget;
+    const fodder = btn.dataset.skillFeedFodder;
+    if (!target || !fodder) return;
+    const r = runFeedSameMonster(save, target, fodder);
+    save = r.save;
+    persist();
+    flash(r.message);
+    monDetailTab = "skills";
+    const owned = save.roster.find((m) => m.uid === target);
+    const levels = (owned?.skillLevels ?? [1, 1, 1]) as [number, number, number];
+    const hasFodder =
+      !!owned &&
+      save.roster.some(
+        (x) => x.monsterId === owned.monsterId && x.uid !== owned.uid,
+      );
+    if (levels.every((lv) => lv >= MAX_SKILL_LEVEL) || !hasFodder) {
+      skillFeedModalOpen = false;
+    }
+    render();
+  });
+
   app.querySelectorAll<HTMLButtonElement>("[data-evo]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const uid = btn.dataset.evo!;
@@ -7444,20 +7934,6 @@ function bind(): void {
         enhanceTab = "monsters";
         render();
       }
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-skill-feed-fodder]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = btn.dataset.skillFeedTarget;
-      const fodder = btn.dataset.skillFeedFodder;
-      if (!target || !fodder) return;
-      const r = runFeedSameMonster(save, target, fodder);
-      save = r.save;
-      persist();
-      flash(r.message);
-      monDetailTab = "skills";
-      render();
     });
   });
 

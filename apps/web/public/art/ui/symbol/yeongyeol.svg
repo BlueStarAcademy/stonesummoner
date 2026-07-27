@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+  <defs>
+    
+    <radialGradient id="yeongyeolseal-aura" cx="50%" cy="48%" r="50%">
+      <stop stop-color="#70b8a0" stop-opacity=".38"/>
+      <stop offset=".55" stop-color="#70b8a0" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#70b8a0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="yeongyeolseal-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D6"/>
+      <stop offset=".28" stop-color="#F0D878"/>
+      <stop offset=".62" stop-color="#C9A227"/>
+      <stop offset="1" stop-color="#7A5A18"/>
+    </linearGradient>
+    <linearGradient id="yeongyeolseal-disc" x1="18" y1="14" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2A2216"/>
+      <stop offset="1" stop-color="#12100A"/>
+    </linearGradient>
+    <linearGradient id="yeongyeolseal-ink" x1="22" y1="18" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EDD8"/>
+      <stop offset=".55" stop-color="#E8D9A8"/>
+      <stop offset="1" stop-color="#A89050"/>
+    </linearGradient>
+    <linearGradient id="yeongyeolseal-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6D0" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="yeongyeolseal-depth" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#000" flood-opacity=".55"/>
+    </filter>
+  </defs>
+  <circle cx="36" cy="36" r="34" fill="url(#yeongyeolseal-aura)"/>
+  <circle cx="36" cy="36" r="28.2" fill="none" stroke="#0A0806" stroke-width="4.5" opacity=".85"/>
+  <circle cx="36" cy="36" r="27.5" fill="url(#yeongyeolseal-disc)" stroke="url(#yeongyeolseal-gold)" stroke-width="2.4"/>
+  <circle cx="36" cy="36" r="23.5" fill="none" stroke="#FFF4C8" stroke-width=".85" opacity=".32" stroke-dasharray="2.2 4.5"/>
+  <g stroke="url(#yeongyeolseal-gold)" stroke-width="1.5" stroke-linecap="round" opacity=".8">
+    <path d="M36 10.5v4.2"/><path d="M36 57.3v4.2"/><path d="M10.5 36h4.2"/><path d="M57.3 36h4.2"/>
+  </g>
+  <g filter="url(#yeongyeolseal-depth)" transform="translate(36 36) scale(0.62) translate(-36 -36)">
+    
+      <circle cx="28" cy="36" r="11" fill="none" stroke="url(#yeongyeolseal-gold)" stroke-width="2.4"/>
+      <circle cx="44" cy="36" r="11" fill="none" stroke="url(#yeongyeolseal-gold)" stroke-width="2.4"/>
+      <circle cx="28" cy="36" r="6.5" fill="url(#yeongyeolseal-ink)" stroke="#5A4214" stroke-width="1"/>
+      <circle cx="44" cy="36" r="6.5" fill="url(#yeongyeolseal-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M33 36h6" stroke="url(#yeongyeolseal-gold)" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="36" cy="36" r="2.2" fill="url(#yeongyeolseal-gold)"/>
+  </g>
+</svg>

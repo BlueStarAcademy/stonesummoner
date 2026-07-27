@@ -13,12 +13,20 @@ const outDir = path.resolve(__dirname, "../public/art/ui/symbol");
 const SETS = [
   { id: "hwalro", accent: "#6cbc7a" },
   { id: "yongmaeng", accent: "#e07040" },
-  { id: "haengma", accent: "#4aa0d0" },
-  { id: "gunhim", accent: "#c9a227" },
   { id: "mussang", accent: "#d0b070" },
-  { id: "chimtu", accent: "#c04070" },
-  { id: "bogang", accent: "#8ec8f0" },
+  { id: "haengma", accent: "#4aa0d0" },
   { id: "jipjung", accent: "#9a70d0" },
+  { id: "gunhim", accent: "#c9a227" },
+  { id: "yeongyeol", accent: "#70b8a0" },
+  { id: "bogang", accent: "#8ec8f0" },
+  { id: "hwangyeok", accent: "#e09050" },
+  { id: "ssangnip", accent: "#e8e0c8" },
+  { id: "eungjing", accent: "#c05040" },
+  { id: "tagae", accent: "#a03050" },
+  { id: "pamyeol", accent: "#5a4068" },
+  { id: "myosu", accent: "#6060a8" },
+  { id: "gyeongno", accent: "#e05030" },
+  { id: "chimtu", accent: "#c04070" },
 ];
 
 /** Rarity stone plates — body color changes; rim stays gold metal. */
@@ -149,6 +157,15 @@ function glyph(setId, uid) {
         fill="${ink}" stroke="#5A4214" stroke-width="1"/>
       <path d="M28 34h16M36 26v16" stroke="#5A4214" stroke-width="3.2" stroke-linecap="round"/>
       <path d="M28 34h16M36 26v16" stroke="${g}" stroke-width="1.8" stroke-linecap="round"/>`;
+    case "yeongyeol":
+      // Linked rings / endure bond
+      return `
+      <circle cx="28" cy="36" r="11" fill="none" stroke="${g}" stroke-width="2.4"/>
+      <circle cx="44" cy="36" r="11" fill="none" stroke="${g}" stroke-width="2.4"/>
+      <circle cx="28" cy="36" r="6.5" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
+      <circle cx="44" cy="36" r="6.5" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
+      <path d="M33 36h6" stroke="${g}" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="36" cy="36" r="2.2" fill="${g}"/>`;
     case "mussang":
       // Crossed blades
       return `
@@ -176,6 +193,50 @@ function glyph(setId, uid) {
         fill="${ink}" stroke="#5A4214" stroke-width="1"/>
       <path d="M30 38h12" stroke="${g}" stroke-width="2.2" stroke-linecap="round"/>
       <circle cx="36" cy="25" r="2.2" fill="${g}"/>`;
+    case "hwangyeok":
+      // Rebound crescent / counter slash
+      return `
+      <path d="M18 42c4-16 14-26 28-28 2 10-2 20-10 28"
+        fill="none" stroke="${g}" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M22 44c3-12 10-20 20-22" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>
+      <path d="M46 18 54 22 48 30z" fill="${ink}" stroke="${g}" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="M20 48 28 44 24 54z" fill="${g}" stroke="#5A4214" stroke-width="1" stroke-linejoin="round"/>
+      <circle cx="36" cy="36" r="3" fill="#1A140C" stroke="${g}" stroke-width="1.4"/>`;
+    case "ssangnip":
+      // Twin pillars / immunity
+      return `
+      <path d="M20 52V24l8-6 8 6v28z" fill="#1A1810" stroke="${g}" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M36 52V24l8-6 8 6v28z" fill="#1A1810" stroke="${g}" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M24 48V28l4-3 4 3v20z" fill="${ink}" stroke="#5A4214" stroke-width=".9"/>
+      <path d="M40 48V28l4-3 4 3v20z" fill="${ink}" stroke="#5A4214" stroke-width=".9"/>
+      <path d="M18 52h36" stroke="${g}" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="36" cy="18" r="2.4" fill="${g}"/>`;
+    case "eungjing":
+      // Nemesis — rising gauge flame
+      return `
+      <path d="M22 50h28v4H22z" fill="#1A140C" stroke="${g}" stroke-width="1.5"/>
+      <path d="M26 50V34l10-16 10 16v16z" fill="#241018" stroke="${g}" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M30 48V36l6-10 6 10v12z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
+      <path d="M36 22v8" stroke="${g}" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="36" cy="18" r="2.5" fill="${g}"/>`;
+    case "tagae":
+      // Fang / lifesteal droplet
+      return `
+      <path d="M36 14c10 10 16 18 16 28 0 10-7 16-16 16s-16-6-16-16c0-10 6-18 16-28z"
+        fill="#241018" stroke="${g}" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M36 22c6 7 10 13 10 20 0 6-4.5 10-10 10s-10-4-10-10c0-7 4-13 10-20z"
+        fill="${ink}" stroke="#5A4214" stroke-width="1"/>
+      <path d="M36 30v18" stroke="#5A4214" stroke-width="3" stroke-linecap="round"/>
+      <path d="M36 30v18" stroke="${g}" stroke-width="1.6" stroke-linecap="round"/>
+      <ellipse cx="32" cy="26" rx="2.2" ry="3" fill="#FFF8D6" opacity=".5"/>`;
+    case "pamyeol":
+      // Destroy — cracked hex
+      return `
+      <path d="M36 14 52 24v20L36 58 20 44V24z" fill="#1A1420" stroke="${g}" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M36 20 46 26v14L36 50 26 40V26z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
+      <path d="M28 28 44 44M40 26 30 42" stroke="#5A4214" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M28 28 44 44M40 26 30 42" stroke="${g}" stroke-width="1.2" stroke-linecap="round"/>
+      <circle cx="36" cy="36" r="2.5" fill="${g}"/>`;
     case "jipjung":
       // Focus crosshair
       return `
@@ -187,6 +248,31 @@ function glyph(setId, uid) {
         stroke="${g}" stroke-width="2.2" stroke-linecap="round"/>
       <path d="M24 24 28 28M48 24 44 28M24 48 28 44M48 48 44 44"
         stroke="${ink}" stroke-width="1.5" stroke-linecap="round" opacity=".85"/>`;
+    case "myosu":
+      // Spiral / despair stun
+      return `
+      <circle cx="36" cy="36" r="16" fill="#181428" stroke="${g}" stroke-width="2"/>
+      <path d="M36 20c10 0 14 8 14 14 0 10-8 14-14 14s-12-6-12-12 6-10 12-10 8 4 8 8-3 6-8 6"
+        fill="none" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="36" cy="36" r="3.2" fill="${g}"/>
+      <path d="M28 28 32 32M44 28 40 32M28 44 32 40M44 44 40 40"
+        stroke="${g}" stroke-width="1.5" stroke-linecap="round" opacity=".75"/>`;
+    case "gyeongno":
+      // Violent — double arrow / extra turn
+      return `
+      <path d="M20 40 36 16 52 40h-8l-8 16-8-16z" fill="#241010" stroke="${g}" stroke-width="1.9" stroke-linejoin="round"/>
+      <path d="M26 38 36 22 46 38h-5l-5 10-5-10z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
+      <path d="M24 48h24" stroke="${g}" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M28 54h16" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="36" cy="34" r="2.2" fill="${g}"/>`;
+    case "chimtu":
+      // Piercing diamond / rage
+      return `
+      <path d="M36 12 50 36 36 60 22 36Z" fill="#241018" stroke="${g}" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M36 20 44 36 36 52 28 36Z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
+      <circle cx="36" cy="36" r="4.2" fill="#1A140C" stroke="${g}" stroke-width="1.5"/>
+      <circle cx="36" cy="36" r="1.8" fill="${g}"/>
+      <path d="M36 14v6M36 52v6" stroke="${g}" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>`;
     default:
       return `<circle cx="36" cy="36" r="10" fill="${ink}" stroke="${g}" stroke-width="1.6"/>`;
   }

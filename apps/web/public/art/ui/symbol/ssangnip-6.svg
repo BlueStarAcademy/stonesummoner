@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+  <defs>
+    
+    <radialGradient id="ssangnips6-aura" cx="50%" cy="48%" r="50%">
+      <stop stop-color="#e8e0c8" stop-opacity=".38"/>
+      <stop offset=".55" stop-color="#e8e0c8" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#e8e0c8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ssangnips6-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D6"/>
+      <stop offset=".28" stop-color="#F0D878"/>
+      <stop offset=".62" stop-color="#C9A227"/>
+      <stop offset="1" stop-color="#7A5A18"/>
+    </linearGradient>
+    <linearGradient id="ssangnips6-disc" x1="18" y1="14" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2A2216"/>
+      <stop offset="1" stop-color="#12100A"/>
+    </linearGradient>
+    <linearGradient id="ssangnips6-ink" x1="22" y1="18" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EDD8"/>
+      <stop offset=".55" stop-color="#E8D9A8"/>
+      <stop offset="1" stop-color="#A89050"/>
+    </linearGradient>
+    <linearGradient id="ssangnips6-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6D0" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="ssangnips6-depth" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#000" flood-opacity=".55"/>
+    </filter>
+  </defs>
+  <g filter="url(#ssangnips6-depth)" transform="translate(36 36) scale(0.56) translate(-36 -36)">
+    
+      <path d="M20 52V24l8-6 8 6v28z" fill="#1A1810" stroke="url(#ssangnips6-gold)" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M36 52V24l8-6 8 6v28z" fill="#1A1810" stroke="url(#ssangnips6-gold)" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M24 48V28l4-3 4 3v20z" fill="url(#ssangnips6-ink)" stroke="#5A4214" stroke-width=".9"/>
+      <path d="M40 48V28l4-3 4 3v20z" fill="url(#ssangnips6-ink)" stroke="#5A4214" stroke-width=".9"/>
+      <path d="M18 52h36" stroke="url(#ssangnips6-gold)" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="36" cy="18" r="2.4" fill="url(#ssangnips6-gold)"/>
+  </g>
+</svg>

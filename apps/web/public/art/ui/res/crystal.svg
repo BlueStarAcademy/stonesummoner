@@ -1,22 +1,96 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
   <defs>
-    <linearGradient id="cbg" x1="12" y1="8" x2="52" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0e2438"/>
-      <stop offset="1" stop-color="#081420"/>
+    <radialGradient id="cGlow" cx="32" cy="34" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8AE0F8" stop-opacity=".52"/>
+      <stop offset=".45" stop-color="#3AA8D8" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cBody" x1="14" y1="6" x2="52" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FEFF"/>
+      <stop offset=".22" stop-color="#A8E8FC"/>
+      <stop offset=".52" stop-color="#3AB0E0"/>
+      <stop offset="1" stop-color="#0E4A68"/>
     </linearGradient>
-    <linearGradient id="ccr" x1="18" y1="10" x2="48" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#E8FBFF"/>
-      <stop offset=".4" stop-color="#7ED7F2"/>
-      <stop offset="1" stop-color="#2A7FA8"/>
+    <linearGradient id="cRim" x1="12" y1="8" x2="52" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset=".4" stop-color="#9AE0F8"/>
+      <stop offset="1" stop-color="#1E6A90"/>
     </linearGradient>
-    <linearGradient id="cshine" x1="24" y1="14" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+    <linearGradient id="cCrown" x1="20" y1="6" x2="44" y2="28" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFFFFF" stop-opacity=".95"/>
+      <stop offset=".5" stop-color="#D0F4FF" stop-opacity=".55"/>
       <stop offset="1" stop-color="#7ED7F2" stop-opacity="0"/>
     </linearGradient>
+    <linearGradient id="cLeft" x1="14" y1="22" x2="32" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E6A90" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#062838" stop-opacity=".5"/>
+    </linearGradient>
+    <linearGradient id="cRight" x1="32" y1="22" x2="52" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#145878" stop-opacity=".4"/>
+    </linearGradient>
+    <linearGradient id="cCore" x1="24" y1="20" x2="42" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset=".35" stop-color="#C8F0FF"/>
+      <stop offset="1" stop-color="#4AB8E0"/>
+    </linearGradient>
+    <linearGradient id="cShine" x1="20" y1="10" x2="36" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".98"/>
+      <stop offset="1" stop-color="#7ED7F2" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="cGold" x1="26" y1="2" x2="38" y2="14" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6C8"/>
+      <stop offset="1" stop-color="#C9A227"/>
+    </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#cbg)"/>
-  <path d="M32 10L48 26L32 54L16 26Z" fill="url(#ccr)" stroke="#C8F0FF" stroke-width="1.6" stroke-linejoin="round"/>
-  <path d="M32 10L40 26H24L32 10Z" fill="#FFFFFF" fill-opacity=".28"/>
-  <path d="M24 26L32 54L16 26H24Z" fill="#1E5F82" fill-opacity=".22"/>
-  <path d="M27 20L32 14L35 22L30 28Z" fill="url(#cshine)"/>
+
+  <circle cx="32" cy="33" r="27" fill="url(#cGlow)"/>
+
+  <!-- gold cap accent -->
+  <path d="M32 4.8L36.4 10.8 32 13 27.6 10.8Z" fill="url(#cGold)"/>
+  <path d="M32 6.4L34.6 10.6 32 11.8 29.4 10.6Z" fill="#E8FBFF"/>
+
+  <!-- main crystal -->
+  <path
+    d="M32 8L49 25.2 40.5 28.5 32 58 23.5 28.5 15 25.2Z"
+    fill="url(#cBody)"
+    stroke="url(#cRim)"
+    stroke-width="1.45"
+    stroke-linejoin="round"
+  />
+
+  <!-- crown facets -->
+  <path d="M32 8L40.5 25.2 32 22.5 23.5 25.2Z" fill="url(#cCrown)"/>
+  <path d="M32 8L49 25.2 40.5 25.2 32 8Z" fill="#FFFFFF" fill-opacity=".16"/>
+  <path d="M32 8L15 25.2 23.5 25.2 32 8Z" fill="#1E6A90" fill-opacity=".12"/>
+
+  <!-- pavilion facets -->
+  <path d="M15 25.2L23.5 28.5 32 58 15 25.2Z" fill="url(#cLeft)"/>
+  <path d="M49 25.2L40.5 28.5 32 58 49 25.2Z" fill="url(#cRight)"/>
+  <path d="M23.5 28.5H40.5L32 58 23.5 28.5Z" fill="#062838" fill-opacity=".16"/>
+
+  <!-- girdle -->
+  <path d="M15.8 25.2H48.2" stroke="#E8FBFF" stroke-width="1.15" opacity=".6"/>
+  <path d="M23.5 28.5H40.5" stroke="#C8F0FF" stroke-width=".7" opacity=".4"/>
+
+  <!-- inner fire -->
+  <path
+    d="M32 18.5L37.8 27.2H26.2L32 18.5Z"
+    fill="url(#cCore)"
+    stroke="#F2FCFF"
+    stroke-width=".75"
+    stroke-linejoin="round"
+  />
+  <path d="M26.2 27.2L32 46 37.8 27.2H26.2Z" fill="#FFFFFF" fill-opacity=".16"/>
+
+  <!-- refraction lines -->
+  <path d="M23.5 28.5L32 58M40.5 28.5L32 58" stroke="#C8F0FF" stroke-width=".55" opacity=".3"/>
+  <path d="M32 22.5V58" stroke="#FFFFFF" stroke-width=".45" opacity=".18"/>
+
+  <!-- gloss + sparks -->
+  <path d="M24.8 13.5L30.5 10.2 33.8 16.8 27.5 21.2Z" fill="url(#cShine)"/>
+  <circle cx="42.5" cy="19.5" r="1.35" fill="#FFFFFF" fill-opacity=".95"/>
+  <circle cx="44.2" cy="37.5" r="1" fill="#C8F0FF" fill-opacity=".9"/>
+  <circle cx="21.5" cy="39" r="0.85" fill="#FFFFFF" fill-opacity=".78"/>
+  <circle cx="29.5" cy="34" r="0.7" fill="#FFFFFF" fill-opacity=".7"/>
 </svg>

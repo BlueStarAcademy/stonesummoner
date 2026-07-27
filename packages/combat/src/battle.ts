@@ -79,6 +79,7 @@ function tickSkillCooldowns(units: Unit[]): void {
 export function pickAutoSkillIndex(unit: Unit, units: Unit[]): number {
   const skills = unit.skills;
   if (!skills?.length) return 0;
+  if ((unit.stunnedTurns ?? 0) > 0) return 0;
   const cds = ensureSkillCd(unit);
 
   const allies = units.filter(
@@ -274,6 +275,32 @@ export class Battle {
     if (this.boards.length > 1) {
       this.log.push(`쌍국: A국·B국 — ${DUAL_BOARD_SWITCH_INTERVAL}수마다 전환`);
     }
+    this.applySymbolStartShields();
+  }
+
+  /** 보강: pool wearers' HP×pct onto every ally monster for N turns. */
+  private applySymbolStartShields(): void {
+    for (const team of ["ally", "enemy"] as const) {
+      const mons = this.units.filter(
+        (u) => u.alive && u.team === team && u.kind === "monster",
+      );
+      const pool = mons.reduce(
+        (sum, u) => sum + Math.round((u.startShieldPct ?? 0) * u.stats.hp),
+        0,
+      );
+      if (pool <= 0) continue;
+      const turns = Math.max(
+        ...mons.map((u) => (u.startShieldPct ? 3 : 0)),
+        0,
+      );
+      for (const u of mons) {
+        u.shieldHp = (u.shieldHp ?? 0) + pool;
+        u.shieldTurns = Math.max(u.shieldTurns ?? 0, turns);
+      }
+      this.log.push(
+        `보강 실드 (${team === "ally" ? "아군" : "적군"} +${pool} · ${turns}턴)`,
+      );
+    }
   }
 
   get boardLabel(): string {
@@ -344,6 +371,22 @@ export class Battle {
         unit.atb = 0;
         if ((unit.spdBoostTurns ?? 0) > 0) {
           unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) - 1;
+        }
+        if ((unit.statusImmuneTurns ?? 0) > 0) {
+          unit.statusImmuneTurns = (unit.statusImmuneTurns ?? 0) - 1;
+        }
+        if ((unit.stunnedTurns ?? 0) > 0) {
+          unit.stunnedTurns = (unit.stunnedTurns ?? 0) - 1;
+          this.log.push(`${unit.name} 기절 — 행동 불가`);
+          tickSkillCooldowns(this.units);
+          continue;
+        }
+        if ((unit.shieldTurns ?? 0) > 0) {
+          unit.shieldTurns = (unit.shieldTurns ?? 0) - 1;
+          if ((unit.shieldTurns ?? 0) <= 0) {
+            unit.shieldTurns = 0;
+            unit.shieldHp = 0;
+          }
         }
         tickSkillCooldowns(this.units);
         for (const u of this.units) {
@@ -1343,8 +1386,12 @@ export class Battle {
         }
       }
     } else if (!summonerSkill) {
-      const skillIndex =
+      let skillIndex =
         opts?.skillIndex ?? pickAutoSkillIndex(unit, this.units);
+      if ((unit.stunnedTurns ?? 0) > 0) {
+        this.log.push(`${unit.name} 기절 — 스킬 불가`);
+        return [];
+      }
       if (!this.canUseSkill(unit, skillIndex) && unit.skills?.[skillIndex]) {
         this.log.push(`${unit.name} 스킬 쿨다운`);
         return [];
@@ -1370,6 +1417,20 @@ export class Battle {
     }
 
     this.skillAmplifyBonus = 0;
+    // Violent: extra turn (not from counter)
+    if (
+      !summonerSkill &&
+      unit.alive &&
+      (unit.violentChance ?? 0) > 0 &&
+      this.rng() * 100 < (unit.violentChance ?? 0)
+    ) {
+      unit.atb = ATB_THRESHOLD;
+      this.log.push(`${unit.name} 격노 — 추가 턴`);
+      this.phase = "await_stone";
+      this.activeUnitId = unit.id;
+      this.checkFinish();
+      return results;
+    }
     this.phase = "resolved";
     this.activeUnitId = null;
     this.checkFinish();
@@ -1474,6 +1535,7 @@ export class Battle {
     target: Unit,
     coeff: number,
     usedSummonerSkill: boolean,
+    opts?: { fromCounter?: boolean },
   ): SkillResult {
     if (target.kind === "summoner") {
       this.log.push(`${target.name}는 후열 — 공격 무효`);
@@ -1549,6 +1611,79 @@ export class Battle {
       target.alive = false;
       this.log.push(`${target.name} defeated`);
     }
+
+    // Nemesis: ATB on HP loss thresholds
+    if (
+      remaining > 0 &&
+      target.alive &&
+      (target.nemesisAtbPer7 ?? 0) > 0
+    ) {
+      const maxHp = target.originalMaxHp ?? target.stats.hp;
+      const lostChunks = Math.floor((remaining / Math.max(1, maxHp)) * 100 / 7);
+      if (lostChunks > 0) {
+        const gain = lostChunks * (target.nemesisAtbPer7 ?? 0);
+        target.atb = Math.min(ATB_THRESHOLD, target.atb + gain);
+        this.log.push(`${target.name} 응징 ATB +${gain}`);
+      }
+    }
+
+    // Destroy: reduce target max HP
+    if (
+      remaining > 0 &&
+      target.alive &&
+      (attacker.destroySets ?? 0) > 0 &&
+      target.kind === "monster"
+    ) {
+      const orig = target.originalMaxHp ?? target.stats.hp;
+      const already = target.destroyTakenFrac ?? 0;
+      const perHitCap = 0.04 * (attacker.destroySets ?? 1);
+      const fromDmg = (remaining * 0.3) / Math.max(1, orig);
+      const add = Math.min(perHitCap, fromDmg, 0.6 - already);
+      if (add > 0) {
+        target.destroyTakenFrac = already + add;
+        const newMax = Math.max(
+          Math.round(orig * 0.4),
+          Math.round(orig * (1 - (target.destroyTakenFrac ?? 0))),
+        );
+        target.stats = { ...target.stats, hp: newMax };
+        target.hp = Math.min(target.hp, newMax);
+        this.log.push(`${target.name} 파멸 최대HP → ${newMax}`);
+      }
+    }
+
+    if (remaining > 0 && (attacker.lifestealPct ?? 0) > 0 && attacker.alive) {
+      const heal = Math.round((remaining * (attacker.lifestealPct ?? 0)) / 100);
+      if (heal > 0) {
+        attacker.hp = Math.min(attacker.stats.hp, attacker.hp + heal);
+        this.log.push(`${attacker.name} 흡혈 +${heal}`);
+      }
+    }
+
+    if (
+      remaining > 0 &&
+      target.alive &&
+      (attacker.stunOnHitChance ?? 0) > 0
+    ) {
+      if ((target.statusImmuneTurns ?? 0) > 0) {
+        this.log.push(`${target.name} 상태이상 면역`);
+      } else if (this.rng() * 100 < (attacker.stunOnHitChance ?? 0)) {
+        target.stunnedTurns = Math.max(target.stunnedTurns ?? 0, 1);
+        this.log.push(`${target.name} 기절`);
+      }
+    }
+
+    if (
+      remaining > 0 &&
+      !opts?.fromCounter &&
+      target.alive &&
+      attacker.alive &&
+      (target.counterChance ?? 0) > 0 &&
+      this.rng() * 100 < (target.counterChance ?? 0)
+    ) {
+      this.log.push(`${target.name} 반격`);
+      this.applyHit(target, attacker, 0.75, false, { fromCounter: true });
+    }
+
     return {
       attackerId: attacker.id,
       targetId: target.id,

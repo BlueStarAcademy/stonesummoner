@@ -11,6 +11,10 @@ export interface UnitStats {
   spd: number;
   critRate: number;
   critDmg: number;
+  /** Effect accuracy % (집중 등). */
+  accuracy?: number;
+  /** Effect resistance % (연결 등). */
+  resistance?: number;
 }
 
 export interface Unit {
@@ -38,6 +42,8 @@ export interface Unit {
   critDmgBonus?: number;
   /** Absorb incoming damage before HP. */
   shieldHp?: number;
+  /** Remaining turns before set-shield expires (보강). */
+  shieldTurns?: number;
   /** Remaining ATB ticks with 행마모래 SPD multiplier. */
   spdBoostTurns?: number;
   /** Stub: ignore next damaging hit (축 연결). */
@@ -46,6 +52,28 @@ export interface Unit {
   atkBuffPct?: number;
   /** Remaining ATB-ready ticks for atkBuffPct. */
   atkBuffTicks?: number;
+  /** 보강: fraction of max HP contributed to ally shield pool at battle start. */
+  startShieldPct?: number;
+  /** 환격: % chance to counter after taking a hit. */
+  counterChance?: number;
+  /** 쌍립: remaining turns of status immunity. */
+  statusImmuneTurns?: number;
+  /** 타개: % of damage dealt healed. */
+  lifestealPct?: number;
+  /** 묘수(Despair): % chance to stun on hit. */
+  stunOnHitChance?: number;
+  /** Remaining turns skipped (기절). */
+  stunnedTurns?: number;
+  /** 격노(Violent): % chance for extra turn after skill. */
+  violentChance?: number;
+  /** 응징(Nemesis): ATB % per 7% HP lost when hit. */
+  nemesisAtbPer7?: number;
+  /** 파멸(Destroy): completed set count. */
+  destroySets?: number;
+  /** Cumulative destroy max-HP reduction (fraction of original). */
+  destroyTakenFrac?: number;
+  /** Original max HP for destroy calc. */
+  originalMaxHp?: number;
 }
 
 export interface SummonerState {

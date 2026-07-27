@@ -28,6 +28,7 @@ import {
   getSkillTreeNode,
   isSkillTreeNodeId,
   canUnlockSkillNode,
+  symbolCombatMods,
   MAX_GEAR_BAG,
   normalizeSummonerGear,
   rollGearDrop,
@@ -56,6 +57,7 @@ import {
   type StageDef,
   type SummonerGear,
   type SymbolInstance,
+  normalizeSymbol,
 } from "stonesummoner-data";
 export { MAX_GEAR_BAG };
 import {
@@ -519,7 +521,8 @@ function equippedSymbols(
   const slots = owned.symbolSlots ?? emptySymbolSlots();
   return slots
     .map((id) => (id ? save.symbols.find((s) => s.id === id) : undefined))
-    .filter((s): s is SymbolInstance => !!s);
+    .filter((s): s is SymbolInstance => !!s)
+    .map(normalizeSymbol);
 }
 
 export const MAX_SUMMONER_AWAKEN = 5;
@@ -668,6 +671,7 @@ function unitFromOwned(
   }
   const evoTag = (owned.evolve ?? 0) > 0 ? ` E${owned.evolve}` : "";
   const skillLevels = normalizeSkillLevels(owned.skillLevels);
+  const mods = symbolCombatMods(equippedSymbols(save, owned));
   return makeUnit({
     id: owned.uid,
     name: `${m.nameKo} Lv.${owned.level}${evoTag}`,
@@ -675,10 +679,28 @@ function unitFromOwned(
     kind: "monster",
     monsterId: m.id,
     element: m.element,
-    stats: { ...stats },
+    stats: {
+      hp: stats.hp,
+      atk: stats.atk,
+      def: stats.def,
+      spd: stats.spd,
+      critRate: stats.critRate,
+      critDmg: stats.critDmg,
+      accuracy: stats.accuracy,
+      resistance: stats.resistance,
+    },
     skillCoeff: m.skillCoeff + (owned.evolve ?? 0) * 0.05 + (skillLevels[0]! - 1) * 0.08,
     skills: skillsForMonster(m, owned.evolve ?? 0, skillLevels),
     stonePassive: m.stonePassiveId,
+    startShieldPct: mods.startShieldPct || undefined,
+    counterChance: mods.counterChance || undefined,
+    statusImmuneTurns: mods.statusImmuneTurns || undefined,
+    lifestealPct: mods.lifestealPct || undefined,
+    stunOnHitChance: mods.stunChance || undefined,
+    violentChance: mods.violentChance || undefined,
+    nemesisAtbPer7: mods.nemesisAtbPer7 || undefined,
+    destroySets: mods.destroySets || undefined,
+    originalMaxHp: stats.hp,
   });
 }
 
@@ -2201,7 +2223,7 @@ export function createStageBattle(
     }
   }
   if (allyMonsters.length === 0) {
-    const fallback = ["fire_fang", "dew_healer", "gale_scout", "seal_scholar"];
+    const fallback = ["seokrang_fire", "yeonhwa_water", "cheokhu_wind", "jinmunsa_light"];
     allyMonsters.push(
       ...fallback.map((id, i) => unitFromMonsterId(id, "ally", `a-${i}`)),
     );
@@ -2412,12 +2434,13 @@ export function applyRewards(
         stage.mode === "scenario" && stage.stage >= 1 && stage.stage <= 6
           ? (stage.stage as 1 | 2 | 3 | 4 | 5 | 6)
           : undefined;
-      symbol = rollSymbolDrop(
-        rng,
-        `drop_${stage.id}_${symbols.length}`,
-        stage.dropSetId,
+      symbol = rollSymbolDrop(rng, `drop_${stage.id}_${symbols.length}`, {
+        preferredSet: stage.dropSetId,
         preferredSlot,
-      );
+        setPool: stage.dropSetPool,
+        starWeights: stage.starWeights,
+        qualityWeights: stage.qualityWeights,
+      });
       symbols.push(symbol);
     }
   }

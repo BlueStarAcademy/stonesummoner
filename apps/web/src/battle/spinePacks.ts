@@ -61,13 +61,16 @@ export const SPINE_PACKS: Record<string, SpinePack> = {
 
 /**
  * Resolve which Spine pack a catalog / unit id uses.
- * Only registered packs (currently `fire_fang`); others → null (WebP fallback).
+ * Packs are keyed by artKey (e.g. fire_fang); family variants alias to that pack.
  */
 export function resolveSpinePackId(
   monsterOrSummonerKey: string | undefined | null,
 ): string | null {
   if (!monsterOrSummonerKey) return null;
   if (SPINE_PACKS[monsterOrSummonerKey]) return monsterOrSummonerKey;
+  // Family variants share the family's pilot artKey until per-element Spine skins ship.
+  if (monsterOrSummonerKey.startsWith("seokrang_")) return "fire_fang";
+  if (monsterOrSummonerKey === "fire_fang") return "fire_fang";
   return null;
 }
 

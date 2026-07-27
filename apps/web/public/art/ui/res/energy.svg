@@ -1,16 +1,75 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
   <defs>
-    <linearGradient id="ebg" x1="12" y1="8" x2="52" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#102818"/>
-      <stop offset="1" stop-color="#081410"/>
+    <radialGradient id="eGlow" cx="32" cy="32" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5AD090" stop-opacity=".42"/>
+      <stop offset=".45" stop-color="#2A8A58" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="eOrb" cx="26" cy="24" r="22" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4FFF8"/>
+      <stop offset=".28" stop-color="#8AE8B0"/>
+      <stop offset=".62" stop-color="#2C9A5C"/>
+      <stop offset="1" stop-color="#0E3A24"/>
+    </radialGradient>
+    <linearGradient id="eBolt" x1="22" y1="10" x2="44" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset=".3" stop-color="#E8FFF0"/>
+      <stop offset=".65" stop-color="#9AF0BC"/>
+      <stop offset="1" stop-color="#3CB878"/>
     </linearGradient>
-    <linearGradient id="ebolt" x1="20" y1="8" x2="44" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#D8FFE4"/>
-      <stop offset=".45" stop-color="#6AD08A"/>
-      <stop offset="1" stop-color="#2A6B48"/>
+    <linearGradient id="eGold" x1="14" y1="10" x2="50" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF0B8"/>
+      <stop offset=".4" stop-color="#D4B040"/>
+      <stop offset="1" stop-color="#6A4810"/>
+    </linearGradient>
+    <linearGradient id="eGoldHi" x1="18" y1="12" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D8" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="eGem" x1="28" y1="4" x2="36" y2="14" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8FFE8"/>
+      <stop offset="1" stop-color="#2F9A5C"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#ebg)"/>
-  <path d="M36.5 10L18 34.5h12.5L26 54l22-28H35.5L36.5 10Z" fill="url(#ebolt)" stroke="#B8F0C8" stroke-width="1.6" stroke-linejoin="round"/>
-  <path d="M34 15L24 32h9l-2.5 11L42 29h-9l1-14Z" fill="#FFFFFF" fill-opacity=".28"/>
+
+  <!-- transparent canvas: soft aura only -->
+  <circle cx="32" cy="32" r="27" fill="url(#eGlow)"/>
+
+  <!-- ornate gold claws -->
+  <path d="M18.5 20.5c-2.2 2.8-3.4 6.2-3.4 10.2 0 1.4.2 2.8.5 4.1l3.2-1.2c-.2-1-.3-1.9-.3-2.9 0-3.1.9-5.7 2.6-7.8l-2.6-2.4Z" fill="url(#eGold)"/>
+  <path d="M45.5 20.5c2.2 2.8 3.4 6.2 3.4 10.2 0 1.4-.2 2.8-.5 4.1l-3.2-1.2c.2-1 .3-1.9.3-2.9 0-3.1-.9-5.7-2.6-7.8l2.6-2.4Z" fill="url(#eGold)"/>
+  <path d="M22 46.5c2.6 2.8 6.2 4.5 10 4.5s7.4-1.7 10-4.5l-2.2-2.2c-2 2-4.7 3.2-7.8 3.2s-5.8-1.2-7.8-3.2L22 46.5Z" fill="url(#eGold)"/>
+
+  <!-- top gem accent -->
+  <path d="M32 5.5L36.2 11.2 32 13.5 27.8 11.2Z" fill="url(#eGold)"/>
+  <path d="M32 7.2L34.4 11 32 12.2 29.6 11Z" fill="url(#eGem)"/>
+
+  <!-- bottom tip -->
+  <path d="M32 58.2L27.6 50.8h8.8L32 58.2Z" fill="url(#eGold)"/>
+  <path d="M32 55.6L29.4 51.4h5.2L32 55.6Z" fill="url(#eGem)"/>
+
+  <!-- main orb + gold ring -->
+  <circle cx="32" cy="31.5" r="18.6" fill="none" stroke="url(#eGold)" stroke-width="2.6"/>
+  <circle cx="32" cy="31.5" r="16.4" fill="url(#eOrb)" stroke="#C8F8DC" stroke-width="1.05"/>
+  <circle cx="32" cy="31.5" r="12.2" fill="#041810" fill-opacity=".22"/>
+
+  <!-- lightning -->
+  <path
+    d="M35.8 12.2L21.4 31.8h10.4L28.4 50.8l15.8-22.6H33.8L35.8 12.2Z"
+    fill="url(#eBolt)"
+    stroke="#F4FFF8"
+    stroke-width="1.05"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M34.2 16L24.8 30.2h7.2l-2.1 9.2L40 27.4h-6.8l1-11.4Z"
+    fill="#FFFFFF"
+    fill-opacity=".42"
+  />
+
+  <!-- gloss + sparks -->
+  <ellipse cx="24.2" cy="22" rx="5.2" ry="3" fill="url(#eGoldHi)" transform="rotate(-32 24.2 22)"/>
+  <circle cx="41.5" cy="20.8" r="1.3" fill="#FFFFFF" fill-opacity=".92"/>
+  <circle cx="43.8" cy="37.5" r="0.9" fill="#D8FFE4" fill-opacity=".88"/>
+  <circle cx="22.2" cy="39.2" r="0.75" fill="#FFFFFF" fill-opacity=".7"/>
 </svg>
