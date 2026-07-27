@@ -42,6 +42,10 @@ export interface Unit {
   spdBoostTurns?: number;
   /** Stub: ignore next damaging hit (축 연결). */
   cutImmune?: number;
+  /** Temporary ATK% from summoner ult leader aura (e.g. 0.05). */
+  atkBuffPct?: number;
+  /** Remaining ATB-ready ticks for atkBuffPct. */
+  atkBuffTicks?: number;
 }
 
 export interface SummonerState {
@@ -50,7 +54,7 @@ export interface SummonerState {
   manaMax: number;
   manaRegenPerTick: number;
   boardSense: number;
-  /** Multiplies 진문개방 skill coeff (from weapon). */
+  /** Multiplies 진문개방 / composed ult skill coeff (from weapon + tree). */
   skillPowerBonus?: number;
   /** Mana cost multipliers for summoner skills (default 1). */
   declareCostMul?: number;
@@ -60,6 +64,8 @@ export interface SummonerState {
   declarePowerBonus?: number;
   /** Extra Amplify per stone on 진문청소. */
   cleanAmpBonus?: number;
+  /** Unlocked skill-tree node ids — shapes the full-mana signature ult. */
+  skillTreeUnlocked?: string[];
   /** 속성의뢰: matching element stone plays consume charges for Amp. */
   elementWardElement?: Element;
   elementWardCharges?: number;

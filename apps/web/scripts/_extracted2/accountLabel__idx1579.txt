@@ -1,0 +1,8 @@
+  const accountLabel =
+    sessionUser?.nickname?.trim() ||
+    sessionUser?.email ||
+    (sessionUser?.kind === "demo"
+      ? "데모 계정"
+      : sessionUser?.kind === "guest"
+        ? "게스트"
+        : "계정");

@@ -58,15 +58,17 @@ Amplify = clamp(ComputedAmplify, 0.85, AmplifyCap)
 
 ## 3. Amplify 기여 이벤트
 
-| 이벤트 | Amplify 기여 (초안) | 부가 |
-|--------|---------------------|------|
-| 안전 착수 | +0.00 ~ +0.02 (유지) | 마나 +소 |
-| 돌 1~2 따냄 | +0.05 ~ +0.10 (이번 스킬) | 마나 +중, ATB 소량 |
-| 돌 3+ 따냄 | +0.12 ~ +0.20 | 마나 +대, 광역 약화 |
+| 이벤트 | Amplify 기여 | 부가 (핵심) |
+|--------|--------------|-------------|
+| 안전 착수 | +0.01 | 마나 +소 (플랫) |
+| 돌 N 따냄 | +0.02 ~ +0.03 (유지) | **다음 소환수 피해 ×(1+0.10N)** · **마력 +10%p×N** |
 | 대마 유지 | 받는피해 ×0.90~0.95 | 힐↑ |
 | 활로1 압박 | 상대 ACC/행동 패널티 | — |
 | 보드 아이템 | 버프별 (치명/실드 등) | 일부 마나 +대 |
 | 형상 완성 | +0.03 ~ +0.08 짧은 지속 | Phase 2 |
+
+따냄의 주 보상은 Amplify가 아니라 **다음 1회 몬스터 타격 피해 배율**과 **소환사 마력 게이지 %**다.
+`pendingCaptureDamageBonus`는 해당 팀 몬스터가 `applyHit`할 때 소모된다.
 
 `ComputedAmplify`는 전투 시작 1.0에서 시작해 이벤트마다 가산/감산 후 클램프.
 
@@ -77,20 +79,22 @@ Amplify = clamp(ComputedAmplify, 0.85, AmplifyCap)
 ```text
 ManaPerSecond = BaseManaRegen(SummonerLevel, EquipManaCircuit)
 
-OnBoardEvent(event):
-  Mana += event.ManaBonus * (1 + EquipBoardSense)
+OnSafePlace:
+  Mana += flatSafeMana * (1 + EquipBoardSense)   // 소량
 
-ManaMax = 100  // 또는 장비 상한
+OnCapture(N):
+  Mana += manaMax * 0.10 * N                     // 돌 1개당 게이지 10%p
+
+ManaMax = 100  // 또는 장비·스킬트리 상한
 ManaFull = Mana >= ManaMax
 ```
 
-### 국면 → 마나 보너스 (초안)
+### 국면 → 마나 보너스
 
 | 이벤트 | 마나 |
 |--------|------|
-| 안전 착수 | +2 ~ +4 |
-| 따냄 1~2 | +8 ~ +12 |
-| 따냄 3+ | +18 ~ +25 |
+| 안전 착수 | +2 ~ +4 (플랫 × manaMul) |
+| 따냄 N개 | **manaMax × 10% × N** |
 | 사석자석 아이템 | +30 ~ +40 |
 | 형상 완성 | +10 ~ +15 |
 | 자살수 시도 | 0 |
@@ -99,24 +103,29 @@ ManaFull = Mana >= ManaMax
 
 ```text
 if ManaFull and IsSummonerTurn:
-  canCastSummonerSkill = true
+  canCastSignatureUlt = true   // 진문개방 기반, 스킬트리로 성형
 
-OnCastSummonerSkill(skill):
-  Mana = max(0, Mana - skill.ManaCost)  // 보통 ManaMax 전량 또는 80%
-  ApplySkillEffects(skill)
+OnCastSignatureUlt:
+  Mana = 0
+  Apply composeSummonerUlt(skillTree)   // 계수·Amp·환급·부가 모듈
+  Mana += manaMax * refundFrac          // mana 분기 시
 ```
 
 기본 타이밍: **소환사 ATB 턴에 마나 소모 스킬**.  
-보스전 옵션: 마나 풀 즉시 컷인 (설정/콘텐츠 플래그).
+중간 마나 스킬(증폭선언·쌍착·청소·수호)은 부분 게이지로 유지. 풀 마나 시 고유기 우선.
 
-### 소환사 스킬 예시 계수
+### 소환사 고유기 (스킬트리 합성)
 
-| 스킬 | 효과 | 마나 |
-|------|------|------|
-| 진문개방 | 적 전원 피해 `1.8×ATK_summoner` + Amplify +0.15 (2턴) | 풀 |
-| 포석강림 | 돌 2개 배치 또는 연결 | 풀 |
-| 정화의 수 | 아군 해제기 + 보호막(체력 15%) | 풀 |
-| 사석폭풍 | `CapturedStones × 계수` 광역 + 마나 20% 환급 | 풀 |
+| 모듈 | 효과 |
+|------|------|
+| base (진문개방) | 적 소환수 전원 피해 `1.8×(1+skillPower)` + skill Amp |
+| power 분기 | 계수·skill Amp 가중 |
+| sense 분기 | 전역 Amplify / 국면 가중 |
+| mana 분기 | 시전 후 마력 일부 환급 |
+| dual_mastery | 추가 착수 1 |
+| clean_mastery | 3×3 정리 + Amp |
+| declare_mastery | Amplify 바닥 고정 |
+| leader / war_chorus | 아군 ATK% 버프 틱 |
 
 ---
 

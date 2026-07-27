@@ -1,0 +1,6 @@
+  const isHome = view === "home";
+  const onIsland = isHome || isFacilityView();
+  const onExpedition = view === "stages";
+  app.classList.remove("auth-mode");
+  app.classList.toggle("home-mode", onIsland);
+  app.classList.toggle("expedition-mode", onExpedition);

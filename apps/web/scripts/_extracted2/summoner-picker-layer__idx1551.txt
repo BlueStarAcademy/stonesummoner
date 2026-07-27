@@ -1,0 +1,48 @@
+/** Toggle summoner picker sheet without a full screen re-render. */
+function applySummonerPickerOpen(): void {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-summoner-picker");
+  const layer = app.querySelector<HTMLElement>("#summoner-picker-layer");
+  if (btn) {
+    btn.setAttribute("aria-expanded", summonerPickerOpen ? "true" : "false");
+  }
+  if (layer) {
+    layer.hidden = !summonerPickerOpen;
+    layer.setAttribute("aria-hidden", summonerPickerOpen ? "false" : "true");
+  }
+}
+
+/** One-line notice board lines under the app bar. */
+function tickerMessages(): string[] {
+  const active = getActiveSummoner(save);
+  const el = save.activeSummoner ?? "light";
+  const energy = Math.floor(save.island.energy);
+  const energyMax = save.island.energyMax ?? 100;
+  const lines = [
+    "신비의마법석 · 섬을 드래그해 시설을 둘러보세요",
+    `${SUMMONER_ELEMENT_LABEL[el]} 서머너 Lv.${active.level} 육성 중`,
+    `행동력 ${energy}/${energyMax} · 출정문으로 전투에 나서세요`,
+    `소환서 ${save.scrolls}장 · 소환진에서 동료를 불러내세요`,
+  ];
+  if ((save.gloryPoints ?? 0) > 0) {
+    lines.push(`영광 ${save.gloryPoints} · 영광 건물에서 보너스를 강화하세요`);
+  }
+  if (save.island.summonerLevel < 7) {
+    lines.push("서머너 Lv.7에 소원의 사당이 해금됩니다");
+  } else if (save.island.summonerLevel < 8) {
+    lines.push("서머너 Lv.8에 마법진 도장이 해금됩니다");
+  }
+  return lines;
+}
+
+function renderTicker(): string {
+  const items = tickerMessages().map((m) => escapeHtml(m));
+  const joined = items.join("　　·　　");
+  // Duplicate track for seamless CSS loop
+  return `<div class="ticker" role="marquee" aria-label="공지 전광판">
+    <div class="ticker-fade" aria-hidden="true"></div>
+    <div class="ticker-track">
+      <span class="ticker-text">${joined}</span>
+      <span class="ticker-text" aria-hidden="true">${joined}</span>
+    </div>
+  </div>`;
+}

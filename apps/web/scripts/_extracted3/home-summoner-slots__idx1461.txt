@@ -1,0 +1,19 @@
+  return `<div class="home-island">
+    <div class="home-hud">
+      <div class="home-hud-main">
+        <div class="home-summoner-portrait home-summoner-portrait--${activeEl}" aria-hidden="true">
+          <img src="/art/summoner/${activeEl}.svg" width="64" height="64" alt="" draggable="false" />
+        </div>
+        <div class="home-hud-info">
+          <div class="home-hud-row">
+            <p class="home-level">${SUMMONER_ELEMENT_LABEL[activeEl]} 서머너 · Lv.${activeSum.level}${activeSum.awaken > 0 ? ` · 각성 ${activeSum.awaken}` : ""}</p>
+            <p class="home-meta">파티 ${save.party.length}/4</p>
+          </div>
+          <div class="home-exp" role="progressbar" aria-valuenow="${exp}" aria-valuemin="0" aria-valuemax="100" aria-label="경험치">
+            <div class="home-exp-fill" style="width:${Math.min(100, exp)}%"></div>
+          </div>
+          <p class="home-exp-label">EXP ${exp}/100</p>
+        </div>
+      </div>
+      <div class="home-summoner-slots" role="tablist" aria-label="속성별 서머너">${summonerSlots}</div>
+    </div>

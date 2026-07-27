@@ -1,0 +1,134 @@
+function renderHome(): string {
+  const pond = save.island.buildings.find((b) => b.id === "mana_pond");
+  const mine = save.island.buildings.find((b) => b.id === "crystal_mine");
+  const pondDef = PHASE1_BUILDINGS.find((b) => b.id === "mana_pond")!;
+  const pondLv = pond?.level ?? 1;
+  const pondCap = productionStorageCap(pondDef, pondLv);
+  const storedMana = Math.floor(pond?.storedMana ?? 0);
+  const storedCrystal = Math.floor(mine?.storedCrystal ?? 0);
+  const exp = Math.floor(save.island.summonerExp ?? 0);
+  const hasWish =
+    save.island.buildings.some((b) => b.id === "wish_temple") ||
+    save.island.summonerLevel >= 7;
+  const dojoOk =
+    save.island.summonerLevel >= 8 ||
+    save.island.buildings.some((b) => b.id === "practice_dojo");
+  const guildOk =
+    save.island.summonerLevel >= 12 ||
+    save.island.buildings.some((b) => b.id === "guild_hall");
+  const fusionOk =
+    save.island.summonerLevel >= 17 ||
+    save.island.buildings.some((b) => b.id === "fusion_star");
+  const mineOk = Boolean(mine) || save.island.summonerLevel >= 10;
+
+  const lockSvg = `<span class="island-spot-lock" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2zm-6-2a2 2 0 1 1 4 0v2h-4V7zm6 12H7v-8h10v8z"/></svg></span>`;
+
+  const spot = (
+    id: string,
+    title: string,
+    x: number,
+    y: number,
+    opts?: {
+      locked?: boolean;
+      unlockLv?: number;
+      bubble?: string;
+      bubbleKind?: "mana" | "crystal";
+      tone?: "summon" | "forge" | "shop" | "gate" | "pond" | "mine" | "wish" | "glory" | "dojo" | "guild" | "fusion" | "party";
+      sub?: string;
+    },
+  ) => {
+    const locked = !!opts?.locked;
+    const tone = opts?.tone ? ` island-spot--${opts.tone}` : "";
+    const bubble =
+      !locked && opts?.bubble && opts.bubbleKind
+        ? `<span class="res-bubble res-bubble--${opts.bubbleKind}" data-collect="${opts.bubbleKind}" role="button" tabindex="0" aria-label="${opts.bubble} 수집">${opts.bubble}</span>`
+        : "";
+    const unlock =
+      locked && opts?.unlockLv
+        ? `<span class="island-spot-lv">Lv.${opts.unlockLv}</span>`
+        : opts?.sub
+          ? `<span class="island-spot-sub">${opts.sub}</span>`
+          : "";
+    const label = locked && opts?.unlockLv ? `${title} · Lv.${opts.unlockLv} 해금` : title;
+    return `<button type="button" class="island-spot${tone}${locked ? " is-locked" : ""}" style="left:${x}%;top:${y}%" data-b="${id}" data-locked="${locked ? "1" : "0"}" ${opts?.unlockLv ? `data-unlock="${opts.unlockLv}"` : ""} aria-label="${label}">
+      <span class="island-spot-art" aria-hidden="true"></span>
+      ${locked ? lockSvg : ""}
+      <span class="island-spot-name">${title}</span>
+      ${unlock}
+      ${bubble}
+    </button>`;
+  };
+
+  return `<div class="home-island">
+    <div class="home-hud">
+      <p class="home-level">서머너 Lv.${save.island.summonerLevel}${(save.summonerAwaken ?? 0) > 0 ? ` · 각성 ${save.summonerAwaken}` : ""}</p>
+      <div class="home-exp" role="progressbar" aria-valuenow="${exp}" aria-valuemin="0" aria-valuemax="100">
+        <div class="home-exp-fill" style="width:${Math.min(100, exp)}%"></div>
+      </div>
+      <p class="home-meta">EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
+    </div>
+    <div class="island-viewport" id="island-viewport">
+      <div class="island-world" id="island-world" style="transform:translate(${islandPan.x}px,${islandPan.y}px)">
+        <img
+          class="island-map-img"
+          src="/art/home/home-island-bg.webp"
+          srcset="/art/home/home-island-bg-720.webp 720w, /art/home/home-island-bg.webp 1080w, /art/home/home-island-bg@2x.webp 1440w"
+          sizes="(max-width: 430px) 160vw, 720px"
+          width="1080"
+          height="1920"
+          alt=""
+          draggable="false"
+          decoding="async"
+        />
+        <div class="island-map-veil" aria-hidden="true"></div>
+        ${spot("summon_hearth", "소환진", 28, 38, { tone: "summon", sub: `소환서 ${save.scrolls}장` })}
+        ${spot("power_circle", "강화진", 52, 30, { tone: "forge", sub: "레벨 · 각성 · 장비" })}
+        ${spot("gateway", "출정문", 74, 40, { tone: "gate", sub: "시나리오 · 아레나" })}
+        ${spot("mana_pond", "진액 연못", 36, 58, {
+          tone: "pond",
+          sub: `Lv.${pondLv} · 대기 ${storedMana}/${pondCap}`,
+          bubble: storedMana > 0 ? String(storedMana) : undefined,
+          bubbleKind: storedMana > 0 ? "mana" : undefined,
+        })}
+        ${spot("shop", "마법상점", 58, 55, { tone: "shop", sub: "소환서 · 연마 · 각인" })}
+        ${spot("party", "파티", 78, 62, { tone: "party", sub: `${save.party.length}/4` })}
+        ${spot("wish", "소원의 사당", 22, 72, {
+          tone: "wish",
+          locked: !hasWish,
+          unlockLv: 7,
+          sub: hasWish ? "일 1회 소원" : undefined,
+        })}
+        ${spot("dojo", "마법진 도장", 44, 76, {
+          tone: "dojo",
+          locked: !dojoOk,
+          unlockLv: 8,
+          sub: dojoOk ? `수련 ${save.dojoDrills ?? 0}회` : undefined,
+        })}
+        ${spot("crystal_mine", "수정 광맥", 66, 74, {
+          tone: "mine",
+          locked: !mineOk,
+          unlockLv: 10,
+          sub: mineOk ? `대기 ${storedCrystal}` : undefined,
+          bubble: mineOk && storedCrystal > 0 ? String(storedCrystal) : undefined,
+          bubbleKind: mineOk && storedCrystal > 0 ? "crystal" : undefined,
+        })}
+        ${spot("glory", "영광 건물", 84, 78, { tone: "glory", sub: `영광 ${save.gloryPoints ?? 0}` })}
+        ${spot("guild", save.guildName ? save.guildName : "길드 홀", 30, 88, {
+          tone: "guild",
+          locked: !guildOk,
+          unlockLv: 12,
+          sub: guildOk ? "가입·출석" : undefined,
+        })}
+        ${spot("fusion", "융합의 별", 56, 90, {
+          tone: "fusion",
+          locked: !fusionOk,
+          unlockLv: 17,
+          sub: fusionOk ? "동일종 융합" : undefined,
+        })}
+      </div>
+    </div>
+  </div>`;
+}
+
+
+function navBackBtn

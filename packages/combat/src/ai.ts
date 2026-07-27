@@ -20,7 +20,12 @@ export interface StoneSuggestion {
   capturedCount: number;
   amplifyDelta: number;
   skillAmplifyBonus: number;
+  /** Flat mana (safe place / items). Capture mana uses captureManaFrac × manaMax. */
   manaGain: number;
+  /** Next monster hit: FinalDamage × (1 + captureDamageBonus). */
+  captureDamageBonus: number;
+  /** Summoner mana += manaMax × captureManaFrac. */
+  captureManaFrac: number;
   hasToken: boolean;
 }
 
@@ -77,6 +82,8 @@ export function rankStoneSuggestions(
       skillAmplifyBonus:
         gains.skillAmplifyBonus + (magnet?.skillAmplifyBonus ?? 0),
       manaGain: Math.round(gains.mana + (magnet?.mana ?? 0)),
+      captureDamageBonus: gains.captureDamageBonus,
+      captureManaFrac: gains.captureManaFrac,
       hasToken: ev.hasToken,
       rank: 0,
     };

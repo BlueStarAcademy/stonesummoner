@@ -46,7 +46,9 @@ type MainQuestAreaDef = {
 };
 
 /** 13 scenario areas — each opens an N-1…N-7 sortie list.
- * Pins sit on atlas landmarks (calibrated in game-box cover space).
+ * Pin x/y are percentages of the full atlas image
+ * (`apps/web/public/art/stages/stages-world-map.png`, 1080×1920).
+ * The stages world keeps that aspect ratio so coordinates stay stable across devices.
  */
 const MAIN_QUEST_AREAS: MainQuestAreaDef[] = [
   { map: 1, slug: "garen", areaKo: "월영숲", tone: "forest", dropSetId: "hwalro", x: 47, y: 88 },

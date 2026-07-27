@@ -1,0 +1,30 @@
+  app.querySelectorAll<HTMLButtonElement>("[data-region]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.region as StagesRegionId | undefined;
+      if (!id) return;
+      if (btn.dataset.locked === "1") {
+        flash("아직 해금되지 않은 지역입니다.");
+        return;
+      }
+      stagesRegion = stagesRegion === id ? null : id;
+      render();
+    });
+  });
+
+  const closeRegion = () => {
+    if (!stagesRegion) return;
+    stagesRegion = null;
+    render();
+  };
+  app.querySelector("#btn-region-close")?.addEventListener("click", closeRegion);
+  app.querySelector("#btn-region-close-x")?.addEventListener("click", closeRegion);
+
+  app.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      settingsOpen = false;
+      summonerPickerOpen = false;
+      resMoreOpen = false;
+      const nav = btn.dataset.nav;
+      if (nav === "home" || nav === "stages") {
+        if (nav === "home") stagesRegion = null;
+      }

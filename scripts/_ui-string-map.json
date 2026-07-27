@@ -1,0 +1,1627 @@
+{
+  "curHangul": 0,
+  "headHangul": 2346,
+  "badLines": 170,
+  "recoveredLines": 135,
+  "unrecovered": [
+    {
+      "line": 780,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"?? ??? ??????.\"",
+      "recovered": null
+    },
+    {
+      "line": 782,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"???? ??????.\"",
+      "recovered": null
+    },
+    {
+      "line": 790,
+      "kind": "qmark",
+      "asciiKey": ":\"..\",",
+      "current": ": \"????????. ????? ?? ???.\",",
+      "recovered": null
+    },
+    {
+      "line": 801,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"?? ??? ??????.\"",
+      "recovered": null
+    },
+    {
+      "line": 803,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"???? ??????.\"",
+      "recovered": null
+    },
+    {
+      "line": 1611,
+      "kind": "qmark",
+      "asciiKey": ":\"\");",
+      "current": ": \"???\");",
+      "recovered": null
+    },
+    {
+      "line": 2407,
+      "kind": "qmark",
+      "asciiKey": "\"(+1)\"",
+      "current": "? \"?? ?? ? ?? ?? (??? +1)\"",
+      "recovered": null
+    },
+    {
+      "line": 2411,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 2444,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 2488,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 2533,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 2754,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"???\",",
+      "recovered": null
+    },
+    {
+      "line": 3339,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 3374,
+      "kind": "qmark",
+      "asciiKey": "\"\"",
+      "current": "? \"??? ?? ??\"",
+      "recovered": null
+    },
+    {
+      "line": 3377,
+      "kind": "qmark",
+      "asciiKey": ":\"\";",
+      "current": ": \"?? ?????\";",
+      "recovered": null
+    },
+    {
+      "line": 3411,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 3412,
+      "kind": "qmark",
+      "asciiKey": "name\"\",",
+      "current": "name ?? \"??? ? ??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 3463,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 3504,
+      "kind": "qmark",
+      "asciiKey": "{id:\"normal\",labelKo:\"\",blurb:\"\",energyMul:1},",
+      "current": "{ id: \"normal\", labelKo: \"??\", blurb: \"?? ???\", energyMul: 1 },",
+      "recovered": null
+    },
+    {
+      "line": 3505,
+      "kind": "qmark",
+      "asciiKey": "{id:\"hard\",labelKo:\"\",blurb:\"+2\",energyMul:1.5},",
+      "current": "{ id: \"hard\", labelKo: \"???\", blurb: \"? ?? +2 ? ??? ??\", energyMul: 1.5 },",
+      "recovered": null
+    },
+    {
+      "line": 3506,
+      "kind": "qmark",
+      "asciiKey": "{id:\"hell\",labelKo:\"\",blurb:\"+4\",energyMul:2},",
+      "current": "{ id: \"hell\", labelKo: \"??\", blurb: \"? ?? +4 ? ??? ?? ??\", energyMul: 2 },",
+      "recovered": null
+    },
+    {
+      "line": 3584,
+      "kind": "qmark",
+      "asciiKey": "\"\"",
+      "current": "? \"??? ???\"",
+      "recovered": null
+    },
+    {
+      "line": 3586,
+      "kind": "qmark",
+      "asciiKey": "\"0\"",
+      "current": "? \"??? 0\"",
+      "recovered": null
+    },
+    {
+      "line": 3587,
+      "kind": "qmark",
+      "asciiKey": ":`${cost}`;",
+      "current": ": `??? ${cost}`;",
+      "recovered": null
+    },
+    {
+      "line": 3628,
+      "kind": "qmark",
+      "asciiKey": "blurb:`${pin.areaKo}`,",
+      "current": "blurb: `???? ? ${pin.areaKo}`,",
+      "recovered": null
+    },
+    {
+      "line": 3728,
+      "kind": "qmark",
+      "asciiKey": "constlabel=opend.labelKo:`${d.labelKo}()`;",
+      "current": "const label = open ? d.labelKo : `${d.labelKo} (???)`;",
+      "recovered": null
+    },
+    {
+      "line": 3734,
+      "kind": "qmark",
+      "asciiKey": "extras=`<pclass=\"stages-note\">${equipVaultRemaining(syncEquipVaultWeek(save))}/$",
+      "current": "extras = `<p class=\"stages-note\">?? ${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT} ? ?? ?? ? ????? ??/??</p>`;",
+      "recovered": null
+    },
+    {
+      "line": 3774,
+      "kind": "qmark",
+      "asciiKey": "<spanclass=\"sr-only\"></span>",
+      "current": "<span class=\"sr-only\">???</span>",
+      "recovered": null
+    },
+    {
+      "line": 3775,
+      "kind": "qmark",
+      "asciiKey": "<selectclass=\"stages-region-diff-select\"id=\"region-diff-select\"aria-label=\"\"titl",
+      "current": "<select class=\"stages-region-diff-select\" id=\"region-diff-select\" aria-label=\"???? ???\" title=\"${diffMeta.blurb}\">",
+      "recovered": null
+    },
+    {
+      "line": 3780,
+      "kind": "qmark",
+      "asciiKey": "<pclass=\"stages-meta\">${prog.cleared}/${prog.total}${prog.unlocked\"\":\"\"}${energy",
+      "current": "<p class=\"stages-meta\">??? ${prog.cleared}/${prog.total}${prog.unlocked ? \"\" : \" ? ???\"} ? ??? ${energyNow}/${energyMax}</p>",
+      "recovered": null
+    },
+    {
+      "line": 3956,
+      "kind": "qmark",
+      "asciiKey": "\"!()\"",
+      "current": "? \"??! (? ??? ??)\"",
+      "recovered": null
+    },
+    {
+      "line": 3964,
+      "kind": "qmark",
+      "asciiKey": "\"\"",
+      "current": "? \"???? ??? ?????\"",
+      "recovered": null
+    },
+    {
+      "line": 3966,
+      "kind": "qmark",
+      "asciiKey": "\"\"",
+      "current": "? \"? ???? ?? ?? ?? ? ??\"",
+      "recovered": null
+    },
+    {
+      "line": 4147,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"?? ??? ??????.\"",
+      "recovered": null
+    },
+    {
+      "line": 4149,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"??? ?? ????? ?????.\"",
+      "recovered": null
+    }
+  ],
+  "uniqueQLiterals": [
+    {
+      "n": 40,
+      "lit": "??"
+    },
+    {
+      "n": 21,
+      "lit": "?? ??"
+    },
+    {
+      "n": 14,
+      "lit": "???"
+    },
+    {
+      "n": 9,
+      "lit": "??? ??"
+    },
+    {
+      "n": 5,
+      "lit": "????"
+    },
+    {
+      "n": 4,
+      "lit": " ? ??"
+    },
+    {
+      "n": 3,
+      "lit": "?? ??? ??????."
+    },
+    {
+      "n": 3,
+      "lit": "?? ????? ?? ??????."
+    },
+    {
+      "n": 3,
+      "lit": "??? ${cost}"
+    },
+    {
+      "n": 3,
+      "lit": "?? ???"
+    },
+    {
+      "n": 3,
+      "lit": "??:"
+    },
+    {
+      "n": 2,
+      "lit": "???? ??????."
+    },
+    {
+      "n": 2,
+      "lit": "???? ?????."
+    },
+    {
+      "n": 2,
+      "lit": "?? ?? ${\"I\".repeat(Math.min(phase, 3))}"
+    },
+    {
+      "n": 2,
+      "lit": "Lv.${lv} ? ${rate}/hr ? ?? ${stored}/${cap}"
+    },
+    {
+      "n": 2,
+      "lit": "?? ${stored}"
+    },
+    {
+      "n": 2,
+      "lit": "??? ? Lv.${lv + 1}"
+    },
+    {
+      "n": 2,
+      "lit": ">??</span><span class="
+    },
+    {
+      "n": 2,
+      "lit": "??? ?? ??"
+    },
+    {
+      "n": 2,
+      "lit": "??? ? ??"
+    },
+    {
+      "n": 2,
+      "lit": "?? ?? ??"
+    },
+    {
+      "n": 2,
+      "lit": "? ??"
+    },
+    {
+      "n": 2,
+      "lit": " ? ???"
+    },
+    {
+      "n": 2,
+      "lit": ") ?? "
+    },
+    {
+      "n": 1,
+      "lit": "??? ??? DB???. Railway? DATABASE_URL(Postgres)? ?????. ?? ???? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "???? ??? ???????. ?? ????? ??????. (?? ??? ??)"
+    },
+    {
+      "n": 1,
+      "lit": "?????${user.email ? "
+    },
+    {
+      "n": 1,
+      "lit": "???? ? ${user.email}"
+    },
+    {
+      "n": 1,
+      "lit": "????????. ????? ?? ???."
+    },
+    {
+      "n": 1,
+      "lit": "?????${sessionUser.email ? "
+    },
+    {
+      "n": 1,
+      "lit": "????????."
+    },
+    {
+      "n": 1,
+      "lit": "?? ???? ?? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "?? ???? ?? ???? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "<li><span>??</span><strong>+${reward.mana}</strong></li>"
+    },
+    {
+      "n": 1,
+      "lit": "<li><span>????</span><strong>+${reward.crystal}</strong></li>"
+    },
+    {
+      "n": 1,
+      "lit": "<li><span>??</span><strong>+${reward.glory}</strong></li>"
+    },
+    {
+      "n": 1,
+      "lit": "<li><span>???</span><strong>+${reward.jinmun}</strong></li>"
+    },
+    {
+      "n": 1,
+      "lit": "<li><span>???</span><strong>+${reward.contribution}</strong></li>"
+    },
+    {
+      "n": 1,
+      "lit": "<li><span>??? EXP</span><strong>+${reward.summonerExp}</strong></li>"
+    },
+    {
+      "n": 1,
+      "lit": "<li><span>??</span><strong>Lv.${save.island.summonerLevel}</strong></li>"
+    },
+    {
+      "n": 1,
+      "lit": "<li><span>???</span><strong>+${lastScrollGain}</strong></li>"
+    },
+    {
+      "n": 1,
+      "lit": "<button type=\"button\" class=\"secondary auth-btn-ghost\" data-nav=\"party\">??</button>"
+    },
+    {
+      "n": 1,
+      "lit": "?? 50% ?? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "?? 35% ?? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "?? 45% ?? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "?? 40% ?? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "?? ??? ?"
+    },
+    {
+      "n": 1,
+      "lit": "<span class=\"shield-badge\" title=\"??\">+${shield}</span>"
+    },
+    {
+      "n": 1,
+      "lit": "<span class=\"board-opening-hint\">?? ???</span>"
+    },
+    {
+      "n": 1,
+      "lit": "${battle.circleElement ?? "
+    },
+    {
+      "n": 1,
+      "lit": "Stone Summoners ? ??????"
+    },
+    {
+      "n": 1,
+      "lit": "<p class=\"auth-warn\">?? DB? ??? ?????. ?? ????? Postgres(DATABASE_URL)? ?????.</p>"
+    },
+    {
+      "n": 1,
+      "lit": "<span class=\"res-bubble res-bubble--${opts.bubbleKind}\" data-collect=\"${opts.bubbleKind}\" role=\"button\" tabindex=\"0\" ari"
+    },
+    {
+      "n": 1,
+      "lit": "${\"\\uC218\\uB828\"} ${save.dojoDrills ?? 0}${\"\\uD68C\"}"
+    },
+    {
+      "n": 1,
+      "lit": "${\"\\uC601\\uAD11\"} ${save.gloryPoints ?? 0}"
+    },
+    {
+      "n": 1,
+      "lit": " data-nav=\"${opts?.nav ?? \"home\"}\""
+    },
+    {
+      "n": 1,
+      "lit": "?? ?? ? ?? ?? (??? +1)"
+    },
+    {
+      "n": 1,
+      "lit": "?? ???? ${untilMission}?"
+    },
+    {
+      "n": 1,
+      "lit": "?? ${drills}? ? ??? Lv.${save.island.summonerLevel}"
+    },
+    {
+      "n": 1,
+      "lit": "?? ?? ? ${last}"
+    },
+    {
+      "n": 1,
+      "lit": "? 1? ??"
+    },
+    {
+      "n": 1,
+      "lit": "><span>??</span><strong>${used ? "
+    },
+    {
+      "n": 1,
+      "lit": "><span>??</span><strong>${last ?? "
+    },
+    {
+      "n": 1,
+      "lit": "??? ?? ?????"
+    },
+    {
+      "n": 1,
+      "lit": "party-slot el-${def?.element ?? "
+    },
+    {
+      "n": 1,
+      "lit": "?? ${selected.size}/4 ? ??? ??"
+    },
+    {
+      "n": 1,
+      "lit": "stage-card party-card el-${def?.element ?? "
+    },
+    {
+      "n": 1,
+      "lit": " : (def?.element?.[0]?.toUpperCase() ?? "
+    },
+    {
+      "n": 1,
+      "lit": "${revDef?.naturalStars ?? 0}?"
+    },
+    {
+      "n": 1,
+      "lit": "??? ?? (4?? ??)"
+    },
+    {
+      "n": 1,
+      "lit": "${SCROLL_KIND_LABEL[kind]} 1? ??"
+    },
+    {
+      "n": 1,
+      "lit": "${SCROLL_KIND_LABEL[kind]} ${SUMMON_MULTI_COUNT}? ??"
+    },
+    {
+      "n": 1,
+      "lit": "??? ${worn} ? ??"
+    },
+    {
+      "n": 1,
+      "lit": "<p class=\"muted\">?? ${slot}? ??? ????. ?? ?????? ?????.</p>"
+    },
+    {
+      "n": 1,
+      "lit": "<p class=\"muted loadout-sets-empty\">?? ???</p>"
+    },
+    {
+      "n": 1,
+      "lit": "<div class=\"slot-row\" aria-label=\"?? ??\">${cells}</div>${stats}${picker}"
+    },
+    {
+      "n": 1,
+      "lit": "?? ??? ${mana} ? ????? ${crystal}"
+    },
+    {
+      "n": 1,
+      "lit": "?? ??? ${mana}"
+    },
+    {
+      "n": 1,
+      "lit": "?? MAX (+${MAX_SUMMONER_AWAKEN})"
+    },
+    {
+      "n": 1,
+      "lit": "?? Lv.${awakenNeedLv}+"
+    },
+    {
+      "n": 1,
+      "lit": "?? +${awaken + 1} (??? ${awakenMana} ? ????? ${awakenCrystal})"
+    },
+    {
+      "n": 1,
+      "lit": "??? ${n.manaCost} ? ?? ${n.crystalCost}"
+    },
+    {
+      "n": 1,
+      "lit": "??? ${n.manaCost}"
+    },
+    {
+      "n": 1,
+      "lit": "??? ${evoMana} ? ????? ${evoCrystal}"
+    },
+    {
+      "n": 1,
+      "lit": "??? ${evoMana}"
+    },
+    {
+      "n": 1,
+      "lit": "?? Lv.${evoNeed}+"
+    },
+    {
+      "n": 1,
+      "lit": "?? ${evoCost}"
+    },
+    {
+      "n": 1,
+      "lit": "enhance-mon el-${def?.element ?? "
+    },
+    {
+      "n": 1,
+      "lit": ", 40) || (def?.element?.[0]?.toUpperCase() ?? "
+    },
+    {
+      "n": 1,
+      "lit": " : \"\"}${maxed ? \" ? ??\" : "
+    },
+    {
+      "n": 1,
+      "lit": "<p class=\"muted\">??? ?? ????. ?? ???? ??? ?????.</p>"
+    },
+    {
+      "n": 1,
+      "lit": ">${p.slot[0]?.toUpperCase() ?? "
+    },
+    {
+      "n": 1,
+      "lit": " ? ?? ??"
+    },
+    {
+      "n": 1,
+      "lit": "?? ${worn}"
+    },
+    {
+      "n": 1,
+      "lit": " ? ?? ??? ${symbolEnhanceManaCost(s.enhance)}"
+    },
+    {
+      "n": 1,
+      "lit": "??+${(weapon.skillPowerBonus * 100).toFixed(0)}%"
+    },
+    {
+      "n": 1,
+      "lit": "??+${(ring.skillPowerBonus * 100).toFixed(0)}%"
+    },
+    {
+      "n": 1,
+      "lit": "<span class=\"muted\">?? ?? ??</span>"
+    },
+    {
+      "n": 1,
+      "lit": "?? ? ???? ? ?? ? ??"
+    },
+    {
+      "n": 1,
+      "lit": "<p class=\"muted\">??? ??? ????</p>"
+    },
+    {
+      "n": 1,
+      "lit": "<p class=\"muted\">?? ??? ??? ???? (?? 4?6 ?? ??)</p>"
+    },
+    {
+      "n": 1,
+      "lit": "??? ${save.scrolls} ? ?? ${Math.floor(save.island.mana)} ? ???? ${save.island.crystal}"
+    },
+    {
+      "n": 1,
+      "lit": "?? ?? ${glory}"
+    },
+    {
+      "n": 1,
+      "lit": "??? ${g.gloryCostPerLevel}"
+    },
+    {
+      "n": 1,
+      "lit": "?? ?? Amplify"
+    },
+    {
+      "n": 1,
+      "lit": "?? ?????"
+    },
+    {
+      "n": 1,
+      "lit": "??? ? ??? ??"
+    },
+    {
+      "n": 1,
+      "lit": "><span>??</span><strong>${save.guildCheckInDay ?? "
+    },
+    {
+      "n": 1,
+      "lit": "?: ?????"
+    },
+    {
+      "n": 1,
+      "lit": "?? ? 2?? ? ?? +1 ? ??? ${FUSION_MANA_COST}"
+    },
+    {
+      "n": 1,
+      "lit": "<p class=\"muted\">?? ? ??? 2??? ?????</p>"
+    },
+    {
+      "n": 1,
+      "lit": "? ?? +2 ? ??? ??"
+    },
+    {
+      "n": 1,
+      "lit": "? ?? +4 ? ??? ?? ??"
+    },
+    {
+      "n": 1,
+      "lit": " ? ?? ${s.gloryReward}"
+    },
+    {
+      "n": 1,
+      "lit": " ? ??? ${s.jinmunReward}"
+    },
+    {
+      "n": 1,
+      "lit": " ? ?? ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}"
+    },
+    {
+      "n": 1,
+      "lit": "??? ???"
+    },
+    {
+      "n": 1,
+      "lit": "??? 0"
+    },
+    {
+      "n": 1,
+      "lit": "???? ? ${pin.areaKo}"
+    },
+    {
+      "n": 1,
+      "lit": "????? ????"
+    },
+    {
+      "n": 1,
+      "lit": "?? ??? ??"
+    },
+    {
+      "n": 1,
+      "lit": "${d.labelKo} (???)"
+    },
+    {
+      "n": 1,
+      "lit": "<p class=\"stages-note\">?? ${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT} ? ?? ?? ? ????? ?"
+    },
+    {
+      "n": 1,
+      "lit": "<p class=\"stages-note\">?? ${save.guildContribution ?? 0} ? ?? +${save.guildRaidBest ?? 0}</p>"
+    },
+    {
+      "n": 1,
+      "lit": ">? ${bans.length ? bans.map((id) => getMonster(id)?.nameKo ?? id).join("
+    },
+    {
+      "n": 1,
+      "lit": "???? ???"
+    },
+    {
+      "n": 1,
+      "lit": ">??? ${prog.cleared}/${prog.total}${prog.unlocked ? "
+    },
+    {
+      "n": 1,
+      "lit": " ? ?? ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? \"?\" : \"\"}"
+    },
+    {
+      "n": 1,
+      "lit": "??! (? ??? ??)"
+    },
+    {
+      "n": 1,
+      "lit": "??... (?? ??? ??)"
+    },
+    {
+      "n": 1,
+      "lit": "?? ??(1?2?3) ?? ? ?"
+    },
+    {
+      "n": 1,
+      "lit": "???? ??? ?????"
+    },
+    {
+      "n": 1,
+      "lit": "? ???? ?? ?? ?? ? ??"
+    },
+    {
+      "n": 1,
+      "lit": "<button type=\"button\" class=\"secondary board-switch\" id=\"btn-board-switch\">?? ${battle.boardLabel === \"A?\" ? \"?B\" : \"?A\""
+    },
+    {
+      "n": 1,
+      "lit": "??? ?? ????? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "??? ??? ? ????. API? ??? ? ?? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "?? ?? ? ?? ${Math.floor(island.mana)}"
+    },
+    {
+      "n": 1,
+      "lit": "??? Lv.${lv}? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "?? ???? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "?? ??? ????."
+    },
+    {
+      "n": 1,
+      "lit": "?? ??:"
+    },
+    {
+      "n": 1,
+      "lit": "??? ${SYMBOL_GRIND_MANA_COST}"
+    },
+    {
+      "n": 1,
+      "lit": "????? ${SYMBOL_IMPRINT_CRYSTAL_COST}"
+    },
+    {
+      "n": 1,
+      "lit": "??? ${FUSION_MANA_COST}"
+    },
+    {
+      "n": 1,
+      "lit": "??? ?? 4????."
+    },
+    {
+      "n": 1,
+      "lit": "?? 1?? ?????."
+    },
+    {
+      "n": 1,
+      "lit": "?? ?? 2?????."
+    },
+    {
+      "n": 1,
+      "lit": "? ???"
+    }
+  ],
+  "unicodeUiLits": [
+    {
+      "escaped": "\\uAC74\\uBB3C \\uBC30\\uCE58 \\uD3B8\\uC9D1 \\u00B7 \\uB4DC\\uB798\\uADF8\\uB85C \\uC704\\uCE58\\uB97C \\uC62E\\uAE30\\uC138\\uC694",
+      "decoded": "건물 배치 편집 · 드래그로 위치를 옮기세요"
+    },
+    {
+      "escaped": "\\uAC74\\uBB3C \\uBC30\\uCE58\\uB97C \\uC800\\uC7A5\\uD588\\uC2B5\\uB2C8\\uB2E4",
+      "decoded": "건물 배치를 저장했습니다"
+    },
+    {
+      "escaped": "\\uBC30\\uCE58 \\uD3B8\\uC9D1\\uC744 \\uCDE8\\uC18C\\uD588\\uC2B5\\uB2C8\\uB2E4",
+      "decoded": "배치 편집을 취소했습니다"
+    },
+    {
+      "escaped": "\\uB9C8\\uBC95\\uC0C1\\uC810",
+      "decoded": "마법상점"
+    },
+    {
+      "escaped": "\\uD30C\\uD2F0",
+      "decoded": "파티"
+    },
+    {
+      "escaped": "\\uC601\\uAD11 \\uAC74\\uBB3C",
+      "decoded": "영광 건물"
+    },
+    {
+      "escaped": "\\uC9C4\\uC561 \\uC5F0\\uBABB",
+      "decoded": "진액 연못"
+    },
+    {
+      "escaped": "\\uD574\\uAE08",
+      "decoded": "해금"
+    },
+    {
+      "escaped": "\\uAC74\\uBB3C \\uBC30\\uCE58 \\uD3B8\\uC9D1",
+      "decoded": "건물 배치 편집"
+    },
+    {
+      "escaped": "\\uBC30\\uCE58 \\uD3B8\\uC9D1",
+      "decoded": "배치 편집"
+    },
+    {
+      "escaped": "\\uB4DC\\uB798\\uADF8\\uB85C \\uAC74\\uBB3C \\uC704\\uCE58\\uB97C \\uC62E\\uAE30\\uC138\\uC694",
+      "decoded": "드래그로 건물 위치를 옮기세요"
+    },
+    {
+      "escaped": "\\uCD08\\uAE30\\uD654",
+      "decoded": "초기화"
+    },
+    {
+      "escaped": "\\uC644\\uB8CC",
+      "decoded": "완료"
+    },
+    {
+      "escaped": "\\uBC30\\uCE58 \\uAC00\\uB2A5 \\uAD6C\\uC5ED",
+      "decoded": "배치 가능 구역"
+    },
+    {
+      "escaped": "\\uC18C\\uD658\\uC11C",
+      "decoded": "소환서"
+    },
+    {
+      "escaped": "\\uC7A5",
+      "decoded": "장"
+    },
+    {
+      "escaped": "\\uB808\\uBCA8 \\u00B7 \\uAC01\\uC131 \\u00B7 \\uC7A5\\uBE44",
+      "decoded": "레벨 · 각성 · 장비"
+    },
+    {
+      "escaped": "\\uC2DC\\uB098\\uB9AC\\uC624 \\u00B7 \\uC544\\uB808\\uB098",
+      "decoded": "시나리오 · 아레나"
+    },
+    {
+      "escaped": "\\uB300\\uAE30",
+      "decoded": "대기"
+    },
+    {
+      "escaped": "\\uC18C\\uD658\\uC11C \\u00B7 \\uC5F0\\uB9C8 \\u00B7 \\uAC01\\uC778",
+      "decoded": "소환서 · 연마 · 각인"
+    },
+    {
+      "escaped": "\\uC77C 1\\uD68C \\uC18C\\uC6D0",
+      "decoded": "일 1회 소원"
+    },
+    {
+      "escaped": "\\uC218\\uB828",
+      "decoded": "수련"
+    },
+    {
+      "escaped": "\\uD68C",
+      "decoded": "회"
+    },
+    {
+      "escaped": "\\uC601\\uAD11",
+      "decoded": "영광"
+    },
+    {
+      "escaped": "\\uAC00\\uC785\\u00B7\\uCD9C\\uC11D",
+      "decoded": "가입·출석"
+    },
+    {
+      "escaped": "\\uB3D9\\uC77C\\uC885 \\uC735\\uD569",
+      "decoded": "동일종 융합"
+    },
+    {
+      "escaped": "\\uC2A4\\uD1A4\\uD328\\uC2DC\\uBE0C",
+      "decoded": "스톤패시브"
+    },
+    {
+      "escaped": "\\uD68D\\uB4DD",
+      "decoded": "획득"
+    },
+    {
+      "escaped": "\\uC2A4\\uD3F0",
+      "decoded": "스폰"
+    },
+    {
+      "escaped": "\\uC6E8\\uC774\\uBE0C",
+      "decoded": "웨이브"
+    },
+    {
+      "escaped": "\\uAC15\\uD654 \\uC9C4\\uBB38",
+      "decoded": "강화 진문"
+    },
+    {
+      "escaped": "\\uC9C4\\uBB38 \\uBD95\\uAD34",
+      "decoded": "진문 붕괴"
+    },
+    {
+      "escaped": "\\uD3EC\\uC11D \\uBCF4\\uB108\\uC2A4",
+      "decoded": "포석 보너스"
+    },
+    {
+      "escaped": "\\uD68C\\uBCF5",
+      "decoded": "회복"
+    },
+    {
+      "escaped": "\\uC9C4\\uBB38\\uAC1C\\uBC29",
+      "decoded": "진문개방"
+    },
+    {
+      "escaped": "\\uC99D\\uD3ED\\uC120\\uC5B8",
+      "decoded": "증폭선언"
+    },
+    {
+      "escaped": "\\uC30D\\uCC29\\uC218",
+      "decoded": "쌍착수"
+    },
+    {
+      "escaped": "\\uC9C4\\uBB38\\uCCAD\\uC18C",
+      "decoded": "진문청소"
+    },
+    {
+      "escaped": "\\uC9C4\\uBB38\\uC218\\uD638",
+      "decoded": "진문수호"
+    },
+    {
+      "escaped": "\\uD615\\uC0C1",
+      "decoded": "형상"
+    },
+    {
+      "escaped": "\\uC774\\uBCA4\\uD2B8",
+      "decoded": "이벤트"
+    },
+    {
+      "escaped": "\\uC0AC\\uC11D\\uC0C1\\uC810",
+      "decoded": "사석상점"
+    },
+    {
+      "escaped": "\\uC18D\\uC131",
+      "decoded": "속성"
+    },
+    {
+      "escaped": "\\uD544\\uC2B9",
+      "decoded": "필승"
+    },
+    {
+      "escaped": "\\uBD09\\uC778",
+      "decoded": "봉인"
+    },
+    {
+      "escaped": "\\uB3CC\\uD761\\uC218",
+      "decoded": "돌흡수"
+    },
+    {
+      "escaped": "\\uC9C4\\uD615\\uD30C\\uAD34",
+      "decoded": "진형파괴"
+    },
+    {
+      "escaped": "\\uC11C\\uBA38\\uB108 \\uCC29\\uC218",
+      "decoded": "서머너 착수"
+    },
+    {
+      "escaped": "\\uBB18\\uC218",
+      "decoded": "묘수"
+    },
+    {
+      "escaped": "\\uB9DE\\uB9C8\\uB098",
+      "decoded": "맞마나"
+    },
+    {
+      "escaped": "\\uC774\\uC911\\uCE35",
+      "decoded": "이중층"
+    },
+    {
+      "escaped": "\\uC804\\uD22C \\uC54C\\uB9BC \\u2014 \\uB530\\uB0C4\\u00B7\\uC544\\uC774\\uD15C\\u00B7\\uD328\\uC2DC\\uBE0C\\uAC00 \\uC5EC\\uAE30 \\uD45C\\uC2DC\\uB429\\uB2C8\\uB2E4",
+      "decoded": "전투 알림 — 따냄·아이템·패시브가 여기 표시됩니다"
+    },
+    {
+      "escaped": "\\uAE30\\uBCF8 \\uBC30\\uCE58\\uB85C \\uB3CC\\uB824\\uB193\\uC558\\uC2B5\\uB2C8\\uB2E4",
+      "decoded": "기본 배치로 돌려놓았습니다"
+    },
+    {
+      "escaped": "\\uC18C\\uC6D0:",
+      "decoded": "소원:"
+    }
+  ],
+  "sampleFindings": [
+    {
+      "line": 280,
+      "kind": "unicode",
+      "asciiKey": "flash(\"\\uAC74\\uBB3C\\uBC30\\uCE58\\uD3B8\\uC9D1\\u00B7\\uB4DC\\uB798\\uADF8\\uB85C\\uC704\\",
+      "current": "flash(\"\\uAC74\\uBB3C \\uBC30\\uCE58 \\uD3B8\\uC9D1 \\u00B7 \\uB4DC\\uB798\\uADF8\\uB85C \\uC704\\uCE58\\uB97C \\uC62E\\uAE30\\uC138\\uC694\");",
+      "recovered": null
+    },
+    {
+      "line": 296,
+      "kind": "unicode",
+      "asciiKey": "flash(\"\\uAC74\\uBB3C\\uBC30\\uCE58\\uB97C\\uC800\\uC7A5\\uD588\\uC2B5\\uB2C8\\uB2E4\");",
+      "current": "flash(\"\\uAC74\\uBB3C \\uBC30\\uCE58\\uB97C \\uC800\\uC7A5\\uD588\\uC2B5\\uB2C8\\uB2E4\");",
+      "recovered": null
+    },
+    {
+      "line": 298,
+      "kind": "unicode",
+      "asciiKey": "flash(\"\\uBC30\\uCE58\\uD3B8\\uC9D1\\uC744\\uCDE8\\uC18C\\uD588\\uC2B5\\uB2C8\\uB2E4\");",
+      "current": "flash(\"\\uBC30\\uCE58 \\uD3B8\\uC9D1\\uC744 \\uCDE8\\uC18C\\uD588\\uC2B5\\uB2C8\\uB2E4\");",
+      "recovered": null
+    },
+    {
+      "line": 613,
+      "kind": "qmark",
+      "asciiKey": "\"DB.RailwayDATABASE_URL(Postgres)..\"",
+      "current": "? \"??? ??? DB???. Railway? DATABASE_URL(Postgres)? ?????. ?? ???? ?????.\"",
+      "recovered": "? \"서버가 메모리 DB입니다. Railway에 DATABASE_URL(Postgres)을 연결하세요. 로컬 세이브는 유지됩니다.\""
+    },
+    {
+      "line": 614,
+      "kind": "qmark",
+      "asciiKey": ":\"..()\",",
+      "current": ": \"???? ??? ???????. ?? ????? ??????. (?? ??? ??)\",",
+      "recovered": ": \"클라우드 세션이 만료되었습니다. 다시 로그인하면 동기화됩니다. (로컬 세이브 유지)\","
+    },
+    {
+      "line": 780,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"?? ??? ??????.\"",
+      "recovered": null
+    },
+    {
+      "line": 782,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"???? ??????.\"",
+      "recovered": null
+    },
+    {
+      "line": 783,
+      "kind": "qmark",
+      "asciiKey": ":`${user.email`${user.email}`:\"\"}`,",
+      "current": ": `?????${user.email ? ` ? ${user.email}` : \"\"}`,",
+      "recovered": ": `환영합니다${user.email ? ` · ${user.email}` : \"\"}`,"
+    },
+    {
+      "line": 789,
+      "kind": "qmark",
+      "asciiKey": "`${user.email}`",
+      "current": "? `???? ? ${user.email}`",
+      "recovered": "? `로그인됨 · ${user.email}`"
+    },
+    {
+      "line": 790,
+      "kind": "qmark",
+      "asciiKey": ":\"..\",",
+      "current": ": \"????????. ????? ?? ???.\",",
+      "recovered": null
+    },
+    {
+      "line": 801,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"?? ??? ??????.\"",
+      "recovered": null
+    },
+    {
+      "line": 803,
+      "kind": "qmark",
+      "asciiKey": "\".\"",
+      "current": "? \"???? ??????.\"",
+      "recovered": null
+    },
+    {
+      "line": 804,
+      "kind": "qmark",
+      "asciiKey": ":`${sessionUser.email`${sessionUser.email}`:\"\"}`,",
+      "current": ": `?????${sessionUser.email ? ` ? ${sessionUser.email}` : \"\"}`,",
+      "recovered": ": `환영합니다${sessionUser.email ? ` · ${sessionUser.email}` : \"\"}`,"
+    },
+    {
+      "line": 821,
+      "kind": "qmark",
+      "asciiKey": "flash(\".\");",
+      "current": "flash(\"????????.\");",
+      "recovered": "flash(\"로그아웃했습니다.\");"
+    },
+    {
+      "line": 933,
+      "kind": "qmark",
+      "asciiKey": "flash(\".\");",
+      "current": "flash(\"?? ???? ?? ?????.\");",
+      "recovered": "flash(\"로그아웃했습니다.\");"
+    },
+    {
+      "line": 938,
+      "kind": "qmark",
+      "asciiKey": "flash(\".\");",
+      "current": "flash(\"?? ???? ?? ???? ?????.\");",
+      "recovered": "flash(\"로그아웃했습니다.\");"
+    },
+    {
+      "line": 944,
+      "kind": "qmark",
+      "asciiKey": "flash(\".\");",
+      "current": "flash(\"???? ?????.\");",
+      "recovered": "flash(\"로그아웃했습니다.\");"
+    },
+    {
+      "line": 1028,
+      "kind": "qmark",
+      "asciiKey": "${navBackBtn({nav:\"stages\",label:\"\"})}",
+      "current": "${navBackBtn({ nav: \"stages\", label: \"????\" })}",
+      "recovered": "${navBackBtn({ nav: \"stages\", label: \"돌아가기\" })}"
+    },
+    {
+      "line": 1037,
+      "kind": "qmark",
+      "asciiKey": "<pclass=\"result-sub\"></p>",
+      "current": "<p class=\"result-sub\">????? ??? ?? ?????</p>",
+      "recovered": "<p class=\"result-sub\">출정문으로 돌아가 다시 도전하세요</p>"
+    },
+    {
+      "line": 1047,
+      "kind": "qmark",
+      "asciiKey": "rows.push(`<li><span></span><strong>+${reward.crystal}</strong></li>`);",
+      "current": "rows.push(`<li><span>????</span><strong>+${reward.crystal}</strong></li>`);",
+      "recovered": "rows.push(`<li><span>크리스탈</span><strong>+${reward.crystal}</strong></li>`);"
+    },
+    {
+      "line": 1051,
+      "kind": "qmark",
+      "asciiKey": "rows.push(`<li><span></span><strong>+${reward.jinmun}</strong></li>`);",
+      "current": "rows.push(`<li><span>???</span><strong>+${reward.jinmun}</strong></li>`);",
+      "recovered": "rows.push(`<li><span>진문석</span><strong>+${reward.jinmun}</strong></li>`);"
+    },
+    {
+      "line": 1054,
+      "kind": "qmark",
+      "asciiKey": "`<li><span></span><strong>+${reward.contribution}</strong></li>`,",
+      "current": "`<li><span>???</span><strong>+${reward.contribution}</strong></li>`,",
+      "recovered": "`<li><span>기여도</span><strong>+${reward.contribution}</strong></li>`,"
+    },
+    {
+      "line": 1058,
+      "kind": "qmark",
+      "asciiKey": "`<li><span>EXP</span><strong>+${reward.summonerExp}</strong></li>`,",
+      "current": "`<li><span>??? EXP</span><strong>+${reward.summonerExp}</strong></li>`,",
+      "recovered": "`<li><span>서머너 EXP</span><strong>+${reward.summonerExp}</strong></li>`,"
+    },
+    {
+      "line": 1066,
+      "kind": "qmark",
+      "asciiKey": "`<li><span></span><strong>+${lastScrollGain}</strong></li>`,",
+      "current": "`<li><span>???</span><strong>+${lastScrollGain}</strong></li>`,",
+      "recovered": "`<li><span>소환서</span><strong>+${lastScrollGain}</strong></li>`,"
+    },
+    {
+      "line": 1075,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"auth-btn-primary\"data-nav=\"enhance\"></button>",
+      "current": "<button type=\"button\" class=\"auth-btn-primary\" data-nav=\"enhance\">??? ???? ??</button>",
+      "recovered": "<button type=\"button\" class=\"auth-btn-primary\" data-nav=\"enhance\">강화진 가방에서 장착</button>"
+    },
+    {
+      "line": 1084,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"auth-btn-primary\"data-nav=\"enhance\"></button>",
+      "current": "<button type=\"button\" class=\"auth-btn-primary\" data-nav=\"enhance\">????? ??</button>",
+      "recovered": "<button type=\"button\" class=\"auth-btn-primary\" data-nav=\"enhance\">강화진 가방에서 장착</button>"
+    },
+    {
+      "line": 1085,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"secondary\"data-nav=\"shop\"></button>",
+      "current": "<button type=\"button\" class=\"secondary\" data-nav=\"shop\">?????</button>",
+      "recovered": "<button type=\"button\" class=\"secondary\" data-nav=\"shop\">연마·각인</button>"
+    },
+    {
+      "line": 1091,
+      "kind": "qmark",
+      "asciiKey": "${navBackBtn({nav:\"stages\",label:\"\"})}",
+      "current": "${navBackBtn({ nav: \"stages\", label: \"????\" })}",
+      "recovered": "${navBackBtn({ nav: \"stages\", label: \"돌아가기\" })}"
+    },
+    {
+      "line": 1100,
+      "kind": "qmark",
+      "asciiKey": "<pclass=\"result-sub\"></p>",
+      "current": "<p class=\"result-sub\">????? ??? ?? ?????</p>",
+      "recovered": "<p class=\"result-sub\">출정문으로 돌아가 다시 도전하세요</p>"
+    },
+    {
+      "line": 1109,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"secondaryauth-btn-ghost\"data-nav=\"stages\"></button>",
+      "current": "<button type=\"button\" class=\"secondary auth-btn-ghost\" data-nav=\"stages\">???</button>",
+      "recovered": "<button type=\"button\" class=\"secondary auth-btn-ghost\" data-nav=\"stages\">출정문</button>"
+    },
+    {
+      "line": 1115,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"secondaryauth-btn-ghost\"data-nav=\"home\"></button>",
+      "current": "<button type=\"button\" class=\"secondary auth-btn-ghost\" data-nav=\"home\">???</button>",
+      "recovered": "<button type=\"button\" class=\"secondary auth-btn-ghost\" data-nav=\"home\">홈으로</button>"
+    },
+    {
+      "line": 1293,
+      "kind": "qmark",
+      "asciiKey": "flash(\".\");",
+      "current": "flash(\"???? ?????.\");",
+      "recovered": "flash(\"로그아웃했습니다.\");"
+    },
+    {
+      "line": 1304,
+      "kind": "qmark",
+      "asciiKey": "flash(\"50%.\");",
+      "current": "flash(\"?? 50% ?? ?????.\");",
+      "recovered": "flash(\"마나 50% 이상 필요합니다.\");"
+    },
+    {
+      "line": 1315,
+      "kind": "qmark",
+      "asciiKey": "flash(\"35%.\");",
+      "current": "flash(\"?? 35% ?? ?????.\");",
+      "recovered": "flash(\"마나 35% 이상 필요합니다.\");"
+    },
+    {
+      "line": 1326,
+      "kind": "qmark",
+      "asciiKey": "flash(\"45%.\");",
+      "current": "flash(\"?? 45% ?? ?????.\");",
+      "recovered": "flash(\"마나 45% 이상 필요합니다.\");"
+    },
+    {
+      "line": 1337,
+      "kind": "qmark",
+      "asciiKey": "flash(\"40%.\");",
+      "current": "flash(\"?? 40% ?? ?????.\");",
+      "recovered": "flash(\"마나 40% 이상 필요합니다.\");"
+    },
+    {
+      "line": 1350,
+      "kind": "qmark",
+      "asciiKey": "flash(\"\");",
+      "current": "flash(\"?? ??? ?\");",
+      "recovered": "flash(\"스킬 쿨다운 중\");"
+    },
+    {
+      "line": 1357,
+      "kind": "qmark",
+      "asciiKey": "flash(\".\");",
+      "current": "flash(\"?? ????? ?? ??????.\");",
+      "recovered": "flash(\"로그아웃했습니다.\");"
+    },
+    {
+      "line": 1447,
+      "kind": "qmark",
+      "asciiKey": "`<spanclass=\"board-opening-hint\"></span>`",
+      "current": "? `<span class=\"board-opening-hint\">?? ???</span>`",
+      "recovered": "? `<span class=\"board-opening-hint\">포석 보너스</span>`"
+    },
+    {
+      "line": 1591,
+      "kind": "qmark",
+      "asciiKey": "alt=\"StoneSummoners\"",
+      "current": "alt=\"Stone Summoners ? ??????\"",
+      "recovered": "alt=\"Stone Summoners — 신비의마법석\""
+    },
+    {
+      "line": 1611,
+      "kind": "qmark",
+      "asciiKey": ":\"\");",
+      "current": ": \"???\");",
+      "recovered": null
+    },
+    {
+      "line": 1616,
+      "kind": "qmark",
+      "asciiKey": "<pclass=\"auth-session\">${label}</p>",
+      "current": "<p class=\"auth-session\">??? ? ${label}</p>",
+      "recovered": "<p class=\"auth-session\">로그인 · ${label}</p>"
+    },
+    {
+      "line": 1618,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"auth-btn-primary\"id=\"auth-start\"></button>",
+      "current": "<button type=\"button\" class=\"auth-btn-primary\" id=\"auth-start\">????</button>",
+      "recovered": "<button type=\"button\" class=\"auth-btn-primary\" id=\"auth-start\">게임시작</button>"
+    },
+    {
+      "line": 1619,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"secondaryauth-btn-ghost\"id=\"auth-logout\"></button>",
+      "current": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-logout\">????</button>",
+      "recovered": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-logout\">로그아웃</button>"
+    },
+    {
+      "line": 1628,
+      "kind": "qmark",
+      "asciiKey": "${navBackBtn({id:\"auth-back\",label:\"\"})}",
+      "current": "${navBackBtn({ id: \"auth-back\", label: \"????\" })}",
+      "recovered": "${navBackBtn({ id: \"auth-back\", label: \"돌아가기\" })}"
+    },
+    {
+      "line": 1631,
+      "kind": "qmark",
+      "asciiKey": "<h2class=\"auth-title\"></h2>",
+      "current": "<h2 class=\"auth-title\">????</h2>",
+      "recovered": "<h2 class=\"auth-title\">회원가입</h2>"
+    },
+    {
+      "line": 1633,
+      "kind": "qmark",
+      "asciiKey": "<label><inputname=\"email\"type=\"email\"autocomplete=\"username\"required/></label>",
+      "current": "<label>???<input name=\"email\" type=\"email\" autocomplete=\"username\" required /></label>",
+      "recovered": "<label>이메일<input name=\"email\" type=\"email\" autocomplete=\"username\" required /></label>"
+    },
+    {
+      "line": 1634,
+      "kind": "qmark",
+      "asciiKey": "<label><inputname=\"password\"type=\"password\"autocomplete=\"new-password\"minlength=",
+      "current": "<label>????<input name=\"password\" type=\"password\" autocomplete=\"new-password\" minlength=\"6\" required /></label>",
+      "recovered": "<label>비밀번호<input name=\"password\" type=\"password\" autocomplete=\"new-password\" minlength=\"6\" required /></label>"
+    },
+    {
+      "line": 1635,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"submit\"class=\"auth-btn-primary\"></button>",
+      "current": "<button type=\"submit\" class=\"auth-btn-primary\">????</button>",
+      "recovered": "<button type=\"submit\" class=\"auth-btn-primary\">회원가입</button>"
+    },
+    {
+      "line": 1650,
+      "kind": "qmark",
+      "asciiKey": "<h2class=\"auth-title\"></h2>",
+      "current": "<h2 class=\"auth-title\">????</h2>",
+      "recovered": "<h2 class=\"auth-title\">회원가입</h2>"
+    },
+    {
+      "line": 1652,
+      "kind": "qmark",
+      "asciiKey": "<label><inputname=\"email\"type=\"email\"autocomplete=\"username\"value=\"${emailAttr}\"",
+      "current": "<label>???<input name=\"email\" type=\"email\" autocomplete=\"username\" value=\"${emailAttr}\" required /></label>",
+      "recovered": "<label>이메일<input name=\"email\" type=\"email\" autocomplete=\"username\" value=\"${emailAttr}\" required /></label>"
+    },
+    {
+      "line": 1653,
+      "kind": "qmark",
+      "asciiKey": "<label><inputname=\"password\"type=\"password\"autocomplete=\"current-password\"minlen",
+      "current": "<label>????<input name=\"password\" type=\"password\" autocomplete=\"current-password\" minlength=\"6\" required /></label>",
+      "recovered": "<label>비밀번호<input name=\"password\" type=\"password\" autocomplete=\"current-password\" minlength=\"6\" required /></label>"
+    },
+    {
+      "line": 1655,
+      "kind": "qmark",
+      "asciiKey": "<labelclass=\"auth-check\"><inputtype=\"checkbox\"name=\"saveId\"${prefs.saveId\"checke",
+      "current": "<label class=\"auth-check\"><input type=\"checkbox\" name=\"saveId\" ${prefs.saveId ? \"checked\" : \"\"} /> ??? ??</label>",
+      "recovered": "<label class=\"auth-check\"><input type=\"checkbox\" name=\"saveId\" ${prefs.saveId ? \"checked\" : \"\"} /> 아이디 저장</label>"
+    },
+    {
+      "line": 1656,
+      "kind": "qmark",
+      "asciiKey": "<labelclass=\"auth-check\"><inputtype=\"checkbox\"name=\"autoLogin\"${prefs.autoLogin\"",
+      "current": "<label class=\"auth-check\"><input type=\"checkbox\" name=\"autoLogin\" ${prefs.autoLogin ? \"checked\" : \"\"} /> ?? ???</label>",
+      "recovered": "<label class=\"auth-check\"><input type=\"checkbox\" name=\"autoLogin\" ${prefs.autoLogin ? \"checked\" : \"\"} /> 자동 로그인</label>"
+    },
+    {
+      "line": 1658,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"submit\"class=\"auth-btn-primary\"></button>",
+      "current": "<button type=\"submit\" class=\"auth-btn-primary\">????</button>",
+      "recovered": "<button type=\"submit\" class=\"auth-btn-primary\">회원가입</button>"
+    },
+    {
+      "line": 1661,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"secondaryauth-btn-ghost\"id=\"auth-register\"></button>",
+      "current": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-register\">????</button>",
+      "recovered": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-register\">회원가입</button>"
+    },
+    {
+      "line": 1662,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"secondaryauth-btn-ghost\"id=\"auth-demo\"></button>",
+      "current": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-demo\">?? ???</button>",
+      "recovered": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-demo\">데모 플레이</button>"
+    },
+    {
+      "line": 1663,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"secondaryauth-btn-ghost\"id=\"auth-guest\"></button>",
+      "current": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-guest\">???? ??</button>",
+      "recovered": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-guest\">게스트로 계속</button>"
+    },
+    {
+      "line": 1668,
+      "kind": "qmark",
+      "asciiKey": "`<pclass=\"auth-warn\">DB.Postgres(DATABASE_URL).</p>`",
+      "current": "? `<p class=\"auth-warn\">?? DB? ??? ?????. ?? ????? Postgres(DATABASE_URL)? ?????.</p>`",
+      "recovered": "? `<p class=\"auth-warn\">서버 DB가 메모리 모드입니다. 배포 환경에서는 Postgres(DATABASE_URL)를 연결하세요.</p>`"
+    },
+    {
+      "line": 2248,
+      "kind": "unicode",
+      "asciiKey": "`<divclass=\"island-edit-hud\"role=\"toolbar\"aria-label=\"${\"\\uAC74\\uBB3C\\uBC30\\uCE5",
+      "current": "? `<div class=\"island-edit-hud\" role=\"toolbar\" aria-label=\"${\"\\uAC74\\uBB3C \\uBC30\\uCE58 \\uD3B8\\uC9D1\"}\">",
+      "recovered": null
+    },
+    {
+      "line": 2250,
+      "kind": "unicode",
+      "asciiKey": "<strong>${\"\\uBC30\\uCE58\\uD3B8\\uC9D1\"}</strong>",
+      "current": "<strong>${\"\\uBC30\\uCE58 \\uD3B8\\uC9D1\"}</strong>",
+      "recovered": null
+    },
+    {
+      "line": 2251,
+      "kind": "unicode",
+      "asciiKey": "<small>${\"\\uB4DC\\uB798\\uADF8\\uB85C\\uAC74\\uBB3C\\uC704\\uCE58\\uB97C\\uC62E\\uAE30\\uC1",
+      "current": "<small>${\"\\uB4DC\\uB798\\uADF8\\uB85C \\uAC74\\uBB3C \\uC704\\uCE58\\uB97C \\uC62E\\uAE30\\uC138\\uC694\"}</small>",
+      "recovered": null
+    },
+    {
+      "line": 2253,
+      "kind": "unicode",
+      "asciiKey": "<buttontype=\"button\"class=\"secondary\"id=\"btn-island-layout-reset\">${\"\\uCD08\\uAE3",
+      "current": "<button type=\"button\" class=\"secondary\" id=\"btn-island-layout-reset\">${\"\\uCD08\\uAE30\\uD654\"}</button>",
+      "recovered": null
+    },
+    {
+      "line": 2254,
+      "kind": "unicode",
+      "asciiKey": "<buttontype=\"button\"class=\"auth-btn-primary\"id=\"btn-island-layout-done\">${\"\\uC64",
+      "current": "<button type=\"button\" class=\"auth-btn-primary\" id=\"btn-island-layout-done\">${\"\\uC644\\uB8CC\"}</button>",
+      "recovered": null
+    },
+    {
+      "line": 2277,
+      "kind": "unicode",
+      "asciiKey": "<spanclass=\"island-build-zone-label\">${\"\\uBC30\\uCE58\\uAC00\\uB2A5\\uAD6C\\uC5ED\"}</",
+      "current": "<span class=\"island-build-zone-label\">${\"\\uBC30\\uCE58 \\uAC00\\uB2A5 \\uAD6C\\uC5ED\"}</span>",
+      "recovered": null
+    },
+    {
+      "line": 2360,
+      "kind": "qmark",
+      "asciiKey": "${navBackBtn({nav:\"home\",label:\"\"})}",
+      "current": "${navBackBtn({ nav: \"home\", label: \"????\" })}",
+      "recovered": "${navBackBtn({ nav: \"home\", label: \"돌아가기\" })}"
+    },
+    {
+      "line": 2407,
+      "kind": "qmark",
+      "asciiKey": "\"(+1)\"",
+      "current": "? \"?? ?? ? ?? ?? (??? +1)\"",
+      "recovered": null
+    },
+    {
+      "line": 2408,
+      "kind": "qmark",
+      "asciiKey": ":`${untilMission}`;",
+      "current": ": `?? ???? ${untilMission}?`;",
+      "recovered": ": `묘수 미션까지 ${untilMission}회`;"
+    },
+    {
+      "line": 2411,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 2412,
+      "kind": "qmark",
+      "asciiKey": "`${drills}Lv.${save.island.summonerLevel}`,",
+      "current": "`?? ${drills}? ? ??? Lv.${save.island.summonerLevel}`,",
+      "recovered": "`수련 ${drills}회 · 서머너 Lv.${save.island.summonerLevel}`,"
+    },
+    {
+      "line": 2427,
+      "kind": "qmark",
+      "asciiKey": "<buttontype=\"button\"class=\"primaryfull\"id=\"btn-dojo-drill\"></button>",
+      "current": "<button type=\"button\" class=\"primary full\" id=\"btn-dojo-drill\">????</button>",
+      "recovered": "<button type=\"button\" class=\"primary full\" id=\"btn-dojo-drill\">수련하기</button>"
+    },
+    {
+      "line": 2444,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 2468,
+      "kind": "qmark",
+      "asciiKey": "<strong>${maxed\"\":`Lv.${lv+1}`}</strong>",
+      "current": "<strong>${maxed ? \"?? ??\" : `??? ? Lv.${lv + 1}`}</strong>",
+      "recovered": "<strong>${maxed ? \"최대 레벨\" : `레벨업 → Lv.${lv + 1}`}</strong>"
+    },
+    {
+      "line": 2469,
+      "kind": "qmark",
+      "asciiKey": "<small>${maxed`MAX${MAX_BUILDING_LEVEL}`:`${cost}`}</small>",
+      "current": "<small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `??? ${cost}`}</small>",
+      "recovered": "<small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `−마나 ${cost}`}</small>"
+    },
+    {
+      "line": 2488,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 2512,
+      "kind": "qmark",
+      "asciiKey": "<strong>${maxed\"\":`Lv.${lv+1}`}</strong>",
+      "current": "<strong>${maxed ? \"?? ??\" : `??? ? Lv.${lv + 1}`}</strong>",
+      "recovered": "<strong>${maxed ? \"최대 레벨\" : `레벨업 → Lv.${lv + 1}`}</strong>"
+    },
+    {
+      "line": 2513,
+      "kind": "qmark",
+      "asciiKey": "<small>${maxed`MAX${MAX_BUILDING_LEVEL}`:`${cost}`}</small>",
+      "current": "<small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `??? ${cost}`}</small>",
+      "recovered": "<small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `−마나 ${cost}`}</small>"
+    },
+    {
+      "line": 2533,
+      "kind": "qmark",
+      "asciiKey": "\"\",",
+      "current": "\"??? ??\",",
+      "recovered": null
+    },
+    {
+      "line": 2542,
+      "kind": "qmark",
+      "asciiKey": "<divclass=\"guild-stat\"><span></span><strong>${save.scrolls}</strong></div>",
+      "current": "<div class=\"guild-stat\"><span>???</span><strong>${save.scrolls}</strong></div>",
+      "recovered": "<div class=\"guild-stat\"><span>소환서</span><strong>${save.scrolls}</strong></div>"
+    },
+    {
+      "line": 2544,
+      "kind": "qmark",
+      "asciiKey": "<pclass=\"muteddojo-hint\">.</p>",
+      "current": "<p class=\"muted dojo-hint\">?? ? ???? ? ??? ? ??? ???? ?????.</p>",
+      "recovered": "<p class=\"muted dojo-hint\">마나 · 크리스탈 · 소환서 중 하나가 무작위로 내려옵니다.</p>"
+    }
+  ]
+}

@@ -18,7 +18,9 @@ describe("ai helpers", () => {
     assert.equal(ranked.length, 3);
     assert.equal(ranked[0]!.point.x, 1);
     assert.equal(ranked[0]!.capturedCount, 2);
-    assert.ok(ranked[0]!.manaGain > 0);
+    assert.equal(ranked[0]!.manaGain, 0);
+    assert.equal(ranked[0]!.captureManaFrac, 0.2);
+    assert.equal(ranked[0]!.captureDamageBonus, 0.2);
   });
 
   it("ranks bait lure above empty center when no capture", () => {

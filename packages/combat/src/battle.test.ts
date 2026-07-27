@@ -681,4 +681,93 @@ describe("Battle flow", () => {
     assert.ok(b.allySummoner.mana >= mana0 + 8);
     assert.match(b.log.join("\n"), /포석 보너스 \(중앙 국면\)/);
   });
+
+  it("capture grants N×10% next-monster damage and manaMax×10%×N", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    // Surround white stones so black capture yields 3
+    const board = b.board;
+    board.play("white", { x: 2, y: 1 });
+    board.play("white", { x: 1, y: 2 });
+    board.play("white", { x: 3, y: 2 });
+    board.play("black", { x: 2, y: 0 });
+    board.play("black", { x: 0, y: 2 });
+    board.play("black", { x: 4, y: 2 });
+    board.play("black", { x: 2, y: 3 });
+    // One more white in a group of 1 that we can capture with 1 move
+    // Simpler: play a capture of 1 via standard atari
+    const b2 = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    // White stone at (1,0) with liberties; black surrounds for capture of 1
+    b2.board.play("white", { x: 0, y: 0 });
+    b2.board.play("black", { x: 1, y: 0 });
+    b2.board.play("black", { x: 0, y: 1 });
+    // Capture at... white at corner has liberty? Actually (0,0) white needs (1,0) and (0,1) taken - already done, so white is already captured? play might have auto-captured.
+    // Reset approach: force capture count via direct pending + mana path unit test style
+    for (const u of b2.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b2.tickUntilReady();
+    const manaBefore = b2.allySummoner.mana;
+    // Place on empty that captures: after black at 1,0 and 0,1, white at 0,0 should already be dead
+    // Use playStone on a fresh isolated capture setup
+    const b3 = new Battle({
+      boardSize: 9,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    // Classic: white single at 2,2; black surrounds N/E/W, capture from south
+    b3.board.play("white", { x: 2, y: 2 });
+    b3.board.play("black", { x: 2, y: 1 });
+    b3.board.play("black", { x: 1, y: 2 });
+    b3.board.play("black", { x: 3, y: 2 });
+    for (const u of b3.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b3.tickUntilReady();
+    const m0 = b3.allySummoner.mana;
+    assert.equal(b3.playStone({ x: 2, y: 3 }), true);
+    assert.equal(b3.pendingCaptureDamageBonus.ally, 0.1);
+    assert.ok(b3.allySummoner.mana >= m0 + 10); // 10% of 100
+    assert.equal(b3.skillAmplifyBonus, 0);
+    const hp0 = b3.getUnit("e-m1")!.hp;
+    const hits = b3.useSkill({ targetId: "e-m1" });
+    assert.ok(hits[0]!.damage > 0);
+    assert.equal(b3.pendingCaptureDamageBonus.ally, 0);
+    assert.ok(b3.getUnit("e-m1")!.hp < hp0);
+    // Second hit should not keep the bonus
+    for (const u of b3.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b3.tickUntilReady();
+    b3.autoStone();
+    assert.equal(b3.pendingCaptureDamageBonus.ally, 0);
+  });
+
+  it("composed ult refunds mana and buffs when tree nodes unlocked", () => {
+    const sm = summonerState("a-sum", 100, 0.1);
+    sm.skillTreeUnlocked = ["root_mana", "abyss_well", "root_power", "leader_aura"];
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: sm,
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) u.atb = u.id === "a-sum" ? 100 : 0;
+    b.tickUntilReady();
+    b.autoStone();
+    const hits = b.useSkill({ summonerSkill: "open" });
+    assert.ok(hits.length >= 1);
+    assert.ok(b.allySummoner.mana > 0); // refund from mana branch
+    assert.match(b.log.join("\n"), /진문개방 \[.*mana/);
+    const mon = b.getUnit("a-m1")!;
+    assert.ok((mon.atkBuffPct ?? 0) > 0);
+  });
 });

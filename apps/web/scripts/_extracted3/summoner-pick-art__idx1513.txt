@@ -1,0 +1,53 @@
+  const isHome = view === "home";
+  app.classList.remove("auth-mode");
+  app.classList.toggle("home-mode", isHome);
+  const nick = escapeHtml(displayNickname());
+  const userLv = island.summonerLevel;
+  const userExp = Math.floor(island.summonerExp ?? 0);
+  const rosterForPicker = save.summoners ?? createSummonerRoster();
+  const summonerPickerList = SUMMONER_ELEMENTS.map((el) => {
+    const p = rosterForPicker[el];
+    const on = el === activeEl;
+    const aw = p.awaken > 0 ? ` · 각성 ${p.awaken}` : "";
+    return `<button type="button" class="summoner-pick${on ? " is-active" : ""}" data-summoner="${el}" ${on ? "disabled" : ""}>
+      <img class="summoner-pick-art" src="/art/summoner/${el}.svg" width="44" height="44" alt="" draggable="false" />
+      <span class="summoner-pick-body">
+        <strong>${SUMMONER_ELEMENT_LABEL[el]} 서머너</strong>
+        <small>Lv.${p.level}${aw}${on ? " · 사용 중" : ""}</small>
+      </span>
+    </button>`;
+  }).join("");
+  app.innerHTML = `
+    <header class="app-bar app-bar--strip${isHome ? " app-bar--home" : ""}">
+      <div class="app-bar-frame app-bar-frame--strip">
+        <div class="app-bar-rail" aria-hidden="true"></div>
+        <div class="app-bar-strip">
+          <div class="app-bar-brand app-bar-brand--strip" title="${nick}">
+            <div class="user-profile" aria-label="${nick} · Lv.${userLv}">
+              <img class="user-profile-img" src="/art/auth/logo-mark-192.png" width="72" height="72" alt="" />
+              <span class="user-profile-nick">${nick}</span>
+              <div class="user-profile-foot">
+                <span class="user-profile-lv">Lv.${userLv}</span>
+                <div class="user-profile-exp" role="progressbar" aria-valuenow="${userExp}" aria-valuemin="0" aria-valuemax="100" aria-label="경험치 ${userExp}/100">
+                  <div class="user-profile-exp-fill" style="width:${Math.min(100, userExp)}%"></div>
+                </div>
+              </div>
+            </div>
+            ${
+              isHome
+                ? ""
+                : `<div class="app-bar-titles app-bar-titles--strip">
+              <h1>StoneSummoner ${demoTag}</h1>
+              <p class="app-bar-lv">
+                <span class="app-bar-lv-badge app-bar-lv-badge--${activeEl}">
+                  <span class="app-bar-lv-el">${SUMMONER_ELEMENT_LABEL[activeEl]}</span>
+                  <span class="app-bar-lv-num">Lv.${activeSum.level}</span>${
+                    activeSum.awaken > 0
+                      ? `<span class="app-bar-lv-awaken">각성 ${activeSum.awaken}</span>`
+                      : ""
+                  }
+                </span>
+              </p>
+            </div>`
+            }
+          </div>

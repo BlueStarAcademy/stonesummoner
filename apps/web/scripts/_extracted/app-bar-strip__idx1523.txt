@@ -1,0 +1,67 @@
+        <div class="app-bar-strip">
+          <div class="app-bar-brand app-bar-brand--strip" title="${nick}">
+            <div class="user-profile" aria-label="Lv.${userLv}">
+              <img class="user-profile-img" src="/art/auth/logo-mark-192.png" width="40" height="40" alt="" />
+              <div class="user-profile-foot">
+                <span class="user-profile-lv">Lv.${userLv}</span>
+                <div class="user-profile-exp" role="progressbar" aria-valuenow="${userExp}" aria-valuemin="0" aria-valuemax="100" aria-label="경험치 ${userExp}/100">
+                  <div class="user-profile-exp-fill" style="width:${Math.min(100, userExp)}%"></div>
+                </div>
+              </div>
+            </div>
+            <div class="user-profile-info">
+              <p class="user-profile-nick">${nick}${demoTag ? ` ${demoTag}` : ""}</p>
+              ${
+                isHome
+                  ? ""
+                  : `<p class="user-profile-sub">${SUMMONER_ELEMENT_LABEL[activeEl]} Lv.${activeSum.level}${
+                      activeSum.awaken > 0 ? ` · 각성 ${activeSum.awaken}` : ""
+                    }</p>`
+              }
+            </div>
+          </div>
+          <div class="res-bar" role="group" aria-label="주요 재화">
+            <div class="res-item res-item--gold" title="골드">
+              <img class="res-ico" src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(island.mana)}</strong>
+            </div>
+            <span class="res-sep" aria-hidden="true"></span>
+            <div class="res-crystal-wrap">
+              <div class="res-item res-item--crystal" title="크리스탈">
+                <img class="res-ico" src="/art/ui/res/crystal.svg" width="16" height="16" alt="" draggable="false" />
+                <strong class="res-val">${fmtRes(island.crystal)}</strong>
+              </div>
+              <button type="button" class="res-more-btn${resMoreOpen ? " is-open" : ""}" id="btn-res-more" aria-expanded="${resMoreOpen ? "true" : "false"}" aria-controls="res-more-panel" title="${resMoreOpen ? "재화 접기" : "다른 재화 보기"}" aria-label="${resMoreOpen ? "재화 접기" : "다른 재화 보기"}">
+                <span class="res-more-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="res-more-panel${resMoreOpen ? " is-open" : ""}" id="res-more-panel" role="region" aria-label="기타 재화" ${resMoreOpen ? "" : "hidden"}>
+                <div class="res-item res-item--scroll" title="소환서">
+                  <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
+                  <strong class="res-val">${fmtRes(save.scrolls)}</strong>
+                </div>
+                <div class="res-item res-item--glory" title="영광">
+                  <img class="res-ico" src="/art/ui/res/glory.svg" width="16" height="16" alt="" draggable="false" />
+                  <strong class="res-val">${fmtRes(save.gloryPoints ?? 0)}</strong>
+                </div>
+                <div class="res-item res-item--jinmun" title="진문석">
+                  <img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" />
+                  <strong class="res-val">${fmtRes(save.jinmunStones ?? 0)}</strong>
+                </div>
+                <div class="res-item res-item--guild" title="기여">
+                  <img class="res-ico" src="/art/ui/res/guild.svg" width="16" height="16" alt="" draggable="false" />
+                  <strong class="res-val">${fmtRes(save.guildContribution ?? 0)}</strong>
+                </div>
+                <div class="res-item res-item--arena" title="시즌승">
+                  <img class="res-ico" src="/art/ui/res/arena.svg" width="16" height="16" alt="" draggable="false" />
+                  <strong class="res-val">${fmtRes(save.arenaSeasonWins ?? 0)}</strong>
+                </div>
+              </div>
+            </div>
+            <span class="res-sep" aria-hidden="true"></span>
+            <div class="res-item res-item--energy" title="행동력">
+              <img class="res-ico" src="/art/ui/res/energy.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${Math.floor(island.energy)}<small>/${island.energyMax ?? 100}</small></strong>
+            </div>
+          </div>
+        </div>
+      </div>

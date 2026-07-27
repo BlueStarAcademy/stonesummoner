@@ -1,0 +1,12 @@
+              <div class="res-item res-item--scroll" title="일반 소환서">
+                <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
+                <strong class="res-val">${fmtRes(scrollCount(save, "normal"))}<small>일</small></strong>
+              </div>
+              <div class="res-item res-item--scroll" title="고급 소환서">
+                <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
+                <strong class="res-val">${fmtRes(scrollCount(save, "premium"))}<small>고</small></strong>
+              </div>
+              <div class="res-item res-item--scroll" title="신성/심연 소환서">
+                <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
+                <strong class="res-val">${fmtRes(scrollCount(save, "mystic"))}<small>신</small></strong>
+              </div>

@@ -303,7 +303,19 @@ export async function createStore() {
     ssl: process.env.PGSSL === "0" ? false : { rejectUnauthorized: false },
   });
   const store = createPgStore(pool);
-  await store.migrate();
-  console.log("[store] Postgres ready");
-  return store;
+  try {
+    await store.migrate();
+    console.log("[store] Postgres ready");
+    return store;
+  } catch (e) {
+    await pool.end().catch(() => {});
+    const isProd =
+      Boolean(process.env.RAILWAY_ENVIRONMENT) ||
+      process.env.NODE_ENV === "production";
+    if (isProd) throw e;
+    console.warn(
+      `[store] Postgres unavailable (${e.code ?? e.message}) — falling back to in-memory store`,
+    );
+    return createMemoryStore();
+  }
 }

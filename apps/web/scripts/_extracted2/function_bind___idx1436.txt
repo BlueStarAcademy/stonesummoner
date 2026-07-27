@@ -1,0 +1,14 @@
+function bind(): void {
+  if (view === "auth") {
+    bindAuth();
+    return;
+  }
+
+  app.querySelector("#btn-res-more")?.addEventListener("click", () => {
+    resMoreOpen = !resMoreOpen;
+    render();
+  });
+
+  app.querySelector("#btn-logout")?.addEventListener("click", () => {
+    void logout();
+  });

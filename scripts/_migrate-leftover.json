@@ -1,0 +1,738 @@
+[
+  {
+    "n": 783,
+    "l": ": `환영합니다${user.email ? ` · ${user.email}` : \"\"}`,"
+  },
+  {
+    "n": 789,
+    "l": "? `로그인됨 · ${user.email}`"
+  },
+  {
+    "n": 804,
+    "l": ": `환영합니다${sessionUser.email ? ` · ${sessionUser.email}` : \"\"}`,"
+  },
+  {
+    "n": 938,
+    "l": "flash(\"?? ???? ?? ???? ?????.\");"
+  },
+  {
+    "n": 1035,
+    "l": "<p class=\"result-kicker\">전투 결과</p>"
+  },
+  {
+    "n": 1036,
+    "l": "<h2 class=\"result-title\">결과 없음</h2>"
+  },
+  {
+    "n": 1037,
+    "l": "<p class=\"result-sub\">출정문으로 돌아가 다시 도전하세요</p>"
+  },
+  {
+    "n": 1045,
+    "l": "rows.push(`<li><span>마나</span><strong>+${reward.mana}</strong></li>`);"
+  },
+  {
+    "n": 1047,
+    "l": "rows.push(`<li><span>크리스탈</span><strong>+${reward.crystal}</strong></li>`);"
+  },
+  {
+    "n": 1049,
+    "l": "rows.push(`<li><span>영광</span><strong>+${reward.glory}</strong></li>`);"
+  },
+  {
+    "n": 1051,
+    "l": "rows.push(`<li><span>진문석</span><strong>+${reward.jinmun}</strong></li>`);"
+  },
+  {
+    "n": 1054,
+    "l": "`<li><span>기여도</span><strong>+${reward.contribution}</strong></li>`,"
+  },
+  {
+    "n": 1058,
+    "l": "`<li><span>서머너 EXP</span><strong>+${reward.summonerExp}</strong></li>`,"
+  },
+  {
+    "n": 1062,
+    "l": "`<li><span>레벨</span><strong>Lv.${save.island.summonerLevel}</strong></li>`,"
+  },
+  {
+    "n": 1066,
+    "l": "`<li><span>소환서</span><strong>+${lastScrollGain}</strong></li>`,"
+  },
+  {
+    "n": 1072,
+    "l": "<p class=\"section-label\">장비 드롭</p>"
+  },
+  {
+    "n": 1075,
+    "l": "<button type=\"button\" class=\"auth-btn-primary\" data-nav=\"enhance\">강화진 가방에서 장착</button>"
+  },
+  {
+    "n": 1081,
+    "l": "<p class=\"section-label\">장비 드롭</p>"
+  },
+  {
+    "n": 1084,
+    "l": "<button type=\"button\" class=\"auth-btn-primary\" data-nav=\"enhance\">강화진에서 장착</button>"
+  },
+  {
+    "n": 1085,
+    "l": "<button type=\"button\" class=\"secondary\" data-nav=\"shop\">연마·각인</button>"
+  },
+  {
+    "n": 1098,
+    "l": "<p class=\"result-kicker\">전투 결과</p>"
+  },
+  {
+    "n": 1099,
+    "l": "<h2 class=\"result-title\">결과 없음</h2>"
+  },
+  {
+    "n": 1100,
+    "l": "<p class=\"result-sub\">출정문으로 돌아가 다시 도전하세요</p>"
+  },
+  {
+    "n": 1108,
+    "l": "<button type=\"button\" class=\"auth-btn-primary\" id=\"btn-result-again\">다시 도전</button>"
+  },
+  {
+    "n": 1109,
+    "l": "<button type=\"button\" class=\"secondary auth-btn-ghost\" data-nav=\"stages\">출정문</button>"
+  },
+  {
+    "n": 1112,
+    "l": "? `<button type=\"button\" class=\"secondary auth-btn-ghost\" data-nav=\"party\">파티</button>`"
+  },
+  {
+    "n": 1115,
+    "l": "<button type=\"button\" class=\"secondary auth-btn-ghost\" data-nav=\"home\">홈으로</button>"
+  },
+  {
+    "n": 1445,
+    "l": ": `진문 재건 ${\"I\".repeat(Math.min(phase, 3))}`;"
+  },
+  {
+    "n": 1447,
+    "l": "? `<span class=\"board-opening-hint\">포석 보너스</span>`"
+  },
+  {
+    "n": 1547,
+    "l": "<p class=\"suggest-strip-title\">추천 착수</p>"
+  },
+  {
+    "n": 1555,
+    "l": "<small>따냄 ${s.capturedCount} · 마나 +${s.manaGain} · amp +${s.amplifyDelta.toFixed(2)}${s.hasToken ? t(\"ui.67082f387a\") : \"\"}</small>"
+  },
+  {
+    "n": 1616,
+    "l": "<p class=\"auth-session\">로그인 · ${label}</p>"
+  },
+  {
+    "n": 1618,
+    "l": "<button type=\"button\" class=\"auth-btn-primary\" id=\"auth-start\">게임시작</button>"
+  },
+  {
+    "n": 1619,
+    "l": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-logout\">로그아웃</button>"
+  },
+  {
+    "n": 1631,
+    "l": "<h2 class=\"auth-title\">회원가입</h2>"
+  },
+  {
+    "n": 1633,
+    "l": "<label>이메일<input name=\"email\" type=\"email\" autocomplete=\"username\" required /></label>"
+  },
+  {
+    "n": 1634,
+    "l": "<label>비밀번호<input name=\"password\" type=\"password\" autocomplete=\"new-password\" minlength=\"6\" required /></label>"
+  },
+  {
+    "n": 1635,
+    "l": "<button type=\"submit\" class=\"auth-btn-primary\">회원가입</button>"
+  },
+  {
+    "n": 1650,
+    "l": "<h2 class=\"auth-title\">회원가입</h2>"
+  },
+  {
+    "n": 1652,
+    "l": "<label>이메일<input name=\"email\" type=\"email\" autocomplete=\"username\" value=\"${emailAttr}\" required /></label>"
+  },
+  {
+    "n": 1653,
+    "l": "<label>비밀번호<input name=\"password\" type=\"password\" autocomplete=\"current-password\" minlength=\"6\" required /></label>"
+  },
+  {
+    "n": 1655,
+    "l": "<label class=\"auth-check\"><input type=\"checkbox\" name=\"saveId\" ${prefs.saveId ? \"checked\" : \"\"} /> 아이디 저장</label>"
+  },
+  {
+    "n": 1656,
+    "l": "<label class=\"auth-check\"><input type=\"checkbox\" name=\"autoLogin\" ${prefs.autoLogin ? \"checked\" : \"\"} /> 자동 로그인</label>"
+  },
+  {
+    "n": 1658,
+    "l": "<button type=\"submit\" class=\"auth-btn-primary\">회원가입</button>"
+  },
+  {
+    "n": 1661,
+    "l": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-register\">회원가입</button>"
+  },
+  {
+    "n": 1662,
+    "l": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-demo\">데모 플레이</button>"
+  },
+  {
+    "n": 1663,
+    "l": "<button type=\"button\" class=\"secondary auth-btn-ghost\" id=\"auth-guest\">게스트로 계속</button>"
+  },
+  {
+    "n": 1668,
+    "l": "? `<p class=\"auth-warn\">서버 DB가 메모리 모드입니다. 배포 환경에서는 Postgres(DATABASE_URL)를 연결하세요.</p>`"
+  },
+  {
+    "n": 2248,
+    "l": "? `<div class=\"island-edit-hud\" role=\"toolbar\" aria-label=\"\"건물 배치 편집\"\">"
+  },
+  {
+    "n": 2383,
+    "l": "<button type=\"button\" class=\"secondary full auth-btn-ghost\" id=\"btn-forge-dismiss\">확인</button>"
+  },
+  {
+    "n": 2390,
+    "l": "<p class=\"forge-reveal-kicker\"><span class=\"forge-reveal-mark\" aria-hidden=\"true\">融</span>융합 완료</p>"
+  },
+  {
+    "n": 2397,
+    "l": "<button type=\"button\" class=\"secondary full auth-btn-ghost\" id=\"btn-fusion-dismiss\">확인</button>"
+  },
+  {
+    "n": 2408,
+    "l": ": `묘수 미션까지 ${untilMission}회`;"
+  },
+  {
+    "n": 2412,
+    "l": "`수련 ${drills}회 · 서머너 Lv.${save.island.summonerLevel}`,"
+  },
+  {
+    "n": 2415,
+    "l": "<p class=\"dojo-panel-title\">수련 현황</p>"
+  },
+  {
+    "n": 2418,
+    "l": "<span class=\"dojo-stat-label\">누적</span>"
+  },
+  {
+    "n": 2422,
+    "l": "<span class=\"dojo-stat-label\">누적</span>"
+  },
+  {
+    "n": 2426,
+    "l": "<p class=\"muted dojo-hint\">1회 수련 · 마나 +${manaGain} · EXP +15</p>"
+  },
+  {
+    "n": 2427,
+    "l": "<button type=\"button\" class=\"primary full\" id=\"btn-dojo-drill\">수련하기</button>"
+  },
+  {
+    "n": 2445,
+    "l": "`Lv.${lv} · ${rate}/hr · 저장 ${stored}/${cap}`,"
+  },
+  {
+    "n": 2448,
+    "l": "<p class=\"pond-panel-title\">진액 연못</p>"
+  },
+  {
+    "n": 2462,
+    "l": "<small>${stored > 0 ? `대기 ${stored}` : t(\"ui.2c1116fb7b\")}</small>"
+  },
+  {
+    "n": 2468,
+    "l": "<strong>${maxed ? t(\"ui.cc24e86471\") : `레벨업 → Lv.${lv + 1}`}</strong>"
+  },
+  {
+    "n": 2469,
+    "l": "<small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `−마나 ${cost}`}</small>"
+  },
+  {
+    "n": 2489,
+    "l": "`Lv.${lv} · ${rate}/hr · 저장 ${stored}/${cap}`,"
+  },
+  {
+    "n": 2492,
+    "l": "<p class=\"pond-panel-title\">진액 연못</p>"
+  },
+  {
+    "n": 2506,
+    "l": "<small>${stored > 0 ? `대기 ${stored}` : t(\"ui.2c1116fb7b\")}</small>"
+  },
+  {
+    "n": 2512,
+    "l": "<strong>${maxed ? t(\"ui.cc24e86471\") : `레벨업 → Lv.${lv + 1}`}</strong>"
+  },
+  {
+    "n": 2513,
+    "l": "<small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `−마나 ${cost}`}</small>"
+  },
+  {
+    "n": 2527,
+    "l": "<p class=\"forge-reveal-kicker\"><span class=\"forge-reveal-mark\" aria-hidden=\"true\">融</span>융합 완료</p>"
+  },
+  {
+    "n": 2529,
+    "l": "<button type=\"button\" class=\"secondary full auth-btn-ghost\" id=\"btn-wish-dismiss\" style=\"margin-top:12px\">확인</button>"
+  },
+  {
+    "n": 2534,
+    "l": "used ? `오늘 완료 · ${last}` : t(\"ui.b65d90440e\"),"
+  },
+  {
+    "n": 2538,
+    "l": "<p class=\"guild-panel-title\">기원 현황</p>"
+  },
+  {
+    "n": 2540,
+    "l": "<div class=\"guild-stat\"><span>오늘</span><strong>${used ? t(\"ui.8d8680373c\") : t(\"ui.9614672b56\")}</strong></div>"
+  },
+  {
+    "n": 2541,
+    "l": "<div class=\"guild-stat\"><span>최근</span><strong>${last ?? \"—\"}</strong></div>"
+  },
+  {
+    "n": 2542,
+    "l": "<div class=\"guild-stat\"><span>소환서</span><strong>${save.scrolls}</strong></div>"
+  },
+  {
+    "n": 2544,
+    "l": "<p class=\"muted dojo-hint\">마나 · 크리스탈 · 소환서 중 하나가 무작위로 내려옵니다.</p>"
+  },
+  {
+    "n": 2577,
+    "l": "`편성 ${selected.size}/4 · 탭하여 선택`,"
+  },
+  {
+    "n": 2580,
+    "l": "<p class=\"party-lineup-title\">출전 라인</p>"
+  },
+  {
+    "n": 2583,
+    "l": "<p class=\"section-label\">로스터</p>"
+  },
+  {
+    "n": 2604,
+    "l": "<button type=\"button\" class=\"auth-btn-primary full\" id=\"btn-party-save\" style=\"margin-top:10px\">편성 저장 (${selected.size}/4)</button>"
+  },
+  {
+    "n": 2676,
+    "l": "<p class=\"equip-picker-title\">장착 대상 선택</p>"
+  },
+  {
+    "n": 2681,
+    "l": "<button type=\"button\" class=\"secondary\" data-nav=\"enhance\">강화진으로</button>"
+  },
+  {
+    "n": 2682,
+    "l": "<button type=\"button\" class=\"secondary\" data-gear-equip=\"${i}\">장착</button>"
+  },
+  {
+    "n": 2690,
+    "l": "<p class=\"summon-reveal-kicker\">소환 성공</p>"
+  },
+  {
+    "n": 2711,
+    "l": "<button type=\"button\" class=\"secondary\" data-nav=\"enhance\">강화진으로</button>"
+  },
+  {
+    "n": 2716,
+    "l": "<p class=\"summon-idle-title\">소환진이 고요합니다</p>"
+  },
+  {
+    "n": 2717,
+    "l": "<p class=\"summon-idle-copy\">소환서를 사용해 동료를 불러내세요</p>"
+  },
+  {
+    "n": 2781,
+    "l": "<p class=\"equip-picker-title\">슬롯 ${slot} 상징 선택</p>"
+  },
+  {
+    "n": 2793,
+    "l": "<small>${worn ? `착용중 ${worn} · 이동` : t(\"ui.43d54a7358\")}</small>"
+  },
+  {
+    "n": 2798,
+    "l": ": `<p class=\"muted\">슬롯 ${slot}용 상징이 없습니다. 전투 드롭·상점을 확인하세요.</p>`"
+  },
+  {
+    "n": 2801,
+    "l": "<button type=\"button\" class=\"secondary full\" id=\"btn-slot-equip-cancel\">취소</button>"
+  },
+  {
+    "n": 2835,
+    "l": "<div class=\"stat-cell\"><span class=\"stat-cell-k\">치확</span><span class=\"stat-cell-v\">${preview.final.critRate}%</span></div>"
+  },
+  {
+    "n": 2836,
+    "l": "<div class=\"stat-cell\"><span class=\"stat-cell-k\">치피</span><span class=\"stat-cell-v\">${preview.final.critDmg}%</span></div>"
+  },
+  {
+    "n": 2846,
+    "l": ": `<p class=\"muted loadout-sets-empty\">세트 미진행</p>`"
+  },
+  {
+    "n": 2892,
+    "l": "? `강화 −마나 ${mana} · −크리스탈 ${crystal}`"
+  },
+  {
+    "n": 2893,
+    "l": ": `강화 −마나 ${mana}`;"
+  },
+  {
+    "n": 2909,
+    "l": "? `각성 MAX (+${MAX_SUMMONER_AWAKEN})`"
+  },
+  {
+    "n": 2911,
+    "l": "? `각성 Lv.${awakenNeedLv}+`"
+  },
+  {
+    "n": 2912,
+    "l": ": `각성 +${awaken + 1} (−마나 ${awakenMana} · −크리스탈 ${awakenCrystal})`;"
+  },
+  {
+    "n": 2997,
+    "l": "? `−마나 ${n.manaCost} · −크 ${n.crystalCost}`"
+  },
+  {
+    "n": 2998,
+    "l": ": `−마나 ${n.manaCost}`;"
+  },
+  {
+    "n": 3049,
+    "l": "? `−마나 ${evoMana} · −크리스탈 ${evoCrystal}`"
+  },
+  {
+    "n": 3050,
+    "l": ": `−마나 ${evoMana}`;"
+  },
+  {
+    "n": 3054,
+    "l": "? `진화 Lv.${evoNeed}+`"
+  },
+  {
+    "n": 3055,
+    "l": ": `진화 ${evoCost}`;"
+  },
+  {
+    "n": 3081,
+    "l": "<small>${preview ? `HP ${preview.final.hp} · ATK ${preview.final.atk}` : \"\"}${maxed ? t(\"ui.191dcc34ee\") : ` · 강화 −마나 ${cost}`}</small>"
+  },
+  {
+    "n": 3120,
+    "l": "? `<p class=\"muted\">가방이 비어 있습니다. 장비 금고에서 드롭을 획득하세요.</p>`"
+  },
+  {
+    "n": 3132,
+    "l": "<button type=\"button\" class=\"secondary\" data-gear-equip=\"${i}\">장착</button>"
+  },
+  {
+    "n": 3142,
+    "l": "<p class=\"equip-picker-title\">장착 대상 선택</p>"
+  },
+  {
+    "n": 3161,
+    "l": "<button type=\"button\" class=\"secondary full auth-btn-ghost\" id=\"btn-equip-cancel\">취소</button>"
+  },
+  {
+    "n": 3178,
+    "l": "<small>${worn ? `착용 ${worn}` : t(\"ui.43d54a7358\")}${maxed ? t(\"ui.191dcc34ee\") : ` · 강화 −마나 ${symbolEnhanceManaCost(s.enhance)}`}</small>"
+  },
+  {
+    "n": 3182,
+    "l": "<button type=\"button\" class=\"secondary\" data-grind=\"${i}\" ${grindable ? \"\" : \"disabled\"}>연마</button>"
+  },
+  {
+    "n": 3195,
+    "l": "<button type=\"button\" class=\"enhance-tab${tab === \"awaken\" ? \" is-active\" : \"\"}\" data-enhance-tab=\"awaken\" role=\"tab\" aria-selected=\"${tab === \"awaken\"}\">각성·트리</button>"
+  },
+  {
+    "n": 3196,
+    "l": "<button type=\"button\" class=\"enhance-tab${tab === \"monsters\" ? \" is-active\" : \"\"}\" data-enhance-tab=\"monsters\" role=\"tab\" aria-selected=\"${tab === \"monsters\"}\">몬스터</button>"
+  },
+  {
+    "n": 3197,
+    "l": "<button type=\"button\" class=\"enhance-tab${tab === \"gear\" ? \" is-active\" : \"\"}\" data-enhance-tab=\"gear\" role=\"tab\" aria-selected=\"${tab === \"gear\"}\">장비</button>"
+  },
+  {
+    "n": 3198,
+    "l": "<button type=\"button\" class=\"enhance-tab${tab === \"symbols\" ? \" is-active\" : \"\"}\" data-enhance-tab=\"symbols\" role=\"tab\" aria-selected=\"${tab === \"symbols\"}\">상징</button>"
+  },
+  {
+    "n": 3202,
+    "l": "<p class=\"section-label\">장비 드롭</p>"
+  },
+  {
+    "n": 3212,
+    "l": "<p class=\"section-label\">스킬 트리 (${treeUnlocked.size}/${SKILL_TREE_NODES.length})</p>"
+  },
+  {
+    "n": 3216,
+    "l": "<p class=\"section-label\">로스터</p>"
+  },
+  {
+    "n": 3220,
+    "l": "<p class=\"section-label\">장비 드롭</p>"
+  },
+  {
+    "n": 3222,
+    "l": "${gearSlotBtn(\"weapon\", weapon, \"劍\", t(\"ui.8c4dac1fcc\"), `스킬+${(weapon.skillPowerBonus * 100).toFixed(0)}%`)}"
+  },
+  {
+    "n": 3228,
+    "l": "${gearSlotBtn(\"ring\", ring, \"環\", t(\"ui.f8435cd16d\"), `스킬+${(ring.skillPowerBonus * 100).toFixed(0)}%`)}"
+  },
+  {
+    "n": 3230,
+    "l": "<div class=\"gear-set-summary\">${setSummary || `<span class=\"muted\">세트 조각 없음</span>`}</div>"
+  },
+  {
+    "n": 3231,
+    "l": "<p class=\"section-label\">세트 부여 · −마나 ${GEAR_SET_AFFIX_MANA}</p>"
+  },
+  {
+    "n": 3233,
+    "l": "<p class=\"section-label\">장비 가방 (${bagLen}/${MAX_GEAR_BAG})</p>"
+  },
+  {
+    "n": 3237,
+    "l": "<p class=\"section-label\">로스터</p>"
+  },
+  {
+    "n": 3262,
+    "l": ".join(\"\") || `<p class=\"muted\">연마할 상징이 없습니다</p>`;"
+  },
+  {
+    "n": 3276,
+    "l": "`<p class=\"muted\">각인 가능한 상징이 없습니다 (슬롯 4–6 드롭 필요)</p>`;"
+  },
+  {
+    "n": 3279,
+    "l": "`소환서 ${save.scrolls} · 마나 ${Math.floor(save.island.mana)} · 크리스탈 ${save.island.crystal}`,"
+  },
+  {
+    "n": 3282,
+    "l": "<p class=\"section-label\">로스터</p>"
+  },
+  {
+    "n": 3299,
+    "l": "<p class=\"section-label\">에너지 · 제작</p>"
+  },
+  {
+    "n": 3323,
+    "l": "<p class=\"section-label\">상징 연마 (접두어)</p>"
+  },
+  {
+    "n": 3325,
+    "l": "<p class=\"section-label\">상징 각인 (슬롯 4–6)</p>"
+  },
+  {
+    "n": 3340,
+    "l": "`보유 영광 ${glory}`,"
+  },
+  {
+    "n": 3343,
+    "l": "<p class=\"guild-panel-title\">기원 현황</p>"
+  },
+  {
+    "n": 3345,
+    "l": "<div class=\"guild-stat\"><span>보유</span><strong>${glory}</strong></div>"
+  },
+  {
+    "n": 3346,
+    "l": "<div class=\"guild-stat\"><span>건물 합산</span><strong>${levels}/${maxTotal}</strong></div>"
+  },
+  {
+    "n": 3347,
+    "l": "<div class=\"guild-stat\"><span>종류</span><strong>${GLORY_BUILDINGS.length}</strong></div>"
+  },
+  {
+    "n": 3358,
+    "l": "<small>${g.effectKo} · ${maxed ? \"MAX\" : `−영광 ${g.gloryCostPerLevel}`}</small>"
+  },
+  {
+    "n": 3379,
+    "l": "<p class=\"capture-shop-title\">사석상점</p>"
+  },
+  {
+    "n": 3380,
+    "l": "<p class=\"muted capture-shop-sub\">대량 따냄 보상 — 하나 선택</p>"
+  },
+  {
+    "n": 3417,
+    "l": "<div class=\"guild-stat\"><span>기여</span><strong>${save.guildContribution ?? 0}</strong></div>"
+  },
+  {
+    "n": 3418,
+    "l": "<div class=\"guild-stat\"><span>레이드 최고</span><strong>+${save.guildRaidBest ?? 0}</strong></div>"
+  },
+  {
+    "n": 3419,
+    "l": "<div class=\"guild-stat\"><span>출석</span><strong>${save.guildCheckInDay ?? \"—\"}</strong></div>"
+  },
+  {
+    "n": 3441,
+    "l": "<label class=\"guild-join-label\">길드명"
+  },
+  {
+    "n": 3444,
+    "l": "<button type=\"button\" class=\"auth-btn-primary full\" id=\"btn-guild-join\">가입</button>"
+  },
+  {
+    "n": 3447,
+    "l": "<p class=\"section-label\">에너지 · 제작</p>"
+  },
+  {
+    "n": 3464,
+    "l": "`동일 종 2마리 → 진화 +1 · −마나 ${FUSION_MANA_COST}`,"
+  },
+  {
+    "n": 3468,
+    "l": "<p class=\"guild-panel-title\">기원 현황</p>"
+  },
+  {
+    "n": 3469,
+    "l": "<p class=\"muted dojo-hint\">같은 종의 두 마리를 합치면 진화 +1 · 높은 레벨·스킬·상징을 유지합니다.</p>"
+  },
+  {
+    "n": 3491,
+    "l": ": `<p class=\"muted\">동일 종 몬스터 2마리가 필요합니다</p>`}"
+  },
+  {
+    "n": 3504,
+    "l": "{ id: \"normal\", labelKo: \"??\", blurb: \"?? ???\", energyMul: 1 },"
+  },
+  {
+    "n": 3505,
+    "l": "{ id: \"hard\", labelKo: \"???\", blurb: \"? ?? +2 ? ??? ??\", energyMul: 1.5 },"
+  },
+  {
+    "n": 3506,
+    "l": "{ id: \"hell\", labelKo: \"??\", blurb: \"? ?? +4 ? ??? ?? ??\", energyMul: 2 },"
+  },
+  {
+    "n": 3575,
+    "l": "? ` · 영광 ${s.gloryReward}`"
+  },
+  {
+    "n": 3577,
+    "l": "? ` · 진문석 ${s.jinmunReward}`"
+  },
+  {
+    "n": 3584,
+    "l": "? \"??? ???\""
+  },
+  {
+    "n": 3586,
+    "l": "? \"??? 0\""
+  },
+  {
+    "n": 3587,
+    "l": ": `??? ${cost}`;"
+  },
+  {
+    "n": 3628,
+    "l": "blurb: `???? ? ${pin.areaKo}`,"
+  },
+  {
+    "n": 3728,
+    "l": "const label = open ? d.labelKo : `${d.labelKo} (???)`;"
+  },
+  {
+    "n": 3734,
+    "l": "extras = `<p class=\"stages-note\">?? ${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT} ? ?? ?? ? ????? ??/??</p>`;"
+  },
+  {
+    "n": 3774,
+    "l": "<span class=\"sr-only\">???</span>"
+  },
+  {
+    "n": 3775,
+    "l": "<select class=\"stages-region-diff-select\" id=\"region-diff-select\" aria-label=\"???? ???\" title=\"${diffMeta.blurb}\">"
+  },
+  {
+    "n": 3780,
+    "l": "<p class=\"stages-meta\">??? ${prog.cleared}/${prog.total}${prog.unlocked ? \"\" : \" ? ???\"} ? ??? ${energyNow}/${energyMax}</p>"
+  },
+  {
+    "n": 3820,
+    "l": "return `<button type=\"button\" class=\"stages-pin ${mq ? \"stages-pin--mq\" : \"stages-pin--side\"} stages-pin--${r.tone}${prog.unlocked ? \"\" : \" is-locked\"}${active ? \" is-active\" : \"\"}"
+  },
+  {
+    "n": 3873,
+    "l": "<p class=\"stages-title\">세계 지도</p>"
+  },
+  {
+    "n": 3874,
+    "l": "<p class=\"stages-meta\">메인 ${mqCleared}/${mqTotal} · 전체 클리어 ${cleared} · 시즌승 ${seasonWins}</p>"
+  },
+  {
+    "n": 3933,
+    "l": "phase <= 0 ? t(\"ui.d2342783cb\") : `강화 진문 ${\"I\".repeat(Math.min(phase, 3))}`;"
+  },
+  {
+    "n": 3950,
+    "l": "? ` · 묘수 ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? \"✓\" : \"\"}`"
+  },
+  {
+    "n": 3983,
+    "l": "<button type=\"button\" id=\"sk-ult\" class=\"summoner-sk ult${canUlt ? \" ready\" : \"\"}\" ${awaitSkill && canUlt ? \"\" : \"disabled\"}><span class=\"sk-mark\" aria-hidden=\"true\">開</span><span "
+  },
+  {
+    "n": 3984,
+    "l": "<button type=\"button\" id=\"sk-declare\" class=\"summoner-sk declare${canDeclare ? \" ready\" : \"\"}\" ${awaitSkill && canDeclare ? \"\" : \"disabled\"}><span class=\"sk-mark\" aria-hidden=\"true"
+  },
+  {
+    "n": 3985,
+    "l": "<button type=\"button\" id=\"sk-dual\" class=\"summoner-sk dual${canDual ? \" ready\" : \"\"}\" ${awaitSkill && canDual ? \"\" : \"disabled\"}><span class=\"sk-mark\" aria-hidden=\"true\">雙</span><s"
+  },
+  {
+    "n": 3986,
+    "l": "<button type=\"button\" id=\"sk-clean\" class=\"summoner-sk clean${canClean ? \" ready\" : \"\"}\" ${awaitSkill && canClean ? \"\" : \"disabled\"}><span class=\"sk-mark\" aria-hidden=\"true\">掃</spa"
+  },
+  {
+    "n": 3987,
+    "l": "<button type=\"button\" id=\"sk-guard\" class=\"summoner-sk guard${canGuard ? \" ready\" : \"\"}\" ${awaitSkill && canGuard ? \"\" : \"disabled\"}><span class=\"sk-mark\" aria-hidden=\"true\">守</spa"
+  },
+  {
+    "n": 3990,
+    "l": "<button type=\"button\" id=\"sk-smart\" class=\"smart\" ${awaitSkill ? \"\" : \"disabled\"}>추천</button>"
+  },
+  {
+    "n": 3993,
+    "l": "? `<button type=\"button\" class=\"secondary board-switch\" id=\"btn-board-switch\">쌍국 ${battle.boardLabel === t(\"ui.8bbc778e36\") ? \"→B\" : \"→A\"}</button>`"
+  },
+  {
+    "n": 4609,
+    "l": "flash(`진액 수집 · 마나 ${Math.floor(island.mana)}`);"
+  },
+  {
+    "n": 4689,
+    "l": "flash(lv ? `서머너 Lv.${lv}에 해금됩니다.` : t(\"ui.654ebee916\"));"
+  },
+  {
+    "n": 4953,
+    "l": "cost: `−마나 ${SYMBOL_GRIND_MANA_COST}`,"
+  },
+  {
+    "n": 4986,
+    "l": "cost: `−크리스탈 ${SYMBOL_IMPRINT_CRYSTAL_COST}`,"
+  },
+  {
+    "n": 5059,
+    "l": "cost: `−마나 ${FUSION_MANA_COST}`,"
+  },
+  {
+    "n": 5340,
+    "l": "const next = window.prompt(\"새 길드명\", save.guildName ?? \"\");"
+  }
+]

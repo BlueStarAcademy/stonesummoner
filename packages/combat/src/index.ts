@@ -5,7 +5,9 @@ export {
   amplifyCapFromPowerDelta,
   estimateCombatPower,
 } from "./power.js";
-export { gainsForBoardEvent, classifyCapture } from "./boardEvents.js";
+export { gainsForBoardEvent, classifyCapture, CAPTURE_BONUS_PER_STONE } from "./boardEvents.js";
+export { composeSummonerUlt } from "./summonerUlt.js";
+export type { ComposedSummonerUlt } from "./summonerUlt.js";
 export { detectShapeBonuses, starPoints } from "./shapes.js";
 export type { ShapeBonus, ShapeBonusId } from "./shapes.js";
 export {

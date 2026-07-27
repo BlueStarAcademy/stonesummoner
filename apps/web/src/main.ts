@@ -9,6 +9,31 @@ import {
   type LocaleId,
 } from "./i18n";
 import {
+  fxDurationMs,
+  mountUnitAnimHooks,
+  playUltCutin,
+  pulseBoardCell,
+  pulseUnitClass,
+  waitFx,
+} from "./battle/fx";
+import { destroyAllSpine, mountBattleSpines, mountBookPreviewSpine, playSpineClip } from "./battle/spinePilot";
+import { dematteArtInTree } from "./ui/dematteArt";
+import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
+import {
+  ARROW_DOWN,
+  ARROW_LEFT,
+  ARROW_RIGHT,
+  ARROW_UP,
+  CHECK,
+  EM_DASH,
+  MIDDOT,
+  MINUS,
+  Mark,
+  RANGE,
+  STAR,
+  TIMES,
+} from "./ui/marks";
+import {
   captureShopOffers,
   pickAutoSkillIndex,
   starPoints,
@@ -347,7 +372,7 @@ let sessionUser: SessionUser | null = null;
 const authUi = { pane: "gate" as "gate" | "login" | "register" };
 let bootReady = false;
 let cloudTimer: ReturnType<typeof setTimeout> | null = null;
-/** False after cloud 401 ? keep local play, stop PUT spam. */
+/** False after cloud 401 — keep local play, stop PUT spam. */
 let cloudSyncOk = true;
 let cloudAuthWarned = false;
 let ephemeralStore = false;
@@ -365,9 +390,9 @@ let lastScrollGain = 0;
 let lastSummonUids: string[] = [];
 /** Symbol index awaiting monster pick for equip. */
 let equipPickSymIndex: number | null = null;
-/** Empty slot awaiting symbol pick (monster uid + slot 1?6). */
+/** Empty slot awaiting symbol pick (monster uid + slot 1-6). */
 let slotEquipPick: { uid: string; slot: number } | null = null;
-/** Grind/imprint before?after reveal card. */
+/** Grind/imprint before/after reveal card. */
 let forgeReveal: ForgeReveal | null = null;
 /** Fusion success reveal card. */
 let fusionReveal: FusionReveal | null = null;
@@ -389,14 +414,6 @@ function applyMonDetailTabUi(): boolean {
     btn.classList.toggle("is-active", on);
     btn.setAttribute("aria-selected", on ? "true" : "false");
   });
-  const body = shell.querySelector(".mon-inspect-body");
-  body?.classList.toggle("mon-inspect-body--symbols", monDetailTab === "symbols");
-  shell
-    .querySelector(".mon-inspect-col-art")
-    ?.classList.toggle("is-hidden", monDetailTab === "symbols");
-  shell
-    .querySelector(".mon-inspect-col-inv")
-    ?.classList.toggle("is-hidden", monDetailTab !== "symbols");
   shell.querySelectorAll<HTMLElement>("[data-mon-pane]").forEach((pane) => {
     pane.hidden = pane.dataset.monPane !== monDetailTab;
   });
@@ -424,13 +441,15 @@ let partyDraft: Set<string> | null = null;
 let toast = "";
 let battleSpeed: 1 | 2 | 3 = 1;
 let autoMode = false;
+/** Blocks input while place/strike choreography plays. */
+let battleFxBusy = false;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let energyRegenTimer: ReturnType<typeof setInterval> | null = null;
 let dmgFloats: { id: number; text: string; crit: boolean; ult: boolean }[] = [];
 let floatSeq = 0;
-/** Last seen circle phase ? detect empowered reset for board FX. */
+/** Last seen circle phase — detect empowered reset for board FX. */
 let lastSeenBoardPhase = 0;
-/** One-shot collapse?rekindle class on the board frame. */
+/** One-shot collapse/rekindle class on the board frame. */
 let boardRekindleFx = false;
 
 /** Extra currencies drawer under app-bar resources. */
@@ -440,6 +459,8 @@ let mailboxOpen = false;
 let notifOpen = false;
 let summonerPickerOpen = false;
 let missionOpen = false;
+let communityOpen = false;
+let shopOpen = false;
 /** Island world chat panel. */
 let chatOpen = false;
 /** True while the player is connected to a world-chat channel session. */
@@ -654,6 +675,15 @@ let stagesPanDrag: {
   origY: number;
   moved: boolean;
 } | null = null;
+/** Atlas pixel size — pin x/y% are fractions of this image, not the viewport crop. */
+const STAGES_MAP_NATURAL = { w: 1080, h: 1920 } as const;
+const STAGES_MAP_ASPECT = STAGES_MAP_NATURAL.w / STAGES_MAP_NATURAL.h;
+/** World larger than viewport so the full atlas can be panned. */
+const STAGES_WORLD_OVERSCAN = 1.55;
+/** Bump when atlas fit metrics change so the next bind re-centers once. */
+const STAGES_MAP_FIT_VERSION = 1;
+let stagesMapFitApplied = 0;
+let stagesWorldResizeObs: ResizeObserver | null = null;
 
 function localSaveKey(): string {
   return sessionUser?.kind === "demo" ? DEMO_SAVE_KEY : SAVE_KEY;
@@ -861,7 +891,10 @@ async function enterWithUser(
   await hydrateSession(user, opts);
   authUi.pane = "gate";
   const enterGame =
-    opts?.enterGame ?? (opts?.demo === true || opts?.fresh === true);
+    opts?.enterGame ??
+    (opts?.demo === true ||
+      opts?.fresh === true ||
+      readAuthPrefs().autoLogin);
   if (enterGame) {
     view = "home";
     flash(
@@ -869,7 +902,7 @@ async function enterWithUser(
         ? t('ui.0b00025fb4')
         : user.kind === "guest"
           ? t('ui.02f932d2cd')
-          : `${t('ui.b0814cee04')}${user.email ? ` ? ${user.email}` : ""}`,
+          : `${t('ui.b0814cee04')}${user.email ? ` ${MIDDOT} ${user.email}` : ""}`,
     );
   } else {
     view = "auth";
@@ -890,7 +923,7 @@ function startGameFromAuth(): void {
         ? t('ui.0b00025fb4')
       : sessionUser.kind === "guest"
         ? t('ui.02f932d2cd')
-        : `${t('ui.b0814cee04')}${sessionUser.email ? ` ? ${sessionUser.email}` : ""}`,
+        : `${t('ui.b0814cee04')}${sessionUser.email ? ` ${MIDDOT} ${sessionUser.email}` : ""}`,
   );
   render();
 }
@@ -913,6 +946,17 @@ async function logout(): Promise<void> {
 
 function flash(msg: string): void {
   toast = msg;
+  const bar = app.querySelector("header.app-bar");
+  if (!bar) return;
+  bar.querySelector(".toast")?.remove();
+  const p = document.createElement("p");
+  p.className = "toast";
+  p.textContent = msg;
+  bar.appendChild(p);
+  setTimeout(() => {
+    if (toast === msg) toast = "";
+    p.remove();
+  }, 2200);
 }
 
 
@@ -946,7 +990,7 @@ function animateResCount(
   requestAnimationFrame(tick);
 }
 
-/** Float resource chips upward, then bump the header wallet. */
+/** Float one resource icon skyward, then bump the header wallet. */
 function playResourceCollectFx(opts: {
   kind: "mana" | "crystal";
   amount: number;
@@ -989,31 +1033,15 @@ function playResourceCollectFx(opts: {
   const layer = ensureResFxLayer();
   const cx = opts.from.left + opts.from.width / 2;
   const cy = opts.from.top + opts.from.height / 2;
-  const n = Math.min(7, Math.max(3, Math.ceil(opts.amount / 40)));
+  const chip = document.createElement("div");
+  chip.className = `res-fly res-fly--${opts.kind}`;
+  chip.style.left = `${cx}px`;
+  chip.style.top = `${cy}px`;
+  chip.innerHTML = `<img src="${icon}" width="28" height="28" alt="" />`;
+  layer.appendChild(chip);
+  chip.addEventListener("animationend", () => chip.remove(), { once: true });
 
-  for (let i = 0; i < n; i++) {
-    const chip = document.createElement("div");
-    chip.className = `res-fly res-fly--${opts.kind}`;
-    const dx = (Math.random() - 0.5) * 56;
-    chip.style.left = `${cx + (Math.random() - 0.5) * 18}px`;
-    chip.style.top = `${cy + (Math.random() - 0.5) * 10}px`;
-    chip.style.setProperty("--dx", `${dx}px`);
-    chip.style.setProperty("--delay", `${i * 42}ms`);
-    chip.innerHTML = `<img src="${icon}" width="16" height="16" alt="" />`;
-    layer.appendChild(chip);
-    chip.addEventListener("animationend", () => chip.remove(), { once: true });
-  }
-
-  const label = document.createElement("div");
-  label.className = `res-fly-label res-fly-label--${opts.kind}`;
-  label.style.left = `${cx}px`;
-  label.style.top = `${cy - 10}px`;
-  label.style.setProperty("--dx", `${(Math.random() - 0.5) * 16}px`);
-  label.textContent = `+${fmtRes(opts.amount)}`;
-  layer.appendChild(label);
-  label.addEventListener("animationend", () => label.remove(), { once: true });
-
-  window.setTimeout(finishHeader, 620);
+  window.setTimeout(finishHeader, 720);
 }
 
 
@@ -1204,15 +1232,50 @@ function renderResult(): string {
 }
 
 function onCellClick(x: number, y: number): void {
+  void onCellClickAsync(x, y);
+}
+
+async function onCellClickAsync(x: number, y: number): Promise<void> {
   if (!battle || battle.phase !== "await_stone") return;
-  if (autoMode) return;
+  if (autoMode || battleFxBusy) return;
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
     : null;
   if (!unit || unit.team !== "ally") return;
-  if (!battle.playStone({ x, y })) return;
-  refreshLegal();
-  render();
+
+  battleFxBusy = true;
+  try {
+    const allySum = battle.units.find(
+      (u) => u.team === "ally" && u.kind === "summoner" && u.alive,
+    );
+    const castMs = fxDurationMs(420, battleSpeed);
+    if (allySum) {
+      pulseUnitClass(app, allySum.id, "fx-cast-place", castMs);
+      playSpineClip(allySum.id, "cast");
+    }
+    await waitFx(castMs);
+
+    if (!battle.playStone({ x, y })) return;
+    const capBonus = battle.pendingCaptureDamageBonus.ally;
+    refreshLegal();
+    render();
+    const dropMs = fxDurationMs(280, battleSpeed);
+    pulseBoardCell(app, x, y, "fx-stone-drop", dropMs);
+    if (capBonus > 0) {
+      pulseBoardCell(app, x, y, "fx-capture", fxDurationMs(380, battleSpeed));
+      app.querySelector(".board-frame")?.classList.add("fx-capture-flash");
+      window.setTimeout(
+        () =>
+          app
+            .querySelector(".board-frame")
+            ?.classList.remove("fx-capture-flash"),
+        fxDurationMs(380, battleSpeed),
+      );
+    }
+    await waitFx(Math.max(dropMs, capBonus > 0 ? fxDurationMs(380, battleSpeed) : 0));
+  } finally {
+    battleFxBusy = false;
+  }
 }
 
 function pushDamageFloats(hits: SkillResult[]): void {
@@ -1442,84 +1505,128 @@ function autoAllyTurn(): void {
 function castSkill(
   mode: "ult" | "declare" | "dual" | "clean" | "guard" | "smart" | number,
 ): void {
-  if (!battle || battle.phase !== "await_skill" || autoMode) return;
+  void castSkillAsync(mode);
+}
+
+async function playStrikeFx(
+  hits: SkillResult[],
+  opts?: { ult?: boolean },
+): Promise<void> {
+  if (!hits.length) {
+    pushDamageFloats(hits);
+    return;
+  }
+  if (opts?.ult) {
+    const cutMs = fxDurationMs(520, battleSpeed);
+    playUltCutin(app, cutMs);
+    const caster = hits[0]?.attackerId;
+    if (caster) {
+      pulseUnitClass(app, caster, "fx-ult", cutMs);
+      playSpineClip(caster, "ult");
+    }
+    await waitFx(cutMs);
+  } else {
+    const attackerId = hits[0]!.attackerId;
+    const targetId = hits[0]!.targetId;
+    const lungeMs = fxDurationMs(380, battleSpeed);
+    pulseUnitClass(app, attackerId, "fx-lunge", lungeMs);
+    pulseUnitClass(app, targetId, "fx-hit", lungeMs);
+    playSpineClip(attackerId, "run", { loop: false });
+    window.setTimeout(() => {
+      playSpineClip(attackerId, "attack");
+    }, Math.floor(lungeMs * 0.35));
+    await waitFx(lungeMs);
+  }
+  pushDamageFloats(hits);
+}
+
+async function castSkillAsync(
+  mode: "ult" | "declare" | "dual" | "clean" | "guard" | "smart" | number,
+): Promise<void> {
+  if (!battle || battle.phase !== "await_skill" || autoMode || battleFxBusy)
+    return;
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
     : null;
   if (!unit || unit.team !== "ally") return;
 
-  if (mode === "ult") {
-    if (!battle.canUseSummonerSkill(unit)) {
-    flash(t('ui.711b4aaddc'));
-      render();
+  battleFxBusy = true;
+  try {
+    if (mode === "ult") {
+      if (!battle.canUseSummonerSkill(unit)) {
+        flash(t("ui.711b4aaddc"));
+        render();
+        return;
+      }
+      const hits = battle.useSkill({ summonerSkill: "open" });
+      await playStrikeFx(hits, { ult: true });
+      afterPlayerAction();
       return;
     }
-    const hits = battle.useSkill({ summonerSkill: "open" });
-    pushDamageFloats(hits);
-    afterPlayerAction();
-    return;
-  }
-  if (mode === "declare") {
-    if (!battle.canUseSummonerDeclare(unit)) {
-      flash(t('ui.9af91c9bed'));
-      render();
+    if (mode === "declare") {
+      if (!battle.canUseSummonerDeclare(unit)) {
+        flash(t("ui.9af91c9bed"));
+        render();
+        return;
+      }
+      const hits = battle.useSkill({ summonerSkill: "declare" });
+      pushDamageFloats(hits);
+      afterPlayerAction();
       return;
     }
-    const hits = battle.useSkill({ summonerSkill: "declare" });
-    pushDamageFloats(hits);
-    afterPlayerAction();
-    return;
-  }
-  if (mode === "dual") {
-    if (!battle.canUseSummonerDual(unit)) {
-      flash(t('ui.b0b1120abf'));
-      render();
+    if (mode === "dual") {
+      if (!battle.canUseSummonerDual(unit)) {
+        flash(t("ui.b0b1120abf"));
+        render();
+        return;
+      }
+      const hits = battle.useSkill({ summonerSkill: "dual" });
+      pushDamageFloats(hits);
+      afterPlayerAction();
       return;
     }
-    const hits = battle.useSkill({ summonerSkill: "dual" });
-    pushDamageFloats(hits);
-    afterPlayerAction();
-    return;
-  }
-  if (mode === "clean") {
-    if (!battle.canUseSummonerClean(unit)) {
-      flash(t('ui.c85840dca0'));
-      render();
+    if (mode === "clean") {
+      if (!battle.canUseSummonerClean(unit)) {
+        flash(t("ui.c85840dca0"));
+        render();
+        return;
+      }
+      const hits = battle.useSkill({ summonerSkill: "clean" });
+      pushDamageFloats(hits);
+      afterPlayerAction();
       return;
     }
-    const hits = battle.useSkill({ summonerSkill: "clean" });
-    pushDamageFloats(hits);
-    afterPlayerAction();
-    return;
-  }
-  if (mode === "guard") {
-    if (!battle.canUseSummonerGuard(unit)) {
-      flash(t('ui.9cf3c0b981'));
-      render();
+    if (mode === "guard") {
+      if (!battle.canUseSummonerGuard(unit)) {
+        flash(t("ui.9cf3c0b981"));
+        render();
+        return;
+      }
+      const hits = battle.useSkill({ summonerSkill: "guard" });
+      pushDamageFloats(hits);
+      afterPlayerAction();
       return;
     }
-    const hits = battle.useSkill({ summonerSkill: "guard" });
-    pushDamageFloats(hits);
-    afterPlayerAction();
-    return;
-  }
 
-  const skillIndex =
-    mode === "smart" ? pickAutoSkillIndex(unit, battle.units) : mode;
-  if (typeof skillIndex === "number" && !battle.canUseSkill(unit, skillIndex)) {
-    flash(t('ui.73743ba945'));
-    render();
-    return;
+    const skillIndex =
+      mode === "smart" ? pickAutoSkillIndex(unit, battle.units) : mode;
+    if (typeof skillIndex === "number" && !battle.canUseSkill(unit, skillIndex)) {
+      flash(t("ui.73743ba945"));
+      render();
+      return;
+    }
+    const targetId = ensureTarget();
+    const hits = battle.useSkill({ skillIndex, targetId });
+    if (!hits.length) {
+      flash(t("ui.b72f5a4752"));
+      render();
+      return;
+    }
+    await playStrikeFx(hits);
+    afterPlayerAction();
+  } finally {
+    battleFxBusy = false;
   }
-  const targetId = ensureTarget();
-  const hits = battle.useSkill({ skillIndex, targetId });
-  if (!hits.length) {
-    flash(t('ui.b72f5a4752'));
-    render();
-    return;
-  }
-  pushDamageFloats(hits);
-  afterPlayerAction();
 }
 
 function renderSkillButtons(active: Unit | null, awaitSkill: boolean): string {
@@ -1560,7 +1667,11 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
       ? monsterArtImg(u.monsterId, "battle-unit-img", artSize)
       : `<img class="battle-unit-img" src="${summonerArtSrc(u.element)}" width="${artSize}" height="${artSize}" alt="" draggable="false" decoding="async" />`;
   const showName = isActive || isTargeted;
-  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""} el-${u.element}${active}${targeted}${dead}${shield ? " has-shield" : ""}" ${attrs} title="${u.name}">
+  const spineId =
+    u.kind === "monster"
+      ? u.monsterId ?? ""
+      : `summoner-${u.element}`;
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""} el-${u.element}${active}${targeted}${dead}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${u.name}">
     <div class="battle-unit-bars">
       <div class="battle-unit-hp-row">
         <span class="battle-unit-hp-num">${Math.max(0, Math.round(u.hp))}</span>
@@ -1631,21 +1742,21 @@ function renderBoard(): string {
       const victoryClass = victory === key && !stone ? " victory" : "";
       const tokenLabel =
         token?.id === "crit_charm"
-          ? "?"
+          ? Mark.crit
           : token?.id === "shield_core"
-            ? "?"
+            ? Mark.shieldCore
             : token?.id === "capture_magnet"
-              ? "?"
+              ? Mark.magnet
               : token?.id === "stride_sand"
-                ? "?"
+                ? Mark.stride
                 : token?.id === "seal_nail"
-                  ? "?"
+                  ? Mark.seal
                   : token?.id === "element_ward"
-                    ? "?"
+                    ? Mark.ward
                     : token?.id === "bait_stone"
-                      ? "?"
+                      ? Mark.lure
                       : token?.id === "transform_dust"
-                        ? "?"
+                        ? Mark.transform
                         : "";
       const bait =
         battle.baitLure &&
@@ -1660,13 +1771,13 @@ function renderBoard(): string {
           : token
             ? `<span class="token-mark">${tokenLabel}</span>`
             : forbid
-              ? `<span class="forbid-mark">?</span>`
+              ? `<span class="forbid-mark">${Mark.forbid}</span>`
               : bait
-                ? `<span class="bait-mark">?</span>`
+                ? `<span class="bait-mark">${Mark.bait}</span>`
                 : victory === key
-                  ? `<span class="victory-mark">?</span>`
+                  ? `<span class="victory-mark">${Mark.victory}</span>`
                   : starSet.has(key)
-                    ? `<span class="star-mark">?</span>`
+                    ? `<span class="star-mark">${Mark.starDot}</span>`
                     : "";
       cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}${sugClass}${forbidClass}${baitClass}${starClass}${victoryClass}" data-x="${x}" data-y="${y}" ${canClick && !stone && !forbid ? "" : "disabled"}>${stoneHtml}</button>`;
     }
@@ -1678,10 +1789,14 @@ function renderBoard(): string {
         100,
     ),
   );
-  return `<div class="board-frame phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}" data-element="${battle.circleElement ?? ""}">
+  return `<div class="board-frame board-frame--tilted phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}" data-element="${battle.circleElement ?? ""}">
     <div class="board-phase-tag">${rebuildTag}${openingHint}</div>
     <div class="board-phase-meter" aria-hidden="true"><i style="width:${resetPct}%"></i></div>
-    <div class="board size-${size} phase-${Math.min(phase, 3)}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${cells}</div>
+    <div class="board-stage">
+      <div class="board-hit" aria-hidden="false">
+        <div class="board size-${size} phase-${Math.min(phase, 3)}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${cells}</div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -1690,14 +1805,14 @@ function renderBoardTabs(): string {
   return `<div class="board-tabs" role="tablist">
     ${battle.boards
       .map((_, i) => {
-        const label = i === 0 ? "A?" : "B?";
+        const label = i === 0 ? Mark.boardA : Mark.boardB;
         const active = battle!.activeBoardIndex === i;
         const stones = battle!.boards[i]!
           .getBoard()
           .flat()
           .filter(Boolean).length;
         return `<button type="button" class="board-tab${active ? " active" : ""}" data-board-tab="${i}" ${active ? "aria-selected=\"true\"" : ""}>
-          ${label}<small>${stones}?</small>
+          ${label}<small>${stones}${Mark.stone}</small>
         </button>`;
       })
       .join("")}
@@ -1706,19 +1821,23 @@ function renderBoardTabs(): string {
 
 function renderSuggestStrip(): string {
   if (!stoneSuggestions.length || battle?.phase !== "await_stone") return "";
+  const manaMax = battle?.allySummoner.manaMax ?? 100;
   return `<div class="suggest-strip">
     <p class="suggest-strip-title">${t('ui.c943a2bfc5')}</p>
     ${stoneSuggestions
-      .map(
-        (s) =>
-          `<button type="button" class="suggest-chip suggest-chip--${s.rank}" data-sgx="${s.point.x}" data-sgy="${s.point.y}">
+      .map((s) => {
+        const manaTotal =
+          s.manaGain + Math.round(manaMax * (s.captureManaFrac ?? 0));
+        const dmgPct = Math.round((s.captureDamageBonus ?? 0) * 100);
+        const dmgBit = dmgPct > 0 ? ` ${MIDDOT} +${dmgPct}%` : "";
+        return `<button type="button" class="suggest-chip suggest-chip--${s.rank}" data-sgx="${s.point.x}" data-sgy="${s.point.y}">
             <span class="suggest-rank">${s.rank}</span>
             <span class="suggest-body">
               <strong>${s.point.x},${s.point.y}</strong>
-              <small>${t('ui.b61d5e36ba')} ${s.capturedCount} ? ${t('ui.dc78e6a251')} +${s.manaGain} ? amp +${s.amplifyDelta.toFixed(2)}${s.hasToken ? t('ui.67082f387a') : ""}</small>
+              <small>${t('ui.b61d5e36ba')} ${s.capturedCount}${dmgBit} ${MIDDOT} ${t('ui.dc78e6a251')} +${manaTotal} ${MIDDOT} amp +${s.amplifyDelta.toFixed(2)}${s.hasToken ? t('ui.67082f387a') : ""}</small>
             </span>
-          </button>`,
-      )
+          </button>`;
+      })
       .join("")}
   </div>`;
 }
@@ -1795,7 +1914,7 @@ function renderAuth(): string {
   if (pane === "gate") {
     const sessionHint = loggedIn
       ? `<p class="auth-session-hint">${escapeHtml(displayNickname())}${
-          sessionUser!.email ? ` ? ${escapeHtml(sessionUser!.email)}` : ""
+          sessionUser!.email ? ` ${MIDDOT} ${escapeHtml(sessionUser!.email)}` : ""
         }</p>`
       : "";
     const primary = loggedIn
@@ -1807,10 +1926,8 @@ function renderAuth(): string {
         </div>`
       : `<div class="auth-link-row">
           <button type="button" class="auth-text-link" id="auth-register">${t("ui.ecb4cc8789")}</button>
-          <span class="auth-link-sep" aria-hidden="true">?</span>
+          <span class="auth-link-sep" aria-hidden="true">${MIDDOT}</span>
           <button type="button" class="auth-text-link" id="auth-demo">${t("ui.275aaa8da4")}</button>
-          <span class="auth-link-sep" aria-hidden="true">?</span>
-          <button type="button" class="auth-text-link" id="auth-guest">${t("ui.9746b4cedd")}</button>
         </div>`;
     return `${authHeroLayer()}
     <div class="auth-screen auth-screen--gate">
@@ -1854,12 +1971,13 @@ function renderAuth(): string {
         <label>${t("ui.81973897c7")}<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
         <div class="auth-checks">
           <label class="auth-check"><input type="checkbox" name="saveId" ${prefs.saveId ? "checked" : ""} /> ${t("ui.929b21bf23")}</label>
+          <label class="auth-check"><input type="checkbox" name="autoLogin" ${prefs.autoLogin ? "checked" : ""} /> ${t("ui.217211959e")}</label>
         </div>
         <button type="submit" class="auth-btn-primary">${t("ui.e225a6fd75")}</button>
       </form>
       <div class="auth-link-row">
         <button type="button" class="auth-text-link" id="auth-register">${t("ui.ecb4cc8789")}</button>
-        <span class="auth-link-sep" aria-hidden="true">?</span>
+        <span class="auth-link-sep" aria-hidden="true">${MIDDOT}</span>
         <button type="button" class="auth-text-link" id="auth-demo">${t("ui.275aaa8da4")}</button>
       </div>
       <button type="button" class="secondary full auth-btn-ghost" id="auth-back">${t("ui.94b7dba159")}</button>
@@ -1939,6 +2057,11 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Seal-style X close control; triggers the matching backdrop close button. */
+function modalCloseX(ariaLabel: string, closeBtnId: string): string {
+  return `<button type="button" class="modal-x" data-modal-x-for="${closeBtnId}" aria-label="${escapeHtml(ariaLabel)}"></button>`;
+}
+
 /** Short display name for profile overlays. */
 function displayNickname(): string {
   const email = sessionUser?.email?.trim();
@@ -1972,7 +2095,7 @@ function applyResMoreOpen(): void {
 
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
-  const sheet = layer?.querySelector<HTMLElement>(".settings-sheet, .mission-sheet, .stages-region-sheet, .stage-entry-modal");
+  const sheet = layer?.querySelector<HTMLElement>(".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal");
   if (!sheet) return;
   sheet.style.animation = "none";
   void sheet.offsetWidth;
@@ -2040,6 +2163,62 @@ function applyMissionOpen(): void {
   }
 }
 
+/** Toggle community (guild) modal without a full screen re-render. */
+function applyCommunityOpen(): void {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-community");
+  const layer = app.querySelector<HTMLElement>("#community-layer");
+  if (btn) {
+    btn.classList.toggle("active", communityOpen);
+    btn.setAttribute("aria-expanded", communityOpen ? "true" : "false");
+  }
+  if (layer) {
+    layer.hidden = !communityOpen;
+    layer.setAttribute("aria-hidden", communityOpen ? "false" : "true");
+    if (communityOpen) replayModalPop(layer);
+  }
+}
+
+/** Open community modal and close other home overlays. */
+function openCommunityModal(): void {
+  communityOpen = true;
+  shopOpen = false;
+  missionOpen = false;
+  settingsOpen = false;
+  mailboxOpen = false;
+  notifOpen = false;
+  summonerPickerOpen = false;
+  resMoreOpen = false;
+  chatOpen = false;
+}
+
+/** Toggle shop modal without a full screen re-render. */
+function applyShopOpen(): void {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-shop");
+  const layer = app.querySelector<HTMLElement>("#shop-layer");
+  if (btn) {
+    btn.classList.toggle("active", shopOpen);
+    btn.setAttribute("aria-expanded", shopOpen ? "true" : "false");
+  }
+  if (layer) {
+    layer.hidden = !shopOpen;
+    layer.setAttribute("aria-hidden", shopOpen ? "false" : "true");
+    if (shopOpen) replayModalPop(layer);
+  }
+}
+
+/** Open shop modal and close other home overlays. */
+function openShopModal(): void {
+  shopOpen = true;
+  communityOpen = false;
+  missionOpen = false;
+  settingsOpen = false;
+  mailboxOpen = false;
+  notifOpen = false;
+  summonerPickerOpen = false;
+  resMoreOpen = false;
+  chatOpen = false;
+}
+
 
 /** Toggle summoner picker sheet without a full screen re-render. */
 function applySummonerPickerOpen(): void {
@@ -2056,7 +2235,7 @@ function applySummonerPickerOpen(): void {
   }
 }
 
-/** One-line notice board lines under the app bar. */
+/** Notice lines reused by the notification sheet (not a marquee). */
 function tickerMessages(): string[] {
   const active = getActiveSummoner(save);
   const el = save.activeSummoner ?? "light";
@@ -2079,17 +2258,6 @@ function tickerMessages(): string[] {
   return lines;
 }
 
-function renderTicker(): string {
-  const items = tickerMessages().map((m) => escapeHtml(m));
-  const joined = items.join(t("ticker.sep"));
-  return `<div class="ticker" role="marquee" aria-label="${escapeHtml(t("ticker.label"))}">
-    <div class="ticker-fade" aria-hidden="true"></div>
-    <div class="ticker-track">
-      <span class="ticker-text">${joined}</span>
-      <span class="ticker-text" aria-hidden="true">${joined}</span>
-    </div>
-  </div>`;
-}
 const CHAT_CHANNEL_CAP = 100;
 const CHAT_CHANNEL_COUNT = 6;
 
@@ -2166,7 +2334,7 @@ function clearChannelMsgs(id: number): void {
   if (ch) ch.msgs = [];
 }
 
-/** Begin a chat session on a channel ? no history from before this connect. */
+/** Begin a chat session on a channel — no history from before this connect. */
 function connectChatSession(id?: number): boolean {
   ensureChatChannels();
   const target = id ?? chatChannelId;
@@ -2218,8 +2386,12 @@ function pushChatMessage(channelId: number, nick: string, text: string): ChatMsg
   return msg;
 }
 
+function chatSimAllowed(): boolean {
+  return view !== "auth" && view !== "battle" && view !== "result";
+}
+
 function simulateChatTick(): void {
-  if (view !== "home" || !chatConnected) return;
+  if (!chatSimAllowed() || !chatConnected) return;
   ensureChatChannels();
   const ch = chatChannel(chatChannelId);
   if (!ch || chatIsFull(ch)) return;
@@ -2243,7 +2415,14 @@ function simulateChatTick(): void {
   }
 }
 
+function pauseChatSim(): void {
+  if (!chatSimTimer) return;
+  clearInterval(chatSimTimer);
+  chatSimTimer = null;
+}
+
 function startChatSim(): void {
+  if (!chatSimAllowed()) return;
   if (!chatConnected) connectChatSession(chatChannelId);
   if (chatSimTimer) return;
   ensureChatChannels();
@@ -2252,9 +2431,7 @@ function startChatSim(): void {
 
 function stopChatSim(): void {
   disconnectChatSession();
-  if (!chatSimTimer) return;
-  clearInterval(chatSimTimer);
-  chatSimTimer = null;
+  pauseChatSim();
 }
 
 function renderHomeChatRail(): string {
@@ -2302,10 +2479,61 @@ function openHomeChat(): void {
   settingsOpen = false;
   summonerPickerOpen = false;
   missionOpen = false;
+  communityOpen = false;
+  shopOpen = false;
   render();
   queueMicrotask(() => {
     const log = app.querySelector("#chat-log");
     if (log) log.scrollTop = log.scrollHeight;
+  });
+}
+
+/** Close chat sheet without remounting the island. */
+function closeChatOverlay(): void {
+  if (!chatOpen) return;
+  chatOpen = false;
+  app.querySelector("#chat-layer")?.remove();
+  applyHomeChatRail();
+}
+
+function bindChatUi(): void {
+  app.querySelector("#btn-home-chat")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    openHomeChat();
+  });
+  app.querySelector("#btn-chat-close")?.addEventListener("click", () => {
+    closeChatOverlay();
+  });
+  app.querySelector("#chat-channel-select")?.addEventListener("change", (ev) => {
+    const sel = ev.currentTarget as HTMLSelectElement;
+    const id = Number(sel.value);
+    if (!Number.isFinite(id)) return;
+    if (!switchChatSession(id)) {
+      flash(t("chat.channelFull"));
+      sel.value = String(chatChannelId);
+      return;
+    }
+    chatLineUnread = false;
+    render();
+    queueMicrotask(() => {
+      const log = app.querySelector("#chat-log");
+      if (log) log.scrollTop = log.scrollHeight;
+    });
+  });
+  app.querySelector("#chat-compose")?.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const input = app.querySelector<HTMLInputElement>("#chat-input");
+    const text = input?.value.trim() ?? "";
+    if (!text) return;
+    if (!pushChatMessage(chatChannelId, displayNickname(), text)) return;
+    if (input) input.value = "";
+    chatLineUnread = false;
+    render();
+    queueMicrotask(() => {
+      const log = app.querySelector("#chat-log");
+      if (log) log.scrollTop = log.scrollHeight;
+      app.querySelector<HTMLInputElement>("#chat-input")?.focus();
+    });
   });
 }
 
@@ -2318,7 +2546,7 @@ function renderChatModal(): string {
       const full = chatIsFull(c);
       const on = c.id === chatChannelId;
       const users = t("chat.channelUsers", { n: c.users, max: CHAT_CHANNEL_CAP });
-      const label = `${t("chat.channelN", { n: c.id })} ? ${users}${full ? ` ? ${t("chat.full")}` : ""}`;
+      const label = `${t("chat.channelN", { n: c.id })} ${MIDDOT} ${users}${full ? ` ${MIDDOT} ${t("chat.full")}` : ""}`;
       return `<option value="${c.id}" ${on ? "selected" : ""} ${full && !on ? "disabled" : ""}>${escapeHtml(label)}</option>`;
     })
     .join("");
@@ -2333,6 +2561,7 @@ function renderChatModal(): string {
     <button type="button" class="settings-backdrop" id="btn-chat-close" aria-label="${escapeHtml(t("chat.close"))}"></button>
     <div class="settings-sheet chat-sheet" role="dialog" aria-modal="true" aria-labelledby="chat-title">
       <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("chat.close"), "btn-chat-close")}
       <h2 class="settings-title" id="chat-title">${escapeHtml(t("chat.title"))}</h2>
       <p class="chat-cap-hint">${escapeHtml(t("chat.capHint", { max: CHAT_CHANNEL_CAP }))}</p>
       <label class="chat-ch-select-wrap">
@@ -2492,6 +2721,7 @@ function renderMissionModal(): string {
   <button type="button" class="settings-backdrop" id="btn-mission-close" aria-label="${escapeHtml(t("mission.close"))}"></button>
   <div class="settings-sheet mission-sheet" role="dialog" aria-modal="true" aria-labelledby="mission-title">
     <div class="settings-sheet-handle" aria-hidden="true"></div>
+    ${modalCloseX(t("mission.close"), "btn-mission-close")}
     <h2 class="settings-title" id="mission-title">${escapeHtml(t("mission.title"))}</h2>
     <div class="mission-tabs" role="tablist" aria-label="${escapeHtml(t("mission.title"))}">
       <button type="button" class="mission-tab${daily ? " is-active" : ""}" role="tab" aria-selected="${daily ? "true" : "false"}" data-mission-tab="daily">${escapeHtml(t("mission.tabDaily"))}</button>
@@ -2531,8 +2761,8 @@ function render(): void {
   const tabSummoner = summonerPickerOpen;
   const tabMonster = view === "enhance" || view === "fusion" || view === "party";
   const tabMission = missionOpen;
-  const tabCommunity = view === "guild";
-  const tabShop = view === "shop";
+  const tabCommunity = communityOpen;
+  const tabShop = shopOpen;
   const demoTag = sessionUser?.kind === "demo" ? `<span class="demo-tag">DEMO</span>` : "";
   const mailItems = [
     {
@@ -2548,10 +2778,14 @@ function render(): void {
   ];
   const notifItems = tickerMessages().slice(0, 5);
 
-  if (view === "home") {
-    startChatSim();
-  } else {
+  if (view === "auth") {
     stopChatSim();
+    chatOpen = false;
+  } else if (view === "battle" || view === "result") {
+    pauseChatSim();
+    chatOpen = false;
+  } else {
+    startChatSim();
   }
 
   if (view === "auth") {
@@ -2581,8 +2815,8 @@ function render(): void {
 
   const activeSum = getActiveSummoner(save);
   const activeEl = save.activeSummoner ?? "light";
-  const activeSumExp = Math.max(0, Math.min(100, Math.floor(activeSum.exp ?? 0)));
   const isHome = view === "home";
+  const isStages = view === "stages";
   const nick = escapeHtml(displayNickname());
   const userLv = island.summonerLevel;
   const userExp = Math.floor(island.summonerExp ?? 0);
@@ -2610,11 +2844,11 @@ function render(): void {
 
   app.classList.remove("auth-mode");
   app.classList.toggle("home-mode", view === "home");
-  app.classList.toggle("expedition-mode", view === "stages");
+  app.classList.toggle("expedition-mode", isStages);
   app.classList.toggle("combat-mode", view === "battle" || view === "result");
   app.classList.toggle("monster-mode", view === "enhance");
   app.innerHTML = `
-    <header class="app-bar app-bar--hud${isHome ? " app-bar--home" : ""}">
+    <header class="app-bar app-bar--hud${isHome ? " app-bar--home" : ""}${isStages ? " app-bar--expedition" : ""}">
       <div class="app-bar-hud">
         <div class="hud-profile" title="${nick}">
           <div class="user-profile" aria-label="Lv.${userLv}">
@@ -2694,7 +2928,15 @@ function render(): void {
           </div>
         </div>
       </div>
-      ${isHome ? "" : renderTicker()}
+      ${isHome ? "" : renderHomeChatRail()}
+      ${
+        isStages
+          ? `<button type="button" class="stages-map-back" data-nav="home" aria-label="${t("ui.d758337556")}">
+        <img class="stages-map-back-ico" src="/art/ui/back-arrow.svg" width="18" height="18" alt="" draggable="false" />
+        <span>${t("ui.d758337556")}</span>
+      </button>`
+          : ""
+      }
       ${toast ? `<p class="toast">${toast}</p>` : ""}
     </header>
     <main>${mainContent(manaPct)}</main>
@@ -2702,6 +2944,7 @@ function render(): void {
       <button type="button" class="settings-backdrop" id="btn-settings-close" aria-label="${escapeHtml(t("settings.close"))}"></button>
       <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="settings-sheet-handle" aria-hidden="true"></div>
+        ${modalCloseX(t("settings.close"), "btn-settings-close")}
         <h2 class="settings-title" id="settings-title">${escapeHtml(t("settings.title"))}</h2>
         <p class="settings-account">${accountLabel}</p>
         <label class="settings-lang" for="settings-lang">
@@ -2719,6 +2962,7 @@ function render(): void {
       <button type="button" class="settings-backdrop" id="btn-summoner-picker-close" aria-label="${escapeHtml(t("summonerPicker.close"))}"></button>
       <div class="settings-sheet summoner-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="summoner-picker-title">
         <div class="settings-sheet-handle" aria-hidden="true"></div>
+        ${modalCloseX(t("summonerPicker.close"), "btn-summoner-picker-close")}
         <h2 class="settings-title" id="summoner-picker-title">${escapeHtml(t("summonerPicker.title"))}</h2>
         <p class="settings-account">${escapeHtml(t("summonerPicker.hint"))}</p>
         <div class="summoner-picker-list">${summonerPickerList}</div>
@@ -2757,14 +3001,15 @@ function render(): void {
           <span class="side-quick-caption">${escapeHtml(t("nav.settings"))}</span>
         </span>
       </button>
-    </aside>
-    ${renderChatModal()}`
+    </aside>`
         : ""
     }
+    ${renderChatModal()}
     <div class="settings-layer" id="mailbox-layer" ${mailboxOpen ? "" : "hidden"} aria-hidden="${mailboxOpen ? "false" : "true"}">
       <button type="button" class="settings-backdrop" id="btn-mailbox-close" aria-label="${escapeHtml(t("mailbox.close"))}"></button>
       <div class="settings-sheet quick-sheet" role="dialog" aria-modal="true" aria-labelledby="mailbox-title">
         <div class="settings-sheet-handle" aria-hidden="true"></div>
+        ${modalCloseX(t("mailbox.close"), "btn-mailbox-close")}
         <h2 class="settings-title" id="mailbox-title">${escapeHtml(t("mailbox.title"))}</h2>
         <p class="settings-account">${escapeHtml(t("mailbox.empty"))}</p>
         <div class="quick-sheet-list">${mailItems
@@ -2782,6 +3027,7 @@ function render(): void {
       <button type="button" class="settings-backdrop" id="btn-notif-close" aria-label="${escapeHtml(t("notif.close"))}"></button>
       <div class="settings-sheet quick-sheet" role="dialog" aria-modal="true" aria-labelledby="notif-title">
         <div class="settings-sheet-handle" aria-hidden="true"></div>
+        ${modalCloseX(t("notif.close"), "btn-notif-close")}
         <h2 class="settings-title" id="notif-title">${escapeHtml(t("notif.title"))}</h2>
         <p class="settings-account">${escapeHtml(t("notif.empty"))}</p>
         <div class="quick-sheet-list">${notifItems
@@ -2790,26 +3036,24 @@ function render(): void {
       </div>
     </div>
     ${renderMissionModal()}
+    ${renderCommunityModal()}
+    ${renderShopModal()}
     <nav class="tabs tabs--overlay" aria-label="${escapeHtml(t("nav.main"))}">
       <button type="button" data-nav="stages" class="${tabBattle ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--battle" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/battle.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.battle"))}</span></span></button>
       <button type="button" id="btn-nav-summoner" class="${tabSummoner ? "active" : ""}" aria-expanded="${summonerPickerOpen ? "true" : "false"}" aria-controls="summoner-picker-layer" title="${escapeHtml(t("nav.summoner"))}">
         <span class="seal-badge seal-badge--summoner">
           <span class="tab-ico tab-summoner-face" aria-hidden="true">
             <img class="tab-ico-img tab-summoner-seal" src="/art/ui/nav/summoner-frame.webp" width="58" height="58" alt="" draggable="false" decoding="async" />
-            <img class="tab-summoner-art" src="/art/summoner/${activeEl}.webp" width="38" height="38" alt="" draggable="false" decoding="async" />
-            <span class="tab-summoner-el">${escapeHtml(elementLabel(activeEl))}</span>
-            <span class="tab-summoner-foot">
-              <span class="tab-summoner-lv">Lv.${activeSum.level}</span>
-              <span class="tab-summoner-exp" role="presentation"><span class="tab-summoner-exp-fill" style="width:${activeSumExp}%"></span></span>
-            </span>
+            <img class="tab-summoner-art" src="/art/summoner/${activeEl}.webp" width="42" height="42" alt="" draggable="false" decoding="async" />
+            <span class="tab-summoner-lv">Lv.${activeSum.level}</span>
           </span>
           <span class="tab-label">${escapeHtml(t("nav.summoner"))}</span>
         </span>
       </button>
       <button type="button" data-nav="enhance" class="${tabMonster ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--monster" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/monster.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.monster"))}</span></span></button>
       <button type="button" id="btn-mission" class="${missionOpen ? "active" : ""}" aria-expanded="${missionOpen ? "true" : "false"}" aria-controls="mission-layer" title="${escapeHtml(t("nav.mission"))}"><span class="seal-badge"><span class="tab-ico tab-ico--mission" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/mission.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.mission"))}</span></span></button>
-      <button type="button" data-nav="guild" class="${tabCommunity ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--community" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/community.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.community"))}</span></span></button>
-      <button type="button" data-nav="shop" class="${tabShop ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--shop" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/shop.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.shop"))}</span></span></button>
+      <button type="button" id="btn-community" class="${tabCommunity ? "active" : ""}" aria-expanded="${communityOpen ? "true" : "false"}" aria-controls="community-layer" title="${escapeHtml(t("nav.community"))}"><span class="seal-badge"><span class="tab-ico tab-ico--community" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/community.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.community"))}</span></span></button>
+      <button type="button" id="btn-shop" class="${tabShop ? "active" : ""}" aria-expanded="${shopOpen ? "true" : "false"}" aria-controls="shop-layer" title="${escapeHtml(t("nav.shop"))}"><span class="seal-badge"><span class="tab-ico tab-ico--shop" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/shop.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.shop"))}</span></span></button>
     </nav>
   `;
 
@@ -2876,9 +3120,13 @@ function renderHome(): string {
     const spotZ = Math.round(10 + y);
     const focus =
       islandLayoutEdit && islandSpotDrag?.id === id ? " is-layout-focus" : "";
+    const bubbleIcon =
+      opts?.bubbleKind === "crystal"
+        ? "/art/ui/res/crystal.svg"
+        : "/art/ui/res/gold.svg";
     const bubble =
       !locked && opts?.bubble && opts.bubbleKind
-        ? `<span class="res-bubble res-bubble--${opts.bubbleKind}" data-collect="${opts.bubbleKind}" role="button" tabindex="0" aria-label="${t('ui.4215c0df88')}">${opts.bubble}</span>`
+        ? `<span class="res-bubble res-bubble--${opts.bubbleKind}" data-collect="${opts.bubbleKind}" role="button" tabindex="0" aria-label="${t('ui.4215c0df88')}"><img class="res-bubble-ico" src="${bubbleIcon}" width="18" height="18" alt="" draggable="false" /><strong class="res-bubble-val">${opts.bubble}</strong></span>`
         : "";
     const unlock =
       locked && opts?.unlockLv
@@ -2889,12 +3137,12 @@ function renderHome(): string {
         ? title
         : islandSpotTitle(id, title);
     const label = locked && opts?.unlockLv
-      ? `${displayTitle} ? Lv.${opts.unlockLv} ${t('ui.d1496ce82d')}`
+      ? `${displayTitle} ${ARROW_RIGHT} Lv.${opts.unlockLv} ${t('ui.d1496ce82d')}`
       : displayTitle;
     return `<button type="button" class="island-spot${tone}${locked ? " is-locked" : ""}${islandLayoutEdit ? " is-layout-edit" : ""}${focus}" style="left:${x}%;top:${y}%;--spot-scale:${spotScale};z-index:${spotZ}" data-b="${id}" data-locked="${locked ? "1" : "0"}" ${opts?.unlockLv ? `data-unlock="${opts.unlockLv}"` : ""} aria-label="${label}">
       <span class="island-spot-art" aria-hidden="true">
         <span class="island-spot-glow"></span>
-        <img class="island-spot-img" src="${emblemSrc}" width="96" height="96" alt="" draggable="false" decoding="async" />
+        <img class="island-spot-img" src="${emblemSrc}" width="512" height="512" alt="" draggable="false" decoding="async" />
       </span>
       ${locked ? lockSvg : ""}
       <span class="island-spot-name">${displayTitle}</span>
@@ -3031,12 +3279,12 @@ function hubShell(title: string, subtitle: string, body: string): string {
 function renderForgeReveal(): string {
   if (!forgeReveal) return "";
   const title = forgeReveal.kind === "grind" ? t('ui.d8680bb7b3') : t('ui.27cf021299');
-  const mark = forgeReveal.kind === "grind" ? "?" : "?";
+  const mark = forgeReveal.kind === "grind" ? Mark.grind : Mark.imprint;
   return `<div class="forge-reveal forge-reveal--${forgeReveal.kind}" aria-live="polite">
     <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">${mark}</span>${title}</p>
     <div class="forge-reveal-diff">
       <p class="forge-before">${forgeReveal.before}</p>
-      <p class="forge-arrow" aria-hidden="true">?</p>
+      <p class="forge-arrow" aria-hidden="true">${ARROW_DOWN}</p>
       <p class="forge-after">${forgeReveal.after}</p>
     </div>
     <p class="forge-reveal-cost muted">${forgeReveal.cost}</p>
@@ -3047,10 +3295,10 @@ function renderForgeReveal(): string {
 function renderFusionReveal(): string {
   if (!fusionReveal) return "";
   return `<div class="forge-reveal forge-reveal--fusion" aria-live="polite">
-    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">?</span>${t('ui.0b4d534507')}</p>
+    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">${Mark.fusion}</span>${t('ui.0b4d534507')}</p>
     <div class="forge-reveal-diff">
       <p class="forge-before">${fusionReveal.materials}</p>
-      <p class="forge-arrow" aria-hidden="true">?</p>
+      <p class="forge-arrow" aria-hidden="true">${ARROW_DOWN}</p>
       <p class="forge-after">${fusionReveal.result}</p>
     </div>
     <p class="forge-reveal-cost muted">${fusionReveal.cost}</p>
@@ -3083,7 +3331,7 @@ function renderDojo(): string {
             <strong>${nextNote}</strong>
           </div>
         </div>
-        <p class="muted dojo-hint">1${t('ui.d975611bf8')} +${manaGain} ? EXP +15</p>
+        <p class="muted dojo-hint">1${t('ui.d975611bf8')} +${manaGain} ${MIDDOT} EXP +15</p>
         <button type="button" class="primary full" id="btn-dojo-drill">${t('ui.23a04d1293')}</button>
       </div>
     </div>`,
@@ -3102,7 +3350,7 @@ function renderPond(): string {
   const fillPct = cap > 0 ? Math.min(100, Math.round((stored / cap) * 100)) : 0;
   return hubShell(
     t('ui.81e2301960'),
-    `Lv.${lv} ? ${rate}/hr ? ${t('ui.1f1712acff')} ${stored}/${cap}`,
+    `Lv.${lv} ${MIDDOT} ${rate}/hr ${MIDDOT} ${t('ui.1f1712acff')} ${stored}/${cap}`,
     `<div class="hub-panel">
       <div class="pond-panel">
         <p class="pond-panel-title">${t('ui.7c70400fef')}</p>
@@ -3116,17 +3364,17 @@ function renderPond(): string {
       </div>
       <div class="stage-list">
         <button type="button" class="stage-card" id="btn-pond-collect">
-          <span class="stage-card-mark" aria-hidden="true">?</span>
+          <span class="stage-card-mark" aria-hidden="true">${Mark.pond}</span>
           <span class="stage-card-body">
             <strong>${t('ui.b3fe16e64a')}</strong>
             <small>${stored > 0 ? `${t('ui.df72a8753d')} ${stored}` : t('ui.2c1116fb7b')}</small>
           </span>
         </button>
         <button type="button" class="stage-card" id="btn-pond-upgrade" ${maxed ? "disabled" : ""}>
-          <span class="stage-card-mark" aria-hidden="true">?</span>
+          <span class="stage-card-mark" aria-hidden="true">${ARROW_UP}</span>
           <span class="stage-card-body">
-            <strong>${maxed ? t('ui.cc24e86471') : `${t('ui.e5f5d19099')} ? Lv.${lv + 1}`}</strong>
-            <small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `?${t('ui.dc78e6a251')} ${cost}`}</small>
+            <strong>${maxed ? t('ui.cc24e86471') : `${t('ui.e5f5d19099')} ${ARROW_RIGHT} Lv.${lv + 1}`}</strong>
+            <small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `${MINUS}${t('ui.dc78e6a251')} ${cost}`}</small>
           </span>
         </button>
       </div>
@@ -3146,7 +3394,7 @@ function renderMine(): string {
   const fillPct = cap > 0 ? Math.min(100, Math.round((stored / cap) * 100)) : 0;
   return hubShell(
     t('ui.81e2301960'),
-    `Lv.${lv} ? ${rate}/hr ? ${t('ui.1f1712acff')} ${stored}/${cap}`,
+    `Lv.${lv} ${MIDDOT} ${rate}/hr ${MIDDOT} ${t('ui.1f1712acff')} ${stored}/${cap}`,
     `<div class="hub-panel">
       <div class="pond-panel mine-panel">
         <p class="pond-panel-title">${t('ui.7c70400fef')}</p>
@@ -3160,17 +3408,17 @@ function renderMine(): string {
       </div>
       <div class="stage-list">
         <button type="button" class="stage-card" id="btn-mine-collect">
-          <span class="stage-card-mark" aria-hidden="true">?</span>
+          <span class="stage-card-mark" aria-hidden="true">${Mark.crystal}</span>
           <span class="stage-card-body">
             <strong>${t('ui.b3fe16e64a')}</strong>
             <small>${stored > 0 ? `${t('ui.df72a8753d')} ${stored}` : t('ui.2c1116fb7b')}</small>
           </span>
         </button>
         <button type="button" class="stage-card" id="btn-mine-upgrade" ${maxed ? "disabled" : ""}>
-          <span class="stage-card-mark" aria-hidden="true">?</span>
+          <span class="stage-card-mark" aria-hidden="true">${ARROW_UP}</span>
           <span class="stage-card-body">
-            <strong>${maxed ? t('ui.cc24e86471') : `${t('ui.e5f5d19099')} ? Lv.${lv + 1}`}</strong>
-            <small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `?${t('ui.dc78e6a251')} ${cost}`}</small>
+            <strong>${maxed ? t('ui.cc24e86471') : `${t('ui.e5f5d19099')} ${ARROW_RIGHT} Lv.${lv + 1}`}</strong>
+            <small>${maxed ? `MAX ${MAX_BUILDING_LEVEL}` : `${MINUS}${t('ui.dc78e6a251')} ${cost}`}</small>
           </span>
         </button>
       </div>
@@ -3184,21 +3432,21 @@ function renderWish(): string {
   const used = last === day;
   const reveal = wishReveal
     ? `<div class="forge-reveal forge-reveal--wish" aria-live="polite">
-    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">?</span>${t('ui.0b4d534507')}</p>
+    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">${Mark.wish}</span>${t('ui.0b4d534507')}</p>
         <p class="forge-after">${wishReveal}</p>
         <button type="button" class="secondary full auth-btn-ghost" id="btn-wish-dismiss" style="margin-top:12px">${t('ui.468266d639')}</button>
       </div>`
     : "";
   return hubShell(
     t('ui.81e2301960'),
-    used ? `${t('ui.ecc82466ef')} ? ${last}` : t('ui.b65d90440e'),
+    used ? `${t('ui.ecc82466ef')} ${MIDDOT} ${last}` : t('ui.b65d90440e'),
     `<div class="hub-panel">
       ${reveal}
       <div class="guild-panel wish-panel">
         <p class="guild-panel-title">${t('ui.6667aae26a')}</p>
         <div class="guild-stats">
           <div class="guild-stat"><span>${t('ui.2bdce5e8cc')}</span><strong>${used ? t('ui.8d8680373c') : t('ui.9614672b56')}</strong></div>
-          <div class="guild-stat"><span>${t('ui.0f8cd87cd5')}</span><strong>${last ?? "?"}</strong></div>
+          <div class="guild-stat"><span>${t('ui.0f8cd87cd5')}</span><strong>${last ?? EM_DASH}</strong></div>
           <div class="guild-stat"><span>${t('ui.fa73f3a42f')}</span><strong>${save.scrolls}</strong></div>
         </div>
         <p class="muted dojo-hint">${t('ui.7e6bcf70a0')}.</p>
@@ -3223,7 +3471,7 @@ function renderParty(): string {
       const m = uid ? save.roster.find((x) => x.uid === uid) : null;
       const def = m ? getMonster(m.monsterId) : null;
       if (!m) {
-        return `<div class="party-slot empty"><span class="party-slot-num">${i + 1}</span><span class="party-slot-name">? ?</span></div>`;
+        return `<div class="party-slot empty"><span class="party-slot-num">${i + 1}</span><span class="party-slot-name">${Mark.partyEmpty}</span></div>`;
       }
       return `<div class="party-slot el-${def?.element ?? "dark"}">
         <span class="party-slot-num">${i + 1}</span>
@@ -3234,7 +3482,7 @@ function renderParty(): string {
     .join("");
   return hubShell(
     t('ui.759f762a02'),
-    `${t('ui.d5e7024eb8')} ${selected.size}/4 ? ${t('ui.269ecd9013')}`,
+    `${t('ui.d5e7024eb8')} ${selected.size}/4 ${MIDDOT} ${t('ui.269ecd9013')}`,
     `<div class="hub-panel">
       <div class="party-lineup" aria-label="${t('ui.a5d54ca91e')}">
         <p class="party-lineup-title">${t('ui.a5d54ca91e')}</p>
@@ -3248,10 +3496,10 @@ function renderParty(): string {
             const def = getMonster(m.monsterId);
             const preview = previewOwnedCombatStats(save, m.uid);
             const stats = preview
-              ? `HP ${preview.final.hp} ? ATK ${preview.final.atk} ? DEF ${preview.final.def}`
+              ? `HP ${preview.final.hp} ${MIDDOT} ATK ${preview.final.atk} ${MIDDOT} DEF ${preview.final.def}`
               : def?.element ?? "";
             return `<button type="button" class="stage-card party-card el-${def?.element ?? "dark"}${on ? " picked" : ""}" data-party-toggle="${m.uid}">
-              <span class="stage-card-mark party-card-art" aria-hidden="true">${monsterArtImg(m.monsterId, "party-card-img", 44) || (on ? "?" : (def?.element?.[0]?.toUpperCase() ?? "?"))}</span>
+              <span class="stage-card-mark party-card-art" aria-hidden="true">${monsterArtImg(m.monsterId, "party-card-img", 44) || (on ? STAR : (def?.element?.[0]?.toUpperCase() ?? "?"))}</span>
               <span class="stage-card-body">
                 <strong>${describeOwned(m)}</strong>
                 <small>${stats}</small>
@@ -3356,7 +3604,7 @@ function monsterSkillUpgradeRows(
   return rows.join("");
 }
 
-/** Map catalog role ? ???/???/???/???. */
+/** Map catalog role (tank/dps/support/flex). */
 function monsterRoleLabel(role: string | undefined, base?: {
   hp: number;
   atk: number;
@@ -3416,11 +3664,11 @@ function renderSummonRevealCell(uid: string): string {
   if (!mon) return "";
   const def = getMonster(mon.monsterId);
   const el = def?.element ?? "dark";
-  const stars = "?".repeat(def?.naturalStars ?? 0);
+  const stars = STAR.repeat(def?.naturalStars ?? 0);
   return `<div class="summon-multi-cell el-${el}">
     <span class="summon-multi-seal" aria-hidden="true">${monsterArtImg(mon.monsterId, "summon-multi-img", 48) || monsterElementLabel(el).slice(0, 1)}</span>
     <strong>${def?.nameKo ?? mon.monsterId}</strong>
-    <small>${monsterElementLabel(el)} ? ${stars}</small>
+    <small>${monsterElementLabel(el)} ${MIDDOT} ${stars}</small>
   </div>`;
 }
 
@@ -3437,7 +3685,7 @@ function renderSummon(): string {
     (k) => scrollCount(save, k) >= SUMMON_SCROLL_COST,
   );
   const revEl = revDef?.element ?? (isMulti ? "light" : "dark");
-  const revStars = "?".repeat(revDef?.naturalStars ?? 0);
+  const revStars = STAR.repeat(revDef?.naturalStars ?? 0);
   const revPreview = revealed
     ? previewOwnedCombatStats(save, revealed.uid)
     : null;
@@ -3458,9 +3706,9 @@ function renderSummon(): string {
           ${monsterArtImg(revealed.monsterId, "summon-reveal-img", 72) || `<span class="summon-reveal-el">${monsterElementLabel(revEl).slice(0, 1)}</span>`}
         </div>
         <p class="summon-reveal-kicker">${t('ui.4150cda5a2')}</p>
-        <p class="summon-reveal-stars" aria-label="${revDef?.naturalStars ?? 0}?">${revStars}</p>
+        <p class="summon-reveal-stars" aria-label="${revDef?.naturalStars ?? 0}">${revStars}</p>
         <p class="summon-reveal-name">${revDef?.nameKo ?? revealed.monsterId}</p>
-        <p class="summon-reveal-meta">${monsterElementLabel(revEl)} ? ?${revDef?.naturalStars ?? 0}</p>
+        <p class="summon-reveal-meta">${monsterElementLabel(revEl)} ${MIDDOT} ${STAR}${revDef?.naturalStars ?? 0}</p>
         ${
           revPreview
             ? `<div class="summon-reveal-stats">
@@ -3506,7 +3754,7 @@ function renderSummon(): string {
             <span class="summon-cast-body">
               <strong class="summon-cast-title">${shortLabel[kind]}</strong>
               <small class="summon-cast-blurb">${SCROLL_KIND_BLURB[kind]}</small>
-              <span class="summon-cast-stock"><b>${n}</b>?</span>
+              <span class="summon-cast-stock"><b>${n}</b></span>
             </span>
             <span class="summon-cast-actions">
               <button type="button" class="summon-cast-cta" data-summon-kind="${kind}" data-summon-count="1" ${ready1 ? "" : "disabled"} aria-label="${SCROLL_KIND_LABEL[kind]} ${t('ui.6b0ff13ffd')}">
@@ -3673,7 +3921,7 @@ function renderSymbolDetailModal(): string {
   return `<div class="settings-layer sym-detail-layer" id="sym-detail-layer" aria-hidden="false">
     <button type="button" class="settings-backdrop" id="btn-sym-detail-close" aria-label="close"></button>
     <div class="sym-detail-sheet rarity--${rarity.id}" role="dialog" aria-modal="true" aria-labelledby="sym-detail-title">
-      <button type="button" class="sym-detail-x" id="btn-sym-detail-x" aria-label="close">&times;</button>
+      ${modalCloseX("close", "btn-sym-detail-close")}
       <h3 class="sym-detail-title" id="sym-detail-title">${title}</h3>
       <div class="sym-detail-body">
         <div class="sym-detail-left">
@@ -3713,6 +3961,7 @@ function renderSymbolBagExpandModal(): string {
   return `<div class="settings-layer sym-detail-layer sym-bag-expand-layer" id="sym-bag-expand-layer" aria-hidden="false">
     <button type="button" class="settings-backdrop" id="btn-sym-bag-expand-close" aria-label="close"></button>
     <div class="sym-bag-expand-sheet" role="dialog" aria-modal="true" aria-labelledby="sym-bag-expand-title">
+      ${modalCloseX("close", "btn-sym-bag-expand-close")}
       <h3 class="sym-bag-expand-title" id="sym-bag-expand-title">${t("ui.expandSymbolBagTitle")}</h3>
       <div class="sym-bag-expand-rows">
         <div class="sym-bag-expand-row">
@@ -3721,7 +3970,7 @@ function renderSymbolBagExpandModal(): string {
         </div>
         <div class="sym-bag-expand-row">
           <span>${t("ui.expandSymbolBagAdd")}</span>
-          <strong>+${add} ? ${next}</strong>
+          <strong>+${add} ${MIDDOT} ${next}</strong>
         </div>
         <div class="sym-bag-expand-row sym-bag-expand-row--price">
           <span>${t("ui.expandSymbolBagPrice")}</span>
@@ -4026,9 +4275,6 @@ function renderEnhance(): string {
           { length: Math.max(1, def?.naturalStars ?? 1) },
           () => `<span class="mon-star" aria-hidden="true">&#9733;</span>`,
         ).join("");
-        const art =
-          monsterArtImg(m.monsterId, "mon-inspect-art-img", 200) ||
-          `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
 
         const expPct = Math.round((m.level / MAX_MONSTER_LEVEL) * 100);
         const enhCost = enhanceManaCost(m.level);
@@ -4069,25 +4315,29 @@ function renderEnhance(): string {
 
         const skillDescLines = monsterSkillDescLines(focusSk);
         const skillsPanel = `<div class="mon-pane mon-pane--skills">
-        <div class="mon-skill-icos" role="tablist" aria-label="skills">${skillIcons}</div>
-        <div class="mon-skill-detail mon-skill-detail--tall">
-          <div class="mon-skill-detail-head">
-            <strong class="mon-skill-detail-name">${focusSk?.nameKo ?? `S${monSkillPick + 1}`}</strong>
-            <span class="mon-skill-detail-lv">Lv.${focusLv}${focusLv >= MAX_SKILL_LEVEL ? " MAX" : ""}</span>
-          </div>
-          <ul class="mon-skill-detail-desc">
-            ${skillDescLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}
-          </ul>
-          <div class="mon-skill-upgrades">${monsterSkillUpgradeRows(focusSk, focusLv)}</div>
+        <div class="mon-skill-rail">
+          <div class="mon-skill-icos" role="tablist" aria-label="skills">${skillIcons}</div>
         </div>
-        <div class="mon-skill-footer">
-          <button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--cost" data-enh="${m.uid}" ${enhMaxed ? "disabled" : ""}>${
-            enhMaxed
-              ? "MAX"
-              : `<span class="mon-enh-label">${escapeHtml(t("ui.3e1a337d93"))}</span><span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(enhCost)}</strong></span>`
-          }</button>
-          <p class="mon-skill-feed-caption">${escapeHtml(t("ui.skillFeedTitle"))}</p>
-          ${feedRows ? `<div class="mon-skill-feed-list">${feedRows}</div>` : ""}
+        <div class="mon-skill-main">
+          <div class="mon-skill-detail mon-skill-detail--tall">
+            <div class="mon-skill-detail-head">
+              <strong class="mon-skill-detail-name">${focusSk?.nameKo ?? `S${monSkillPick + 1}`}</strong>
+              <span class="mon-skill-detail-lv">Lv.${focusLv}${focusLv >= MAX_SKILL_LEVEL ? " MAX" : ""}</span>
+            </div>
+            <ul class="mon-skill-detail-desc">
+              ${skillDescLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}
+            </ul>
+            <div class="mon-skill-upgrades">${monsterSkillUpgradeRows(focusSk, focusLv)}</div>
+          </div>
+          <div class="mon-skill-footer">
+            <button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--cost" data-enh="${m.uid}" ${enhMaxed ? "disabled" : ""}>${
+              enhMaxed
+                ? "MAX"
+                : `<span class="mon-enh-label">${escapeHtml(t("ui.3e1a337d93"))}</span><span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(enhCost)}</strong></span>`
+            }</button>
+            <p class="mon-skill-feed-caption">${escapeHtml(t("ui.skillFeedTitle"))}</p>
+            ${feedRows ? `<div class="mon-skill-feed-list">${feedRows}</div>` : ""}
+          </div>
         </div>
       </div>`;
 
@@ -4096,29 +4346,34 @@ function renderEnhance(): string {
       </div>`;
 
         const symbolsPanel = `<div class="mon-pane mon-pane--symbols">
-        ${renderMonsterRuneCircle(m.uid)}
-        <div class="rune-effect-block">
-          <div class="rune-effect-head">
-            <strong>${t("ui.effect")}</strong>
+        <div class="mon-sym-viewer">
+          <div class="mon-sym-viewer-equip">
+            ${renderMonsterRuneCircle(m.uid)}
+            <div class="rune-effect-block">
+              <div class="rune-effect-head">
+                <strong>${t("ui.effect")}</strong>
+              </div>
+              ${
+                selectedPreview?.sets.length
+                  ? `<div class="loadout-sets">${selectedPreview.sets
+                      .map((set) => {
+                        const accent = symbolSetAccent(set.setId);
+                        return `<span class="set-chip${set.active ? " active" : ""}" style="--sym-accent:${accent}">
+                          <img class="set-chip-ico" src="${symbolSetArtSrc(set.setId)}" width="16" height="16" alt="" draggable="false" />
+                          <span class="set-chip-label">${set.nameKo} ${set.count}/${set.pieces}${set.active ? ` / ${set.effectKo}` : ""}</span>
+                        </span>`;
+                      })
+                      .join("")}</div>`
+                  : `<p class="muted loadout-sets-empty">${t("ui.setBonusNone")}</p>`
+              }
+            </div>
           </div>
-          ${
-            selectedPreview?.sets.length
-              ? `<div class="loadout-sets">${selectedPreview.sets
-                  .map((set) => {
-                    const accent = symbolSetAccent(set.setId);
-                    return `<span class="set-chip${set.active ? " active" : ""}" style="--sym-accent:${accent}">
-                      <img class="set-chip-ico" src="${symbolSetArtSrc(set.setId)}" width="16" height="16" alt="" draggable="false" />
-                      <span class="set-chip-label">${set.nameKo} ${set.count}/${set.pieces}${set.active ? ` / ${set.effectKo}` : ""}</span>
-                    </span>`;
-                  })
-                  .join("")}</div>`
-              : `<p class="muted loadout-sets-empty">${t("ui.setBonusNone")}</p>`
-          }
+          <div class="mon-sym-viewer-inv">${renderSymbolInventoryGrid()}</div>
         </div>
       </div>`;
 
         const infoPanel = `<div class="mon-pane mon-pane--info">
-          <div class="mon-book-stats mon-inspect-stats mon-inspect-stats--stack" role="list">
+          <div class="mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list">
             <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statHp")}</span><span class="stat-cell-v">${selectedPreview?.final.hp ?? "-"}</span></div>
             <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statAtk")}</span><span class="stat-cell-v">${selectedPreview?.final.atk ?? "-"}</span></div>
             <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statDef")}</span><span class="stat-cell-v">${selectedPreview?.final.def ?? "-"}</span></div>
@@ -4147,40 +4402,52 @@ function renderEnhance(): string {
           `class="mon-pane mon-pane--symbols" data-mon-pane="symbols"${monDetailTab === "symbols" ? "" : " hidden"}`,
         );
 
-        const artCol = `<div class="mon-inspect-col-art${monDetailTab === "symbols" ? " is-hidden" : ""}">
-            <div class="mon-inspect-id">
-              <span class="mon-el-ico mon-el-ico--${selectedEl}" aria-hidden="true" title="${elLabel}">
-                <img class="mon-el-ico-img" src="${monsterElementArtSrc(selectedEl) ?? ""}" width="36" height="36" alt="" draggable="false" />
-              </span>
-              <div class="mon-inspect-id-text">
-                <strong class="mon-inspect-name">${def?.nameKo ?? m.monsterId}</strong>
-                <div class="mon-inspect-meta">
-                  <span class="mon-inspect-role">${monsterRoleLabel(def?.role, def?.baseStats)}</span>
+        const previewArt =
+          monsterArtImg(m.monsterId, "mon-preview-img", 120) ||
+          `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
+        const heroBlock = `<div class="mon-inspect-hero">
+            <div class="mon-inspect-preview" data-mon-preview="${m.monsterId}" data-yaw="18" role="img" aria-label="${def?.nameKo ?? m.monsterId}">
+              <div class="mon-preview-turntable">
+                <div class="mon-preview-spin">
+                  <div class="mon-preview-art" data-unit-anim="orbit">${previewArt}</div>
                 </div>
               </div>
+              <span class="mon-preview-facing" aria-hidden="true">F</span>
+              <span class="mon-preview-drag-hint" aria-hidden="true">${ARROW_LEFT}${ARROW_RIGHT}</span>
             </div>
-            <div class="mon-inspect-art">
-              ${art}
-              <div class="mon-inspect-stars mon-inspect-stars--overlay" aria-label="${def?.naturalStars ?? 0}">${starsHtml}${selectedEvo > 0 ? ` <span class="mon-evo">+${selectedEvo}</span>` : ""}</div>
+            <div class="mon-inspect-hero-info">
+              <strong class="mon-inspect-name">${def?.nameKo ?? m.monsterId}</strong>
+              <div class="mon-inspect-facts">
+                <span class="mon-inspect-fact mon-inspect-fact--el">
+                  <span class="mon-el-ico mon-el-ico--${selectedEl}" aria-hidden="true">
+                    <img class="mon-el-ico-img" src="${monsterElementArtSrc(selectedEl) ?? ""}" width="22" height="22" alt="" draggable="false" />
+                  </span>
+                  <span class="mon-inspect-fact-v">${elLabel}</span>
+                </span>
+                <span class="mon-inspect-fact mon-inspect-fact--stars" aria-label="${def?.naturalStars ?? 0}">
+                  <span class="mon-inspect-stars">${starsHtml}</span>${selectedEvo > 0 ? `<span class="mon-evo">+${selectedEvo}</span>` : ""}
+                </span>
+                <span class="mon-inspect-fact mon-inspect-fact--role">
+                  <span class="mon-inspect-fact-v">${monsterRoleLabel(def?.role, def?.baseStats)}</span>
+                </span>
+              </div>
               <div class="mon-inspect-art-foot" role="progressbar" aria-valuenow="${expPct}" aria-valuemin="0" aria-valuemax="100" aria-label="Lv.${m.level}">
                 <span class="mon-inspect-art-lv">Lv.${m.level}</span>
                 <div class="mon-inspect-art-exp"><div class="mon-inspect-art-exp-fill" style="width:${Math.min(100, expPct)}%"></div></div>
               </div>
             </div>
           </div>`;
-        const invCol = `<div class="mon-inspect-col-inv${monDetailTab !== "symbols" ? " is-hidden" : ""}">${renderSymbolInventoryGrid()}</div>`;
 
         return `<div class="mon-inspect el-${selectedEl}">
       <div class="mon-inspect-shell">
-        <div class="mon-inspect-tabs mon-inspect-tabs--row mon-inspect-tabs--4" role="tablist" aria-label="detail">
+        ${heroBlock}
+        <div class="mon-inspect-tabs mon-inspect-tabs--row mon-inspect-tabs--4 mon-inspect-tabs--compact" role="tablist" aria-label="detail">
           <button type="button" class="mon-side-tab${monDetailTab === "info" ? " is-active" : ""}" data-mon-detail-tab="info" role="tab" aria-selected="${monDetailTab === "info"}">${t("ui.tabInfo")}</button>
           <button type="button" class="mon-side-tab${monDetailTab === "skills" ? " is-active" : ""}" data-mon-detail-tab="skills" role="tab" aria-selected="${monDetailTab === "skills"}">${t("ui.2b47128fd2")}</button>
           <button type="button" class="mon-side-tab${monDetailTab === "awaken" ? " is-active" : ""}" data-mon-detail-tab="awaken" role="tab" aria-selected="${monDetailTab === "awaken"}">${t("ui.a2d1ab7b28")}</button>
           <button type="button" class="mon-side-tab${monDetailTab === "symbols" ? " is-active" : ""}" data-mon-detail-tab="symbols" role="tab" aria-selected="${monDetailTab === "symbols"}">${t("ui.60fbf51b13")}</button>
         </div>
-        <div class="mon-inspect-body${monDetailTab === "symbols" ? " mon-inspect-body--symbols" : ""}">
-          ${artCol}
-          ${invCol}
+        <div class="mon-inspect-body mon-inspect-body--full">
           <div class="mon-inspect-panel">${infoPane}${skillsPane}${awakenPane}${symbolsPane}</div>
         </div>
       </div>
@@ -4201,7 +4468,7 @@ function renderEnhance(): string {
                   const slot = save.symbols[equipPickSymIndex!]!.slot - 1;
                   const occupied = slots[slot] ? t("ui.50ce91ae85") : "";
                   return `<button type="button" class="stage-card" data-equip-to="${m.uid}">
-                    <span class="stage-card-mark" aria-hidden="true">${monsterArtImg(m.monsterId, "mon-slot-img", 36) || "?"}</span>
+                    <span class="stage-card-mark" aria-hidden="true">${monsterArtImg(m.monsterId, "mon-slot-img", 36) || STAR}</span>
                     <span class="stage-card-body">
                   <strong>${describeOwned(m)}${inParty ? t("ui.7b191a9f9f") : ""}</strong>
                       <small>${t("ui.81d226110c")} ${save.symbols[equipPickSymIndex!]!.slot}${occupied}</small>
@@ -4353,16 +4620,16 @@ function renderEnhance(): string {
   </div>`;
 }
 
-function renderShop(): string {
+function renderShopBody(): string {
   const grindRows =
     save.symbols
       .map((s, i) => {
         if (!canGrindSymbol(s)) return "";
         return `<button type="button" class="stage-card" data-grind="${i}">
-          <span class="stage-card-mark" aria-hidden="true">?</span>
+          <span class="stage-card-mark" aria-hidden="true">${Mark.grind}</span>
           <span class="stage-card-body">
             <strong>${describeSymbol(s)}</strong>
-            <small>${t('ui.956df04e9a')} ? ?${t('ui.dc78e6a251')} ${SYMBOL_GRIND_MANA_COST}</small>
+            <small>${t('ui.956df04e9a')} ${MIDDOT} ${MINUS}${t('ui.dc78e6a251')} ${SYMBOL_GRIND_MANA_COST}</small>
           </span>
         </button>`;
       })
@@ -4372,19 +4639,16 @@ function renderShop(): string {
       .map((s, i) => {
         if (!canImprintSymbol(s)) return "";
         return `<button type="button" class="stage-card" data-imprint="${i}">
-          <span class="stage-card-mark" aria-hidden="true">?</span>
+          <span class="stage-card-mark" aria-hidden="true">${Mark.imprint}</span>
           <span class="stage-card-body">
             <strong>${describeSymbol(s)}</strong>
-            <small>${t('ui.285324164a')} ? ?${t('ui.5d0bf3b101')} ${SYMBOL_IMPRINT_CRYSTAL_COST}</small>
+            <small>${t('ui.285324164a')} ${MIDDOT} ${MINUS}${t('ui.5d0bf3b101')} ${SYMBOL_IMPRINT_CRYSTAL_COST}</small>
           </span>
         </button>`;
       })
       .join("") ||
-    `<p class="muted">${t('ui.b9c0de06ae')} (${t('ui.81d226110c')} 4?6 ${t('ui.a05d718889')})</p>`;
-  return hubShell(
-    t('ui.759f762a02'),
-    `${t('ui.fa73f3a42f')} ${save.scrolls} ? ${t('ui.dc78e6a251')} ${Math.floor(save.island.mana)} ? ${t('ui.5d0bf3b101')} ${save.island.crystal}`,
-    `<div class="hub-panel">
+    `<p class="muted">${t('ui.b9c0de06ae')} (${t('ui.81d226110c')} 4${RANGE}6 ${t('ui.a05d718889')})</p>`;
+  return `<div class="hub-panel shop-body">
     ${renderForgeReveal()}
       <p class="section-label">${t('ui.079b50d844')}</p>
     <div class="stage-list">
@@ -4392,7 +4656,7 @@ function renderShop(): string {
         <span class="stage-card-mark" aria-hidden="true">1</span>
         <span class="stage-card-body">
           <strong>${t('ui.58c8d4982d')}</strong>
-          <small>?${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST} ? ${t('ui.e41479e637')} ${save.scrolls}</small>
+          <small>?${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST} ${MIDDOT} ${t('ui.e41479e637')} ${save.scrolls}</small>
         </span>
       </button>
       <button type="button" class="stage-card shop-offer shop-scroll" id="btn-buy-scroll-5">
@@ -4406,21 +4670,21 @@ function renderShop(): string {
     <p class="section-label">${t('ui.5515ca646d')}</p>
     <div class="stage-list">
       <button type="button" class="stage-card shop-offer" id="btn-buy-energy">
-        <span class="stage-card-mark" aria-hidden="true">?</span>
+        <span class="stage-card-mark" aria-hidden="true">${Mark.energy}</span>
         <span class="stage-card-body">
           <strong>${t('ui.7154da110a')} +${ENERGY_BUY_AMOUNT}</strong>
           <small>?${t('ui.5d0bf3b101')} ${ENERGY_CRYSTAL_COST}</small>
         </span>
       </button>
       <button type="button" class="stage-card shop-offer" id="btn-craft-essence">
-        <span class="stage-card-mark" aria-hidden="true">?</span>
+        <span class="stage-card-mark" aria-hidden="true">${Mark.crystal}</span>
         <span class="stage-card-body">
             <strong>${t('ui.6623b135fa')}</strong>
-          <small>${t('ui.4b482b3675')} ${ESSENCE_JINMUN_COST} ? ${t('ui.5d0bf3b101')} ${ESSENCE_CRYSTAL_GAIN} (Lv.12)</small>
+          <small>${t('ui.4b482b3675')} ${ESSENCE_JINMUN_COST} ${MIDDOT} ${t('ui.5d0bf3b101')} ${ESSENCE_CRYSTAL_GAIN} (Lv.12)</small>
         </span>
       </button>
       <button type="button" class="stage-card shop-offer" id="btn-craft-scroll">
-        <span class="stage-card-mark" aria-hidden="true">?</span>
+        <span class="stage-card-mark" aria-hidden="true">${Mark.summon}</span>
         <span class="stage-card-body">
             <strong>${t('ui.6623b135fa')}</strong>
           <small>${t('ui.4b482b3675')} ${CRAFT_SCROLL_JINMUN} + ${t('ui.dc78e6a251')} ${CRAFT_SCROLL_MANA} (Lv.19)</small>
@@ -4429,10 +4693,30 @@ function renderShop(): string {
     </div>
     <p class="section-label">${t('ui.d3a3c215c8')} (${t('ui.49758b94ae')})</p>
     <div class="stage-list">${grindRows}</div>
-    <p class="section-label">${t('ui.515ca5f235')} (${t('ui.81d226110c')} 4?6)</p>
+    <p class="section-label">${t('ui.515ca5f235')} (${t('ui.81d226110c')} 4${RANGE}6)</p>
     <div class="stage-list">${imprintRows}</div>
-  </div>`,
+  </div>`;
+}
+
+function renderShop(): string {
+  return hubShell(
+    t('ui.759f762a02'),
+    `${t('ui.fa73f3a42f')} ${save.scrolls} ${MIDDOT} ${t('ui.dc78e6a251')} ${Math.floor(save.island.mana)} ${MIDDOT} ${t('ui.5d0bf3b101')} ${save.island.crystal}`,
+    renderShopBody(),
   );
+}
+
+function renderShopModal(): string {
+  return `<div class="settings-layer shop-layer" id="shop-layer" ${shopOpen ? "" : "hidden"} aria-hidden="${shopOpen ? "false" : "true"}">
+  <button type="button" class="settings-backdrop" id="btn-shop-close" aria-label="${escapeHtml(t("shop.close"))}"></button>
+  <div class="settings-sheet shop-sheet" role="dialog" aria-modal="true" aria-labelledby="shop-title">
+    <div class="settings-sheet-handle" aria-hidden="true"></div>
+    ${modalCloseX(t("shop.close"), "btn-shop-close")}
+    <h2 class="settings-title" id="shop-title">${escapeHtml(t("nav.shop"))}</h2>
+    <p class="settings-account">${escapeHtml(`${t("ui.fa73f3a42f")} ${save.scrolls} ${MIDDOT} ${t("ui.dc78e6a251")} ${Math.floor(save.island.mana)} ${MIDDOT} ${t("ui.5d0bf3b101")} ${save.island.crystal}`)}</p>
+    ${renderShopBody()}
+  </div>
+</div>`;
 }
 
 function renderGlory(): string {
@@ -4462,7 +4746,7 @@ function renderGlory(): string {
           <span class="stage-card-mark" aria-hidden="true">${lv}</span>
           <span class="stage-card-body">
             <strong>${g.nameKo} Lv.${lv}/${g.maxLevel}</strong>
-            <small>${g.effectKo} ? ${maxed ? "MAX" : `?${t('ui.ba0c9e096f')} ${g.gloryCostPerLevel}`}</small>
+            <small>${g.effectKo} ${MIDDOT} ${maxed ? "MAX" : `${MINUS}${t('ui.ba0c9e096f')} ${g.gloryCostPerLevel}`}</small>
           </span>
         </button>`;
       }).join("")}
@@ -4475,7 +4759,7 @@ function renderCaptureShop(): string {
   if (!battle || battle.phase !== "await_capture_shop" || autoMode) return "";
   const offers = captureShopOffers();
   const markFor = (choice: string) =>
-    choice === "mana" ? "?" : choice === "amplify" ? "?" : "?";
+    choice === "mana" ? Mark.mana : choice === "amplify" ? Mark.amplify : Mark.shield;
   const hintFor = (choice: string) =>
     choice === "mana"
       ? t('ui.9eab85fc5c')
@@ -4484,7 +4768,7 @@ function renderCaptureShop(): string {
         : t('ui.4ee49fe6c1');
   return `<div class="capture-shop">
     <p class="capture-shop-title">${t('ui.c2646fe538')}</p>
-    <p class="muted capture-shop-sub">${t('ui.fafad3d54f')} ? ${t('ui.12ce947dc1')}</p>
+    <p class="muted capture-shop-sub">${t('ui.fafad3d54f')} ${MIDDOT} ${t('ui.12ce947dc1')}</p>
     <div class="stage-list capture-shop-list">
       ${offers
         .map(
@@ -4502,42 +4786,39 @@ function renderCaptureShop(): string {
   </div>`;
 }
 
-function renderGuild(): string {
+function renderGuildBody(): string {
   const name = save.guildName;
   const board = guildLeaderboard(save)
     .map(
       (r, i) =>
         `<div class="guild-rank-row${r.self ? " self-rank" : ""}">
           <span class="guild-rank-n">${i + 1}</span>
-          <span class="guild-rank-name">${r.name}${r.self ? " (?)" : ""}</span>
+          <span class="guild-rank-name">${r.name}${r.self ? ` (${Mark.me})` : ""}</span>
           <strong class="guild-rank-score">${r.contribution}</strong>
         </div>`,
     )
     .join("");
-  return hubShell(
-    t('ui.81e2301960'),
-    name ?? t('ui.928873f927'),
-    `<div class="hub-panel">
+  return `<div class="hub-panel community-body">
     <div class="guild-panel">
       <p class="guild-panel-title">${name ? name : t('ui.2a1d74bcdd')}</p>
       <div class="guild-stats">
         <div class="guild-stat"><span>${t('ui.fe2c5c3e7d')}</span><strong>${save.guildContribution ?? 0}</strong></div>
         <div class="guild-stat"><span>${t('ui.332e9eedf2')}</span><strong>+${save.guildRaidBest ?? 0}</strong></div>
-        <div class="guild-stat"><span>${t('ui.937c424f40')}</span><strong>${save.guildCheckInDay ?? "?"}</strong></div>
+        <div class="guild-stat"><span>${t('ui.937c424f40')}</span><strong>${save.guildCheckInDay ?? EM_DASH}</strong></div>
       </div>
     </div>
     ${
       name
         ? `<div class="stage-list">
              <button type="button" class="stage-card" id="btn-guild-checkin">
-               <span class="stage-card-mark" aria-hidden="true">?</span>
+               <span class="stage-card-mark" aria-hidden="true">${Mark.checkIn}</span>
                <span class="stage-card-body">
             <strong>${t('ui.b3fe16e64a')}</strong>
                  <small>${t('ui.118337544a')}</small>
                </span>
              </button>
              <button type="button" class="stage-card" id="btn-guild-rename">
-               <span class="stage-card-mark" aria-hidden="true">?</span>
+               <span class="stage-card-mark" aria-hidden="true">${Mark.rename}</span>
                <span class="stage-card-body">
             <strong>${t('ui.b3fe16e64a')}</strong>
                  <small>${t('ui.e9db3b5735')}</small>
@@ -4553,8 +4834,30 @@ function renderGuild(): string {
     }
     <p class="section-label">${t('ui.5515ca646d')}</p>
     <div class="guild-board">${board}</div>
-  </div>`,
+  </div>`;
+}
+
+function renderGuild(): string {
+  const name = save.guildName;
+  return hubShell(
+    t('ui.81e2301960'),
+    name ?? t('ui.928873f927'),
+    renderGuildBody(),
   );
+}
+
+function renderCommunityModal(): string {
+  const name = save.guildName;
+  return `<div class="settings-layer community-layer" id="community-layer" ${communityOpen ? "" : "hidden"} aria-hidden="${communityOpen ? "false" : "true"}">
+  <button type="button" class="settings-backdrop" id="btn-community-close" aria-label="${escapeHtml(t("community.close"))}"></button>
+  <div class="settings-sheet community-sheet" role="dialog" aria-modal="true" aria-labelledby="community-title">
+    <div class="settings-sheet-handle" aria-hidden="true"></div>
+    ${modalCloseX(t("community.close"), "btn-community-close")}
+    <h2 class="settings-title" id="community-title">${escapeHtml(t("nav.community"))}</h2>
+    <p class="settings-account">${escapeHtml(name ?? t("ui.928873f927"))}</p>
+    ${renderGuildBody()}
+  </div>
+</div>`;
 }
 
 function renderFusion(): string {
@@ -4568,7 +4871,7 @@ function renderFusion(): string {
   }
   return hubShell(
     t('ui.81e2301960'),
-    `${t('ui.df9d336285')} ? ${t('ui.d02987ca08')} +1 ? ?${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
+    `${t('ui.df9d336285')} ${MIDDOT} ${t('ui.d02987ca08')} +1 ${MIDDOT} ${MINUS}${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
     `<div class="hub-panel">
     ${renderFusionReveal()}
     <div class="guild-panel fusion-panel">
@@ -4587,10 +4890,10 @@ function renderFusion(): string {
                 Math.max(ma.evolve ?? 0, mb.evolve ?? 0) + 1,
               );
               return `<button type="button" class="stage-card" data-fuse-a="${a}" data-fuse-b="${b}">
-                <span class="stage-card-mark" aria-hidden="true">?</span>
+                <span class="stage-card-mark" aria-hidden="true">${Mark.fusion}</span>
                 <span class="stage-card-body">
                   <strong>${describeOwned(ma)} + ${describeOwned(mb)}</strong>
-                  <small>${t('ui.ebc3c5c656')} ${evo} ? ?${t('ui.dc78e6a251')} ${FUSION_MANA_COST}</small>
+                  <small>${t('ui.ebc3c5c656')} ${evo} ${MIDDOT} ${MINUS}${t('ui.dc78e6a251')} ${FUSION_MANA_COST}</small>
                 </span>
               </button>`;
             })
@@ -4679,13 +4982,13 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
       const canFight = !locked && diffOpen && (cost <= 0 || energyNow >= cost);
       const extra =
         s.gloryReward != null
-          ? ` ? ${t('ui.ba0c9e096f')} ${s.gloryReward}`
+          ? ` ${MIDDOT} ${t('ui.ba0c9e096f')} ${s.gloryReward}`
           : s.jinmunReward != null
-            ? ` ? ${t('ui.4b482b3675')} ${s.jinmunReward}`
+            ? ` ${MIDDOT} ${t('ui.4b482b3675')} ${s.jinmunReward}`
             : "";
       const weekly =
         vaultLeft !== null
-          ?  ` ? ${t('ui.9cbaf58b88')} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}`
+          ?  ` ${MIDDOT} ${t('ui.9cbaf58b88')} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}`
           : "";
       const costHint = !diffOpen
         ? t('ui.4292516afd')
@@ -4693,15 +4996,15 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
           ? t('ui.bc22e8e368')
           : `${t('ui.7dcdb553c8')} ${cost}`;
       const mark = done
-        ? "?"
+        ? CHECK
         : s.mode === "scenario"
           ? `${s.map}-${s.stage}`
           : String(s.boardSize);
       return `<button type="button" class="stage-card stage-card--sortie${done ? " is-cleared" : ""}${!canFight ? " is-disabled" : ""}" data-stage="${s.id}" ${canFight ? "" : "disabled"}>
         <span class="stage-card-mark" aria-hidden="true">${mark}</span>
         <span class="stage-card-body">
-          <strong>${label} ? ${s.nameKo}</strong>
-          <small>${s.boardSize}?${s.boardSize} ? ${t('ui.fe1fb24836')} ${s.waves}${extra}${weekly}</small>
+          <strong>${label} ${MIDDOT} ${s.nameKo}</strong>
+          <small>${s.boardSize}${TIMES}${s.boardSize} ${MIDDOT} ${t('ui.fe1fb24836')} ${s.waves}${extra}${weekly}</small>
           ${stageDropPreview(s, opts)}
         </span>
         <span class="stage-card-cost${cost > energyNow && diffOpen ? " is-short" : ""}">
@@ -4732,7 +5035,7 @@ function stagesRegions(): StagesRegion[] {
   const mqRegions: StagesRegion[] = MAIN_QUEST_PIN_LAYOUT.map((pin) => ({
     id: pin.id,
     name: pin.areaKo,
-    blurb: `${t('ui.9d96ebc162')} ? ${pin.areaKo}`,
+    blurb: `${t('ui.9d96ebc162')} ${MIDDOT} ${pin.areaKo}`,
     x: pin.x,
     y: pin.y,
     tone: pin.tone,
@@ -4763,14 +5066,14 @@ function stagesRegions(): StagesRegion[] {
       equipWeekly: true,
     },
     warena: {
-      name: t('ui.6003da6bd2'),
-      blurb: t('ui.e00890de86'),
+      name: t("stages.warena"),
+      blurb: t("stages.warenaBlurb"),
       stages: WORLD_ARENA_STAGES,
       warena: true,
     },
     guild: {
-      name: t('ui.6003da6bd2'),
-      blurb: t('ui.e00890de86'),
+      name: t("stages.guildRaid"),
+      blurb: t("stages.guildRaidBlurb"),
       stages: GUILD_RAID_STAGES,
       guild: true,
     },
@@ -4780,7 +5083,7 @@ function stagesRegions(): StagesRegion[] {
     return {
       id: pin.id,
       name: meta.name,
-      blurb: `${meta.blurb} ? ${pin.landmarkKo}`,
+      blurb: `${meta.blurb} ${MIDDOT} ${pin.landmarkKo}`,
       x: pin.x,
       y: pin.y,
       tone: pin.id,
@@ -4808,6 +5111,93 @@ function regionDifficultyOpen(region: StagesRegion, diff: StageDifficulty): bool
   return region.stages.some((s) => isDifficultyOpen(s, diff));
 }
 
+/** Open/close/refresh the region sheet without redrawing the world map. */
+function applyStagesRegionOpen(): void {
+  const host = app.querySelector<HTMLElement>("#stages-region-host");
+  if (!host) return;
+
+  app.querySelectorAll<HTMLButtonElement>("[data-region]").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.region === stagesRegion);
+  });
+
+  const selected = stagesRegion
+    ? stagesRegions().find((r) => r.id === stagesRegion) ?? null
+    : null;
+  if (!selected) {
+    host.innerHTML = "";
+    return;
+  }
+  if (!regionDifficultyOpen(selected, stageEntryDiff)) {
+    stageEntryDiff = "normal";
+  }
+  host.innerHTML = renderStagesRegionSheet(selected);
+  const layer = host.querySelector<HTMLElement>(".stages-region-layer");
+  if (layer) replayModalPop(layer);
+  bindStagesRegionSheet();
+}
+
+function bindStagesRegionSheet(): void {
+  const host = app.querySelector("#stages-region-host");
+  if (!host) return;
+
+  host.querySelectorAll<HTMLButtonElement>("[data-modal-x-for]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.modalXFor;
+      if (!id) return;
+      host.querySelector<HTMLButtonElement>(`#${CSS.escape(id)}`)?.click();
+    });
+  });
+
+  host.querySelector("#btn-region-close")?.addEventListener("click", () => {
+    stagesRegion = null;
+    stageEntryId = null;
+    applyStagesRegionOpen();
+  });
+
+  host.querySelector("#region-diff-select")?.addEventListener("change", (ev) => {
+    const v = (ev.target as HTMLSelectElement).value as StageDifficulty;
+    if (v === "normal" || v === "hard" || v === "hell") {
+      stageEntryDiff = v;
+      applyStagesRegionOpen();
+    }
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const stage = getStage(btn.dataset.stage!);
+      if (stage) startBattle(stage, stageEntryDiff);
+    });
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-ban-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.banToggle!;
+      const cur = [...(save.arenaBanIds ?? [])];
+      const idx = cur.indexOf(id);
+      if (idx >= 0) cur.splice(idx, 1);
+      else if (cur.length < 2) cur.push(id);
+      else {
+        flash(t("ui.522ab79351"));
+        return;
+      }
+      const r = runSetArenaBans(save, cur);
+      save = r.save;
+      persist();
+      flash(r.message);
+      applyStagesRegionOpen();
+    });
+  });
+
+  host.querySelector("#btn-season-claim")?.addEventListener("click", () => {
+    const r = runClaimSeasonReward(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    applyStagesRegionOpen();
+  });
+}
+
 function renderStagesRegionSheet(region: StagesRegion): string {
   const prog = regionProgress(region.stages);
   const bans = save.arenaBanIds ?? [];
@@ -4829,10 +5219,10 @@ function renderStagesRegionSheet(region: StagesRegion): string {
 
   let extras = "";
   if (region.equipWeekly) {
-    extras = `<p class="stages-note">${t('ui.e35b325054')} ${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT} ? ${t('ui.6a432402bd')}</p>`;
+    extras = `<p class="stages-note">${t('ui.e35b325054')} ${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT} ${MIDDOT} ${t('ui.6a432402bd')}</p>`;
   }
   if (region.guild) {
-    extras = `<p class="stages-note">${t('ui.fe2c5c3e7d')} ${save.guildContribution ?? 0} ? ${t('ui.3ea974d72f')} +${save.guildRaidBest ?? 0}</p>`;
+    extras = `<p class="stages-note">${t('ui.fe2c5c3e7d')} ${save.guildContribution ?? 0} ${MIDDOT} ${t('ui.3ea974d72f')} +${save.guildRaidBest ?? 0}</p>`;
   }
   if (region.warena) {
     const banPool = [
@@ -4843,7 +5233,7 @@ function renderStagesRegionSheet(region: StagesRegion): string {
         const m = getMonster(id);
         const on = bans.includes(id);
         return `<button type="button" class="ban-chip${on ? " active" : ""}" data-ban-toggle="${id}">
-          <span class="ban-chip-mark" aria-hidden="true">${on ? "?" : "?"}</span>
+          <span class="ban-chip-mark" aria-hidden="true">${on ? Mark.banOn : Mark.banOff}</span>
           <span class="ban-chip-body">
             <strong>${m?.nameKo ?? id}</strong>
             <small>${on ? t('ui.402782da6b') : t('ui.25a68ffa5c')}</small>
@@ -4853,21 +5243,29 @@ function renderStagesRegionSheet(region: StagesRegion): string {
       .join("");
     extras = `<div class="season-panel">
         <p class="season-panel-title">${t('ui.b78477b088')} ${seasonWins}</p>
-        <p class="muted stages-note">${t('ui.45e62f7d49')} ${nextTierAt}${t('ui.3b1908b79a')} ? ${t('ui.d18227b255')} ${claimed}</p>
+        <p class="muted stages-note">${t('ui.45e62f7d49')} ${nextTierAt}${t('ui.3b1908b79a')} ${MIDDOT} ${t('ui.d18227b255')} ${claimed}</p>
         <button type="button" class="auth-btn-primary full" id="btn-season-claim">${t('ui.8b8572eda1')}</button>
       </div>
-      <p class="stages-note">${t('ui.ca139249b0')} ${bans.length ? bans.map((id) => getMonster(id)?.nameKo ?? id).join(", ") : t('ui.d58fa73adc')} ? ${t('ui.869e9feb1b')} 2</p>
+      <p class="stages-note">${t('ui.ca139249b0')} ${bans.length ? bans.map((id) => getMonster(id)?.nameKo ?? id).join(", ") : t('ui.d58fa73adc')} ${MIDDOT} ${t('ui.869e9feb1b')} 2</p>
       <div class="ban-row">${banRow}</div>`;
   }
 
+  const mqPin = isMainQuestRegion(region.id)
+    ? MAIN_QUEST_PIN_LAYOUT.find((p) => p.id === region.id)
+    : null;
+  const regionTitle = mqPin
+    ? `<span class="stages-pin-num" aria-hidden="true">${mqPin.map}</span>${region.name}`
+    : region.name;
+
   return `<div class="stages-region-layer" id="stages-region-layer">
-    <button type="button" class="stages-region-backdrop" id="btn-region-close" aria-label="${t('ui.94b7dba159')}">${t('ui.94b7dba159')}</button>
+    <button type="button" class="stages-region-backdrop" id="btn-region-close" aria-label="${t('ui.94b7dba159')}"></button>
     <div class="stages-region-sheet stages-region-sheet--card stages-region-sheet--${region.tone}" role="dialog" aria-modal="true" aria-labelledby="stages-region-title">
+      ${modalCloseX(t("ui.94b7dba159"), "btn-region-close")}
       <header class="stages-region-head">
         <div class="stages-region-head-main">
           <p class="stages-region-kicker">${region.blurb}</p>
           <div class="stages-region-title-row">
-            <h2 class="stages-region-title" id="stages-region-title">${region.name}</h2>
+            <h2 class="stages-region-title" id="stages-region-title">${regionTitle}</h2>
             <label class="stages-region-diff-inline">
               <span class="sr-only">${t('ui.94b7dba159')}</span>
               <select class="stages-region-diff-select" id="region-diff-select" aria-label="${t('ui.1a3b3223e1')}" title="${diffMeta.blurb}">
@@ -4875,9 +5273,8 @@ function renderStagesRegionSheet(region: StagesRegion): string {
               </select>
             </label>
           </div>
-          <p class="stages-meta">${t('ui.330ccf22cb')} ${prog.cleared}/${prog.total}${prog.unlocked ? "" : ` ? ${t('ui.956f2f4243')}`} ? ${t('ui.7dcdb553c8')} ${energyNow}/${energyMax}</p>
+          <p class="stages-meta">${t('ui.330ccf22cb')} ${prog.cleared}/${prog.total}${prog.unlocked ? "" : ` ${MIDDOT} ${t('ui.956f2f4243')}`} ${MIDDOT} ${t('ui.7dcdb553c8')} ${energyNow}/${energyMax}</p>
         </div>
-        <button type="button" class="secondary stages-region-x" id="btn-region-close-x" aria-label="${t('ui.94b7dba159')}">${t('ui.94b7dba159')}</button>
       </header>
       ${extras}
       <div class="stage-list stage-list--expedition">${stageButtons(region.stages, { equipWeekly: region.equipWeekly })}</div>
@@ -4885,16 +5282,7 @@ function renderStagesRegionSheet(region: StagesRegion): string {
   </div>`;
 }
 function renderStages(): string {
-  const cleared = save.clearedStages.length;
-  const seasonWins = save.arenaSeasonWins ?? 0;
   const regions = stagesRegions();
-  const selected = stagesRegion
-    ? regions.find((r) => r.id === stagesRegion) ?? null
-    : null;
-  const mqTotal = MAIN_QUEST_STAGES.length;
-  const mqCleared = MAIN_QUEST_STAGES.filter((st) =>
-    save.clearedStages.includes(st.id),
-  ).length;
   const mqNodes = MAIN_QUEST_PIN_LAYOUT.map(
     (p) =>
       `<span class="stages-mq-node" style="left:${p.x}%;top:${p.y}%" aria-hidden="true"><span class="stages-mq-node-core"></span></span>`,
@@ -4902,7 +5290,7 @@ function renderStages(): string {
   const pins = regions
     .map((r) => {
       const prog = regionProgress(r.stages);
-      const active = selected?.id === r.id;
+      const active = stagesRegion === r.id;
       const mq = isMainQuestRegion(r.id);
       const pinLayout = mq
         ? MAIN_QUEST_PIN_LAYOUT.find((p) => p.id === r.id)
@@ -4914,10 +5302,14 @@ function renderStages(): string {
       const lockMark = prog.unlocked
         ? ""
         : `<span class="stages-pin-lock" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2zm-6-2a2 2 0 1 1 4 0v2h-4V7zm6 12H7v-8h10v8z"/></svg></span>`;
-      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${prog.unlocked ? "" : " is-locked"}${active ? " is-active" : ""}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" aria-label="${r.name}${prog.unlocked ? "" : ` ? ${t('ui.b35f488f01')}`}" ${prog.unlocked ? "" : 'data-locked="1"'}>
+      const titleNum = mark
+        ? `<span class="stages-pin-num" aria-hidden="true">${mark}</span>`
+        : "";
+      const ariaName = mark ? `${mark} ${r.name}` : r.name;
+      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${prog.unlocked ? "" : " is-locked"}${active ? " is-active" : ""}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" aria-label="${ariaName}${prog.unlocked ? "" : ` ${MIDDOT} ${t('ui.b35f488f01')}`}" ${prog.unlocked ? "" : 'data-locked="1"'}>
         <span class="stages-pin-dot" aria-hidden="true">${mq ? `<span class="stages-pin-mark">${mark}</span>` : ""}</span>
         <span class="stages-pin-label">
-          <strong>${lockMark}${r.name}</strong>
+          <strong>${lockMark}${titleNum}${r.name}</strong>
           <small>${prog.unlocked ? sub : t('ui.759f762a02')}</small>
         </span>
       </button>`;
@@ -4940,23 +5332,13 @@ function renderStages(): string {
         <div class="stages-map-pins">${pins}</div>
       </div>
     </div>
-    <header class="stages-map-hud">
-      <button type="button" class="stages-map-back" data-nav="home" aria-label="${t('ui.d758337556')}">
-        <img class="stages-map-back-ico" src="/art/ui/back-arrow.svg" width="18" height="18" alt="" draggable="false" />
-        <span>${t('ui.d758337556')}</span>
-      </button>
-      <div class="stages-map-hud-text">
-        <p class="stages-title">${t('ui.8f968f51eb')}</p>
-        <p class="stages-meta">${t('ui.3c15bd34eb')} ${mqCleared}/${mqTotal} ? ${t('ui.05873c30d3')} ${cleared} ? ${t('ui.794b55c1ef')} ${seasonWins}</p>
-      </div>
-    </header>
-    ${selected ? renderStagesRegionSheet(selected) : ""}
+    <div id="stages-region-host"></div>
   </div>`;
 }
 
 function renderBattleTicker(): string {
   if (!battle) return "";
-  // ASCII-safe keyword list (\u escapes) ? do not use Hangul regex literals here.
+  // ASCII-safe keyword list (\u escapes) — do not use Hangul regex literals here.
   const keys = [
     t('ui.f4d93d3cf8'),
     t('ui.048b7511df'),
@@ -5019,15 +5401,15 @@ function renderBattle(manaPct: number): string {
   const canGuard = !!active && battle.canUseSummonerGuard(active);
   const mission =
     battle.modules.moduleG && !battle.finishReason
-      ? ` ? ${t('ui.511fa65e38')} ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? "?" : ""}`
+      ? ` ${MIDDOT} ${t('ui.511fa65e38')} ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? CHECK : ""}`
       : "";
   const boardTag =
-    battle.boards.length > 1 ? ` ? ${battle.boardLabel}` : "";
+    battle.boards.length > 1 ? ` ${MIDDOT} ${battle.boardLabel}` : "";
   const status = battle.finishReason
     ? battle.finishReason === "ally_win"
       ? t('ui.ba130f3539')
       : t('ui.8d9e9106fa')
-    : `${battle.phase} ? amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} ? ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}${boardTag}`;
+    : `${battle.phase} ${MIDDOT} amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} ${MIDDOT} ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}${boardTag}`;
 
   const skillHint =
     battle.phase === "await_stone" && active?.team === "ally"
@@ -5052,11 +5434,11 @@ function renderBattle(manaPct: number): string {
         ${renderSkillButtons(active, awaitSkill)}
       </div>
       <div class="skill-cluster skill-cluster--summoner" aria-label="${t('ui.5618aec54c')}">
-        <button type="button" id="sk-ult" class="summoner-sk ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.2d99fde255')}</span></button>
-        <button type="button" id="sk-declare" class="summoner-sk declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.bd1967124e')}</span></button>
-        <button type="button" id="sk-dual" class="summoner-sk dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.1fa6111a65')}</span></button>
-        <button type="button" id="sk-clean" class="summoner-sk clean${canClean ? " ready" : ""}" ${awaitSkill && canClean ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.ac2f6c7ca5')}</span></button>
-        <button type="button" id="sk-guard" class="summoner-sk guard${canGuard ? " ready" : ""}" ${awaitSkill && canGuard ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">?</span><span class="sk-name">${t('ui.0be109c051')}</span></button>
+        <button type="button" id="sk-ult" class="summoner-sk ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">${Mark.open}</span><span class="sk-name">${t('ui.2d99fde255')}</span></button>
+        <button type="button" id="sk-declare" class="summoner-sk declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">${Mark.declare}</span><span class="sk-name">${t('ui.bd1967124e')}</span></button>
+        <button type="button" id="sk-dual" class="summoner-sk dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">${Mark.dual}</span><span class="sk-name">${t('ui.1fa6111a65')}</span></button>
+        <button type="button" id="sk-clean" class="summoner-sk clean${canClean ? " ready" : ""}" ${awaitSkill && canClean ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">${Mark.clean}</span><span class="sk-name">${t('ui.ac2f6c7ca5')}</span></button>
+        <button type="button" id="sk-guard" class="summoner-sk guard${canGuard ? " ready" : ""}" ${awaitSkill && canGuard ? "" : "disabled"}><span class="sk-mark" aria-hidden="true">${Mark.guard}</span><span class="sk-name">${t('ui.0be109c051')}</span></button>
       </div>
       <div class="skill-cluster skill-cluster--util">
         <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>${t('ui.4b0ea2fcd0')}</button>
@@ -5160,26 +5542,6 @@ function bindAuth(): void {
     })();
   });
 
-  app.querySelector("#auth-guest")?.addEventListener("click", () => {
-    void (async () => {
-      const res = await apiJson<{ user: SessionUser }>("/api/auth/guest", {
-        method: "POST",
-        body: "{}",
-      });
-      if (res?.user) {
-        await enterWithUser(res.user, {
-          fresh: !loadLocalSave(),
-          enterGame: true,
-        });
-        return;
-      }
-      await enterWithUser(
-        { id: "local-guest", email: null, kind: "guest" },
-        { fresh: !loadLocalSave(), enterGame: true },
-      );
-    })();
-  });
-
   app.querySelector("#auth-register")?.addEventListener("click", () => {
     authUi.pane = "register";
     render();
@@ -5196,13 +5558,14 @@ function bindAuth(): void {
     const email = String(fd.get("email") ?? "").trim();
     const password = String(fd.get("password") ?? "");
     const saveId = fd.get("saveId") === "on";
+    const autoLogin = fd.get("autoLogin") === "on";
     const path =
       authUi.pane === "register" ? "/api/auth/register" : "/api/auth/login";
 
     if (authUi.pane === "login") {
       writeAuthPrefs({
         saveId,
-        autoLogin: false,
+        autoLogin,
         savedEmail: saveId ? email : "",
       });
     }
@@ -5230,7 +5593,8 @@ function bindAuth(): void {
           render();
           return;
         }
-        const enterGame = authUi.pane === "register";
+        const enterGame =
+          authUi.pane === "register" ? true : readAuthPrefs().autoLogin;
         await enterWithUser(body.user, { enterGame });
       } catch {
     flash(t('ui.b72f5a4752'));
@@ -5508,6 +5872,31 @@ function applyStagesPan(): void {
   }
 }
 
+/**
+ * Size the pannable world to the atlas aspect ratio so pin left%/top% map 1:1
+ * onto stages-world-map.png on every device (no object-fit cover crop drift).
+ */
+function sizeStagesWorld(viewport: HTMLElement, world: HTMLElement): void {
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  if (vw <= 0 || vh <= 0) return;
+  let worldH = Math.max(
+    vh * STAGES_WORLD_OVERSCAN,
+    (vw * STAGES_WORLD_OVERSCAN) / STAGES_MAP_ASPECT,
+  );
+  let worldW = worldH * STAGES_MAP_ASPECT;
+  if (worldW < vw * 1.08) {
+    worldW = vw * STAGES_WORLD_OVERSCAN;
+    worldH = worldW / STAGES_MAP_ASPECT;
+  }
+  if (worldH < vh * 1.08) {
+    worldH = vh * STAGES_WORLD_OVERSCAN;
+    worldW = worldH * STAGES_MAP_ASPECT;
+  }
+  world.style.width = `${Math.round(worldW)}px`;
+  world.style.height = `${Math.round(worldH)}px`;
+}
+
 function clampStagesPan(viewport: HTMLElement, world: HTMLElement): void {
   const minX = Math.min(0, viewport.clientWidth - world.offsetWidth);
   const minY = Math.min(0, viewport.clientHeight - world.offsetHeight);
@@ -5521,9 +5910,15 @@ function bindStagesPan(): void {
   if (!viewport || !world) return;
 
   const finishClamp = () => {
+    sizeStagesWorld(viewport, world);
+    if (stagesMapFitApplied !== STAGES_MAP_FIT_VERSION) {
+      stagesPanCentered = false;
+      stagesMapFitApplied = STAGES_MAP_FIT_VERSION;
+    }
     if (!stagesPanCentered && world.offsetWidth > 0) {
-      stagesPan.x = (viewport.clientWidth - world.offsetWidth) * 0.35;
-      stagesPan.y = (viewport.clientHeight - world.offsetHeight) * 0.58;
+      // Bias toward the MQ corridor start (lower-center of the atlas).
+      stagesPan.x = (viewport.clientWidth - world.offsetWidth) * 0.42;
+      stagesPan.y = (viewport.clientHeight - world.offsetHeight) * 0.72;
       stagesPanCentered = true;
     }
     clampStagesPan(viewport, world);
@@ -5531,6 +5926,14 @@ function bindStagesPan(): void {
   };
   finishClamp();
   requestAnimationFrame(finishClamp);
+
+  stagesWorldResizeObs?.disconnect();
+  stagesWorldResizeObs = new ResizeObserver(() => {
+    sizeStagesWorld(viewport, world);
+    clampStagesPan(viewport, world);
+    applyStagesPan();
+  });
+  stagesWorldResizeObs.observe(viewport);
 
   viewport.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
@@ -5690,6 +6093,15 @@ function bindIslandLayoutEdit(): void {
 }
 
 function bind(): void {
+  app.querySelectorAll<HTMLButtonElement>("[data-modal-x-for]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.modalXFor;
+      if (!id) return;
+      app.querySelector<HTMLButtonElement>(`#${CSS.escape(id)}`)?.click();
+    });
+  });
+
   if (view === "auth") {
     bindAuth();
     return;
@@ -5698,58 +6110,29 @@ function bind(): void {
   if (view === "home") {
     bindIslandPan();
     bindIslandLayoutEdit();
-    app.querySelector("#btn-home-chat")?.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      openHomeChat();
-    });
-    app.querySelector("#btn-chat-close")?.addEventListener("click", () => {
-      chatOpen = false;
-      render();
-    });
-    app.querySelector("#chat-channel-select")?.addEventListener("change", (ev) => {
-      const sel = ev.currentTarget as HTMLSelectElement;
-      const id = Number(sel.value);
-      if (!Number.isFinite(id)) return;
-      if (!switchChatSession(id)) {
-        flash(t("chat.channelFull"));
-        sel.value = String(chatChannelId);
-        return;
-      }
-      chatLineUnread = false;
-      render();
-      queueMicrotask(() => {
-        const log = app.querySelector("#chat-log");
-        if (log) log.scrollTop = log.scrollHeight;
-      });
-    });
-    app.querySelector("#chat-compose")?.addEventListener("submit", (ev) => {
-      ev.preventDefault();
-      const input = app.querySelector<HTMLInputElement>("#chat-input");
-      const text = input?.value.trim() ?? "";
-      if (!text) return;
-      if (!pushChatMessage(chatChannelId, displayNickname(), text)) return;
-      if (input) input.value = "";
-      chatLineUnread = false;
-      render();
-      queueMicrotask(() => {
-        const log = app.querySelector("#chat-log");
-        if (log) log.scrollTop = log.scrollHeight;
-        app.querySelector<HTMLInputElement>("#chat-input")?.focus();
-      });
-    });
   }
+  bindChatUi();
 
   const toggleSummonerPicker = () => {
     summonerPickerOpen = !summonerPickerOpen;
     if (summonerPickerOpen) {
       resMoreOpen = false;
       settingsOpen = false;
-      chatOpen = false;
       mailboxOpen = false;
       notifOpen = false;
       missionOpen = false;
+      communityOpen = false;
+      shopOpen = false;
+      closeChatOverlay();
+      applyResMoreOpen();
+      applySettingsOpen();
+      applyMailboxOpen();
+      applyNotifOpen();
+      applyMissionOpen();
+      applyCommunityOpen();
+      applyShopOpen();
     }
-    render();
+    applySummonerPickerOpen();
   };
 
   app.querySelector("#btn-nav-summoner")?.addEventListener("click", (ev) => {
@@ -5794,16 +6177,14 @@ function bind(): void {
       mailboxOpen = false;
       notifOpen = false;
       missionOpen = false;
-      const hadChat = chatOpen;
-      chatOpen = false;
+      communityOpen = false;
+      shopOpen = false;
+      closeChatOverlay();
       applyMailboxOpen();
       applyNotifOpen();
       applyMissionOpen();
-      if (hadChat) {
-        applySettingsOpen();
-        render();
-        return;
-      }
+      applyCommunityOpen();
+      applyShopOpen();
     }
     if (summonerPickerOpen) {
       summonerPickerOpen = false;
@@ -5829,13 +6210,18 @@ function bind(): void {
       notifOpen = false;
       summonerPickerOpen = false;
       resMoreOpen = false;
+      communityOpen = false;
+      shopOpen = false;
+      closeChatOverlay();
       applySettingsOpen();
       applyMailboxOpen();
       applyNotifOpen();
       applySummonerPickerOpen();
       applyResMoreOpen();
+      applyCommunityOpen();
+      applyShopOpen();
     }
-    render();
+    applyMissionOpen();
   });
   app.querySelector("#btn-mission-close")?.addEventListener("click", () => {
     missionOpen = false;
@@ -5854,9 +6240,73 @@ function bind(): void {
       const nav = btn.dataset.missionGo;
       if (!nav) return;
       missionOpen = false;
+      if (nav === "guild") {
+        openCommunityModal();
+        render();
+        return;
+      }
+      if (nav === "shop") {
+        openShopModal();
+        render();
+        return;
+      }
+      communityOpen = false;
+      shopOpen = false;
       view = nav as View;
       render();
     });
+  });
+
+  app.querySelector("#btn-community")?.addEventListener("click", () => {
+    communityOpen = !communityOpen;
+    if (communityOpen) {
+      settingsOpen = false;
+      mailboxOpen = false;
+      notifOpen = false;
+      summonerPickerOpen = false;
+      resMoreOpen = false;
+      missionOpen = false;
+      shopOpen = false;
+      closeChatOverlay();
+      applySettingsOpen();
+      applyMailboxOpen();
+      applyNotifOpen();
+      applySummonerPickerOpen();
+      applyResMoreOpen();
+      applyMissionOpen();
+      applyShopOpen();
+    }
+    applyCommunityOpen();
+  });
+  app.querySelector("#btn-community-close")?.addEventListener("click", () => {
+    communityOpen = false;
+    applyCommunityOpen();
+  });
+
+  app.querySelector("#btn-shop")?.addEventListener("click", () => {
+    shopOpen = !shopOpen;
+    if (shopOpen) {
+      settingsOpen = false;
+      mailboxOpen = false;
+      notifOpen = false;
+      summonerPickerOpen = false;
+      resMoreOpen = false;
+      missionOpen = false;
+      communityOpen = false;
+      closeChatOverlay();
+      applySettingsOpen();
+      applyMailboxOpen();
+      applyNotifOpen();
+      applySummonerPickerOpen();
+      applyResMoreOpen();
+      applyMissionOpen();
+      applyCommunityOpen();
+    }
+    applyShopOpen();
+  });
+  app.querySelector("#btn-shop-close")?.addEventListener("click", () => {
+    shopOpen = false;
+    applyShopOpen();
   });
 
   app.querySelector<HTMLSelectElement>("#settings-lang")?.addEventListener("change", (ev) => {
@@ -5877,9 +6327,13 @@ function bind(): void {
       notifOpen = false;
       settingsOpen = false;
       missionOpen = false;
+      communityOpen = false;
+      shopOpen = false;
       applyNotifOpen();
       applySettingsOpen();
       applyMissionOpen();
+      applyCommunityOpen();
+      applyShopOpen();
       if (summonerPickerOpen) {
         summonerPickerOpen = false;
         applySummonerPickerOpen();
@@ -5901,8 +6355,14 @@ function bind(): void {
     if (notifOpen) {
       mailboxOpen = false;
       settingsOpen = false;
+      missionOpen = false;
+      communityOpen = false;
+      shopOpen = false;
       applyMailboxOpen();
       applySettingsOpen();
+      applyMissionOpen();
+      applyCommunityOpen();
+      applyShopOpen();
       if (summonerPickerOpen) {
         summonerPickerOpen = false;
         applySummonerPickerOpen();
@@ -5927,7 +6387,26 @@ function bind(): void {
       summonerPickerOpen = false;
       resMoreOpen = false;
       missionOpen = false;
+      communityOpen = false;
+      shopOpen = false;
       const nav = btn.dataset.nav;
+      if (nav === "guild") {
+        openCommunityModal();
+        render();
+        return;
+      }
+      if (nav === "shop") {
+        if (view === "result" || view === "battle") {
+          autoMode = false;
+          clearAutoTimer();
+          battle = null;
+          dmgFloats = [];
+          view = "home";
+        }
+        openShopModal();
+        render();
+        return;
+      }
       if (view === "result" || view === "battle") {
         autoMode = false;
         clearAutoTimer();
@@ -6002,8 +6481,8 @@ function bind(): void {
       const toCrystal = Math.floor(save.island.crystal);
       const gained =
         kind === "mana" ? toMana - beforeMana : toCrystal - beforeCrystal;
-      view = "home";
-      render();
+      // Drop the bubble in place — do not remount the island.
+      btn.remove();
       if (gained > 0) {
         playResourceCollectFx({
           kind,
@@ -6061,7 +6540,7 @@ function bind(): void {
         view = "dojo";
         render();
       } else if (id === "guild") {
-        view = "guild";
+        openCommunityModal();
         render();
       } else if (id === "fusion") {
         view = "fusion";
@@ -6073,7 +6552,7 @@ function bind(): void {
         view = "enhance";
         render();
       } else if (id === "shop") {
-        view = "shop";
+        openShopModal();
         render();
       } else if (id === "party") {
         view = "party";
@@ -6347,7 +6826,6 @@ function bind(): void {
     render();
   };
   app.querySelector("#btn-sym-detail-close")?.addEventListener("click", closeSymDetail);
-  app.querySelector("#btn-sym-detail-x")?.addEventListener("click", closeSymDetail);
 
   app.querySelector("[data-sym-detail-enhance]")?.addEventListener("click", () => {
     if (symbolDetailIndex == null) return;
@@ -6377,7 +6855,7 @@ function bind(): void {
         kind: "imprint",
         before,
         after: describeSymbol(next),
-        cost: `?${t("ui.5d0bf3b101")} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
+        cost: `${MINUS}${t("ui.5d0bf3b101")} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
       };
     }
     if (id) {
@@ -6427,7 +6905,7 @@ function bind(): void {
           kind: "grind",
           before,
           after: describeSymbol(next),
-          cost: `?${t('ui.dc78e6a251')} ${SYMBOL_GRIND_MANA_COST}`,
+          cost: `${MINUS}${t('ui.dc78e6a251')} ${SYMBOL_GRIND_MANA_COST}`,
         };
       }
       flash(r.message);
@@ -6460,7 +6938,7 @@ function bind(): void {
           kind: "imprint",
           before,
           after: describeSymbol(next),
-          cost: `?${t('ui.5d0bf3b101')} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
+          cost: `${MINUS}${t('ui.5d0bf3b101')} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
         };
       }
       flash(r.message);
@@ -6556,7 +7034,7 @@ function bind(): void {
           fusionReveal = {
             materials,
             result: describeOwned(kept),
-            cost: `?${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
+            cost: `${MINUS}${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
           };
         }
       }
@@ -6771,6 +7249,7 @@ function bind(): void {
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-ban-toggle]").forEach((btn) => {
+    if (btn.closest("#stages-region-host")) return;
     btn.addEventListener("click", () => {
       const id = btn.dataset.banToggle!;
       const cur = [...(save.arenaBanIds ?? [])];
@@ -6785,7 +7264,8 @@ function bind(): void {
       save = r.save;
       persist();
       flash(r.message);
-      render();
+      if (view === "stages" && stagesRegion) applyStagesRegionOpen();
+      else render();
     });
   });
 
@@ -6794,7 +7274,8 @@ function bind(): void {
     save = r.save;
     persist();
     flash(r.message);
-    render();
+    if (view === "stages" && stagesRegion) applyStagesRegionOpen();
+    else render();
   });
 
   app.querySelector("#btn-board-switch")?.addEventListener("click", () => {
@@ -6856,11 +7337,13 @@ function bind(): void {
     const v = (ev.target as HTMLSelectElement).value as StageDifficulty;
     if (v === "normal" || v === "hard" || v === "hell") {
       stageEntryDiff = v;
-      render();
+      if (view === "stages") applyStagesRegionOpen();
+      else render();
     }
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
+    if (btn.closest("#stages-region-host")) return;
     btn.addEventListener("click", () => {
       const stage = getStage(btn.dataset.stage!);
       if (stage) startBattle(stage, stageEntryDiff);
@@ -6874,31 +7357,23 @@ function bind(): void {
       }
       const id = btn.dataset.region as StagesRegionId;
       if (btn.dataset.locked === "1") {
-    flash(t('ui.b72f5a4752'));
+        flash(t("ui.b72f5a4752"));
         return;
       }
       stagesRegion = stagesRegion === id ? null : id;
-      if (stagesRegion) {
-        const region = stagesRegions().find((r) => r.id === stagesRegion);
-        if (region && !regionDifficultyOpen(region, stageEntryDiff)) {
-          stageEntryDiff = "normal";
-        }
-      }
-      render();
+      applyStagesRegionOpen();
     });
   });
 
   app.querySelector("#btn-region-close")?.addEventListener("click", () => {
     stagesRegion = null;
     stageEntryId = null;
-    render();
+    applyStagesRegionOpen();
   });
 
-  app.querySelector("#btn-region-close-x")?.addEventListener("click", () => {
-    stagesRegion = null;
-    stageEntryId = null;
-    render();
-  });
+  if (view === "stages") {
+    applyStagesRegionOpen();
+  }
 
   app.querySelectorAll<HTMLButtonElement>(".board .cell").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -6988,6 +7463,23 @@ function bind(): void {
     startBattle(stage);
   });
 
+  if (view === "battle") {
+    destroyAllSpine();
+    mountUnitAnimHooks(app);
+    dematteArtInTree(app, "img.battle-unit-img");
+    void mountBattleSpines(app);
+  } else if (view === "enhance") {
+    destroyAllSpine();
+    bindMonPreviewTurntable(app);
+    dematteArtInTree(
+      app,
+      "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.mon-skill-feed-img",
+    );
+    void mountBookPreviewSpine(app);
+  } else if (view !== "result") {
+    destroyAllSpine();
+  }
+
   startEnergyRegenTimer();
 }
 
@@ -6997,6 +7489,11 @@ async function boot(): Promise<void> {
   const me = await apiJson<{ user: SessionUser }>("/api/me");
   bootReady = true;
   if (me?.user) {
+    const prefs = readAuthPrefs();
+    if (prefs.autoLogin) {
+      await enterWithUser(me.user, { enterGame: true });
+      return;
+    }
     await hydrateSession(me.user);
     authUi.pane = "gate";
     view = "auth";

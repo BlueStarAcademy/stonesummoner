@@ -1,0 +1,9 @@
+  return `<div class="home-island">
+    <div class="home-hud">
+      <p class="home-level">서머너 Lv.${save.island.summonerLevel}${(save.summonerAwaken ?? 0) > 0 ? ` · 각성 ${save.summonerAwaken}` : ""}</p>
+      <div class="home-exp" role="progressbar" aria-valuenow="${exp}" aria-valuemin="0" aria-valuemax="100">
+        <div class="home-exp-fill" style="width:${Math.min(100, exp)}%"></div>
+      </div>
+      <p class="home-meta">EXP ${exp}/100 · 파티 ${save.party.length}/4</p>
+    </div>
+    

@@ -18,6 +18,7 @@ import {
   type StoneSuggestion,
 } from "./ai.js";
 import { classifyCapture, gainsForBoardEvent } from "./boardEvents.js";
+import { composeSummonerUlt } from "./summonerUlt.js";
 import { detectShapeBonuses } from "./shapes.js";
 import {
   circleEventName,
@@ -145,6 +146,14 @@ export class Battle {
   enemySummoner: SummonerState;
   amplify = 1;
   skillAmplifyBonus = 0;
+  /**
+   * Next monster hit damage mul bonus per team (from captures: N×0.10).
+   * Consumed on the next monster `applyHit` for that team.
+   */
+  pendingCaptureDamageBonus: Record<TeamId, number> = {
+    ally: 0,
+    enemy: 0,
+  };
   phase: BattlePhase = "idle";
   activeUnitId: string | null = null;
   finishReason: FinishReason = null;
@@ -337,6 +346,15 @@ export class Battle {
           unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) - 1;
         }
         tickSkillCooldowns(this.units);
+        for (const u of this.units) {
+          if ((u.atkBuffTicks ?? 0) > 0) {
+            u.atkBuffTicks = (u.atkBuffTicks ?? 0) - 1;
+            if ((u.atkBuffTicks ?? 0) <= 0) {
+              u.atkBuffTicks = 0;
+              u.atkBuffPct = 0;
+            }
+          }
+        }
         this.activeUnitId = unit.id;
         this.phase = "await_stone";
         this.skillAmplifyBonus = 0;
@@ -379,6 +397,10 @@ export class Battle {
 
   private summonerOf(team: TeamId): SummonerState {
     return team === "ally" ? this.allySummoner : this.enemySummoner;
+  }
+
+  private isPhase(phase: BattlePhase): boolean {
+    return this.phase === phase;
   }
 
   /** Estimate captures if color played at p (trial board). */
@@ -817,9 +839,23 @@ export class Battle {
       amplifyCapForPhase(this.circle.boardPhase),
       this.powerGapCap,
     );
+    // Capture no longer grants skillAmplifyBonus — N×10% goes to next monster hit.
     this.skillAmplifyBonus = gains.skillAmplifyBonus;
 
     const sm = this.summonerOf(unit.team);
+    if (gains.captureDamageBonus > 0) {
+      this.pendingCaptureDamageBonus[unit.team] = gains.captureDamageBonus;
+      this.log.push(
+        `따냄 버프: 다음 소환수 피해 +${Math.round(gains.captureDamageBonus * 100)}%`,
+      );
+    }
+    if (gains.captureManaFrac > 0) {
+      const captureMana = Math.round(sm.manaMax * gains.captureManaFrac);
+      manaGain += captureMana;
+      this.log.push(
+        `따냄 마력: +${Math.round(gains.captureManaFrac * 100)}%p (${captureMana})`,
+      );
+    }
     sm.mana = Math.min(sm.manaMax, sm.mana + manaGain);
     this.checkManaRace(unit.team);
 
@@ -1215,7 +1251,7 @@ export class Battle {
       if (!placed) {
         this.log.push(`쌍착수 착수 공간 없음`);
       }
-      if (this.phase === "await_capture_shop") {
+      if (this.isPhase("await_capture_shop")) {
         this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
       }
     } else if (summonerSkill === "clean" && this.canUseSummonerClean(unit)) {
@@ -1254,12 +1290,57 @@ export class Battle {
       );
     } else if (summonerSkill === "open" && this.canUseSummonerSkill(unit)) {
       const sm = this.summonerOf(unit.team);
+      const ult = composeSummonerUlt(sm);
       sm.mana = 0;
-      this.skillAmplifyBonus += 0.15;
-      this.log.push(`${unit.name} 진문개방`);
-      const ultCoeff = 1.8 * (1 + (sm.skillPowerBonus ?? 0));
+      if (ult.manaRefundFrac > 0) {
+        sm.mana = Math.min(
+          sm.manaMax,
+          sm.mana + Math.round(sm.manaMax * ult.manaRefundFrac),
+        );
+      }
+      this.skillAmplifyBonus += ult.skillAmplifyBonus;
+      if (ult.amplifyDelta > 0 || ult.declareAmpBump) {
+        const bump = ult.amplifyDelta + (ult.declareAmpBump ? 0.04 : 0);
+        this.amplify = clampAmplify(
+          Math.max(this.amplify, ult.declareAmpBump ? 1.12 : this.amplify) +
+            bump,
+          amplifyCapForPhase(this.circle.boardPhase),
+          this.powerGapCap,
+        );
+      }
+      if (ult.boardClean) {
+        const center = this.pickCleanCenter(unit.team);
+        const removed = this.clearNeighborhood(center);
+        this.log.push(
+          `${unit.name} 고유기·청소 (${center.x},${center.y}) 제거 ${removed}`,
+        );
+      }
+      if (ult.leaderAtkBuffTicks > 0 && ult.leaderAtkBuffPct > 0) {
+        for (const u of this.units) {
+          if (!u.alive || u.team !== unit.team || u.kind !== "monster") continue;
+          u.atkBuffPct = Math.max(u.atkBuffPct ?? 0, ult.leaderAtkBuffPct);
+          u.atkBuffTicks = Math.max(
+            u.atkBuffTicks ?? 0,
+            ult.leaderAtkBuffTicks,
+          );
+        }
+      }
+      this.log.push(
+        `${unit.name} 진문개방 [${ult.modules.join("+")}] coeff=${ult.coeff.toFixed(2)}`,
+      );
       for (const t of enemies) {
-        results.push(this.applyHit(unit, t, ultCoeff, true));
+        results.push(this.applyHit(unit, t, ult.coeff, true));
+      }
+      if (ult.bonusStone) {
+        this.phase = "await_stone";
+        this.activeUnitId = unit.id;
+        const placed = this.autoStone();
+        if (!placed) {
+          this.log.push(`고유기 추가 착수 공간 없음`);
+        }
+        if (this.isPhase("await_capture_shop")) {
+          this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
+        }
       }
     } else if (!summonerSkill) {
       const skillIndex =
@@ -1430,8 +1511,9 @@ export class Battle {
       incomingMul = 0.9;
     }
 
+    const atkMul = 1 + (attacker.atkBuffPct ?? 0);
     const { damage, crit } = computeDamage({
-      atk: attacker.stats.atk,
+      atk: attacker.stats.atk * atkMul,
       skillCoeff: coeff,
       attackerElement: attacker.element,
       defenderElement: target.element,
@@ -1442,7 +1524,19 @@ export class Battle {
       rng: this.rng,
     });
 
-    let remaining = Math.round(damage * incomingMul);
+    let captureMul = 1;
+    if (attacker.kind === "monster") {
+      const bonus = this.pendingCaptureDamageBonus[attacker.team] ?? 0;
+      if (bonus > 0) {
+        captureMul = 1 + bonus;
+        this.pendingCaptureDamageBonus[attacker.team] = 0;
+        this.log.push(
+          `따냄 추가피해 ×${captureMul.toFixed(2)} (${attacker.name})`,
+        );
+      }
+    }
+
+    let remaining = Math.round(damage * incomingMul * captureMul);
     if (target.shieldHp && target.shieldHp > 0) {
       const absorbed = Math.min(target.shieldHp, remaining);
       target.shieldHp -= absorbed;
@@ -1458,7 +1552,7 @@ export class Battle {
     return {
       attackerId: attacker.id,
       targetId: target.id,
-      damage,
+      damage: Math.round(damage * captureMul),
       crit,
       usedSummonerSkill,
     };

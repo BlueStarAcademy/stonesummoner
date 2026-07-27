@@ -1,0 +1,38 @@
+  app.classList.remove("auth-mode");
+  app.classList.toggle("home-mode", view === "home");
+  app.classList.toggle("expedition-mode", view === "stages");
+  app.classList.toggle("combat-mode", view === "battle" || view === "result");
+  app.innerHTML = `
+    <header class="app-bar">
+      <div class="app-bar-frame app-bar-frame--strip">
+        <div class="app-bar-strip">
+          <div class="app-bar-brand app-bar-brand--strip">
+            <span class="app-bar-mark-wrap" aria-hidden="true">
+              <img class="app-bar-mark" src="/art/auth/logo-mark-192.png" width="28" height="28" alt="" />
+            </span>
+            <h1>StoneSummoner ${demoTag}</h1>
+          </div>
+          <div class="resources">
+        <span class="res-chip res-lv">Lv.${island.summonerLevel}${(save.summonerAwaken ?? 0) > 0 ? ` · 각성${save.summonerAwaken}` : ""}</span>
+        <span class="res-chip res-mana">마나 ${Math.floor(island.mana)}</span>
+        <span class="res-chip res-crystal">크리스탈 ${island.crystal}</span>
+        <span class="res-chip">영광 ${save.gloryPoints ?? 0}</span>
+        <span class="res-chip">진문석 ${save.jinmunStones ?? 0}</span>
+        <span class="res-chip">기여 ${save.guildContribution ?? 0}</span>
+        <span class="res-chip">시즌승 ${save.arenaSeasonWins ?? 0}</span>
+        <span class="res-chip res-energy">에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}</span>
+        <span class="res-chip res-scroll">소환서 ${save.scrolls}</span>
+        <button type="button" class="linkish" id="btn-logout">나가기</button>
+          </div>
+        </div>
+      </div>
+      ${toast ? `<p class="toast">${toast}</p>` : ""}
+    </header>
+    <main>${mainContent(manaPct)}</main>
+    <nav class="tabs">
+      <button type="button" data-nav="home" class="${view === "home" || view === "summon" || view === "enhance" || view === "shop" || view === "pond" || view === "mine" || view === "wish" || view === "glory" || view === "fusion" || view === "party" || view === "guild" || view === "dojo" ? "active" : ""}"><span class="tab-ico" aria-hidden="true">島</span>홈</button>
+      <button type="button" data-nav="stages" class="${tabStages ? "active" : ""}"><span class="tab-ico" aria-hidden="true">門</span>출정</button>
+      <button type="button" data-nav="collect"><span class="tab-ico" aria-hidden="true">池</span>수집</button>
+    </nav>
+    <p class="install-hint">공유 → 홈 화면에 추가 (PWA)</p>
+  `;

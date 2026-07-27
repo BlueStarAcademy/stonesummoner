@@ -1,0 +1,133 @@
+function bind(): void {
+  if (view === "auth") {
+    bindAuth();
+    return;
+  }
+
+  if (view === "home") {
+    bindIslandPan();
+    app.querySelector("#btn-summoner-picker")?.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      summonerPickerOpen = !summonerPickerOpen;
+      if (summonerPickerOpen && resMoreOpen) {
+        resMoreOpen = false;
+        applyResMoreOpen();
+      }
+      if (summonerPickerOpen && settingsOpen) {
+        settingsOpen = false;
+        const settings = app.querySelector("#settings-layer");
+        settings?.remove();
+        app.querySelector("#btn-settings")?.classList.remove("active");
+        app.querySelector("#btn-settings")?.setAttribute("aria-expanded", "false");
+      }
+      applySummonerPickerOpen();
+    });
+    app
+      .querySelector("#btn-summoner-picker-close")
+      ?.addEventListener("click", () => {
+        summonerPickerOpen = false;
+        applySummonerPickerOpen();
+      });
+    app.querySelectorAll<HTMLButtonElement>("[data-summoner]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const el = btn.dataset.summoner as SummonerElement | undefined;
+        if (!el || el === (save.activeSummoner ?? "light")) return;
+        save = setActiveSummoner(save, el);
+        summonerPickerOpen = false;
+        persist();
+        flash(`${SUMMONER_ELEMENT_LABEL[el]} 서머너로 전환`);
+        render();
+      });
+    });
+  }
+  if (view === "stages") {
+    bindStagesPan();
+  }
+
+  app.querySelector("#btn-res-more")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    resMoreOpen = !resMoreOpen;
+    if (resMoreOpen && summonerPickerOpen) {
+      summonerPickerOpen = false;
+      applySummonerPickerOpen();
+    }
+    applyResMoreOpen();
+  });
+
+  app.querySelector("#btn-settings")?.addEventListener("click", () => {
+    settingsOpen = !settingsOpen;
+    if (summonerPickerOpen) {
+      summonerPickerOpen = false;
+      applySummonerPickerOpen();
+    }
+    if (resMoreOpen) {
+      resMoreOpen = false;
+      applyResMoreOpen();
+    }
+    render();
+  });
+
+  app.querySelector("#btn-settings-close")?.addEventListener("click", () => {
+    settingsOpen = false;
+    render();
+  });
+
+  app.querySelector("#btn-logout")?.addEventListener("click", () => {
+    settingsOpen = false;
+    void logout();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      settingsOpen = false;
+      summonerPickerOpen = false;
+      resMoreOpen = false;
+      const nav = btn.dataset.nav;
+      if (view === "result" || view === "battle") {
+        autoMode = false;
+        clearAutoTimer();
+        if (nav !== "battle" && nav !== "result") {
+          battle = null;
+          dmgFloats = [];
+          if (nav === "home" || nav === "enhance" || nav === "shop" || nav === "party") {
+            if (nav === "home") {
+              currentStage = null;
+              lastReward = null;
+              lastScrollGain = 0;
+            }
+          }
+        }
+      }
+      if (nav === "collect") {
+        const now = Date.now();
+        save.island = {
+          ...save.island,
+          buildings: save.island.buildings.map((b) =>
+            b.id === "mana_pond"
+              ? { ...b, lastUpdatedAt: now - 30 * 60 * 1000 }
+              : b,
+          ),
+        };
+        const island = collectMana(save.island, "mana_pond", now);
+        save = { ...save, island };
+        persist();
+        flash(`진액 수집 · 마나 ${Math.floor(island.mana)}`);
+        view = "home";
+        partyDraft = null;
+        render();
+        return;
+      }
+      if (nav === "party") {
+        partyDraft = new Set(save.party);
+      } else if (view === "party" && nav !== "party") {
+        partyDraft = null;
+      }
+      if (nav !== "stages") {
+        stagesRegion = null;
+      }
+      view = nav as View;
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLElement>("[data-collect

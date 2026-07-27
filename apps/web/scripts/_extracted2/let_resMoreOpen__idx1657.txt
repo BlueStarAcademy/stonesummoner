@@ -1,0 +1,15 @@
+/** Extra currencies drawer under app-bar resources. */
+let resMoreOpen = false;
+let settingsOpen = false;
+let summonerPickerOpen = false;
+/** Selected region on the expedition world map (Summoners War-style). */
+type StagesRegionId =
+  | "garen"
+  | "tower"
+  | "depth"
+  | "arena"
+  | "cadence"
+  | "equip"
+  | "warena"
+  | "guild";
+let stagesRegion: StagesRegionId | null = null;

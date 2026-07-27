@@ -1,0 +1,38 @@
+  if (view === "home") {
+    bindIslandPan();
+    app.querySelector("#btn-summoner-picker")?.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      summonerPickerOpen = !summonerPickerOpen;
+      if (summonerPickerOpen && resMoreOpen) {
+        resMoreOpen = false;
+        applyResMoreOpen();
+      }
+      if (summonerPickerOpen && settingsOpen) {
+        settingsOpen = false;
+        const settings = app.querySelector("#settings-layer");
+        settings?.remove();
+        app.querySelector("#btn-settings")?.classList.remove("active");
+        app
+          .querySelector("#btn-settings")
+          ?.setAttribute("aria-expanded", "false");
+      }
+      applySummonerPickerOpen();
+    });
+    app
+      .querySelector("#btn-summoner-picker-close")
+      ?.addEventListener("click", () => {
+        summonerPickerOpen = false;
+        applySummonerPickerOpen();
+      });
+    app.querySelectorAll<HTMLButtonElement>("[data-summoner]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const el = btn.dataset.summoner as SummonerElement | undefined;
+        if (!el || el === (save.activeSummoner ?? "light")) return;
+        save = setActiveSummoner(save, el);
+        summonerPickerOpen = false;
+        persist();
+        flash(`${SUMMONER_ELEMENT_LABEL[el]} 서머너로 전환`);
+        render();
+      });
+    });
+  }

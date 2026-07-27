@@ -333,7 +333,23 @@
   },
   "ui.6003da6bd2": {
     "ko": "장비 던전",
-    "en": "장비 던전"
+    "en": "Equip Dungeon"
+  },
+  "stages.warena": {
+    "ko": "월드아레나",
+    "en": "World Arena"
+  },
+  "stages.warenaBlurb": {
+    "ko": "시즌 영광 대전",
+    "en": "Season glory battles"
+  },
+  "stages.guildRaid": {
+    "ko": "길드 레이드",
+    "en": "Guild Raid"
+  },
+  "stages.guildRaidBlurb": {
+    "ko": "길드 기여 · 거대 진문",
+    "en": "Guild contribution · giant circle"
   },
   "ui.f4d93d3cf8": {
     "ko": "스톤패시브",
@@ -1454,6 +1470,14 @@
   "mission.close": {
     "ko": "미션 닫기",
     "en": "Close missions"
+  },
+  "community.close": {
+    "ko": "커뮤니티 닫기",
+    "en": "Close community"
+  },
+  "shop.close": {
+    "ko": "상점 닫기",
+    "en": "Close shop"
   },
   "mission.tabDaily": {
     "ko": "일일미션",

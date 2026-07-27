@@ -1,0 +1,27 @@
+/** Compact display for wallet amounts in the app bar. */
+function fmtRes(n: number): string {
+  const v = Math.floor(n);
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 10_000) return `${(Math.round(v / 100) / 10).toFixed(1)}K`;
+  return v.toLocaleString("ko-KR");
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Short display name for profile overlays. */
+function displayNickname(): string {
+  const email = sessionUser?.email?.trim();
+  if (email) {
+    const local = email.split("@")[0] || email;
+    return local.length > 10 ? `${local.slice(0, 10)}…` : local;
+  }
+  if (sessionUser?.kind === "demo") return "데모모험가";
+  if (sessionUser?.kind === "guest") return "게스트";
+  return "모험가";
+}

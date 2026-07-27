@@ -7,6 +7,8 @@ dist/
 .env.*
 !.env.example
 apps/web/dev-dist/
+NUL.css
+nul.css
 
 # Art generation scratch (keep finals + public exports in git)
 scripts/node_modules_sharp_tmp/

@@ -466,6 +466,7 @@ function buildSummonerState(
     cleanCostMul: tree.cleanCostMul,
     declarePowerBonus: tree.declarePowerBonus,
     cleanAmpBonus: tree.cleanAmpBonus,
+    skillTreeUnlocked: [...skillTree],
   };
 }
 
@@ -510,7 +511,7 @@ function skillsForMonster(
         if (e.kind === "mana") {
           return { ...e, amount: Math.round(e.amount * (1 + skBump)) };
         }
-        return { ...e };
+        return e;
       }),
     };
   });

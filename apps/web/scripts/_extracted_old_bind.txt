@@ -1,0 +1,67 @@
+function bind(): void {
+  if (view === "auth") {
+    bindAuth();
+    return;
+  }
+
+  if (view === "home") {
+    bindIslandPan();
+  }
+  if (view === "stages") {
+    bindStagesPan();
+  }
+
+  app.querySelector("#btn-logout")?.addEventListener("click", () => {
+    void logout();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const nav = btn.dataset.nav;
+      if (view === "result" || view === "battle") {
+        autoMode = false;
+        clearAutoTimer();
+        if (nav !== "battle" && nav !== "result") {
+          battle = null;
+          dmgFloats = [];
+          if (nav === "home" || nav === "enhance" || nav === "shop" || nav === "party") {
+            if (nav === "home") {
+              currentStage = null;
+              lastReward = null;
+              lastScrollGain = 0;
+            }
+          }
+        }
+      }
+      if (nav === "collect") {
+        const now = Date.now();
+        save.island = {
+          ...save.island,
+          buildings: save.island.buildings.map((b) =>
+            b.id === "mana_pond"
+              ? { ...b, lastUpdatedAt: now - 30 * 60 * 1000 }
+              : b,
+          ),
+        };
+        const island = collectMana(save.island, "mana_pond", now);
+        save = { ...save, island };
+        persist();
+        flash(`진액 수집 · 마나 ${Math.floor(island.mana)}`);
+        view = "home";
+        partyDraft = null;
+        render();
+        return;
+      }
+      if (nav === "party") {
+        partyDraft = new Set(save.party);
+      } else if (view === "party" && nav !== "party") {
+        partyDraft = null;
+      }
+      if (nav !== "stages") {
+        stagesRegion = null;
+      }
+      view = nav as View;
+      render();
+    });
+  });
+

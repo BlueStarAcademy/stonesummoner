@@ -1,0 +1,121 @@
+  const isHome = view === "home";
+  app.classList.remove("auth-mode");
+  app.classList.toggle("home-mode", isHome);
+  const rosterForPicker = save.summoners ?? createSummonerRoster();
+  const summonerPickerList = SUMMONER_ELEMENTS.map((el) => {
+    const p = rosterForPicker[el];
+    const on = el === activeEl;
+    const aw = p.awaken > 0 ? ` · 각성 ${p.awaken}` : "";
+    return `<button type="button" class="summoner-pick${on ? " is-active" : ""}" data-summoner="${el}" ${on ? "disabled" : ""}>
+      <img class="summoner-pick-art" src="/art/summoner/${el}.svg" width="44" height="44" alt="" draggable="false" />
+      <span class="summoner-pick-body">
+        <strong>${SUMMONER_ELEMENT_LABEL[el]} 서머너</strong>
+        <small>Lv.${p.level}${aw}${on ? " · 사용 중" : ""}</small>
+      </span>
+    </button>`;
+  }).join("");
+  app.innerHTML = `
+    <header class="app-bar app-bar--strip${isHome ? " app-bar--home" : ""}">
+      <div class="app-bar-frame app-bar-frame--strip">
+        <div class="app-bar-rail" aria-hidden="true"></div>
+        <div class="app-bar-strip">
+          <div class="app-bar-brand app-bar-brand--strip" title="StoneSummoner">
+            <div class="app-bar-mark-wrap app-bar-mark-wrap--sm">
+              <img class="app-bar-mark" src="/art/auth/logo-mark-192.png" width="32" height="32" alt="" />
+            </div>
+            ${
+              isHome
+                ? ""
+                : `<div class="app-bar-titles app-bar-titles--strip">
+              <h1>StoneSummoner ${demoTag}</h1>
+              <p class="app-bar-lv">
+                <span class="app-bar-lv-badge app-bar-lv-badge--${activeEl}">
+                  <span class="app-bar-lv-el">${SUMMONER_ELEMENT_LABEL[activeEl]}</span>
+                  <span class="app-bar-lv-num">Lv.${activeSum.level}</span>${
+                    activeSum.awaken > 0
+                      ? `<span class="app-bar-lv-awaken">각성 ${activeSum.awaken}</span>`
+                      : ""
+                  }
+                </span>
+              </p>
+            </div>`
+            }
+          </div>
+          <div class="res-bar" role="group" aria-label="주요 재화">
+            <div class="res-pill res-pill--gold" title="골드">
+              <span class="res-gem" aria-hidden="true"></span>
+              <img class="res-ico" src="/art/ui/res/gold.svg" width="18" height="18" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(island.mana)}</strong>
+            </div>
+            <div class="res-pill res-pill--crystal" title="크리스탈">
+              <span class="res-gem" aria-hidden="true"></span>
+              <img class="res-ico" src="/art/ui/res/crystal.svg" width="18" height="18" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(island.crystal)}</strong>
+            </div>
+            <button type="button" class="res-more-btn${resMoreOpen ? " is-open" : ""}" id="btn-res-more" aria-expanded="${resMoreOpen ? "true" : "false"}" aria-controls="res-more-panel" title="${resMoreOpen ? "재화 접기" : "다른 재화 보기"}">
+              <span class="res-more-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="res-pill res-pill--energy" title="행동력">
+              <span class="res-gem" aria-hidden="true"></span>
+              <img class="res-ico" src="/art/ui/res/energy.svg" width="18" height="18" alt="" draggable="false" />
+              <strong class="res-val">${Math.floor(island.energy)}<small>/${island.energyMax ?? 100}</small></strong>
+            </div>
+          </div>
+        </div>
+        <div class="res-more-panel${resMoreOpen ? " is-open" : ""}" id="res-more-panel" role="region" aria-label="기타 재화" ${resMoreOpen ? "" : "hidden"}>
+          <div class="res-pill res-pill--scroll" title="소환서">
+            <span class="res-gem" aria-hidden="true"></span>
+            <img class="res-ico" src="/art/ui/res/scroll.svg" width="18" height="18" alt="" draggable="false" />
+            <strong class="res-val">${fmtRes(save.scrolls)}</strong>
+          </div>
+          <div class="res-pill res-pill--glory" title="영광">
+            <span class="res-gem" aria-hidden="true"></span>
+            <img class="res-ico" src="/art/ui/res/glory.svg" width="18" height="18" alt="" draggable="false" />
+            <strong class="res-val">${fmtRes(save.gloryPoints ?? 0)}</strong>
+          </div>
+          <div class="res-pill res-pill--jinmun" title="진문석">
+            <span class="res-gem" aria-hidden="true"></span>
+            <img class="res-ico" src="/art/ui/res/jinmun.svg" width="18" height="18" alt="" draggable="false" />
+            <strong class="res-val">${fmtRes(save.jinmunStones ?? 0)}</strong>
+          </div>
+          <div class="res-pill res-pill--guild" title="기여">
+            <span class="res-gem" aria-hidden="true"></span>
+            <img class="res-ico" src="/art/ui/res/guild.svg" width="18" height="18" alt="" draggable="false" />
+            <strong class="res-val">${fmtRes(save.guildContribution ?? 0)}</strong>
+          </div>
+          <div class="res-pill res-pill--arena" title="시즌승">
+            <span class="res-gem" aria-hidden="true"></span>
+            <img class="res-ico" src="/art/ui/res/arena.svg" width="18" height="18" alt="" draggable="false" />
+            <strong class="res-val">${fmtRes(save.arenaSeasonWins ?? 0)}</strong>
+          </div>
+        </div>
+      </div>
+      ${toast ? `<p class="toast">${toast}</p>` : ""}
+    </header>
+    <main>${mainContent(manaPct)}</main>
+    ${
+      summonerPickerOpen && isHome
+        ? `<div class="settings-layer" id="summoner-picker-layer">
+      <button type="button" class="settings-backdrop" id="btn-summoner-picker-close" aria-label="서머너 선택 닫기"></button>
+      <div class="settings-sheet summoner-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="summoner-picker-title">
+        <div class="settings-sheet-handle" aria-hidden="true"></div>
+        <h2 class="settings-title" id="summoner-picker-title">서머너 변경</h2>
+        <p class="settings-account">속성별 서머너를 선택해 육성하세요</p>
+        <div class="summoner-picker-list">${summonerPickerList}</div>
+      </div>
+    </div>`
+        : ""
+    }
+    ${
+      settingsOpen
+        ? `<div class="settings-layer" id="settings-layer">
+      <button type="button" class="settings-backdrop" id="btn-settings-close" aria-label="설정 닫기"></button>
+      <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="settings-sheet-handle" aria-hidden="true"></div>
+        <h2 class="settings-title" id="settings-title">설정</h2>
+        <p class="settings-account">${accountLabel}</p>
+        <button type="button" class="settings-logout" id="btn-logout">로그아웃</button>
+      </div>
+    </div>`
+        : ""
+    }

@@ -1,0 +1,6 @@
+              <span class="user-profile-lv">Lv.${userLv}</span>
+              <div class="user-profile-foot">
+                <div class="user-profile-exp" role="progressbar" aria-valuenow="${userExp}" aria-valuemin="0" aria-valuemax="100" aria-label="경험치 ${userExp}/100">
+                  <div class="user-profile-exp-fill" style="width:${Math.min(100, userExp)}%"></div>
+                </div>
+              </div>

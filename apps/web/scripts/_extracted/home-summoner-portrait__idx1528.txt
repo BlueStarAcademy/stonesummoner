@@ -1,0 +1,16 @@
+  return `<div class="home-island">
+    <div class="home-hud">
+      <div class="home-summoner-portrait home-summoner-portrait--${activeEl}" aria-label="${SUMMONER_ELEMENT_LABEL[activeEl]} 서머너 Lv.${activeSum.level}">
+        <img src="/art/summoner/${activeEl}.svg" width="64" height="64" alt="" draggable="false" />
+        <span class="home-summoner-tag">${SUMMONER_ELEMENT_LABEL[activeEl]}${activeSum.awaken > 0 ? ` ·${activeSum.awaken}` : ""}</span>
+        <div class="home-summoner-foot">
+          <span class="home-summoner-lv">Lv.${activeSum.level}</span>
+          <div class="home-summoner-exp" role="progressbar" aria-valuenow="${exp}" aria-valuemin="0" aria-valuemax="100" aria-label="경험치 ${exp}/100">
+            <div class="home-summoner-exp-fill" style="width:${Math.min(100, exp)}%"></div>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="home-summoner-change" id="btn-summoner-picker" aria-expanded="${summonerPickerOpen ? "true" : "false"}" aria-controls="summoner-picker-layer">
+        변경
+      </button>
+    </div>

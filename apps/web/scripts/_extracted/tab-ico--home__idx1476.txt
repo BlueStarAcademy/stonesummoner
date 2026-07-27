@@ -1,0 +1,22 @@
+    <main>${mainContent(manaPct)}</main>
+    ${
+      settingsOpen
+        ? `<div class="settings-layer" id="settings-layer">
+      <button type="button" class="settings-backdrop" id="btn-settings-close" aria-label="설정 닫기"></button>
+      <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="settings-sheet-handle" aria-hidden="true"></div>
+        <h2 class="settings-title" id="settings-title">설정</h2>
+        <p class="settings-account">${accountLabel}</p>
+        <button type="button" class="settings-logout" id="btn-logout">로그아웃</button>
+      </div>
+    </div>`
+        : ""
+    }
+    <nav class="tabs">
+      <button type="button" data-nav="home" class="${homeNavActive ? "active" : ""}"><span class="tab-ico tab-ico--home" aria-hidden="true"></span>홈</button>
+      <button type="button" data-nav="stages" class="${tabStages ? "active" : ""}"><span class="tab-ico tab-ico--gate" aria-hidden="true"></span>출정</button>
+      <button type="button" data-nav="collect"><span class="tab-ico tab-ico--collect" aria-hidden="true"></span>수집</button>
+      <button type="button" id="btn-settings" class="${settingsOpen ? "active" : ""}" aria-expanded="${settingsOpen ? "true" : "false"}" aria-controls="settings-layer" title="설정"><span class="tab-ico tab-ico--settings" aria-hidden="true"></span>설정</button>
+    </nav>
+    <p class="install-hint">공유 → 홈 화면에 추가 (PWA)</p>
+  `;

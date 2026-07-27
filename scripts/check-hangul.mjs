@@ -54,14 +54,28 @@ function suspiciousUiLines(src) {
     });
 }
 
+/** Lone "?" that used to be decorative glyphs (middot, CJK marks, arrows). */
+function corruptedMarkLines(src) {
+  const markRe =
+    /(auth-link-sep|forbid-mark|bait-mark|victory-mark|star-mark|forge-arrow|forge-reveal-mark|stage-card-mark|sk-mark|ban-chip-mark|party-slot-name)[^>]*>\s*\?\s*</;
+  const sepRe = /` \? \$\{|\} \? \$\{| \? \$\{t\(| \? \?\$\{/;
+  const starRepeatRe = /"\?"\.repeat\(/;
+  return src
+    .split(/\r?\n/)
+    .map((l, i) => [i + 1, l])
+    .filter(([, l]) => markRe.test(l) || sepRe.test(l) || starRepeatRe.test(l));
+}
+
 let failed = false;
 
 const mainPath = path.join(root, "apps/web/src/main.ts");
 const main = fs.readFileSync(mainPath, "utf8");
 const mainHangul = hangulCount(main);
 const mainBad = suspiciousUiLines(main);
+const mainMarks = corruptedMarkLines(main);
 console.log("main.ts hangul:", mainHangul);
 console.log("main.ts suspicious ??? UI lines:", mainBad.length);
+console.log("main.ts corrupted mark lines:", mainMarks.length);
 if (mainHangul > 0) {
   console.error("FAIL: apps/web/src/main.ts must not contain Hangul literals (use t() / i18n)");
   failed = true;
@@ -69,6 +83,15 @@ if (mainHangul > 0) {
 if (mainBad.length > 0) {
   console.error("FAIL: apps/web/src/main.ts has corrupted ??? UI strings");
   mainBad.slice(0, 15).forEach(([n, l]) =>
+    console.error(n + ":", l.trim().slice(0, 120)),
+  );
+  failed = true;
+}
+if (mainMarks.length > 0) {
+  console.error(
+    "FAIL: apps/web/src/main.ts has wiped decorative marks (?) — use apps/web/src/ui/marks.ts",
+  );
+  mainMarks.slice(0, 15).forEach(([n, l]) =>
     console.error(n + ":", l.trim().slice(0, 120)),
   );
   failed = true;
@@ -82,6 +105,22 @@ if (koHangul < 200) {
   console.error(
     "FAIL: apps/web/src/i18n/messages/ko.ts Hangul too low — message pack likely corrupted",
   );
+  failed = true;
+}
+
+const marksPath = path.join(root, "apps/web/src/ui/marks.ts");
+if (fs.existsSync(marksPath)) {
+  const marksSrc = fs.readFileSync(marksPath, "utf8");
+  const nonAscii = [...marksSrc].filter((c) => c.charCodeAt(0) > 127);
+  console.log("marks.ts non-ASCII chars:", nonAscii.length);
+  if (nonAscii.length > 0) {
+    console.error(
+      "FAIL: apps/web/src/ui/marks.ts must be ASCII-only (\\uXXXX escapes only)",
+    );
+    failed = true;
+  }
+} else {
+  console.error("FAIL: apps/web/src/ui/marks.ts missing");
   failed = true;
 }
 
