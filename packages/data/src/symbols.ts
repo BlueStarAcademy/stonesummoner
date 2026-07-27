@@ -21,12 +21,12 @@ export interface SymbolSetDef {
 export const SYMBOL_SETS: SymbolSetDef[] = [
   { id: "hwalro", nameKo: "활로", swName: "Energy", pieces: 2, effectKo: "체력 +15%" },
   { id: "yongmaeng", nameKo: "용맹", swName: "Fatal", pieces: 4, effectKo: "공격력 +35%" },
-  { id: "haengma", nameKo: "행마", swName: "Swift", pieces: 4, effectKo: "공격속도 +25%" },
-  { id: "gunhim", nameKo: "군힘", swName: "Guard", pieces: 2, effectKo: "방어력 +15%" },
-  { id: "mussang", nameKo: "무쌍", swName: "Blade", pieces: 2, effectKo: "치명타율 +12%" },
-  { id: "chimtu", nameKo: "침투", swName: "Rage", pieces: 4, effectKo: "치피 +40%" },
-  { id: "bogang", nameKo: "보강", swName: "Shield", pieces: 2, effectKo: "체력 +8%" },
-  { id: "jipjung", nameKo: "집중", swName: "Focus", pieces: 2, effectKo: "명중(치명율) +8%" },
+  { id: "haengma", nameKo: "행마", swName: "Swift", pieces: 4, effectKo: "속도 +25%" },
+  { id: "gunhim", nameKo: "굳힘", swName: "Guard", pieces: 2, effectKo: "방어력 +15%" },
+  { id: "mussang", nameKo: "무쌍", swName: "Blade", pieces: 2, effectKo: "치명확률 +10%" },
+  { id: "chimtu", nameKo: "침투", swName: "Rage", pieces: 4, effectKo: "치명피해 +35%" },
+  { id: "bogang", nameKo: "보강", swName: "Shield", pieces: 2, effectKo: "아군 실드 3턴(체력의 20%)" },
+  { id: "jipjung", nameKo: "집중", swName: "Focus", pieces: 2, effectKo: "효과적중 +20%" },
 ];
 
 export interface SymbolInstance {

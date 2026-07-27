@@ -244,6 +244,42 @@ describe("phase1 data", () => {
     assert.equal(prog[0]!.active, true);
   });
 
+  it("applies balance-sheet set bonuses (mussang/chimtu/jipjung)", () => {
+    const base = {
+      hp: 1000,
+      atk: 100,
+      def: 50,
+      spd: 100,
+      critRate: 15,
+      critDmg: 100,
+      accuracy: 0,
+      resistance: 15,
+    };
+    const blank = (setId: "mussang" | "chimtu" | "jipjung", slot: 1 | 2 | 3 | 4, id: string) => ({
+      ...createSymbol(setId, slot, id),
+      mainStat: "ATK+",
+      mainValue: 0,
+    });
+    const mussang = applySymbolsToStats(base, [
+      blank("mussang", 1, "m1"),
+      blank("mussang", 2, "m2"),
+    ]);
+    assert.equal(mussang.critRate, 25);
+    const chimtu = applySymbolsToStats(base, [
+      blank("chimtu", 1, "c1"),
+      blank("chimtu", 2, "c2"),
+      blank("chimtu", 3, "c3"),
+      blank("chimtu", 4, "c4"),
+    ]);
+    assert.equal(chimtu.critDmg, 135);
+    const jipjung = applySymbolsToStats(base, [
+      blank("jipjung", 1, "j1"),
+      blank("jipjung", 2, "j2"),
+    ]);
+    assert.equal(jipjung.accuracy, 20);
+    assert.equal(jipjung.critRate, 15);
+  });
+
   it("rolls imprintable mains for slots 4–6", () => {
     const s = createSymbol("hwalro", 4, "t");
     assert.equal(canImprintSymbol(s), true);

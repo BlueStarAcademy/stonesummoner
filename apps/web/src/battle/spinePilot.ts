@@ -13,6 +13,7 @@ export {
 export type { SpineController, SpineFacing, SpineMountOpts } from "./spineRuntime";
 export {
   getSpinePack,
+  getBattleStillSrc,
   resolveSpinePackId,
   SPINE_PACKS,
 } from "./spinePacks";

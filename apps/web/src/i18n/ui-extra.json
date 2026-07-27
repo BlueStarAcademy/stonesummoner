@@ -1754,5 +1754,217 @@
   "chat.send": {
     "ko": "전송",
     "en": "Send"
+  },
+  "ui.symCompareSelected": {
+    "ko": "선택",
+    "en": "Selected"
+  },
+  "ui.symCompareEquipped": {
+    "ko": "장착중",
+    "en": "Equipped"
+  },
+  "ui.symFilter": {
+    "ko": "세트 필터",
+    "en": "Set filter"
+  },
+  "ui.symFilterAll": {
+    "ko": "전체",
+    "en": "All"
+  },
+  "ui.symFilterNone": {
+    "ko": "선택 없음",
+    "en": "None"
+  },
+  "ui.symFilterN": {
+    "ko": "{n}종",
+    "en": "{n} sets"
+  },
+  "ui.symFilterEmpty": {
+    "ko": "필터에 맞는 상징이 없습니다",
+    "en": "No symbols match this filter"
+  },
+  "ui.stagePrepTitle": {
+    "ko": "출전 준비",
+    "en": "Battle prep"
+  },
+  "ui.stagePrepStart": {
+    "ko": "전투 시작",
+    "en": "Start battle"
+  },
+  "ui.stagePrepParty": {
+    "ko": "출전 파티",
+    "en": "Party"
+  },
+  "ui.stagePrepEnemy": {
+    "ko": "등장 적",
+    "en": "Enemies"
+  },
+  "ui.stagePrepNeedParty": {
+    "ko": "출전 소환수를 1명 이상 선택하세요.",
+    "en": "Select at least one monster for battle."
+  },
+  "ui.stagePrepCancel": {
+    "ko": "취소",
+    "en": "Cancel"
+  },
+  "ui.stagePrepSummoner": {
+    "ko": "소환사",
+    "en": "Summoner"
+  },
+  "ui.stagePrepChangeSummoner": {
+    "ko": "소환사 변경",
+    "en": "Change summoner"
+  },
+  "ui.stagePrepTapRoster": {
+    "ko": "소환수를 탭해 출전 / 해제",
+    "en": "Tap monsters to deploy or remove"
+  },
+  "ui.stagePrepSaveDeck": {
+    "ko": "덱저장",
+    "en": "Save deck"
+  },
+  "ui.stagePrepDeckSaved": {
+    "ko": "덱 슬롯 {n} 저장",
+    "en": "Deck slot {n} saved"
+  },
+  "ui.stagePrepDeckLoaded": {
+    "ko": "덱 슬롯 {n} 불러옴",
+    "en": "Deck slot {n} loaded"
+  },
+  "ui.stagePrepLeaderPassive": {
+    "ko": "리더 패시브",
+    "en": "Leader passive"
+  },
+  "ui.stagePrepLeaderBasic": {
+    "ko": "기본 지휘",
+    "en": "Basic command"
+  },
+  "ui.stagePrepLeaderAtk": {
+    "ko": "아군 공격력 +{pct}%",
+    "en": "Ally ATK +{pct}%"
+  },
+  "ui.stagePrepLeaderNone": {
+    "ko": "리더 패시브 없음",
+    "en": "No leader passive"
+  },
+  "ui.stagePrepEnemyLeader": {
+    "ko": "적 리더 패시브",
+    "en": "Enemy leader"
+  },
+  "ui.stagePrepEnemyLeaderLine": {
+    "ko": "적 소환사 지휘 · 아군 견제",
+    "en": "Enemy summoner command"
+  },
+  "ui.stagePrepEnemySummoner": {
+    "ko": "적 소환사",
+    "en": "Enemy summoner"
+  },
+  "ui.stagePrepSymbolEffect": {
+    "ko": "상징 효과",
+    "en": "Symbol effect"
+  },
+  "ui.stagePrepSymbolNone": {
+    "ko": "활성 상징 세트 없음",
+    "en": "No active symbol set"
+  },
+  "ui.stagePrepSynergy": {
+    "ko": "전투몬 조합효과",
+    "en": "Monster synergy"
+  },
+  "ui.stagePrepSynergyLine": {
+    "ko": "{elems}",
+    "en": "{elems}"
+  },
+  "ui.stagePrepSynergyEmpty": {
+    "ko": "출전 소환수 없음",
+    "en": "No monsters deployed"
+  },
+  "ui.stagePrepTabSummoner": {
+    "ko": "서머너",
+    "en": "Summoner"
+  },
+  "ui.stagePrepTabMonster": {
+    "ko": "전투몬",
+    "en": "Monsters"
+  },
+  "ui.stagePrepTabSkill": {
+    "ko": "기술",
+    "en": "Skills"
+  },
+  "ui.stagePrepStartCost": {
+    "ko": "{cost} 전투시작",
+    "en": "{cost} Start"
+  },
+  "ui.stagePrepCancelBattle": {
+    "ko": "전투취소",
+    "en": "Cancel"
+  },
+  "ui.stagePrepEnergyBuy": {
+    "ko": "행동력 구매",
+    "en": "Buy energy"
+  },
+  "ui.stagePrepSkillLocked": {
+    "ko": "미해금",
+    "en": "Locked"
+  },
+  "ui.stagePrepSkillGrowHint": {
+    "ko": "성장은 스킬트리에서",
+    "en": "Grow in skill tree"
+  },
+  "ui.stageDropInfo": {
+    "ko": "드롭 정보",
+    "en": "Drop info"
+  },
+  "ui.stageBattle": {
+    "ko": "전투",
+    "en": "Battle"
+  },
+  "ui.stageDiff": {
+    "ko": "난이도",
+    "en": "Difficulty"
+  },
+  "ui.stageAppearing": {
+    "ko": "출현 소환수",
+    "en": "Appearing"
+  },
+  "ui.stageDropCraft": {
+    "ko": "마법 제작 재료",
+    "en": "Craft materials"
+  },
+  "ui.stageDropCraftHell": {
+    "ko": "마법 제작 재료 (Hell)",
+    "en": "Craft materials (Hell)"
+  },
+  "ui.stageDropSetMore": {
+    "ko": "상징 상세",
+    "en": "Symbol details"
+  },
+  "ui.stageDropSetBonus": {
+    "ko": "{n}세트: {effect}",
+    "en": "{n}-set: {effect}"
+  },
+  "ui.stageDropScrollNormal": {
+    "ko": "일반 소환서",
+    "en": "Normal scroll"
+  },
+  "ui.stageDropScrollPremium": {
+    "ko": "고급 소환서",
+    "en": "Premium scroll"
+  },
+  "ui.stageDropCrystal": {
+    "ko": "크리스탈",
+    "en": "Crystal"
+  },
+  "ui.stageDropGear": {
+    "ko": "장비",
+    "en": "Gear"
+  },
+  "ui.stageDropJinmun": {
+    "ko": "진문석",
+    "en": "Circle stone"
+  },
+  "ui.stageDropPiece": {
+    "ko": "{name}{slot}",
+    "en": "{name}{slot}"
   }
 }

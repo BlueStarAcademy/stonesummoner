@@ -16,12 +16,12 @@ import {
   pulseUnitClass,
   waitFx,
 } from "./battle/fx";
-import { destroyAllSpine, mountBattleSpines, mountBookPreviewSpine, playSpineClip } from "./battle/spinePilot";
+import { destroyAllSpine, mountBattleSpines, playSpineClip } from "./battle/spinePilot";
+import { getBattleStillSrc } from "./battle/spinePacks";
 import { dematteArtInTree } from "./ui/dematteArt";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
 import {
   ARROW_DOWN,
-  ARROW_LEFT,
   ARROW_RIGHT,
   ARROW_UP,
   CHECK,
@@ -77,6 +77,8 @@ import {
   SYMBOL_SETS,
   stagesForMap,
   summarizeGearSets,
+  summarizeSymbolSets,
+  gearLeaderAtkPct,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_IMPRINT_CRYSTAL_COST,
   symbolEnhanceManaCost,
@@ -163,6 +165,11 @@ import {
   runSellSymbol,
   runSetArenaBans,
   runSetParty,
+  runSavePartyPreset,
+  runLoadPartyPreset,
+  normalizePartyPresets,
+  clampPartyPresetIndex,
+  PARTY_PRESET_COUNT,
   runSummon,
   runUpgradeBuilding,
   setActiveSummoner,
@@ -486,6 +493,18 @@ let stagesRegion: StagesRegionId | null = null;
 type StageDifficulty = "normal" | "hard" | "hell";
 let stageEntryId: string | null = null;
 let stageEntryDiff: StageDifficulty = "normal";
+/** Open region drop-info modal (SW-style). */
+let stagesDropInfoOpen = false;
+/** Active tab inside drop-info modal: scrolls | craft mats. */
+let stagesDropTab: "scroll" | "craft" = "scroll";
+/** Expand symbol piece list under the set row. */
+let stagesDropSetExpand = false;
+/** Summoner element picker open inside stage prep. */
+let stagePrepSummonerOpen = false;
+/** Prep inventory dock tab. */
+let stagePrepInvTab: "summoner" | "monster" | "skill" = "monster";
+/** Prep roster sort (mirrors hub roster sorts). */
+let stagePrepSortMode: RosterSortMode = "stars";
 let islandPan = { x: 0, y: 0 };
 let islandPanCentered = false;
 /** Bump when cover metrics change so the next bind re-centers once. */
@@ -1087,6 +1106,551 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   ensureTarget();
   view = "battle";
   render();
+}
+
+function renderStagePrepDock(): string {
+  const selected = ensurePartyDraft();
+  const activeEl = save.activeSummoner ?? "light";
+  const unlockedSkills = new Set(save.skillTree ?? []);
+
+  let dockBody = "";
+  if (stagePrepInvTab === "summoner") {
+    dockBody = `<div class="stage-prep-summoner-grid">${SUMMONER_ELEMENTS.map(
+      (el) => {
+        const on = el === activeEl;
+        const p = save.summoners?.[el] ?? { level: 1, exp: 0, awaken: 0 };
+        return `<button type="button" class="stage-prep-summoner-card el-${el}${on ? " is-on" : ""}" data-stage-prep-summoner="${el}">
+        <img src="${summonerArtSrc(el)}" width="56" height="56" alt="" draggable="false" decoding="async" />
+        <strong>${escapeHtml(elementLabel(el))}</strong>
+        <small>Lv.${p.level}</small>
+      </button>`;
+      },
+    ).join("")}</div>`;
+  } else if (stagePrepInvTab === "skill") {
+    dockBody = `<p class="stage-prep-dock-hint">${escapeHtml(t("ui.stagePrepSkillGrowHint"))}</p>
+      <div class="stage-prep-skill-grid">${SKILL_TREE_NODES.map((n) => {
+        const on = unlockedSkills.has(n.id);
+        const isLeader = n.branch === "leader";
+        return `<div class="stage-prep-skill-tile${on ? " is-on" : ""}${isLeader ? " is-leader" : ""}" title="${escapeHtml(n.descKo)}">
+          <strong>${escapeHtml(n.nameKo)}</strong>
+          <small>${on ? escapeHtml(n.descKo) : escapeHtml(t("ui.stagePrepSkillLocked"))}</small>
+        </div>`;
+      }).join("")}</div>`;
+  } else {
+    const sorted = sortRosterForSlots(save.roster, stagePrepSortMode);
+    const invTiles = sorted
+      .map((m) => {
+        const on = selected.has(m.uid);
+        const def = getMonster(m.monsterId);
+        const starN = Math.max(1, def?.naturalStars ?? 1);
+        const stars = STAR.repeat(starN);
+        return `<button type="button" class="stage-prep-inv-tile el-${def?.element ?? "dark"}${on ? " is-on" : ""}" data-stage-party-toggle="${m.uid}" aria-pressed="${on}" title="${escapeHtml(describeOwned(m))}">
+          <span class="stage-prep-inv-art">${monsterArtImg(m.monsterId, "stage-prep-inv-img", 56) || "?"}</span>
+          <span class="stage-prep-inv-lv">Lv.${m.level}</span>
+          <span class="stage-prep-inv-stars" aria-hidden="true">${stars}</span>
+          ${on ? `<span class="stage-prep-inv-check" aria-hidden="true">${CHECK}</span>` : ""}
+        </button>`;
+      })
+      .join("");
+    dockBody = `<div class="stage-prep-inv" role="listbox" aria-label="${escapeHtml(t("ui.079b50d844"))}">
+      ${invTiles || `<p class="muted stage-prep-inv-empty">${escapeHtml(t("ui.079b50d844"))}</p>`}
+    </div>`;
+  }
+
+  const sortSelect =
+    stagePrepInvTab === "monster"
+      ? `<label class="stage-prep-sort">
+          <span class="sr-only">${escapeHtml(t("ui.rosterSort"))}</span>
+          <select id="stage-prep-sort" aria-label="${escapeHtml(t("ui.rosterSort"))}">
+            <option value="stars"${stagePrepSortMode === "stars" ? " selected" : ""}>${escapeHtml(t("ui.sortStars"))}</option>
+            <option value="level"${stagePrepSortMode === "level" ? " selected" : ""}>${escapeHtml(t("ui.sortLevel"))}</option>
+            <option value="element"${stagePrepSortMode === "element" ? " selected" : ""}>${escapeHtml(t("ui.sortElement"))}</option>
+            <option value="default"${stagePrepSortMode === "default" ? " selected" : ""}>${escapeHtml(t("ui.sortDefault"))}</option>
+            <option value="party"${stagePrepSortMode === "party" ? " selected" : ""}>${escapeHtml(t("ui.sortParty"))}</option>
+          </select>
+        </label>`
+      : "";
+
+  return `<div class="stage-prep-dock">
+        <div class="stage-prep-dock-bar">
+          <div class="stage-prep-tabs" role="tablist">
+            <button type="button" class="stage-prep-tab${stagePrepInvTab === "summoner" ? " is-on" : ""}" data-stage-inv-tab="summoner" role="tab" aria-selected="${stagePrepInvTab === "summoner"}">${escapeHtml(t("ui.stagePrepTabSummoner"))}</button>
+            <button type="button" class="stage-prep-tab${stagePrepInvTab === "monster" ? " is-on" : ""}" data-stage-inv-tab="monster" role="tab" aria-selected="${stagePrepInvTab === "monster"}">${escapeHtml(t("ui.stagePrepTabMonster"))}</button>
+            <button type="button" class="stage-prep-tab${stagePrepInvTab === "skill" ? " is-on" : ""}" data-stage-inv-tab="skill" role="tab" aria-selected="${stagePrepInvTab === "skill"}">${escapeHtml(t("ui.stagePrepTabSkill"))}</button>
+          </div>
+          ${sortSelect}
+        </div>
+        <div class="stage-prep-dock-body">${dockBody}</div>
+      </div>`;
+}
+
+/** Open party-setup gate before combat (SW-style sortie prep). */
+function openStagePrep(stage: StageDef): void {
+  if (!isStageUnlocked(save, stage.id)) {
+    flash(t("ui.b72f5a4752"));
+    return;
+  }
+  if (!isDifficultyOpen(stage, stageEntryDiff)) {
+    flash(t("ui.a4d2cdf322"));
+    return;
+  }
+  stageEntryId = stage.id;
+  stagePrepSummonerOpen = false;
+  stagePrepInvTab = "monster";
+  const presets = normalizePartyPresets(save, save.partyPresets);
+  const idx = clampPartyPresetIndex(save.activePartyPreset);
+  const preset = presets[idx]!;
+  save = {
+    ...save,
+    partyPresets: presets,
+    activePartyPreset: idx,
+  };
+  if (preset.summoner !== (save.activeSummoner ?? "light")) {
+    save = setActiveSummoner(save, preset.summoner);
+  }
+  partyDraft = new Set(preset.party.length ? preset.party : save.party);
+  persist();
+  applyStagesRegionOpen();
+}
+
+function closeStagePrep(): void {
+  stageEntryId = null;
+  stagePrepSummonerOpen = false;
+  partyDraft = null;
+  applyStagesRegionOpen();
+}
+
+function confirmStagePrepStart(): void {
+  const stage = stageEntryId ? getStage(stageEntryId) : null;
+  if (!stage) return;
+  const draft = ensurePartyDraft();
+  if (draft.size < 1) {
+    flash(t("ui.stagePrepNeedParty"));
+    return;
+  }
+  const r = runSetParty(save, [...draft]);
+  save = r.save;
+  persist();
+  partyDraft = null;
+  startBattle(stage, stageEntryDiff);
+}
+
+function stagePrepLeaderPassive(saveRef: PlayerSave): {
+  title: string;
+  detail: string;
+  pct: number;
+} {
+  const active = getActiveSummoner(saveRef);
+  const tree = skillTreeBonuses(saveRef.skillTree ?? []);
+  const pct =
+    awakenLeaderAtkPct(active.awaken) +
+    gearLeaderAtkPct(normalizeSummonerGear(saveRef.gear)) +
+    tree.leaderAtkBonus;
+  const unlocked = new Set(saveRef.skillTree ?? []);
+  const leaderNodes = SKILL_TREE_NODES.filter(
+    (n) => n.branch === "leader" && unlocked.has(n.id),
+  );
+  const title = leaderNodes.length
+    ? leaderNodes.map((n) => n.nameKo).join(` ${MIDDOT} `)
+    : t("ui.stagePrepLeaderBasic");
+  const detail =
+    pct > 0
+      ? t("ui.stagePrepLeaderAtk", {
+          pct: String(Math.round(pct * 1000) / 10),
+        })
+      : t("ui.stagePrepLeaderNone");
+  return { title, detail, pct };
+}
+
+function stagePrepPartySymbolLine(uids: string[]): string {
+  const equipped: import("stonesummoner-data").SymbolInstance[] = [];
+  for (const uid of uids) {
+    const m = save.roster.find((x) => x.uid === uid);
+    if (!m) continue;
+    for (const sid of m.symbolSlots ?? []) {
+      if (!sid) continue;
+      const sym = save.symbols.find((s) => s.id === sid);
+      if (sym) equipped.push(sym);
+    }
+  }
+  const active = summarizeSymbolSets(equipped).filter((s) => s.active);
+  if (!active.length) return t("ui.stagePrepSymbolNone");
+  return active
+    .map(
+      (s) =>
+        `${s.nameKo} ${t("ui.setPiecesN", { n: s.pieces })} ${s.effectKo}`,
+    )
+    .join(` ${MIDDOT} `);
+}
+
+function stagePrepSynergyLine(uids: string[]): string {
+  const els = new Set<string>();
+  for (const uid of uids) {
+    const m = save.roster.find((x) => x.uid === uid);
+    const def = m ? getMonster(m.monsterId) : null;
+    if (def?.element) els.add(def.element);
+  }
+  if (!els.size) return t("ui.stagePrepSynergyEmpty");
+  const labels = [...els].map((el) =>
+    t(`element.${el}` as Parameters<typeof t>[0]),
+  );
+  return t("ui.stagePrepSynergyLine", { elems: labels.join(MIDDOT) });
+}
+
+function renderStageEntryModal(): string {
+  const stage = stageEntryId ? getStage(stageEntryId) : null;
+  if (!stage) return "";
+  const diff =
+    STAGE_DIFFICULTIES.find((d) => d.id === stageEntryDiff) ??
+    STAGE_DIFFICULTIES[0]!;
+  const cost = stageEnergyCost(stage, stageEntryDiff);
+  const energyNow = Math.floor(save.island.energy);
+  const energyMax = save.island.energyMax ?? 100;
+  const selected = ensurePartyDraft();
+  const partyUids = [...selected];
+  while (partyUids.length < 4) partyUids.push("");
+  const activeEl = save.activeSummoner ?? "light";
+  const activeSum = getActiveSummoner(save);
+  const enemyIds = (stage.enemyMonsterIds ?? []).slice(0, 4);
+  const leader = stagePrepLeaderPassive(save);
+  const symbolLine = stagePrepPartySymbolLine(partyUids.filter(Boolean));
+  const synergyLine = stagePrepSynergyLine(partyUids.filter(Boolean));
+  const presets = normalizePartyPresets(save, save.partyPresets);
+  const presetIdx = clampPartyPresetIndex(save.activePartyPreset);
+  const dropSet = SYMBOL_SETS.find((x) => x.id === stage.dropSetId);
+
+  const enemyMonSlots = [0, 1, 2, 3]
+    .map((i) => {
+      const id = enemyIds[i];
+      if (!id) {
+        return `<div class="stage-prep-slot empty" aria-hidden="true"></div>`;
+      }
+      const m = getMonster(id);
+      return `<div class="stage-prep-slot el-${m?.element ?? "dark"}" title="${escapeHtml(m?.nameKo ?? id)}">
+        <span class="stage-prep-slot-art">${monsterArtImg(id, "stage-prep-slot-img", 52) || "?"}</span>
+        <small>${escapeHtml(m?.nameKo ?? id)}</small>
+      </div>`;
+    })
+    .join("");
+
+  const allyMonSlots = [0, 1, 2, 3]
+    .map((i) => {
+      const uid = partyUids[i];
+      if (!uid) {
+        return `<div class="stage-prep-slot empty is-open-slot" aria-label="${i + 1}"></div>`;
+      }
+      const m = save.roster.find((x) => x.uid === uid);
+      if (!m) {
+        return `<div class="stage-prep-slot empty is-open-slot" aria-label="${i + 1}"></div>`;
+      }
+      const def = getMonster(m.monsterId);
+      return `<button type="button" class="stage-prep-slot el-${def?.element ?? "dark"}" data-stage-party-toggle="${m.uid}" title="${escapeHtml(describeOwned(m))}">
+        <span class="stage-prep-slot-art">${monsterArtImg(m.monsterId, "stage-prep-slot-img", 56) || "?"}</span>
+        <span class="stage-prep-slot-lv">Lv.${m.level}</span>
+      </button>`;
+    })
+    .join("");
+
+  const presetRow = Array.from({ length: PARTY_PRESET_COUNT }, (_, i) => {
+    const on = i === presetIdx;
+    const filled = (presets[i]?.party.length ?? 0) > 0;
+    return `<button type="button" class="stage-prep-preset${on ? " is-on" : ""}${filled ? " is-filled" : ""}" data-stage-preset="${i}" aria-pressed="${on}">${i + 1}</button>`;
+  }).join("");
+
+  const unlockedSkills = new Set(save.skillTree ?? []);
+  const skillIcons = SKILL_TREE_NODES.filter(
+    (n) =>
+      n.branch === "leader" || n.branch === "mastery" || n.branch === "power",
+  )
+    .slice(0, 2)
+    .map((n) => {
+      const on = unlockedSkills.has(n.id);
+      return `<span class="stage-prep-skill-ico${on ? " is-on" : ""}" title="${escapeHtml(n.nameKo)}">${escapeHtml(n.nameKo.slice(0, 1))}</span>`;
+    })
+    .join("");
+
+  const titleText = `${stage.nameKo}(${diff.labelKo})`;
+  const canStart = selected.size > 0 && energyNow >= cost;
+
+  return `<div class="stage-prep-layer" role="dialog" aria-modal="true" aria-labelledby="stage-entry-title">
+    <div class="stage-prep stage-prep--board stage-prep--${diff.id}">
+      <header class="stage-prep-top stage-prep-top--board">
+        <h2 class="stage-prep-title" id="stage-entry-title">${escapeHtml(titleText)}</h2>
+        <div class="stage-prep-energy">
+          <img class="res-ico" src="/art/ui/res/energy.svg" width="16" height="16" alt="" draggable="false" />
+          <strong>${energyNow}/${energyMax}</strong>
+          <button type="button" class="stage-prep-energy-buy" id="btn-stage-prep-buy-energy" title="${escapeHtml(t("ui.stagePrepEnergyBuy"))}" aria-label="${escapeHtml(t("ui.stagePrepEnergyBuy"))}">+</button>
+        </div>
+      </header>
+
+      <section class="stage-prep-team stage-prep-team--enemy" aria-label="${escapeHtml(t("ui.stagePrepEnemy"))}">
+        <div class="stage-prep-slots">
+          <div class="stage-prep-slot stage-prep-slot--summoner el-dark" title="${escapeHtml(t("ui.stagePrepEnemySummoner"))}">
+            <img class="stage-prep-slot-img" src="${summonerArtSrc("dark")}" width="64" height="64" alt="" draggable="false" decoding="async" />
+            <span class="stage-prep-slot-tag">${escapeHtml(t("ui.stagePrepEnemySummoner"))}</span>
+          </div>
+          ${enemyMonSlots}
+        </div>
+        <div class="stage-prep-effects">
+          <p><span>${escapeHtml(t("ui.stagePrepEnemyLeader"))}</span> ${escapeHtml(t("ui.stagePrepEnemyLeaderLine"))}</p>
+          <p><span>${escapeHtml(t("ui.stagePrepSymbolEffect"))}</span> ${escapeHtml(
+            dropSet
+              ? t("ui.stageDropSetBonus", {
+                  n: dropSet.pieces,
+                  effect: dropSet.effectKo,
+                })
+              : t("ui.stagePrepSymbolNone"),
+          )}</p>
+        </div>
+      </section>
+
+      <div class="stage-prep-vs" aria-hidden="true">VS</div>
+
+      <section class="stage-prep-team stage-prep-team--ally" aria-label="${escapeHtml(t("ui.stagePrepParty"))}">
+        <div class="stage-prep-presets">
+          ${presetRow}
+          <button type="button" class="stage-prep-save-deck" id="btn-stage-prep-save-deck">${escapeHtml(t("ui.stagePrepSaveDeck"))}</button>
+        </div>
+        <div class="stage-prep-slots">
+          <button type="button" class="stage-prep-slot stage-prep-slot--summoner el-${activeEl}" data-stage-inv-tab="summoner" title="${escapeHtml(t("ui.stagePrepChangeSummoner"))}">
+            <img class="stage-prep-slot-img" src="${summonerArtSrc(activeEl)}" width="64" height="64" alt="" draggable="false" decoding="async" />
+            <span class="stage-prep-slot-tag">${escapeHtml(t("ui.stagePrepSummoner"))}</span>
+            <span class="stage-prep-slot-lv">Lv.${activeSum.level}</span>
+          </button>
+          ${allyMonSlots}
+        </div>
+        <div class="stage-prep-effects stage-prep-effects--ally">
+          <div class="stage-prep-effects-main">
+            <p><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span> ${escapeHtml(leader.title)} ${MIDDOT} ${escapeHtml(leader.detail)}</p>
+            <p><span>${escapeHtml(t("ui.stagePrepSymbolEffect"))}</span> ${escapeHtml(symbolLine)}</p>
+            <p><span>${escapeHtml(t("ui.stagePrepSynergy"))}</span> ${escapeHtml(synergyLine)}</p>
+          </div>
+          <div class="stage-prep-skill-icos" aria-hidden="true">${skillIcons}</div>
+        </div>
+      </section>
+
+      ${renderStagePrepDock()}
+
+      <footer class="stage-prep-footer">
+        <button type="button" class="stage-prep-start" id="btn-stage-entry-start" ${canStart ? "" : "disabled"}>
+          <span class="stage-prep-start-cost" aria-hidden="true"><img src="/art/ui/res/energy.svg" width="14" height="14" alt="" draggable="false" />${cost}</span>
+          <span>${escapeHtml(t("ui.stagePrepStart"))}</span>
+        </button>
+      </footer>
+    </div>
+  </div>`;
+}
+
+
+
+/** Suppress CSS modal-pop on soft in-place refreshes. */
+function suppressStageModalAnim(root: ParentNode): void {
+  root
+    .querySelectorAll<HTMLElement>(
+      ".stage-prep-layer, .stages-region-layer, .stages-region-sheet, .stage-prep, .stage-drop-info-layer, .stage-entry-modal",
+    )
+    .forEach((el) => {
+      el.style.animation = "none";
+    });
+}
+
+/** Refresh only the battle-prep inventory dock (no modal pop / team reflow). */
+function refreshStagePrepDock(): void {
+  const host = app.querySelector("#stages-region-host");
+  if (!host || !stageEntryId) return;
+  const dock = host.querySelector(".stage-prep-dock");
+  if (!dock) {
+    applyStagesRegionOpen({ animate: false });
+    return;
+  }
+  dock.outerHTML = renderStagePrepDock();
+  bindStagePrepDockControls(host);
+}
+
+function onStagePrepInvTabClick(btn: HTMLButtonElement): void {
+  const tab = btn.dataset.stageInvTab;
+  if (tab === "summoner" || tab === "monster" || tab === "skill") {
+    if (stagePrepInvTab === tab) return;
+    stagePrepInvTab = tab;
+    refreshStagePrepDock();
+  }
+}
+
+function bindStagePrepDockControls(host: ParentNode): void {
+  const dock = host.querySelector(".stage-prep-dock");
+  if (!dock) return;
+
+  dock.querySelectorAll<HTMLButtonElement>("[data-stage-inv-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => onStagePrepInvTabClick(btn));
+  });
+
+  dock.querySelector("#stage-prep-sort")?.addEventListener("change", (ev) => {
+    const raw = (ev.target as HTMLSelectElement).value;
+    const allowed: RosterSortMode[] = [
+      "default",
+      "level",
+      "stars",
+      "element",
+      "party",
+    ];
+    if (!allowed.includes(raw as RosterSortMode)) return;
+    stagePrepSortMode = raw as RosterSortMode;
+    refreshStagePrepDock();
+  });
+
+  dock.querySelectorAll<HTMLButtonElement>("[data-stage-prep-summoner]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const el = btn.dataset.stagePrepSummoner as SummonerElement | undefined;
+      if (!el) return;
+      if (el !== (save.activeSummoner ?? "light")) {
+        save = setActiveSummoner(save, el);
+        persist();
+        flash(t("summonerPicker.switched", { element: elementLabel(el) }));
+      }
+      stagePrepInvTab = "monster";
+      applyStagesRegionOpen({ animate: false });
+    });
+  });
+
+  dock.querySelectorAll<HTMLButtonElement>("[data-stage-party-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const draft = ensurePartyDraft();
+      const uid = btn.dataset.stagePartyToggle!;
+      if (draft.has(uid)) draft.delete(uid);
+      else if (draft.size < 4) draft.add(uid);
+      else {
+        flash(t("ui.e44dd9cad3"));
+        return;
+      }
+      applyStagesRegionOpen({ animate: false });
+    });
+  });
+}
+
+/** Open/update drop-info overlay without rebuilding the region sheet. */
+function applyStageDropInfo(opts?: { animate?: boolean }): void {
+  const host = app.querySelector("#stages-region-host");
+  const regionLayer = host?.querySelector(".stages-region-layer");
+  if (!host || !regionLayer || stageEntryId) return;
+  const selected = stagesRegion
+    ? stagesRegions().find((r) => r.id === stagesRegion) ?? null
+    : null;
+  if (!selected) return;
+
+  const btn = host.querySelector<HTMLButtonElement>("#btn-region-drop-info");
+  if (btn) {
+    btn.classList.toggle("is-on", stagesDropInfoOpen);
+    btn.setAttribute("aria-pressed", stagesDropInfoOpen ? "true" : "false");
+  }
+
+  const existing = host.querySelector("#stage-drop-info-layer");
+  if (!stagesDropInfoOpen) {
+    existing?.remove();
+    return;
+  }
+
+  const html = renderStageDropInfoModal(selected);
+  const animate = opts?.animate !== false;
+  if (existing) {
+    existing.outerHTML = html;
+    const next = host.querySelector<HTMLElement>("#stage-drop-info-layer");
+    if (next && !animate) next.style.animation = "none";
+  } else {
+    regionLayer.insertAdjacentHTML("beforeend", html);
+    if (!animate) {
+      const next = host.querySelector<HTMLElement>("#stage-drop-info-layer");
+      if (next) next.style.animation = "none";
+    }
+  }
+  bindStageDropInfoControls(host);
+}
+
+function bindStageDropInfoControls(host: ParentNode): void {
+  host.querySelector("#btn-stage-drop-info-close")?.addEventListener("click", () => {
+    stagesDropInfoOpen = false;
+    stagesDropSetExpand = false;
+    applyStageDropInfo();
+  });
+
+  host.querySelector("#btn-stage-drop-set-more")?.addEventListener("click", () => {
+    stagesDropSetExpand = !stagesDropSetExpand;
+    applyStageDropInfo({ animate: false });
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-drop-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.dropTab;
+      if (tab === "scroll" || tab === "craft") {
+        stagesDropTab = tab;
+        applyStageDropInfo({ animate: false });
+      }
+    });
+  });
+}
+
+
+function bindStageEntryModal(): void {
+  const host = app.querySelector("#stages-region-host");
+  if (!host) return;
+
+  host.querySelector("#btn-stage-entry-start")?.addEventListener("click", () => {
+    confirmStagePrepStart();
+  });
+
+  host.querySelector("#btn-stage-prep-buy-energy")?.addEventListener("click", () => {
+    const r = runBuyEnergy(save, 1);
+    save = r.save;
+    persist();
+    flash(r.message);
+    applyStagesRegionOpen({ animate: false });
+  });
+
+  host.querySelector("#btn-stage-prep-save-deck")?.addEventListener("click", () => {
+    const draft = ensurePartyDraft();
+    const idx = clampPartyPresetIndex(save.activePartyPreset);
+    const r = runSavePartyPreset(save, idx, {
+      summoner: save.activeSummoner ?? "light",
+      party: [...draft],
+    });
+    save = r.save;
+    persist();
+    flash(t("ui.stagePrepDeckSaved", { n: idx + 1 }));
+    applyStagesRegionOpen({ animate: false });
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-stage-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = clampPartyPresetIndex(Number(btn.dataset.stagePreset));
+      const r = runLoadPartyPreset(save, idx);
+      save = r.save;
+      partyDraft = new Set(save.party);
+      persist();
+      flash(t("ui.stagePrepDeckLoaded", { n: idx + 1 }));
+      applyStagesRegionOpen({ animate: false });
+    });
+  });
+
+  host.querySelectorAll<HTMLButtonElement>(".stage-prep-slots [data-stage-party-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const draft = ensurePartyDraft();
+      const uid = btn.dataset.stagePartyToggle!;
+      if (draft.has(uid)) draft.delete(uid);
+      else if (draft.size < 4) draft.add(uid);
+      else {
+        flash(t("ui.e44dd9cad3"));
+        return;
+      }
+      applyStagesRegionOpen({ animate: false });
+    });
+  });
+
+  host
+    .querySelectorAll<HTMLButtonElement>(".stage-prep-slots [data-stage-inv-tab]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () => onStagePrepInvTabClick(btn));
+    });
+
+  bindStagePrepDockControls(host);
 }
 
 function refreshLegal(): void {
@@ -3659,6 +4223,30 @@ function monsterArtImg(
   return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
 }
 
+/** Art used in battle / book hero: Spine still when available, else WebP. */
+function monsterBattleArtSrc(
+  monsterId: string | undefined | null,
+  facing: "front" | "back" = "front",
+): string | null {
+  return getBattleStillSrc(monsterId, facing) ?? monsterArtSrc(monsterId);
+}
+
+function monsterBattleArtImg(
+  monsterId: string | undefined | null,
+  className: string,
+  size = 120,
+  facing: "front" | "back" = "front",
+): string {
+  const src = monsterBattleArtSrc(monsterId, facing);
+  if (!src) return "";
+  const front = getBattleStillSrc(monsterId, "front") ?? "";
+  const back = getBattleStillSrc(monsterId, "back") ?? front;
+  const stillAttrs = front
+    ? ` data-still-front="${front}" data-still-back="${back || front}"`
+    : "";
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${stillAttrs} />`;
+}
+
 function renderSummonRevealCell(uid: string): string {
   const mon = save.roster.find((m) => m.uid === uid);
   if (!mon) return "";
@@ -4153,9 +4741,11 @@ function renderSymbolInventoryGrid(): string {
         <strong>${t("ui.60fbf51b13")}</strong>
         <button type="button" class="mon-sym-inv-expand" data-expand-sym-bag ${atMax ? "disabled" : ""} title="${escapeHtml(expandTitle)}" aria-label="${escapeHtml(expandTitle)}">+</button>
       </div>
-      <span>${filled}/${cap}</span>
     </div>
     <div class="mon-sym-inv-grid">${tiles.join("")}</div>
+    <div class="mon-sym-inv-foot">
+      <span class="mon-sym-inv-count">${filled}/${cap}</span>
+    </div>
   </div>`;
 }
 
@@ -4276,7 +4866,7 @@ function renderEnhance(): string {
           () => `<span class="mon-star" aria-hidden="true">&#9733;</span>`,
         ).join("");
 
-        const expPct = Math.round((m.level / MAX_MONSTER_LEVEL) * 100);
+        const roleLabel = monsterRoleLabel(def?.role, def?.baseStats);
         const enhCost = enhanceManaCost(m.level);
         const enhMaxed = m.level >= MAX_MONSTER_LEVEL;
         if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
@@ -4403,37 +4993,27 @@ function renderEnhance(): string {
         );
 
         const previewArt =
-          monsterArtImg(m.monsterId, "mon-preview-img", 120) ||
+          monsterBattleArtImg(m.monsterId, "mon-preview-img", 160) ||
           `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
         const heroBlock = `<div class="mon-inspect-hero">
-            <div class="mon-inspect-preview" data-mon-preview="${m.monsterId}" data-yaw="18" role="img" aria-label="${def?.nameKo ?? m.monsterId}">
+            <div class="mon-inspect-preview" data-mon-preview="${m.monsterId}" role="img" aria-label="${def?.nameKo ?? m.monsterId}">
               <div class="mon-preview-turntable">
-                <div class="mon-preview-spin">
-                  <div class="mon-preview-art" data-unit-anim="orbit">${previewArt}</div>
-                </div>
+                <div class="mon-preview-art">${previewArt}</div>
               </div>
-              <span class="mon-preview-facing" aria-hidden="true">F</span>
-              <span class="mon-preview-drag-hint" aria-hidden="true">${ARROW_LEFT}${ARROW_RIGHT}</span>
             </div>
             <div class="mon-inspect-hero-info">
-              <strong class="mon-inspect-name">${def?.nameKo ?? m.monsterId}</strong>
-              <div class="mon-inspect-facts">
-                <span class="mon-inspect-fact mon-inspect-fact--el">
-                  <span class="mon-el-ico mon-el-ico--${selectedEl}" aria-hidden="true">
-                    <img class="mon-el-ico-img" src="${monsterElementArtSrc(selectedEl) ?? ""}" width="22" height="22" alt="" draggable="false" />
-                  </span>
-                  <span class="mon-inspect-fact-v">${elLabel}</span>
+              <div class="mon-inspect-title-row">
+                <span class="mon-el-ico mon-el-ico--${selectedEl}" title="${elLabel}" aria-label="${elLabel}">
+                  <img class="mon-el-ico-img" src="${monsterElementArtSrc(selectedEl) ?? ""}" width="24" height="24" alt="" draggable="false" />
                 </span>
-                <span class="mon-inspect-fact mon-inspect-fact--stars" aria-label="${def?.naturalStars ?? 0}">
-                  <span class="mon-inspect-stars">${starsHtml}</span>${selectedEvo > 0 ? `<span class="mon-evo">+${selectedEvo}</span>` : ""}
-                </span>
-                <span class="mon-inspect-fact mon-inspect-fact--role">
-                  <span class="mon-inspect-fact-v">${monsterRoleLabel(def?.role, def?.baseStats)}</span>
-                </span>
+                <strong class="mon-inspect-name">${def?.nameKo ?? m.monsterId}</strong>
               </div>
-              <div class="mon-inspect-art-foot" role="progressbar" aria-valuenow="${expPct}" aria-valuemin="0" aria-valuemax="100" aria-label="Lv.${m.level}">
-                <span class="mon-inspect-art-lv">Lv.${m.level}</span>
-                <div class="mon-inspect-art-exp"><div class="mon-inspect-art-exp-fill" style="width:${Math.min(100, expPct)}%"></div></div>
+              <div class="mon-inspect-meta-row">
+                <span class="mon-inspect-lv">Lv.${m.level}</span>
+                <span class="mon-inspect-type">${roleLabel}</span>
+              </div>
+              <div class="mon-inspect-stars-row" aria-label="${def?.naturalStars ?? 0}">
+                <span class="mon-inspect-stars">${starsHtml}</span>${selectedEvo > 0 ? `<span class="mon-evo">+${selectedEvo}</span>` : ""}
               </div>
             </div>
           </div>`;
@@ -4965,14 +5545,29 @@ function stageDropPreview(stage: StageDef, opts?: { equipWeekly?: boolean }): st
   return `<span class="stage-card-drops">${chips}${gear}</span>`;
 }
 
+function stageAppearingMons(stage: StageDef): string {
+  const ids = [...new Set(stage.enemyMonsterIds)].slice(0, 6);
+  if (!ids.length) return "";
+  const icons = ids
+    .map((id) => {
+      const m = getMonster(id);
+      const el = m?.element ?? "dark";
+      const name = m?.nameKo ?? id;
+      return `<span class="stage-sortie-mon el-${el}" title="${name}">
+        ${monsterArtImg(id, "stage-sortie-mon-img", 40) || `<span class="stage-sortie-mon-fallback">${name.slice(0, 1)}</span>`}
+      </span>`;
+    })
+    .join("");
+  return `<div class="stage-sortie-mons" aria-label="${t("ui.stageAppearing")}">${icons}</div>`;
+}
+
 function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): string {
   const vaultLeft = opts?.equipWeekly
     ? equipVaultRemaining(syncEquipVaultWeek(save))
     : null;
   const energyNow = Math.floor(save.island.energy);
   return list
-    .map((s) => {
-      const label = stageUnlockLabel(save, s);
+    .map((s, idx) => {
       const locked =
         !isStageUnlocked(save, s.id) ||
         (vaultLeft !== null && vaultLeft <= 0);
@@ -4980,37 +5575,31 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
       const diffOpen = isDifficultyOpen(s, stageEntryDiff);
       const cost = stageEnergyCost(s, stageEntryDiff);
       const canFight = !locked && diffOpen && (cost <= 0 || energyNow >= cost);
-      const extra =
-        s.gloryReward != null
-          ? ` ${MIDDOT} ${t('ui.ba0c9e096f')} ${s.gloryReward}`
-          : s.jinmunReward != null
-            ? ` ${MIDDOT} ${t('ui.4b482b3675')} ${s.jinmunReward}`
-            : "";
+      const short = cost > energyNow && diffOpen;
       const weekly =
         vaultLeft !== null
-          ?  ` ${MIDDOT} ${t('ui.9cbaf58b88')} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}`
+          ? `<small class="stage-sortie-meta">${t("ui.9cbaf58b88")} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}</small>`
           : "";
-      const costHint = !diffOpen
-        ? t('ui.4292516afd')
-        : cost <= 0
-          ? t('ui.bc22e8e368')
-          : `${t('ui.7dcdb553c8')} ${cost}`;
-      const mark = done
-        ? CHECK
-        : s.mode === "scenario"
-          ? `${s.map}-${s.stage}`
-          : String(s.boardSize);
-      return `<button type="button" class="stage-card stage-card--sortie${done ? " is-cleared" : ""}${!canFight ? " is-disabled" : ""}" data-stage="${s.id}" ${canFight ? "" : "disabled"}>
-        <span class="stage-card-mark" aria-hidden="true">${mark}</span>
-        <span class="stage-card-body">
-          <strong>${label} ${MIDDOT} ${s.nameKo}</strong>
-          <small>${s.boardSize}${TIMES}${s.boardSize} ${MIDDOT} ${t('ui.fe1fb24836')} ${s.waves}${extra}${weekly}</small>
-          ${stageDropPreview(s, opts)}
-        </span>
-        <span class="stage-card-cost${cost > energyNow && diffOpen ? " is-short" : ""}">
-          <strong>${costHint}</strong>
-        </span>
-      </button>`;
+      const num =
+        s.mode === "scenario" || s.mode === "depth" || s.mode === "equip"
+          ? s.stage
+          : idx + 1;
+      const title = `${num}. ${s.nameKo}`;
+      const costLabel = String(cost);
+      const battleAria = !diffOpen
+        ? t("ui.4292516afd")
+        : `${t("ui.stageBattle")} ${MIDDOT} ${t("ui.7dcdb553c8")} ${costLabel}`;
+      return `<div class="stage-sortie${done ? " is-cleared" : ""}${locked ? " is-locked" : ""}${!canFight ? " is-disabled" : ""}">
+        <div class="stage-sortie-main">
+          <strong class="stage-sortie-title">${done ? `${CHECK} ` : ""}${title}</strong>
+          ${stageAppearingMons(s)}
+          ${weekly}
+        </div>
+        <button type="button" class="stage-sortie-battle${short ? " is-short" : ""}" data-stage="${s.id}" aria-label="${battleAria}" title="${!diffOpen ? t("ui.4292516afd") : ""}" ${canFight ? "" : "disabled"}>
+          <span class="stage-sortie-cost" aria-hidden="true"><strong>${costLabel}</strong></span>
+          <span class="stage-sortie-battle-label">${t("ui.stageBattle")}</span>
+        </button>
+      </div>`;
     })
     .join("");
 }
@@ -5112,7 +5701,8 @@ function regionDifficultyOpen(region: StagesRegion, diff: StageDifficulty): bool
 }
 
 /** Open/close/refresh the region sheet without redrawing the world map. */
-function applyStagesRegionOpen(): void {
+function applyStagesRegionOpen(opts?: { animate?: boolean }): void {
+  const animate = opts?.animate !== false;
   const host = app.querySelector<HTMLElement>("#stages-region-host");
   if (!host) return;
 
@@ -5123,17 +5713,26 @@ function applyStagesRegionOpen(): void {
   const selected = stagesRegion
     ? stagesRegions().find((r) => r.id === stagesRegion) ?? null
     : null;
-  if (!selected) {
+  if (!selected && !stageEntryId) {
     host.innerHTML = "";
     return;
   }
-  if (!regionDifficultyOpen(selected, stageEntryDiff)) {
+  if (selected && !regionDifficultyOpen(selected, stageEntryDiff)) {
     stageEntryDiff = "normal";
   }
-  host.innerHTML = renderStagesRegionSheet(selected);
-  const layer = host.querySelector<HTMLElement>(".stages-region-layer");
-  if (layer) replayModalPop(layer);
-  bindStagesRegionSheet();
+  const sheet = selected && !stageEntryId ? renderStagesRegionSheet(selected) : "";
+  const prep = stageEntryId ? renderStageEntryModal() : "";
+  host.innerHTML = `${sheet}${prep}`;
+  const layer = host.querySelector<HTMLElement>(
+    stageEntryId ? ".stage-prep-layer" : ".stages-region-layer",
+  );
+  if (animate) {
+    if (layer) replayModalPop(layer);
+  } else {
+    suppressStageModalAnim(host);
+  }
+  if (selected && !stageEntryId) bindStagesRegionSheet();
+  if (stageEntryId) bindStageEntryModal();
 }
 
 function bindStagesRegionSheet(): void {
@@ -5152,21 +5751,37 @@ function bindStagesRegionSheet(): void {
   host.querySelector("#btn-region-close")?.addEventListener("click", () => {
     stagesRegion = null;
     stageEntryId = null;
+    stagesDropInfoOpen = false;
+    stagesDropSetExpand = false;
     applyStagesRegionOpen();
   });
+
+  host.querySelector("#btn-region-drop-info")?.addEventListener("click", () => {
+    stagesDropInfoOpen = !stagesDropInfoOpen;
+    if (stagesDropInfoOpen) {
+      stagesDropTab = "scroll";
+      stagesDropSetExpand = false;
+      applyStageDropInfo({ animate: true });
+    } else {
+      stagesDropSetExpand = false;
+      applyStageDropInfo();
+    }
+  });
+
+  if (stagesDropInfoOpen) bindStageDropInfoControls(host);
 
   host.querySelector("#region-diff-select")?.addEventListener("change", (ev) => {
     const v = (ev.target as HTMLSelectElement).value as StageDifficulty;
     if (v === "normal" || v === "hard" || v === "hell") {
       stageEntryDiff = v;
-      applyStagesRegionOpen();
+      applyStagesRegionOpen({ animate: false });
     }
   });
 
   host.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const stage = getStage(btn.dataset.stage!);
-      if (stage) startBattle(stage, stageEntryDiff);
+      if (stage) openStagePrep(stage);
     });
   });
 
@@ -5185,7 +5800,7 @@ function bindStagesRegionSheet(): void {
       save = r.save;
       persist();
       flash(r.message);
-      applyStagesRegionOpen();
+      applyStagesRegionOpen({ animate: false });
     });
   });
 
@@ -5194,8 +5809,151 @@ function bindStagesRegionSheet(): void {
     save = r.save;
     persist();
     flash(r.message);
-    applyStagesRegionOpen();
+    applyStagesRegionOpen({ animate: false });
   });
+}
+
+function regionPrimaryDropSet(region: StagesRegion): (typeof SYMBOL_SETS)[number] | null {
+  const counts = new Map<string, number>();
+  for (const s of region.stages) {
+    counts.set(s.dropSetId, (counts.get(s.dropSetId) ?? 0) + 1);
+  }
+  let bestId = region.stages[0]?.dropSetId;
+  let bestN = 0;
+  for (const [id, n] of counts) {
+    if (n > bestN) {
+      bestId = id as typeof bestId;
+      bestN = n;
+    }
+  }
+  if (!bestId) return null;
+  return SYMBOL_SETS.find((x) => x.id === bestId) ?? null;
+}
+
+function stageDropInfoRow(opts: {
+  icon: string;
+  name: string;
+  sub?: string;
+}): string {
+  return `<div class="stage-drop-info-row">
+    <span class="stage-drop-info-ico" aria-hidden="true"><img src="${opts.icon}" width="44" height="44" alt="" draggable="false" /></span>
+    <span class="stage-drop-info-copy">
+      <strong>${opts.name}</strong>
+      ${opts.sub ? `<small>${opts.sub}</small>` : ""}
+    </span>
+  </div>`;
+}
+
+function renderStageDropInfoModal(region: StagesRegion): string {
+  if (!stagesDropInfoOpen) return "";
+  const set = regionPrimaryDropSet(region);
+  const setBonus = set
+    ? t("ui.stageDropSetBonus", { n: set.pieces, effect: set.effectKo })
+    : t("ui.setBonusNone");
+  const setIco = set ? symbolSetArtSrc(set.id) : symbolEmptySlotArtSrc(1);
+  const setName = set?.nameKo ?? "—";
+  const pieceExpand = stagesDropSetExpand && set
+    ? `<div class="stage-drop-info-pieces">${[1, 2, 3, 4, 5, 6]
+        .map(
+          (slot) =>
+            `<span class="stage-drop-info-piece" title="${t("ui.stageDropPiece", { name: set.nameKo, slot })}">
+              <img src="${symbolArtSrc(set.id, slot)}" width="36" height="36" alt="" draggable="false" />
+              <small>${set.nameKo}${slot}</small>
+            </span>`,
+        )
+        .join("")}</div>`
+    : "";
+
+  const craftLabel =
+    stageEntryDiff === "hell" ? t("ui.stageDropCraftHell") : t("ui.stageDropCraft");
+  const scrollRows = [
+    stageDropInfoRow({
+      icon: scrollArtSrc("normal"),
+      name: t("ui.stageDropScrollNormal"),
+    }),
+  ];
+  if (stageEntryDiff === "hard" || stageEntryDiff === "hell") {
+    scrollRows.push(
+      stageDropInfoRow({
+        icon: scrollArtSrc("premium"),
+        name: t("ui.stageDropScrollPremium"),
+      }),
+    );
+  }
+
+  const craftRows = [
+    stageDropInfoRow({
+      icon: "/art/ui/res/crystal.svg",
+      name: t("ui.stageDropCrystal"),
+    }),
+  ];
+  if (region.stages.some((s) => (s.jinmunReward ?? 0) > 0)) {
+    craftRows.push(
+      stageDropInfoRow({
+        icon: "/art/ui/res/jinmun.svg",
+        name: t("ui.stageDropJinmun"),
+      }),
+    );
+  }
+  if (
+    region.equipWeekly ||
+    region.stages.some((s) => s.mode === "equip" || (s.gearDropChance ?? 0) > 0)
+  ) {
+    craftRows.push(
+      stageDropInfoRow({
+        icon: "/art/ui/symbol/gear.svg",
+        name: t("ui.stageDropGear"),
+      }),
+    );
+  }
+  if (stageEntryDiff === "hell") {
+    craftRows.push(
+      stageDropInfoRow({
+        icon: scrollArtSrc("premium"),
+        name: t("ui.stageDropScrollPremium"),
+      }),
+    );
+  }
+
+  const bodyRows =
+    stagesDropTab === "craft" ? craftRows.join("") : scrollRows.join("");
+
+  return `<div class="stage-drop-info-layer" id="stage-drop-info-layer" role="presentation">
+    <button type="button" class="stage-drop-info-backdrop" id="btn-stage-drop-info-close" aria-label="${t("ui.94b7dba159")}"></button>
+    <div class="stage-drop-info-modal" role="dialog" aria-modal="true" aria-labelledby="stage-drop-info-title">
+      ${modalCloseX(t("ui.94b7dba159"), "btn-stage-drop-info-close")}
+      <h2 class="sr-only" id="stage-drop-info-title">${t("ui.stageDropInfo")}</h2>
+
+      <section class="stage-drop-info-block">
+        <div class="stage-drop-info-tabs stage-drop-info-tabs--solo">
+          <span class="stage-drop-info-tab is-on">${t("ui.60fbf51b13")}</span>
+        </div>
+        <div class="stage-drop-info-panel">
+          <div class="stage-drop-info-row stage-drop-info-row--set">
+            <span class="stage-drop-info-ico" aria-hidden="true"><img src="${setIco}" width="44" height="44" alt="" draggable="false" /></span>
+            <span class="stage-drop-info-copy">
+              <strong>${setName}</strong>
+              <small>${setBonus}</small>
+            </span>
+            <button type="button" class="stage-drop-info-more${stagesDropSetExpand ? " is-on" : ""}" id="btn-stage-drop-set-more" aria-expanded="${stagesDropSetExpand ? "true" : "false"}" aria-label="${t("ui.stageDropSetMore")}" title="${t("ui.stageDropSetMore")}">
+              <span aria-hidden="true">${MIDDOT}${MIDDOT}${MIDDOT}</span>
+            </button>
+          </div>
+          ${pieceExpand}
+        </div>
+      </section>
+
+      <section class="stage-drop-info-block">
+        <div class="stage-drop-info-tabs" role="tablist" aria-label="${t("ui.stageDropInfo")}">
+          <button type="button" class="stage-drop-info-tab${stagesDropTab === "scroll" ? " is-on" : ""}" role="tab" aria-selected="${stagesDropTab === "scroll" ? "true" : "false"}" data-drop-tab="scroll">${t("ui.fa73f3a42f")}</button>
+          <button type="button" class="stage-drop-info-tab${stagesDropTab === "craft" ? " is-on" : ""}" role="tab" aria-selected="${stagesDropTab === "craft" ? "true" : "false"}" data-drop-tab="craft">${craftLabel}</button>
+        </div>
+        <div class="stage-drop-info-panel" role="tabpanel">
+          ${bodyRows}
+        </div>
+      </section>
+    </div>
+  </div>`;
 }
 
 function renderStagesRegionSheet(region: StagesRegion): string {
@@ -5259,26 +6017,27 @@ function renderStagesRegionSheet(region: StagesRegion): string {
 
   return `<div class="stages-region-layer" id="stages-region-layer">
     <button type="button" class="stages-region-backdrop" id="btn-region-close" aria-label="${t('ui.94b7dba159')}"></button>
-    <div class="stages-region-sheet stages-region-sheet--card stages-region-sheet--${region.tone}" role="dialog" aria-modal="true" aria-labelledby="stages-region-title">
+    <div class="stages-region-sheet stages-region-sheet--card stages-region-sheet--sortie stages-region-sheet--${region.tone}" data-diff="${stageEntryDiff}" role="dialog" aria-modal="true" aria-labelledby="stages-region-title">
       ${modalCloseX(t("ui.94b7dba159"), "btn-region-close")}
-      <header class="stages-region-head">
-        <div class="stages-region-head-main">
-          <p class="stages-region-kicker">${region.blurb}</p>
-          <div class="stages-region-title-row">
-            <h2 class="stages-region-title" id="stages-region-title">${regionTitle}</h2>
-            <label class="stages-region-diff-inline">
-              <span class="sr-only">${t('ui.94b7dba159')}</span>
-              <select class="stages-region-diff-select" id="region-diff-select" aria-label="${t('ui.1a3b3223e1')}" title="${diffMeta.blurb}">
-                ${diffOptions}
-              </select>
-            </label>
-          </div>
-          <p class="stages-meta">${t('ui.330ccf22cb')} ${prog.cleared}/${prog.total}${prog.unlocked ? "" : ` ${MIDDOT} ${t('ui.956f2f4243')}`} ${MIDDOT} ${t('ui.7dcdb553c8')} ${energyNow}/${energyMax}</p>
+      <header class="stages-region-head stages-region-head--sortie">
+        <div class="stages-region-banner">
+          <h2 class="stages-region-title" id="stages-region-title">${regionTitle}</h2>
         </div>
+        <div class="stages-region-tools">
+          <button type="button" class="stages-region-drop-btn${stagesDropInfoOpen ? " is-on" : ""}" id="btn-region-drop-info" aria-pressed="${stagesDropInfoOpen ? "true" : "false"}">${t("ui.stageDropInfo")}</button>
+          <label class="stages-region-diff-inline">
+            <span class="stages-region-diff-label">${t("ui.stageDiff")}</span>
+            <select class="stages-region-diff-select stages-region-diff-select--${stageEntryDiff}" id="region-diff-select" aria-label="${t('ui.1a3b3223e1')}" title="${diffMeta.blurb}">
+              ${diffOptions}
+            </select>
+          </label>
+        </div>
+        <p class="stages-meta">${t('ui.330ccf22cb')} ${prog.cleared}/${prog.total}${prog.unlocked ? "" : ` ${MIDDOT} ${t('ui.956f2f4243')}`} ${MIDDOT} ${t('ui.7dcdb553c8')} ${energyNow}/${energyMax}</p>
       </header>
       ${extras}
       <div class="stage-list stage-list--expedition">${stageButtons(region.stages, { equipWeekly: region.equipWeekly })}</div>
     </div>
+    ${renderStageDropInfoModal(region)}
   </div>`;
 }
 function renderStages(): string {
@@ -7346,7 +8105,7 @@ function bind(): void {
     if (btn.closest("#stages-region-host")) return;
     btn.addEventListener("click", () => {
       const stage = getStage(btn.dataset.stage!);
-      if (stage) startBattle(stage, stageEntryDiff);
+      if (stage) openStagePrep(stage);
     });
   });
 
@@ -7360,7 +8119,12 @@ function bind(): void {
         flash(t("ui.b72f5a4752"));
         return;
       }
-      stagesRegion = stagesRegion === id ? null : id;
+      const next = stagesRegion === id ? null : id;
+      if (next !== stagesRegion) {
+        stagesDropInfoOpen = false;
+        stagesDropSetExpand = false;
+      }
+      stagesRegion = next;
       applyStagesRegionOpen();
     });
   });
@@ -7471,11 +8235,11 @@ function bind(): void {
   } else if (view === "enhance") {
     destroyAllSpine();
     bindMonPreviewTurntable(app);
+    // Only dematte opaque WebP mattes — Spine still PNGs are already transparent.
     dematteArtInTree(
       app,
-      "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.mon-skill-feed-img",
+      "img.mon-preview-img:not([data-still-front]), img.mon-inspect-art-img, img.mon-slot-img, img.mon-skill-feed-img",
     );
-    void mountBookPreviewSpine(app);
   } else if (view !== "result") {
     destroyAllSpine();
   }

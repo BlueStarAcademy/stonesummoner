@@ -1,26 +1,32 @@
-/** Drag-to-orbit monster preview (CSS rotateY turntable). */
+/** Drag to flip monster book preview front/back (battle stills or WebP mirror). */
 
 export function bindMonPreviewTurntable(root: ParentNode): void {
   root.querySelectorAll<HTMLElement>("[data-mon-preview]").forEach((el) => {
     if (el.dataset.turntableBound === "1") return;
     el.dataset.turntableBound = "1";
 
-    const spinner = el.querySelector<HTMLElement>(".mon-preview-spin");
-    const facing = el.querySelector<HTMLElement>(".mon-preview-facing");
-    if (!spinner) return;
+    const art = el.querySelector<HTMLElement>(".mon-preview-art");
+    const img = el.querySelector<HTMLImageElement>("img.mon-preview-img");
+    if (!art || !img) return;
 
-    let yaw = Number(el.dataset.yaw ?? "12") || 12;
+    const stillFront = img.dataset.stillFront || "";
+    const stillBack = img.dataset.stillBack || stillFront;
+    let facingBack = false;
     let dragging = false;
     let lastX = 0;
     let pointerId: number | null = null;
+    let dragAccum = 0;
 
     const apply = (): void => {
-      yaw = ((yaw % 360) + 360) % 360;
-      el.dataset.yaw = String(Math.round(yaw));
-      spinner.style.setProperty("--yaw", `${yaw}deg`);
-      const back = yaw > 90 && yaw < 270;
-      el.classList.toggle("is-back", back);
-      if (facing) facing.textContent = back ? "B" : "F";
+      el.classList.toggle("is-back", facingBack);
+      el.dataset.facing = facingBack ? "back" : "front";
+      if (stillFront) {
+        const next = facingBack ? stillBack || stillFront : stillFront;
+        if (img.getAttribute("src") !== next) img.src = next;
+        art.classList.remove("is-mirrored");
+      } else {
+        art.classList.toggle("is-mirrored", facingBack);
+      }
     };
 
     apply();
@@ -29,6 +35,7 @@ export function bindMonPreviewTurntable(root: ParentNode): void {
       if (ev.button !== 0 && ev.pointerType === "mouse") return;
       dragging = true;
       lastX = ev.clientX;
+      dragAccum = 0;
       pointerId = ev.pointerId;
       el.classList.add("is-dragging");
       try {
@@ -43,14 +50,19 @@ export function bindMonPreviewTurntable(root: ParentNode): void {
       if (!dragging || (pointerId != null && ev.pointerId !== pointerId)) return;
       const dx = ev.clientX - lastX;
       lastX = ev.clientX;
-      yaw += dx * 0.55;
-      apply();
+      dragAccum += dx;
+      if (Math.abs(dragAccum) >= 48) {
+        facingBack = !facingBack;
+        dragAccum = 0;
+        apply();
+      }
     };
 
     const onUp = (ev: PointerEvent): void => {
       if (pointerId != null && ev.pointerId !== pointerId) return;
       dragging = false;
       pointerId = null;
+      dragAccum = 0;
       el.classList.remove("is-dragging");
     };
 

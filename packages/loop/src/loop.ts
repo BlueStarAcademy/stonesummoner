@@ -189,6 +189,132 @@ export interface ElementSummonerProfile {
   awaken: number;
 }
 
+/** Saved favorite deck: summoner element + up to 4 monster uids. */
+export interface PartyPreset {
+  summoner: SummonerElement;
+  party: string[];
+}
+
+export const PARTY_PRESET_COUNT = 5;
+
+export function emptyPartyPreset(
+  summoner: SummonerElement = "light",
+): PartyPreset {
+  return { summoner, party: [] };
+}
+
+function isSummonerElement(v: unknown): v is SummonerElement {
+  return (
+    typeof v === "string" &&
+    (SUMMONER_ELEMENTS as readonly string[]).includes(v)
+  );
+}
+
+/** Normalize / seed 5 deck presets; slot 0 mirrors current party when missing. */
+export function normalizePartyPresets(
+  save: PlayerSave,
+  raw?: PartyPreset[] | null,
+): PartyPreset[] {
+  const active = isSummonerElement(save.activeSummoner)
+    ? save.activeSummoner
+    : "light";
+  const rosterIds = new Set(save.roster.map((m) => m.uid));
+  const out: PartyPreset[] = [];
+  for (let i = 0; i < PARTY_PRESET_COUNT; i++) {
+    const src = Array.isArray(raw) ? raw[i] : undefined;
+    if (!src || typeof src !== "object") {
+      out.push(
+        i === 0
+          ? {
+              summoner: active,
+              party: [...(save.party ?? [])]
+                .filter((uid) => rosterIds.has(uid))
+                .slice(0, 4),
+            }
+          : emptyPartyPreset(active),
+      );
+      continue;
+    }
+    const el = isSummonerElement(src.summoner) ? src.summoner : active;
+    const seen = new Set<string>();
+    const party: string[] = [];
+    for (const uid of Array.isArray(src.party) ? src.party : []) {
+      if (typeof uid !== "string" || !rosterIds.has(uid) || seen.has(uid)) {
+        continue;
+      }
+      seen.add(uid);
+      party.push(uid);
+      if (party.length >= 4) break;
+    }
+    out.push({ summoner: el, party });
+  }
+  return out;
+}
+
+export function clampPartyPresetIndex(index: unknown): number {
+  const n = typeof index === "number" ? Math.floor(index) : 0;
+  if (n < 0) return 0;
+  if (n >= PARTY_PRESET_COUNT) return PARTY_PRESET_COUNT - 1;
+  return n;
+}
+
+/** Write current (or override) lineup into a favorite slot. */
+export function runSavePartyPreset(
+  save: PlayerSave,
+  index: number,
+  opts?: { summoner?: SummonerElement; party?: string[] },
+): LoopStepResult {
+  const i = clampPartyPresetIndex(index);
+  const summoner = isSummonerElement(opts?.summoner)
+    ? opts!.summoner!
+    : isSummonerElement(save.activeSummoner)
+      ? save.activeSummoner
+      : "light";
+  const rosterIds = new Set(save.roster.map((m) => m.uid));
+  const srcParty = opts?.party ?? save.party ?? [];
+  const seen = new Set<string>();
+  const party: string[] = [];
+  for (const uid of srcParty) {
+    if (typeof uid !== "string" || !rosterIds.has(uid) || seen.has(uid)) {
+      continue;
+    }
+    seen.add(uid);
+    party.push(uid);
+    if (party.length >= 4) break;
+  }
+  const presets = normalizePartyPresets(save, save.partyPresets);
+  presets[i] = { summoner, party };
+  return {
+    save: {
+      ...save,
+      partyPresets: presets,
+      activePartyPreset: i,
+    },
+    message: `덱 슬롯 ${i + 1} 저장`,
+  };
+}
+
+/** Load a favorite slot into party + active summoner. */
+export function runLoadPartyPreset(
+  save: PlayerSave,
+  index: number,
+): LoopStepResult {
+  const i = clampPartyPresetIndex(index);
+  const presets = normalizePartyPresets(save, save.partyPresets);
+  const preset = presets[i] ?? emptyPartyPreset();
+  const next = syncSummonerMirrors({
+    ...save,
+    party: [...preset.party],
+    activeSummoner: preset.summoner,
+    partyPresets: presets,
+    activePartyPreset: i,
+  });
+  return {
+    save: next,
+    message: `덱 슬롯 ${i + 1} 불러옴`,
+  };
+}
+
 export const SUMMONER_ELEMENT_LABEL: Record<SummonerElement, string> = {
   fire: "화염",
   water: "심해",
@@ -297,6 +423,10 @@ export interface PlayerSave {
   roster: OwnedMonster[];
   /** Up to 4 owned monster uids for battle. */
   party: string[];
+  /** Favorite deck slots (summoner + party), length 5. */
+  partyPresets: PartyPreset[];
+  /** Active favorite deck index 0..4. */
+  activePartyPreset: number;
   /** 일반 소환서. */
   scrolls: number;
   /** 고급 소환서. */
@@ -592,6 +722,14 @@ export function createNewSave(now = Date.now()): PlayerSave {
     clearedStages: [],
     roster,
     party,
+    partyPresets: [
+      { summoner: "light" as SummonerElement, party: [...party] },
+      emptyPartyPreset("light"),
+      emptyPartyPreset("light"),
+      emptyPartyPreset("light"),
+      emptyPartyPreset("light"),
+    ],
+    activePartyPreset: 0,
     scrolls,
     scrollsPremium,
     scrollsMystic,

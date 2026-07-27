@@ -43,7 +43,7 @@
 | 2 | 용맹 | Fatal |
 | 3 | 침투 | Rage |
 | 4 | 행마 | Swift |
-| 5 | 군힘 | Guard |
+| 5 | 굳힘 | Guard |
 | 6 | 연결 | Endure |
 | 7 | 보강 | Shield |
 | 8 | 환격 | Revenge |

@@ -66,8 +66,7 @@ function ensurePixiCss(): void {
       display: block;
       background: transparent !important;
     }
-    .battle-unit-art.has-spine > .battle-unit-img,
-    .mon-preview-art.has-spine > .mon-preview-img {
+    .battle-unit-art.has-spine > .battle-unit-img {
       opacity: 0 !important;
     }
   `;
@@ -337,17 +336,24 @@ export async function mountBattleSpines(root: ParentNode): Promise<void> {
   );
 }
 
-/** Mount Spine on monster-book preview turntable. */
+/** Mount Spine on monster-book preview (same packs/skins as battle). */
 export async function mountBookPreviewSpine(root: ParentNode): Promise<void> {
   const preview = root.querySelector<HTMLElement>("[data-mon-preview]");
   if (!preview) return;
   const art = preview.querySelector<HTMLElement>(".mon-preview-art");
   if (!art) return;
-  const catalog = preview.dataset.monPreview || "";
+  const catalog = preview.dataset.monPreview || art.dataset.spineBook || "";
   if (!catalog || !resolveSpinePackId(catalog)) return;
-  await mountSpineInHost(
+  const facing =
+    preview.dataset.facing === "back" || preview.classList.contains("is-back")
+      ? "back"
+      : "front";
+  const ctrl = await mountSpineInHost(
     art,
-    { catalogId: catalog, facing: "front", scale: 1.15 },
+    { catalogId: catalog, facing, scale: 1.35 },
     `book:${catalog}`,
   );
+  if (ctrl) {
+    art.classList.remove("is-mirrored");
+  }
 }

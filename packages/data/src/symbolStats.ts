@@ -41,12 +41,11 @@ export function applySymbolsToStats(
   const gunhimSets = Math.floor((counts.gunhim ?? 0) / 2);
   for (let i = 0; i < gunhimSets; i++) stats.def = Math.round(stats.def * 1.15);
   const mussangSets = Math.floor((counts.mussang ?? 0) / 2);
-  stats.critRate += mussangSets * 12;
-  if ((counts.chimtu ?? 0) >= 4) stats.critDmg = Math.round(stats.critDmg * 1.4);
-  const bogangSets = Math.floor((counts.bogang ?? 0) / 2);
-  for (let i = 0; i < bogangSets; i++) stats.hp = Math.round(stats.hp * 1.08);
+  stats.critRate += mussangSets * 10;
+  if ((counts.chimtu ?? 0) >= 4) stats.critDmg = Math.round(stats.critDmg * 1.35);
+  // bogang (Shield): battle-start ally shield — not a flat stat; see effectKo
   const jipjungSets = Math.floor((counts.jipjung ?? 0) / 2);
-  stats.critRate += jipjungSets * 8;
+  stats.accuracy += jipjungSets * 20;
 
   return stats;
 }

@@ -40,8 +40,8 @@ const BACK_SRC = argValue("--back") || defaultAsset("fire_fang_back_raw.png");
 const TARGET_H = 512;
 const PAD = 4;
 
-/** Soft-edge near-black fringe only (do not punch charcoal body). */
-function dematteFringe(rgba, w, h) {
+/** Punch checkerboard / near-black mattes to alpha (keep charcoal body + fire chroma). */
+function dematteFringe(rgba, _w, _h) {
   const d = Buffer.from(rgba);
   for (let i = 0; i < d.length; i += 4) {
     const a = d[i + 3];
@@ -49,11 +49,24 @@ function dematteFringe(rgba, w, h) {
     const r = d[i];
     const g = d[i + 1];
     const b = d[i + 2];
-    // Only punch pure black / checker matte corners — keep dark rock (has color variance).
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const chroma = max - min;
+    const lum = (r + g + b) / 3;
+    // Baked gray/white checkerboard (fake transparency)
+    if (lum >= 225 && chroma <= 14) {
+      d[i + 3] = 0;
+      continue;
+    }
+    if (lum >= 200 && chroma <= 18) {
+      const t = Math.max(0, Math.min(1, (lum - 200) / 40));
+      d[i + 3] = Math.round(a * (1 - t * 0.9));
+      continue;
+    }
+    // Pure black matte — keep dark rock (has color variance).
     if (r <= 6 && g <= 6 && b <= 6 && a > 200) {
       d[i + 3] = 0;
     } else if (r < 20 && g < 20 && b < 20 && Math.abs(r - g) < 3 && Math.abs(g - b) < 3) {
-      const lum = (r + g + b) / 3;
       d[i + 3] = Math.round(a * (lum / 20));
     }
   }
@@ -523,11 +536,24 @@ async function main() {
     "utf8",
   );
 
-  // Source mirrors for rebuild
+  // Transparent stills for book UI (same art as battle skins; no checker matte)
   const srcDir = path.join(OUT_DIR, "src");
   fs.mkdirSync(srcDir, { recursive: true });
-  fs.copyFileSync(FRONT_SRC, path.join(srcDir, "front.png"));
-  fs.copyFileSync(BACK_SRC, path.join(srcDir, "back.png"));
+  for (const [srcPath, outName] of [
+    [FRONT_SRC, "front.png"],
+    [BACK_SRC, "back.png"],
+  ]) {
+    const { data, info } = await sharp(srcPath)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const punched = dematteFringe(data, info.width, info.height);
+    await sharp(punched, {
+      raw: { width: info.width, height: info.height, channels: 4 },
+    })
+      .png({ compressionLevel: 9 })
+      .toFile(path.join(srcDir, outName));
+  }
 
   console.log("[fire_fang] wrote", OUT_DIR);
   console.log(

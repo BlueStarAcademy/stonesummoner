@@ -30,6 +30,9 @@ export interface SpinePack {
    * fake facing with scaleX mirror alone.
    */
   skins?: { front?: string; back?: string };
+  /** Transparent full-body stills (same art as battle Spine skins) for book UI. */
+  stillFrontUrl?: string;
+  stillBackUrl?: string;
 }
 
 /** Fantasy pilot pack — assets under public/art/spine/fire_fang/ (see brief). */
@@ -51,6 +54,8 @@ export const SPINE_PACKS: Record<string, SpinePack> = {
     scale: 0.36,
     offsetY: 4,
     skins: { front: "front", back: "back" },
+    stillFrontUrl: "/art/spine/fire_fang/src/front.png",
+    stillBackUrl: "/art/spine/fire_fang/src/back.png",
   },
 };
 
@@ -68,4 +73,17 @@ export function resolveSpinePackId(
 
 export function getSpinePack(packId: string): SpinePack | null {
   return SPINE_PACKS[packId] ?? null;
+}
+
+/** Battle-character still for monster book / UI (transparent; falls back to null). */
+export function getBattleStillSrc(
+  monsterId: string | undefined | null,
+  facing: "front" | "back" = "front",
+): string | null {
+  const packId = resolveSpinePackId(monsterId);
+  if (!packId) return null;
+  const pack = getSpinePack(packId);
+  if (!pack) return null;
+  if (facing === "back") return pack.stillBackUrl ?? pack.stillFrontUrl ?? null;
+  return pack.stillFrontUrl ?? null;
 }

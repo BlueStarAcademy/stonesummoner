@@ -235,7 +235,7 @@ export const DEPTH_STAGES: StageDef[] = [
   },
   {
     id: "depth_gunhim",
-    nameKo: "심층 · 군힘",
+    nameKo: "심층 · 굳힘",
     map: 90,
     stage: 4,
     boardSize: 9,
