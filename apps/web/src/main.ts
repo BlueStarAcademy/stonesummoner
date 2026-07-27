@@ -208,7 +208,7 @@ type AuthPrefs = {
 };
 
 function defaultAuthPrefs(): AuthPrefs {
-  return { saveId: true, autoLogin: true, savedEmail: "" };
+  return { saveId: true, autoLogin: false, savedEmail: "" };
 }
 
 function readAuthPrefs(): AuthPrefs {
@@ -218,7 +218,7 @@ function readAuthPrefs(): AuthPrefs {
     const parsed = JSON.parse(raw) as Partial<AuthPrefs>;
     return {
       saveId: parsed.saveId !== false,
-      autoLogin: parsed.autoLogin !== false,
+      autoLogin: parsed.autoLogin === true,
       savedEmail: typeof parsed.savedEmail === "string" ? parsed.savedEmail : "",
     };
   } catch {
@@ -861,10 +861,7 @@ async function enterWithUser(
   await hydrateSession(user, opts);
   authUi.pane = "gate";
   const enterGame =
-    opts?.enterGame ??
-    (opts?.demo === true ||
-      opts?.fresh === true ||
-      readAuthPrefs().autoLogin);
+    opts?.enterGame ?? (opts?.demo === true || opts?.fresh === true);
   if (enterGame) {
     view = "home";
     flash(
@@ -1857,7 +1854,6 @@ function renderAuth(): string {
         <label>${t("ui.81973897c7")}<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
         <div class="auth-checks">
           <label class="auth-check"><input type="checkbox" name="saveId" ${prefs.saveId ? "checked" : ""} /> ${t("ui.929b21bf23")}</label>
-          <label class="auth-check"><input type="checkbox" name="autoLogin" ${prefs.autoLogin ? "checked" : ""} /> ${t("ui.217211959e")}</label>
         </div>
         <button type="submit" class="auth-btn-primary">${t("ui.e225a6fd75")}</button>
       </form>
@@ -5200,14 +5196,13 @@ function bindAuth(): void {
     const email = String(fd.get("email") ?? "").trim();
     const password = String(fd.get("password") ?? "");
     const saveId = fd.get("saveId") === "on";
-    const autoLogin = fd.get("autoLogin") === "on";
     const path =
       authUi.pane === "register" ? "/api/auth/register" : "/api/auth/login";
 
     if (authUi.pane === "login") {
       writeAuthPrefs({
         saveId,
-        autoLogin,
+        autoLogin: false,
         savedEmail: saveId ? email : "",
       });
     }
@@ -5235,8 +5230,7 @@ function bindAuth(): void {
           render();
           return;
         }
-        const enterGame =
-          authUi.pane === "register" ? true : readAuthPrefs().autoLogin;
+        const enterGame = authUi.pane === "register";
         await enterWithUser(body.user, { enterGame });
       } catch {
     flash(t('ui.b72f5a4752'));
@@ -7003,11 +6997,6 @@ async function boot(): Promise<void> {
   const me = await apiJson<{ user: SessionUser }>("/api/me");
   bootReady = true;
   if (me?.user) {
-    const prefs = readAuthPrefs();
-    if (prefs.autoLogin) {
-      await enterWithUser(me.user, { enterGame: true });
-      return;
-    }
     await hydrateSession(me.user);
     authUi.pane = "gate";
     view = "auth";
