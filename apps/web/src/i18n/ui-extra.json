@@ -1991,5 +1991,149 @@
   "ui.stageDropPiece": {
     "ko": "{name}{slot}",
     "en": "{name}{slot}"
+  },
+  "ui.codex": {
+    "ko": "도감",
+    "en": "Codex"
+  },
+  "ui.codexTitle": {
+    "ko": "도감",
+    "en": "Codex"
+  },
+  "ui.codexTabMonsters": {
+    "ko": "소환수",
+    "en": "Monsters"
+  },
+  "ui.codexTabSummoners": {
+    "ko": "소환사",
+    "en": "Summoners"
+  },
+  "ui.codexFilterAll": {
+    "ko": "전체",
+    "en": "All"
+  },
+  "ui.codexOwnedCount": {
+    "ko": "보유 {n}/{total}",
+    "en": "Owned {n}/{total}"
+  },
+  "ui.codexOwned": {
+    "ko": "보유",
+    "en": "Owned"
+  },
+  "ui.codexLocked": {
+    "ko": "미보유",
+    "en": "Locked"
+  },
+  "ui.codexClose": {
+    "ko": "닫기",
+    "en": "Close"
+  },
+  "ui.codexStarN": {
+    "ko": "{n}성",
+    "en": "{n}★"
+  },
+  "ui.codexDetailSkills": {
+    "ko": "스킬",
+    "en": "Skills"
+  },
+  "ui.sumBookTabGear": {
+    "ko": "장비",
+    "en": "Gear"
+  },
+  "ui.sumBookLeader": {
+    "ko": "리더 스킬",
+    "en": "Leader skill"
+  },
+  "ui.sumBookMagicBranch": {
+    "ko": "분기 {branch}",
+    "en": "Branch {branch}"
+  },
+  "ui.sumBookMagicBranchNone": {
+    "ko": "분기 미선택",
+    "en": "No branch yet"
+  },
+  "ui.sumBookEnhance": {
+    "ko": "강화",
+    "en": "Enhance"
+  },
+  "ui.sumBookAwakenBtn": {
+    "ko": "각성 +{n}",
+    "en": "Awaken +{n}"
+  },
+  "ui.sumBookAwakenMax": {
+    "ko": "각성 MAX",
+    "en": "Awaken MAX"
+  },
+  "ui.sumBookAwakenNeedLv": {
+    "ko": "소환사 Lv.{n}+ 필요",
+    "en": "Needs summoner Lv.{n}+"
+  },
+  "ui.sumBookAwakenCost": {
+    "ko": "골드 {mana} · 크리스탈 {crystal}",
+    "en": "Gold {mana} · Crystal {crystal}"
+  },
+  "ui.sumBookLeaderAtk": {
+    "ko": "리더 공격 +{pct}%",
+    "en": "Leader ATK +{pct}%"
+  },
+  "ui.sumBookGearBag": {
+    "ko": "장비 가방 ({n}/{max})",
+    "en": "Gear bag ({n}/{max})"
+  },
+  "ui.sumBookGearEmpty": {
+    "ko": "가방이 비어 있습니다",
+    "en": "Bag is empty"
+  },
+  "ui.sumBookSetAffix": {
+    "ko": "세트 부여 · 골드 {n}",
+    "en": "Affix set · Gold {n}"
+  },
+  "ui.sumBookNoSets": {
+    "ko": "세트 조각 없음",
+    "en": "No set pieces"
+  },
+  "ui.sumBookEquip": {
+    "ko": "장착",
+    "en": "Equip"
+  },
+  "ui.sumBookSell": {
+    "ko": "판매",
+    "en": "Sell"
+  },
+  "ui.gearSlotWeapon": {
+    "ko": "무기",
+    "en": "Weapon"
+  },
+  "ui.gearSlotRobe": {
+    "ko": "로브",
+    "en": "Robe"
+  },
+  "ui.gearSlotOrb": {
+    "ko": "마법구",
+    "en": "Orb"
+  },
+  "ui.gearSlotAccessory": {
+    "ko": "장신구",
+    "en": "Accessory"
+  },
+  "ui.gearSlotCloak": {
+    "ko": "망토",
+    "en": "Cloak"
+  },
+  "ui.gearSlotRing": {
+    "ko": "반지",
+    "en": "Ring"
+  },
+  "ui.gearEnhanceCost": {
+    "ko": "강화 골드 {mana}",
+    "en": "Enhance gold {mana}"
+  },
+  "ui.gearEnhanceCostCrystal": {
+    "ko": "강화 골드 {mana} · 크리스탈 {crystal}",
+    "en": "Enhance gold {mana} · crystal {crystal}"
+  },
+  "ui.skillLockedHint": {
+    "ko": "{branch} +{n} 필요",
+    "en": "Needs {branch} +{n}"
   }
 }

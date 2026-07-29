@@ -57,4 +57,6 @@ export const Mark = {
   partyEmpty: "\uBE48 \uCE78",
   boardA: "A\uAD6D",
   boardB: "B\uAD6D",
+  /** Codex / illustrated catalog seal */
+  codex: "\u5716",
 } as const;
