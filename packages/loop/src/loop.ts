@@ -28,6 +28,7 @@ import {
   getSkillTreeNode,
   isSkillTreeNodeId,
   canUnlockSkillNode,
+  resolveMonsterId,
   symbolCombatMods,
   MAX_GEAR_BAG,
   normalizeSummonerGear,
@@ -48,6 +49,16 @@ import {
   SYMBOL_GRIND_MANA_COST,
   summarizeSymbolSets,
   ALL_STAGES,
+  emptyMagicProgress,
+  getSummonerKit,
+  getSummonerLeader,
+  magicEnhanceCrystalCost,
+  magicEnhanceManaCost,
+  magicRank,
+  magicSkillPower,
+  MAX_MAGIC_RANK,
+  tryUnlockMagicBranch,
+  unlockedMagicSkills,
   type Element,
   type GearPiece,
   type GearSetId,
@@ -56,6 +67,7 @@ import {
   type SkillTreeNodeId,
   type StageDef,
   type SummonerGear,
+  type SummonerMagicProgress,
   type SymbolInstance,
   normalizeSymbol,
 } from "stonesummoner-data";
@@ -343,6 +355,19 @@ export function createSummonerRoster(
   };
 }
 
+export function createEmptySummonerMagic(): Record<
+  SummonerElement,
+  SummonerMagicProgress
+> {
+  return {
+    fire: emptyMagicProgress(),
+    water: emptyMagicProgress(),
+    wind: emptyMagicProgress(),
+    light: emptyMagicProgress(),
+    dark: emptyMagicProgress(),
+  };
+}
+
 export function accountSummonerLevel(
   summoners: Record<SummonerElement, ElementSummonerProfile>,
 ): number {
@@ -372,11 +397,18 @@ export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
   });
   const activeSummoner = save.activeSummoner ?? "light";
   const active = summoners[activeSummoner] ?? summoners.light;
+  const summonerMagic = {
+    ...(save.summonerMagic ?? createEmptySummonerMagic()),
+  };
+  for (const el of SUMMONER_ELEMENTS) {
+    if (!summonerMagic[el]) summonerMagic[el] = emptyMagicProgress();
+  }
   return {
     ...save,
     summoners,
     activeSummoner,
     summonerAwaken: active.awaken,
+    summonerMagic,
     island: {
       ...save.island,
       summonerLevel: accountSummonerLevel(summoners),
@@ -444,8 +476,10 @@ export interface PlayerSave {
   summoners: Record<SummonerElement, ElementSummonerProfile>;
   /** Currently selected summoner element. */
   activeSummoner: SummonerElement;
-  /** Unlocked summoner skill-tree node ids. */
+  /** Unlocked summoner skill-tree node ids (legacy Phase 1 passives). */
   skillTree: string[];
+  /** Phase 2 per-element magic skill ranks + branch. */
+  summonerMagic: Record<SummonerElement, SummonerMagicProgress>;
   /** Phase 2: arena glory currency. */
   gloryPoints: number;
   /** Phase 2: magic-circle trial tokens. */
@@ -551,6 +585,8 @@ function buildSummonerState(
   weakBoard = false,
   awaken = 0,
   skillTree: string[] = [],
+  magicSkills: SummonerState["magicSkills"] = [],
+  summonerElement?: Element,
 ): SummonerState {
   const g = normalizeSummonerGear(gear);
   const pieces = [g.weapon, g.robe, g.accessory, g.orb, g.cloak, g.ring];
@@ -600,6 +636,8 @@ function buildSummonerState(
     declarePowerBonus: tree.declarePowerBonus,
     cleanAmpBonus: tree.cleanAmpBonus,
     skillTreeUnlocked: [...skillTree],
+    magicSkills: magicSkills ?? [],
+    summonerElement,
   };
 }
 
@@ -761,6 +799,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     summoners,
     activeSummoner: "light",
     skillTree: [],
+    summonerMagic: createEmptySummonerMagic(),
     gloryPoints: 0,
     jinmunStones: 0,
     gloryLevels: {},
@@ -1982,6 +2021,82 @@ export function runUnlockSkillNode(
   };
 }
 
+/** Enhance a Phase 2 summoner magic skill (+0→+5). First +5 unlocks that branch. */
+export function runEnhanceMagicSkill(
+  save: PlayerSave,
+  skillId: string,
+  element?: SummonerElement,
+): LoopStepResult {
+  const synced = syncSummonerMirrors(save);
+  const el = element ?? synced.activeSummoner;
+  const kit = getSummonerKit(el);
+  const allSkills = Object.values(kit.skills);
+  const def = allSkills.find((s) => s.id === skillId);
+  if (!def) {
+    return { save: synced, message: `알 수 없는 마법 스킬: ${skillId}` };
+  }
+  const prog = { ...(synced.summonerMagic[el] ?? emptyMagicProgress()) };
+  prog.ranks = { ...prog.ranks };
+  // Upper skills locked until branch matches
+  if (
+    (def.slot === "A1" || def.slot === "A2") &&
+    prog.branch !== "A"
+  ) {
+    return {
+      save: synced,
+      message: `${def.nameKo} — A 기초를 +${MAX_MAGIC_RANK}까지 강화해 해금`,
+    };
+  }
+  if (
+    (def.slot === "B1" || def.slot === "B2") &&
+    prog.branch !== "B"
+  ) {
+    return {
+      save: synced,
+      message: `${def.nameKo} — B 기초를 +${MAX_MAGIC_RANK}까지 강화해 해금`,
+    };
+  }
+  const cur = magicRank(prog, skillId);
+  if (cur >= MAX_MAGIC_RANK) {
+    return {
+      save: synced,
+      message: `${def.nameKo} 이미 최대(+${MAX_MAGIC_RANK})`,
+    };
+  }
+  const manaCost = magicEnhanceManaCost(cur);
+  const crystalCost = magicEnhanceCrystalCost(cur);
+  if (synced.island.mana < manaCost) {
+    return {
+      save: synced,
+      message: `골드 부족 (필요 ${manaCost}, 보유 ${Math.floor(synced.island.mana)})`,
+    };
+  }
+  if (synced.island.crystal < crystalCost) {
+    return {
+      save: synced,
+      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${synced.island.crystal})`,
+    };
+  }
+  prog.ranks[skillId] = cur + 1;
+  const nextProg = tryUnlockMagicBranch(el, prog);
+  const unlockedNote =
+    !prog.branch && nextProg.branch
+      ? ` · ${nextProg.branch} 상위 스킬 해금`
+      : "";
+  return {
+    save: syncSummonerMirrors({
+      ...synced,
+      summonerMagic: { ...synced.summonerMagic, [el]: nextProg },
+      island: {
+        ...synced.island,
+        mana: synced.island.mana - manaCost,
+        crystal: synced.island.crystal - crystalCost,
+      },
+    }),
+    message: `${SUMMONER_ELEMENT_LABEL[el]} ${def.nameKo} +${cur + 1}${unlockedNote} (−골드 ${manaCost}${crystalCost > 0 ? ` · −크리스탈 ${crystalCost}` : ""})`,
+  };
+}
+
 export function runEnhanceSymbol(
   save: PlayerSave,
   idOrIndex: string,
@@ -2232,7 +2347,12 @@ export function createStageBattle(
     }
   }
   if (allyMonsters.length === 0) {
-    const fallback = ["seokrang_fire", "yeonhwa_water", "cheokhu_wind", "jinmunsa_light"];
+    const fallback = [
+      "cinder_imp_fire",
+      "dew_slime_water",
+      "gale_bat_wind",
+      "seal_apprentice_light",
+    ];
     allyMonsters.push(
       ...fallback.map((id, i) => unitFromMonsterId(id, "ally", `a-${i}`)),
     );
@@ -2246,6 +2366,8 @@ export function createStageBattle(
   const awaken = activeProfile.awaken;
   const treeIds = save?.skillTree ?? [];
   const tree = skillTreeBonuses(treeIds);
+  const magicProg =
+    save?.summonerMagic?.[activeEl] ?? emptyMagicProgress();
   const robeHp =
     (gear.robe.summonerHpBonus ?? 0) +
     (gear.cloak.summonerHpBonus ?? 0) +
@@ -2255,18 +2377,28 @@ export function createStageBattle(
     (gear.robe.summonerDefBonus ?? 0) +
     (gear.cloak.summonerDefBonus ?? 0) +
     gearSetBonuses(gear).summonerDefBonus;
-  const leaderPct =
-    awakenLeaderAtkPct(awaken) +
-    gearLeaderAtkPct(gear) +
-    tree.leaderAtkBonus;
-  if (leaderPct > 0) {
-    for (const u of allyMonsters) {
-      u.stats = {
-        ...u.stats,
-        atk: Math.round(u.stats.atk * (1 + leaderPct)),
-        hp: Math.round(u.stats.hp * (1 + leaderPct * 0.5)),
-      };
-      u.hp = u.stats.hp;
+  const leader = getSummonerLeader(activeEl);
+  const awakenAtk = awakenLeaderAtkPct(awaken);
+  const gearAtk = gearLeaderAtkPct(gear) + tree.leaderAtkBonus;
+  for (const u of allyMonsters) {
+    let atkMul = 1 + awakenAtk + gearAtk + (leader.atkPct ?? 0);
+    if (leader.elementAtkPct && u.element === activeEl) {
+      atkMul += leader.elementAtkPct;
+    }
+    const hpMul = 1 + (leader.hpPct ?? 0) + awakenAtk * 0.5;
+    const spdMul = 1 + (leader.spdPct ?? 0);
+    u.stats = {
+      ...u.stats,
+      atk: Math.round(u.stats.atk * atkMul),
+      hp: Math.round(u.stats.hp * hpMul),
+      spd: Math.round(u.stats.spd * spdMul),
+      critRate: (u.stats.critRate ?? 0) + (leader.critRateFlat ?? 0),
+      critDmg: (u.stats.critDmg ?? 0) + (leader.critDmgFlat ?? 0),
+      accuracy: (u.stats.accuracy ?? 0) + (leader.accuracyFlat ?? 0),
+    };
+    u.hp = u.stats.hp;
+    if (leader.damageTakenMul != null) {
+      u.damageTakenMul = leader.damageTakenMul;
     }
   }
   const allySummonerUnit = makeUnit({
@@ -2297,11 +2429,15 @@ export function createStageBattle(
   });
 
   const banSet = new Set(
-    (opts?.banEnemyIds ?? save?.arenaBanIds ?? []).filter(Boolean),
+    (opts?.banEnemyIds ?? save?.arenaBanIds ?? [])
+      .filter(Boolean)
+      .map((id) => resolveMonsterId(id)),
   );
   let enemyIds = stage.enemyMonsterIds;
   if (stage.mode === "world_arena" && banSet.size > 0) {
-    const filtered = enemyIds.filter((id) => !banSet.has(id));
+    const filtered = enemyIds.filter(
+      (id) => !banSet.has(id) && !banSet.has(resolveMonsterId(id)),
+    );
     enemyIds = filtered.length > 0 ? filtered : enemyIds.slice(0, 1);
   }
 
@@ -2342,17 +2478,46 @@ export function createStageBattle(
 
   const modules = modulesForStage(stage);
   const enemyProfile = enemySummonerProfile(stage);
+  const allyMagic = unlockedMagicSkills(activeEl, magicProg).map((sk) => ({
+    id: sk.id,
+    nameKo: sk.nameKo,
+    manaCostFrac: sk.manaCostFrac,
+    kind: sk.kind,
+    power: magicSkillPower(sk, magicRank(magicProg, sk.id)),
+    turns: sk.turns,
+  }));
+  const enemyEl: Element = "dark";
+  const enemyMagic = unlockedMagicSkills(enemyEl, emptyMagicProgress()).map(
+    (sk) => ({
+      id: sk.id,
+      nameKo: sk.nameKo,
+      manaCostFrac: sk.manaCostFrac,
+      kind: sk.kind,
+      power: magicSkillPower(sk, 0),
+      turns: sk.turns,
+    }),
+  );
 
   return new Battle({
     boardSize: stage.boardSize,
     units: [...allyUnits, ...enemyUnits],
-    allySummoner: buildSummonerState("a-sum", gear, false, awaken, treeIds),
+    allySummoner: buildSummonerState(
+      "a-sum",
+      gear,
+      false,
+      awaken,
+      treeIds,
+      allyMagic,
+      activeEl,
+    ),
     enemySummoner: buildSummonerState(
       "e-sum",
       createStarterGear(),
       enemyProfile.weakBoard,
       Math.min(5, enemyProfile.awaken + Math.floor(diffBonus / 2)),
       enemyProfile.skillTree,
+      enemyMagic,
+      enemyEl,
     ),
     powerGapAmplifyCap: powerGapCap,
     totalWaves,

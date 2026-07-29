@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg_shadow_thief_s3" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#282418"/><stop offset="1" stop-color="#141008"/>
+    </linearGradient>
+    <linearGradient id="a1_shadow_thief_s3" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF4C8"/><stop offset=".45" stop-color="#E8C84A"/><stop offset="1" stop-color="#887818"/>
+    </linearGradient>
+    <linearGradient id="a2_shadow_thief_s3" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF4C8"/><stop offset="1" stop-color="#E8C84A"/>
+    </linearGradient>
+    <linearGradient id="a3_shadow_thief_s3" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8C84A"/><stop offset="1" stop-color="#887818"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg_shadow_thief_s3)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#E8C84A" stroke-opacity=".35" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="24" fill="#E8C84A" fill-opacity=".10"/>
+  
+      <path d="M32 12L40 28L56 30L44 42L48 58L32 48L16 58L20 42L8 30L24 28Z" fill="url(#a1_shadow_thief_s3)" stroke="#D8FFE0" stroke-width="1.2" stroke-linejoin="round"/>
+      <circle cx="32" cy="34" r="6" fill="#081208" stroke="#E8C84A" stroke-width="2"/>
+</svg>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg_dew_slime_s2" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1c1428"/><stop offset="1" stop-color="#0c0814"/>
+    </linearGradient>
+    <linearGradient id="a1_dew_slime_s2" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0D0FF"/><stop offset=".45" stop-color="#8A68D0"/><stop offset="1" stop-color="#402878"/>
+    </linearGradient>
+    <linearGradient id="a2_dew_slime_s2" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0D0FF"/><stop offset="1" stop-color="#8A68D0"/>
+    </linearGradient>
+    <linearGradient id="a3_dew_slime_s2" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8A68D0"/><stop offset="1" stop-color="#402878"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg_dew_slime_s2)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#8A68D0" stroke-opacity=".35" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="24" fill="#8A68D0" fill-opacity=".10"/>
+  
+      <path d="M10 40C18 28 24 28 32 40C40 52 46 52 54 40" stroke="url(#a1_dew_slime_s2)" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M10 30C18 18 24 18 32 30C40 42 46 42 54 30" stroke="#8A68D0" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".7"/>
+      <circle cx="32" cy="22" r="5" fill="#C8F0FF"/>
+      <path d="M32 18V26M28 22H36" stroke="#185888" stroke-width="2" stroke-linecap="round"/>
+</svg>

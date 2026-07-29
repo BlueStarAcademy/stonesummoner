@@ -389,14 +389,21 @@ export class Battle {
           }
         }
         tickSkillCooldowns(this.units);
-        for (const u of this.units) {
-          if ((u.atkBuffTicks ?? 0) > 0) {
-            u.atkBuffTicks = (u.atkBuffTicks ?? 0) - 1;
-            if ((u.atkBuffTicks ?? 0) <= 0) {
-              u.atkBuffTicks = 0;
-              u.atkBuffPct = 0;
+        if ((unit.dotTicks ?? 0) > 0 && (unit.dotSourceAtk ?? 0) > 0) {
+          const dotDmg = Math.round(
+            (unit.dotSourceAtk ?? 0) * (unit.dotAtkCoeff ?? 0),
+          );
+          if (dotDmg > 0 && unit.alive) {
+            unit.hp = Math.max(0, unit.hp - dotDmg);
+            this.log.push(`${unit.name} 지속피해 ${dotDmg}`);
+            if (unit.hp <= 0) {
+              unit.alive = false;
+              this.log.push(`${unit.name} defeated`);
             }
           }
+        }
+        for (const u of this.units) {
+          this.tickStatus(u);
         }
         this.activeUnitId = unit.id;
         this.phase = "await_stone";
@@ -438,7 +445,7 @@ export class Battle {
     );
   }
 
-  private summonerOf(team: TeamId): SummonerState {
+  summonerOf(team: TeamId): SummonerState {
     return team === "ally" ? this.allySummoner : this.enemySummoner;
   }
 
@@ -1136,6 +1143,135 @@ export class Battle {
     return sm.mana >= sm.manaMax;
   }
 
+  canUseMagicSkill(unit: Unit, skillId: string): boolean {
+    if (unit.kind !== "summoner") return false;
+    const sm = this.summonerOf(unit.team);
+    const def = sm.magicSkills?.find((s) => s.id === skillId);
+    if (!def) return false;
+    return sm.mana >= sm.manaMax * def.manaCostFrac;
+  }
+
+  private castMagicSkill(
+    unit: Unit,
+    skillId: string,
+    targetId?: string,
+  ): SkillResult[] {
+    const sm = this.summonerOf(unit.team);
+    const def = sm.magicSkills?.find((s) => s.id === skillId);
+    if (!def) return [];
+    const cost = sm.manaMax * def.manaCostFrac;
+    sm.mana = Math.max(0, sm.mana - cost);
+    const power = def.power * (1 + (sm.skillPowerBonus ?? 0));
+    const results: SkillResult[] = [];
+    this.log.push(`${unit.name} ${def.nameKo}`);
+
+    switch (def.kind) {
+      case "aoe_damage": {
+        const foes = aliveSummons(
+          this.units,
+          unit.team === "ally" ? "enemy" : "ally",
+        );
+        for (const t of foes) {
+          results.push(this.applyHit(unit, t, power, true));
+        }
+        break;
+      }
+      case "single_damage": {
+        const target = this.resolveSingleTarget(unit, targetId);
+        if (target) results.push(this.applyHit(unit, target, power, true));
+        break;
+      }
+      case "ally_buff_atk": {
+        for (const u of aliveSummons(this.units, unit.team)) {
+          this.applyStatBuff(u, "atk", power, def.turns ?? 2);
+        }
+        break;
+      }
+      case "ally_buff_spd": {
+        for (const u of aliveSummons(this.units, unit.team)) {
+          this.applyStatBuff(u, "spd", power, def.turns ?? 2);
+        }
+        break;
+      }
+      case "ally_buff_crit": {
+        for (const u of aliveSummons(this.units, unit.team)) {
+          this.applyStatBuff(u, "critRate", power, def.turns ?? 2);
+        }
+        break;
+      }
+      case "ally_heal": {
+        for (const u of aliveSummons(this.units, unit.team)) {
+          const amount = Math.round(u.stats.hp * power);
+          u.hp = Math.min(u.stats.hp, u.hp + amount);
+          this.log.push(`${u.name} 회복 +${amount}`);
+        }
+        break;
+      }
+      case "ally_shield": {
+        for (const u of aliveSummons(this.units, unit.team)) {
+          const amount = Math.round(u.stats.hp * power);
+          u.shieldHp = (u.shieldHp ?? 0) + amount;
+        }
+        break;
+      }
+      case "enemy_debuff": {
+        for (const t of aliveSummons(
+          this.units,
+          unit.team === "ally" ? "enemy" : "ally",
+        )) {
+          this.applyStatDebuff(t, "atk", power, def.turns ?? 2);
+          this.applyStatDebuff(t, "def", power * 0.8, def.turns ?? 2);
+        }
+        break;
+      }
+      case "amplify": {
+        this.amplify = clampAmplify(
+          Math.max(this.amplify, 1.12) + power,
+          amplifyCapForPhase(this.circle.boardPhase),
+          this.powerGapCap,
+        );
+        break;
+      }
+      case "dual_stone": {
+        this.phase = "await_stone";
+        this.autoStone();
+        if (this.isPhase("await_capture_shop")) {
+          this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
+        }
+        return results;
+      }
+      case "board_clean": {
+        const center = this.pickCleanCenter(unit.team);
+        const removed = this.clearNeighborhood(center);
+        if (removed > 0) {
+          this.amplify = clampAmplify(
+            this.amplify + Math.min(0.08, removed * 0.015),
+            amplifyCapForPhase(this.circle.boardPhase),
+            this.powerGapCap,
+          );
+        }
+        break;
+      }
+      case "damage_reduce": {
+        for (const u of aliveSummons(this.units, unit.team)) {
+          u.damageTakenMul = Math.min(
+            u.damageTakenMul ?? 1,
+            1 - power,
+          );
+        }
+        break;
+      }
+      default:
+        break;
+    }
+
+    this.skillAmplifyBonus = 0;
+    this.phase = "resolved";
+    this.activeUnitId = null;
+    this.checkFinish();
+    return results;
+  }
+
   /** 증폭선언: half mana (× cost mul) — short Amplify fix (no damage). */
   canUseSummonerDeclare(unit: Unit): boolean {
     if (unit.kind !== "summoner") return false;
@@ -1251,8 +1387,8 @@ export class Battle {
   useSkill(opts?: {
     targetId?: string;
     useSummonerSkill?: boolean;
-    /** open / declare / dual / clean / guard */
-    summonerSkill?: "open" | "declare" | "dual" | "clean" | "guard";
+    /** Legacy open/declare/dual/clean/guard OR Phase 2 magic skill id. */
+    summonerSkill?: string;
     skillIndex?: number;
   }): SkillResult[] {
     if (this.phase !== "await_skill" || !this.activeUnitId) return [];
@@ -1267,6 +1403,15 @@ export class Battle {
     const summonerSkill =
       opts?.summonerSkill ??
       (opts?.useSummonerSkill ? "open" : undefined);
+
+    const smEarly = this.summonerOf(unit.team);
+    if (
+      summonerSkill &&
+      smEarly.magicSkills?.some((s) => s.id === summonerSkill) &&
+      this.canUseMagicSkill(unit, summonerSkill)
+    ) {
+      return this.castMagicSkill(unit, summonerSkill, opts?.targetId);
+    }
 
     if (summonerSkill === "declare" && this.canUseSummonerDeclare(unit)) {
       const sm = this.summonerOf(unit.team);
@@ -1484,40 +1629,280 @@ export class Battle {
           }
         }
       } else if (effect.kind === "heal") {
-        const target =
+        const targets =
           effect.target === "self"
-            ? unit
-            : this.lowestAllyMonster(unit.team) ?? unit;
-        const amount = Math.round(target.stats.hp * effect.coeff);
-        target.hp = Math.min(target.stats.hp, target.hp + amount);
-        this.log.push(`${target.name} 회복 +${amount}`);
-        results.push({
-          attackerId: unit.id,
-          targetId: target.id,
-          damage: -amount,
-          crit: false,
-          usedSummonerSkill: false,
-        });
+            ? [unit]
+            : effect.target === "all_allies"
+              ? aliveSummons(this.units, unit.team)
+              : [this.lowestAllyMonster(unit.team) ?? unit];
+        for (const target of targets) {
+          const amount = Math.round(target.stats.hp * effect.coeff);
+          target.hp = Math.min(target.stats.hp, target.hp + amount);
+          this.log.push(`${target.name} 회복 +${amount}`);
+          results.push({
+            attackerId: unit.id,
+            targetId: target.id,
+            damage: -amount,
+            crit: false,
+            usedSummonerSkill: false,
+          });
+        }
       } else if (effect.kind === "shield") {
-        const amount = Math.round(unit.stats.hp * effect.coeff);
-        unit.shieldHp = (unit.shieldHp ?? 0) + amount;
-        this.log.push(`${unit.name} 실드 +${amount}`);
-        results.push({
-          attackerId: unit.id,
-          targetId: unit.id,
-          damage: 0,
-          crit: false,
-          usedSummonerSkill: false,
-        });
+        const targets =
+          effect.target === "all_allies"
+            ? aliveSummons(this.units, unit.team)
+            : [unit];
+        for (const t of targets) {
+          const amount = Math.round(t.stats.hp * effect.coeff);
+          t.shieldHp = (t.shieldHp ?? 0) + amount;
+          this.log.push(`${t.name} 실드 +${amount}`);
+          results.push({
+            attackerId: unit.id,
+            targetId: t.id,
+            damage: 0,
+            crit: false,
+            usedSummonerSkill: false,
+          });
+        }
       } else if (effect.kind === "mana") {
         const sm = this.summonerOf(unit.team);
         sm.mana = Math.min(sm.manaMax, sm.mana + effect.amount);
         this.log.push(`${unit.name} 마나 +${effect.amount}`);
+      } else if (effect.kind === "buff") {
+        const targets =
+          effect.target === "self"
+            ? [unit]
+            : aliveSummons(this.units, unit.team);
+        for (const t of targets) {
+          this.applyStatBuff(t, effect.axis, effect.amount, effect.turns);
+          this.log.push(
+            `${t.name} ${effect.axis} 버프 +${Math.round(effect.amount * 100)}%`,
+          );
+        }
+      } else if (effect.kind === "debuff") {
+        const targets =
+          effect.target === "all_enemies"
+            ? aliveSummons(
+                this.units,
+                unit.team === "ally" ? "enemy" : "ally",
+              )
+            : [this.resolveSingleTarget(unit, targetId)].filter(
+                (t): t is Unit => !!t,
+              );
+        for (const t of targets) {
+          this.applyStatDebuff(t, effect.axis, effect.amount, effect.turns);
+          this.log.push(
+            `${t.name} ${effect.axis} 약화 -${Math.round(effect.amount * 100)}%`,
+          );
+        }
+      } else if (effect.kind === "dot") {
+        const targets =
+          effect.target === "all_enemies"
+            ? aliveSummons(
+                this.units,
+                unit.team === "ally" ? "enemy" : "ally",
+              )
+            : [this.resolveSingleTarget(unit, targetId)].filter(
+                (t): t is Unit => !!t,
+              );
+        for (const t of targets) {
+          t.dotAtkCoeff = effect.coeff;
+          t.dotTicks = effect.turns;
+          t.dotSourceAtk = unit.stats.atk * (1 + (unit.atkBuffPct ?? 0));
+          this.log.push(`${t.name} 지속피해 ${effect.turns}턴`);
+        }
+      } else if (effect.kind === "cc") {
+        const chance = effect.chance ?? 1;
+        const targets =
+          effect.target === "all_enemies"
+            ? aliveSummons(
+                this.units,
+                unit.team === "ally" ? "enemy" : "ally",
+              )
+            : [this.resolveSingleTarget(unit, targetId)].filter(
+                (t): t is Unit => !!t,
+              );
+        for (const t of targets) {
+          if (this.rng() > chance) continue;
+          if ((t.statusImmuneTurns ?? 0) > 0) continue;
+          t.stunnedTurns = Math.max(t.stunnedTurns ?? 0, effect.turns);
+          this.log.push(`${t.name} ${effect.cc} ${effect.turns}턴`);
+        }
+      } else if (effect.kind === "strip") {
+        const targets =
+          effect.target === "all_enemies"
+            ? aliveSummons(
+                this.units,
+                unit.team === "ally" ? "enemy" : "ally",
+              )
+            : [this.resolveSingleTarget(unit, targetId)].filter(
+                (t): t is Unit => !!t,
+              );
+        for (const t of targets) {
+          t.atkBuffPct = 0;
+          t.atkBuffTicks = 0;
+          t.defBuffPct = 0;
+          t.defBuffTicks = 0;
+          t.spdBuffPct = 0;
+          t.spdBuffTicks = 0;
+          t.shieldHp = 0;
+          this.log.push(`${t.name} 강화 해제`);
+        }
+      } else if (effect.kind === "cleanse") {
+        const targets =
+          effect.target === "self"
+            ? [unit]
+            : aliveSummons(this.units, unit.team);
+        for (const t of targets) {
+          t.atkDebuffPct = 0;
+          t.atkDebuffTicks = 0;
+          t.defDebuffPct = 0;
+          t.defDebuffTicks = 0;
+          t.spdDebuffPct = 0;
+          t.spdDebuffTicks = 0;
+          t.dotTicks = 0;
+          t.stunnedTurns = 0;
+          this.log.push(`${t.name} 약화 해제`);
+        }
+      } else if (effect.kind === "provoke") {
+        const target = this.resolveSingleTarget(unit, targetId);
+        if (target) {
+          target.provokeTargetId = unit.id;
+          target.provokeTicks = effect.turns;
+          this.log.push(`${target.name} 도발 ${effect.turns}턴`);
+        }
       }
     }
     const cds = ensureSkillCd(unit);
     cds[skillIndex] = skill.cooldown;
     return results;
+  }
+
+  private applyStatBuff(
+    unit: Unit,
+    axis: string,
+    amount: number,
+    turns: number,
+  ): void {
+    switch (axis) {
+      case "atk":
+        unit.atkBuffPct = (unit.atkBuffPct ?? 0) + amount;
+        unit.atkBuffTicks = Math.max(unit.atkBuffTicks ?? 0, turns);
+        break;
+      case "def":
+        unit.defBuffPct = (unit.defBuffPct ?? 0) + amount;
+        unit.defBuffTicks = Math.max(unit.defBuffTicks ?? 0, turns);
+        break;
+      case "spd":
+        unit.spdBuffPct = (unit.spdBuffPct ?? 0) + amount;
+        unit.spdBuffTicks = Math.max(unit.spdBuffTicks ?? 0, turns);
+        break;
+      case "critRate":
+        unit.critRateBuff = (unit.critRateBuff ?? 0) + amount * 100;
+        unit.critRateBuffTicks = Math.max(unit.critRateBuffTicks ?? 0, turns);
+        break;
+      case "critDmg":
+        unit.critDmgBuff = (unit.critDmgBuff ?? 0) + amount * 100;
+        unit.critDmgBuffTicks = Math.max(unit.critDmgBuffTicks ?? 0, turns);
+        break;
+      case "accuracy":
+        unit.accuracyBuff = (unit.accuracyBuff ?? 0) + amount * 100;
+        unit.accuracyBuffTicks = Math.max(unit.accuracyBuffTicks ?? 0, turns);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private applyStatDebuff(
+    unit: Unit,
+    axis: string,
+    amount: number,
+    turns: number,
+  ): void {
+    switch (axis) {
+      case "atk":
+        unit.atkDebuffPct = Math.min(
+          0.7,
+          (unit.atkDebuffPct ?? 0) + amount,
+        );
+        unit.atkDebuffTicks = Math.max(unit.atkDebuffTicks ?? 0, turns);
+        break;
+      case "def":
+        unit.defDebuffPct = Math.min(
+          0.7,
+          (unit.defDebuffPct ?? 0) + amount,
+        );
+        unit.defDebuffTicks = Math.max(unit.defDebuffTicks ?? 0, turns);
+        break;
+      case "spd":
+        unit.spdDebuffPct = Math.min(
+          0.7,
+          (unit.spdDebuffPct ?? 0) + amount,
+        );
+        unit.spdDebuffTicks = Math.max(unit.spdDebuffTicks ?? 0, turns);
+        break;
+      default:
+        // accuracy/crit debuffs: reuse atkDebuff as soft stub for accuracy
+        if (axis === "accuracy") {
+          unit.atkDebuffPct = Math.min(
+            0.5,
+            (unit.atkDebuffPct ?? 0) + amount * 0.5,
+          );
+          unit.atkDebuffTicks = Math.max(unit.atkDebuffTicks ?? 0, turns);
+        }
+        break;
+    }
+  }
+
+  private tickStatus(u: Unit): void {
+    if ((u.atkBuffTicks ?? 0) > 0) {
+      u.atkBuffTicks = (u.atkBuffTicks ?? 0) - 1;
+      if ((u.atkBuffTicks ?? 0) <= 0) u.atkBuffPct = 0;
+    }
+    if ((u.defBuffTicks ?? 0) > 0) {
+      u.defBuffTicks = (u.defBuffTicks ?? 0) - 1;
+      if ((u.defBuffTicks ?? 0) <= 0) u.defBuffPct = 0;
+    }
+    if ((u.spdBuffTicks ?? 0) > 0) {
+      u.spdBuffTicks = (u.spdBuffTicks ?? 0) - 1;
+      if ((u.spdBuffTicks ?? 0) <= 0) u.spdBuffPct = 0;
+    }
+    if ((u.critRateBuffTicks ?? 0) > 0) {
+      u.critRateBuffTicks = (u.critRateBuffTicks ?? 0) - 1;
+      if ((u.critRateBuffTicks ?? 0) <= 0) u.critRateBuff = 0;
+    }
+    if ((u.critDmgBuffTicks ?? 0) > 0) {
+      u.critDmgBuffTicks = (u.critDmgBuffTicks ?? 0) - 1;
+      if ((u.critDmgBuffTicks ?? 0) <= 0) u.critDmgBuff = 0;
+    }
+    if ((u.accuracyBuffTicks ?? 0) > 0) {
+      u.accuracyBuffTicks = (u.accuracyBuffTicks ?? 0) - 1;
+      if ((u.accuracyBuffTicks ?? 0) <= 0) u.accuracyBuff = 0;
+    }
+    if ((u.atkDebuffTicks ?? 0) > 0) {
+      u.atkDebuffTicks = (u.atkDebuffTicks ?? 0) - 1;
+      if ((u.atkDebuffTicks ?? 0) <= 0) u.atkDebuffPct = 0;
+    }
+    if ((u.defDebuffTicks ?? 0) > 0) {
+      u.defDebuffTicks = (u.defDebuffTicks ?? 0) - 1;
+      if ((u.defDebuffTicks ?? 0) <= 0) u.defDebuffPct = 0;
+    }
+    if ((u.spdDebuffTicks ?? 0) > 0) {
+      u.spdDebuffTicks = (u.spdDebuffTicks ?? 0) - 1;
+      if ((u.spdDebuffTicks ?? 0) <= 0) u.spdDebuffPct = 0;
+    }
+    if ((u.dotTicks ?? 0) > 0) {
+      u.dotTicks = (u.dotTicks ?? 0) - 1;
+      if ((u.dotTicks ?? 0) <= 0) {
+        u.dotAtkCoeff = 0;
+        u.dotSourceAtk = 0;
+      }
+    }
+    if ((u.provokeTicks ?? 0) > 0) {
+      u.provokeTicks = (u.provokeTicks ?? 0) - 1;
+      if ((u.provokeTicks ?? 0) <= 0) u.provokeTargetId = undefined;
+    }
   }
 
   private lowestAllyMonster(team: TeamId): Unit | null {
@@ -1565,24 +1950,33 @@ export class Battle {
     const critDmgExtra = attacker.critDmgBonus ?? 0;
     if (critDmgExtra > 0) attacker.critDmgBonus = 0;
 
-    let incomingMul = 1;
+    let incomingMul = target.damageTakenMul ?? 1;
     if (
       target.stonePassive === "high_amp_dr" &&
       this.currentAmplify() >= 1.08
     ) {
-      incomingMul = 0.9;
+      incomingMul *= 0.9;
     }
 
-    const atkMul = 1 + (attacker.atkBuffPct ?? 0);
+    const atkMul =
+      (1 + (attacker.atkBuffPct ?? 0)) * (1 - (attacker.atkDebuffPct ?? 0));
+    const defMul =
+      (1 + (target.defBuffPct ?? 0)) * (1 - (target.defDebuffPct ?? 0));
     const { damage, crit } = computeDamage({
-      atk: attacker.stats.atk * atkMul,
+      atk: attacker.stats.atk * Math.max(0.3, atkMul),
       skillCoeff: coeff,
       attackerElement: attacker.element,
       defenderElement: target.element,
-      defenderDef: target.stats.def,
+      defenderDef: target.stats.def * Math.max(0.3, defMul),
       amplify: this.currentAmplify(),
-      critRate: attacker.stats.critRate + critBonus,
-      critDmg: attacker.stats.critDmg + critDmgExtra,
+      critRate:
+        attacker.stats.critRate +
+        critBonus +
+        (attacker.critRateBuff ?? 0),
+      critDmg:
+        attacker.stats.critDmg +
+        critDmgExtra +
+        (attacker.critDmgBuff ?? 0),
       rng: this.rng,
     });
 
@@ -1745,6 +2139,41 @@ export class Battle {
     if (!this.autoStone()) return [];
     if (this.phase === "await_capture_shop") {
       this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
+    }
+    const sm = this.summonerOf(unit.team);
+    const magics = sm.magicSkills ?? [];
+    if (magics.length > 0) {
+      const full = magics.find(
+        (s) =>
+          s.manaCostFrac >= 0.95 && this.canUseMagicSkill(unit, s.id),
+      );
+      if (full) return this.useSkill({ summonerSkill: full.id });
+      const amp = magics.find(
+        (s) => s.kind === "amplify" && this.canUseMagicSkill(unit, s.id),
+      );
+      if (amp && this.amplify < 1.08) {
+        return this.useSkill({ summonerSkill: amp.id });
+      }
+      const clean = magics.find(
+        (s) => s.kind === "board_clean" && this.canUseMagicSkill(unit, s.id),
+      );
+      if (clean && this.countEnemyStones(unit.team) >= 4) {
+        return this.useSkill({ summonerSkill: clean.id });
+      }
+      const guard = magics.find(
+        (s) =>
+          (s.kind === "ally_shield" || s.kind === "damage_reduce") &&
+          this.canUseMagicSkill(unit, s.id),
+      );
+      if (guard && this.allyMonstersWounded(unit.team, 0.55)) {
+        return this.useSkill({ summonerSkill: guard.id });
+      }
+      const dual = magics.find(
+        (s) => s.kind === "dual_stone" && this.canUseMagicSkill(unit, s.id),
+      );
+      if (dual) return this.useSkill({ summonerSkill: dual.id });
+      const any = magics.find((s) => this.canUseMagicSkill(unit, s.id));
+      if (any) return this.useSkill({ summonerSkill: any.id });
     }
     if (this.canUseSummonerSkill(unit)) {
       return this.useSkill({ summonerSkill: "open" });

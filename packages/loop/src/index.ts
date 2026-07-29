@@ -33,6 +33,7 @@ export {
   resolveBattleAuto,
   runAwakenSummoner,
   runUnlockSkillNode,
+  runEnhanceMagicSkill,
   runAffixGearSet,
   runEquipGearBag,
   runSellGearBag,

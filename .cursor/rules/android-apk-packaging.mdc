@@ -1,0 +1,20 @@
+---
+description: Keep language and stack choices compatible with Google Play APK/AAB packaging
+alwaysApply: true
+---
+
+# Google Play / APK packaging
+
+**Goal:** Ship StoneSummoner on the Google Play Store. Client code and stack choices must stay packable into an Android **AAB/APK** (Capacitor wrapping the Vite+Pixi web client under `apps/web`).
+
+## Rules
+1. **Prefer the current client path:** TypeScript + web (Vite / Pixi) that can be wrapped for Android. Do not introduce a second game client language (Unity C#, Flutter Dart, native Kotlin-only UI, etc.) unless the user explicitly requests a stack migration.
+2. **Before adding a language, runtime, or native dependency,** confirm it has a clear Android packaging path into the same APK/AAB. If it only works on desktop Node, Electron, or browser-desktop APIs, keep it out of the shippable client.
+3. **Split client vs server:** Play packaging applies to the **game client** (`apps/web`, shared `packages/*` used by the client). Backend/API (`server.mjs`, Postgres, Railway) may stay Node — do not assume the APK embeds the full server.
+4. **Mobile WebView constraints:** Avoid desktop-only APIs (unbounded window assumptions, hover-only UX, file paths, Node `fs` in client bundles). Touch-first, mobile viewport, and offline/PWA-friendly patterns stay the default.
+5. **Native plugins sparingly:** If Android capabilities are needed (IAP, push, back button, safe area), prefer Capacitor-compatible plugins over ad-hoc native modules. Document any new native bridge.
+6. **Store artifacts:** Target Play **AAB** for upload; APK is for local/sideload testing. Do not treat “works in desktop Chrome only” as done for release features.
+7. **Packaged API:** Capacitor builds must set `VITE_API_BASE` to the HTTPS API origin. Allow Capacitor origins via CORS (`CORS_ORIGINS` for extras). Cross-site session cookies use `SameSite=None; Secure`.
+
+## When unsure
+Ask before adopting a new language or packaging approach. Default answer: keep TypeScript web client packable for Android.

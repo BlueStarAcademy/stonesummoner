@@ -7,11 +7,33 @@ export {
   listMonsterFamilies,
   resolveMonsterId,
 } from "./monsters.js";
-export type { MonsterDef, Element } from "./monsters.js";
-export { basicStrike } from "./skills.js";
-export type { SkillDef, SkillEffect } from "./skills.js";
+export type { MonsterDef, Element, MonsterRole, FamilySeed } from "./monsters.js";
+export { basicStrike, dmg } from "./skills.js";
+export type { SkillDef, SkillEffect, StatModAxis, CcKind } from "./skills.js";
 export { STONE_PASSIVE_LABEL } from "./stonePassives.js";
 export type { StonePassiveId } from "./stonePassives.js";
+export {
+  SUMMONER_KITS,
+  MAX_MAGIC_RANK,
+  emptyMagicProgress,
+  getSummonerKit,
+  getSummonerLeader,
+  magicEnhanceCrystalCost,
+  magicEnhanceManaCost,
+  magicRank,
+  magicSkillPower,
+  tryUnlockMagicBranch,
+  unlockedMagicSkills,
+} from "./summoners.js";
+export type {
+  MagicBranch,
+  MagicSkillSlot,
+  SummonerKitDef,
+  SummonerLeaderDef,
+  SummonerMagicProgress,
+  SummonerMagicSkillDef,
+  SummonerMagicSkillKind,
+} from "./summoners.js";
 export {
   SYMBOL_SETS,
   createStarterHwalro,

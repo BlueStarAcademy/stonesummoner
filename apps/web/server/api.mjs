@@ -3,18 +3,76 @@ import { validateNickname } from "../shared/nickname.mjs";
 
 const COOKIE = "ss_session";
 
+/** Capacitor WebView + local Vite; extend with CORS_ORIGINS (comma-separated). */
+function allowedCorsOrigins() {
+  const defaults = [
+    "capacitor://localhost",
+    "http://localhost",
+    "https://localhost",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+  ];
+  const extra = String(process.env.CORS_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return new Set([...defaults, ...extra]);
+}
+
+function requestOrigin(req) {
+  return String(req.headers.origin ?? "").trim();
+}
+
+/** Cross-site (Capacitor → Railway) needs SameSite=None; Secure. */
+function isCrossSiteAuth(req) {
+  const origin = requestOrigin(req);
+  if (!origin) return false;
+  if (/^(capacitor|https?):\/\/localhost\b/i.test(origin)) return true;
+  try {
+    return new URL(origin).host !== String(req.headers.host ?? "");
+  } catch {
+    return allowedCorsOrigins().has(origin);
+  }
+}
+
 function cookieOpts(req) {
   const secure =
     process.env.NODE_ENV === "production" ||
     req.secure ||
     req.headers["x-forwarded-proto"] === "https";
+  const crossSite = isCrossSiteAuth(req);
   return {
     httpOnly: true,
-    sameSite: "lax",
-    secure,
+    sameSite: crossSite ? "none" : "lax",
+    // SameSite=None requires Secure; Capacitor cloud sync expects HTTPS API.
+    secure: crossSite ? true : secure,
     path: "/",
     maxAge: 14 * 24 * 60 * 60 * 1000,
   };
+}
+
+export function corsForApi(req, res, next) {
+  const origin = requestOrigin(req);
+  if (origin && allowedCorsOrigins().has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization",
+    );
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+    );
+    res.setHeader("Vary", "Origin");
+  }
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+  next();
 }
 
 function setSession(res, req, token) {
@@ -45,6 +103,7 @@ async function requireUser(store, req, res) {
 }
 
 export function mountApi(app, store) {
+  app.use("/api", corsForApi);
   app.use(cookieParser());
 
   app.get("/api/health", async (_req, res) => {

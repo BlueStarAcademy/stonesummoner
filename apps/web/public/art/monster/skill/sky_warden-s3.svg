@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg_sky_warden_s3" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#142418"/><stop offset="1" stop-color="#081208"/>
+    </linearGradient>
+    <linearGradient id="a1_sky_warden_s3" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8FFE0"/><stop offset=".45" stop-color="#58C878"/><stop offset="1" stop-color="#287848"/>
+    </linearGradient>
+    <linearGradient id="a2_sky_warden_s3" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8FFE0"/><stop offset="1" stop-color="#58C878"/>
+    </linearGradient>
+    <linearGradient id="a3_sky_warden_s3" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#58C878"/><stop offset="1" stop-color="#287848"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg_sky_warden_s3)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#58C878" stroke-opacity=".35" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="24" fill="#58C878" fill-opacity=".10"/>
+  
+      <path d="M32 10L50 18V34C50 46 40 54 32 56C24 54 14 46 14 34V18L32 10Z" fill="url(#a1_sky_warden_s3)" stroke="#C8F0FF" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="M32 18L42 22V34C42 42 36 48 32 50C28 48 22 42 22 34V22L32 18Z" fill="#fff" opacity=".18"/>
+      <path d="M26 32H38M32 26V38" stroke="#185888" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

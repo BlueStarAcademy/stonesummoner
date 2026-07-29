@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg_stone_golem_s1" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2a1410"/><stop offset="1" stop-color="#100806"/>
+    </linearGradient>
+    <linearGradient id="a1_stone_golem_s1" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE2A8"/><stop offset=".45" stop-color="#E07040"/><stop offset="1" stop-color="#8A2818"/>
+    </linearGradient>
+    <linearGradient id="a2_stone_golem_s1" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE2A8"/><stop offset="1" stop-color="#E07040"/>
+    </linearGradient>
+    <linearGradient id="a3_stone_golem_s1" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E07040"/><stop offset="1" stop-color="#8A2818"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg_stone_golem_s1)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#E07040" stroke-opacity=".35" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="24" fill="#E07040" fill-opacity=".10"/>
+  
+      <ellipse cx="32" cy="40" rx="16" ry="10" fill="url(#a1_stone_golem_s1)"/>
+      <rect x="22" y="16" width="20" height="24" rx="6" fill="url(#a2_stone_golem_s1)" stroke="#C8F0FF" stroke-width="1.2"/>
+      <path d="M26 28H38M26 34H38" stroke="#185888" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+</svg>

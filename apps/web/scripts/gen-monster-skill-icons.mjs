@@ -21,16 +21,16 @@ const EL = {
 /** @type {Array<{ monsterId: string, element: keyof typeof EL, skills: Array<{ slot: 1|2|3, motif: string }> }>} */
 const CATALOG = [
   {
-    monsterId: "fire_fang",
+    monsterId: "stone_golem",
     element: "fire",
     skills: [
-      { slot: 1, motif: "claws" },
-      { slot: 2, motif: "fire_strike" },
-      { slot: 3, motif: "inferno" },
+      { slot: 1, motif: "bash" },
+      { slot: 2, motif: "taunt" },
+      { slot: 3, motif: "ironwall" },
     ],
   },
   {
-    monsterId: "dew_healer",
+    monsterId: "forest_sprite",
     element: "water",
     skills: [
       { slot: 1, motif: "droplet" },
@@ -39,7 +39,7 @@ const CATALOG = [
     ],
   },
   {
-    monsterId: "gale_scout",
+    monsterId: "venom_stinger",
     element: "wind",
     skills: [
       { slot: 1, motif: "slash" },
@@ -48,7 +48,124 @@ const CATALOG = [
     ],
   },
   {
-    monsterId: "shield_tortoise",
+    monsterId: "cinder_imp",
+    element: "light",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "dew_slime",
+    element: "dark",
+    skills: [
+      { slot: 1, motif: "droplet" },
+      { slot: 2, motif: "heal_wave" },
+      { slot: 3, motif: "purify" },
+    ],
+  },
+  {
+    monsterId: "gale_bat",
+    element: "fire",
+    skills: [
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
+    ],
+  },
+  {
+    monsterId: "sand_lizard",
+    element: "water",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "moss_turtle",
+    element: "wind",
+    skills: [
+      { slot: 1, motif: "bash" },
+      { slot: 2, motif: "taunt" },
+      { slot: 3, motif: "ironwall" },
+    ],
+  },
+  {
+    monsterId: "crow_scout",
+    element: "light",
+    skills: [
+      { slot: 1, motif: "arrows" },
+      { slot: 2, motif: "weakpoint" },
+      { slot: 3, motif: "arrow_rain" },
+    ],
+  },
+  {
+    monsterId: "bone_thrall",
+    element: "dark",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "mace_soldier",
+    element: "fire",
+    skills: [
+      { slot: 1, motif: "bash" },
+      { slot: 2, motif: "taunt" },
+      { slot: 3, motif: "ironwall" },
+    ],
+  },
+  {
+    monsterId: "heal_priest",
+    element: "water",
+    skills: [
+      { slot: 1, motif: "droplet" },
+      { slot: 2, motif: "heal_wave" },
+      { slot: 3, motif: "purify" },
+    ],
+  },
+  {
+    monsterId: "magic_archer",
+    element: "wind",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "shadow_thief",
+    element: "light",
+    skills: [
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
+    ],
+  },
+  {
+    monsterId: "thunder_spear",
+    element: "dark",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "frost_witch",
+    element: "fire",
+    skills: [
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
+    ],
+  },
+  {
+    monsterId: "stone_fist",
     element: "water",
     skills: [
       { slot: 1, motif: "bash" },
@@ -57,8 +174,17 @@ const CATALOG = [
     ],
   },
   {
-    monsterId: "ash_archer",
-    element: "fire",
+    monsterId: "herb_alchemist",
+    element: "wind",
+    skills: [
+      { slot: 1, motif: "droplet" },
+      { slot: 2, motif: "heal_wave" },
+      { slot: 3, motif: "purify" },
+    ],
+  },
+  {
+    monsterId: "capture_hound",
+    element: "light",
     skills: [
       { slot: 1, motif: "arrows" },
       { slot: 2, motif: "weakpoint" },
@@ -66,7 +192,169 @@ const CATALOG = [
     ],
   },
   {
-    monsterId: "mist_shaman",
+    monsterId: "seal_apprentice",
+    element: "dark",
+    skills: [
+      { slot: 1, motif: "mist_orb" },
+      { slot: 2, motif: "buff_aura" },
+      { slot: 3, motif: "regen_mist" },
+    ],
+  },
+  {
+    monsterId: "flame_warrior",
+    element: "fire",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "abyss_pirate",
+    element: "water",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "gale_rider",
+    element: "wind",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "sanctuary_guard",
+    element: "light",
+    skills: [
+      { slot: 1, motif: "bash" },
+      { slot: 2, motif: "taunt" },
+      { slot: 3, motif: "ironwall" },
+    ],
+  },
+  {
+    monsterId: "abyss_hexer",
+    element: "dark",
+    skills: [
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
+    ],
+  },
+  {
+    monsterId: "dew_healer",
+    element: "fire",
+    skills: [
+      { slot: 1, motif: "droplet" },
+      { slot: 2, motif: "heal_wave" },
+      { slot: 3, motif: "purify" },
+    ],
+  },
+  {
+    monsterId: "seal_elder",
+    element: "water",
+    skills: [
+      { slot: 1, motif: "mist_orb" },
+      { slot: 2, motif: "buff_aura" },
+      { slot: 3, motif: "regen_mist" },
+    ],
+  },
+  {
+    monsterId: "wolf_fighter",
+    element: "wind",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "lotus_dancer",
+    element: "light",
+    skills: [
+      { slot: 1, motif: "droplet" },
+      { slot: 2, motif: "heal_wave" },
+      { slot: 3, motif: "purify" },
+    ],
+  },
+  {
+    monsterId: "scout_sniper",
+    element: "dark",
+    skills: [
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
+    ],
+  },
+  {
+    monsterId: "steel_armor",
+    element: "fire",
+    skills: [
+      { slot: 1, motif: "bash" },
+      { slot: 2, motif: "taunt" },
+      { slot: 3, motif: "ironwall" },
+    ],
+  },
+  {
+    monsterId: "mana_captor",
+    element: "water",
+    skills: [
+      { slot: 1, motif: "arrows" },
+      { slot: 2, motif: "weakpoint" },
+      { slot: 3, motif: "arrow_rain" },
+    ],
+  },
+  {
+    monsterId: "magma_knight",
+    element: "wind",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "glacier_mage",
+    element: "light",
+    skills: [
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
+    ],
+  },
+  {
+    monsterId: "storm_spearmaster",
+    element: "dark",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "angel_healer",
+    element: "fire",
+    skills: [
+      { slot: 1, motif: "droplet" },
+      { slot: 2, motif: "heal_wave" },
+      { slot: 3, motif: "purify" },
+    ],
+  },
+  {
+    monsterId: "demon_hexer",
+    element: "water",
+    skills: [
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
+    ],
+  },
+  {
+    monsterId: "rune_scholar",
     element: "wind",
     skills: [
       { slot: 1, motif: "mist_orb" },
@@ -75,41 +363,113 @@ const CATALOG = [
     ],
   },
   {
-    monsterId: "seal_scholar",
+    monsterId: "golden_guardian",
     element: "light",
     skills: [
-      { slot: 1, motif: "seal_strike" },
-      { slot: 2, motif: "seal_point" },
-      { slot: 3, motif: "rune_read" },
+      { slot: 1, motif: "bash" },
+      { slot: 2, motif: "taunt" },
+      { slot: 3, motif: "ironwall" },
     ],
   },
   {
-    monsterId: "capture_hound",
+    monsterId: "shadow_assassin",
     element: "dark",
     skills: [
-      { slot: 1, motif: "bite" },
-      { slot: 2, motif: "chase" },
-      { slot: 3, motif: "stone_burst" },
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
     ],
   },
   {
-    monsterId: "thunder_lancer",
-    element: "light",
+    monsterId: "holy_judge",
+    element: "fire",
     skills: [
-      { slot: 1, motif: "pierce" },
-      { slot: 2, motif: "charge" },
-      { slot: 3, motif: "thunder" },
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
     ],
   },
   {
     monsterId: "abyss_priest",
-    element: "dark",
+    element: "water",
     skills: [
-      { slot: 1, motif: "curse" },
-      { slot: 2, motif: "silence" },
-      { slot: 3, motif: "abyss_eye" },
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
     ],
   },
+  {
+    monsterId: "wyrm_rider",
+    element: "wind",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "capture_lord",
+    element: "light",
+    skills: [
+      { slot: 1, motif: "arrows" },
+      { slot: 2, motif: "weakpoint" },
+      { slot: 3, motif: "arrow_rain" },
+    ],
+  },
+  {
+    monsterId: "dragon_knight",
+    element: "dark",
+    skills: [
+      { slot: 1, motif: "claws" },
+      { slot: 2, motif: "fire_strike" },
+      { slot: 3, motif: "inferno" },
+    ],
+  },
+  {
+    monsterId: "primordial_hierophant",
+    element: "fire",
+    skills: [
+      { slot: 1, motif: "mist_orb" },
+      { slot: 2, motif: "buff_aura" },
+      { slot: 3, motif: "regen_mist" },
+    ],
+  },
+  {
+    monsterId: "doom_oracle",
+    element: "water",
+    skills: [
+      { slot: 1, motif: "slash" },
+      { slot: 2, motif: "slow_wind" },
+      { slot: 3, motif: "wind_mark" },
+    ],
+  },
+  {
+    monsterId: "sky_warden",
+    element: "wind",
+    skills: [
+      { slot: 1, motif: "bash" },
+      { slot: 2, motif: "taunt" },
+      { slot: 3, motif: "ironwall" },
+    ],
+  },
+  {
+    monsterId: "eternal_healer",
+    element: "light",
+    skills: [
+      { slot: 1, motif: "droplet" },
+      { slot: 2, motif: "heal_wave" },
+      { slot: 3, motif: "purify" },
+    ],
+  },
+  {
+    monsterId: "absolute_captor",
+    element: "dark",
+    skills: [
+      { slot: 1, motif: "arrows" },
+      { slot: 2, motif: "weakpoint" },
+      { slot: 3, motif: "arrow_rain" },
+    ],
+  }
 ];
 
 function uid(prefix, monsterId, slot) {

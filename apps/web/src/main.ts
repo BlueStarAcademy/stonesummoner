@@ -1,4 +1,5 @@
 import "./style.css";
+import { apiUrl } from "./api/url";
 import {
   formatNumber,
   getLocale,
@@ -71,6 +72,12 @@ import {
   GEAR_SETS,
   getMonster,
   getMonsterArtKey,
+  getSummonerLeader,
+  getSummonerKit,
+  emptyMagicProgress,
+  unlockedMagicSkills,
+  magicRank,
+  MAX_MAGIC_RANK,
   resolveMonsterId,
   getStage,
   MAX_GEAR_BAG,
@@ -128,6 +135,7 @@ import {
   MAX_SUMMONER_AWAKEN,
   runAwakenSummoner,
   runUnlockSkillNode,
+  runEnhanceMagicSkill,
   runAffixGearSet,
   runEquipGearBag,
   runSellGearBag,
@@ -874,7 +882,7 @@ async function apiJson<T>(
   init?: RequestInit,
 ): Promise<T | null> {
   try {
-    const res = await fetch(path, {
+    const res = await fetch(apiUrl(path), {
       credentials: "include",
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
       ...init,
@@ -976,6 +984,32 @@ function migrateSave(raw: unknown): PlayerSave | null {
     skillTree: Array.isArray(p.skillTree)
       ? p.skillTree.filter((id): id is string => typeof id === "string")
       : [],
+    summonerMagic: (() => {
+      const raw = p.summonerMagic;
+      const base = {
+        fire: emptyMagicProgress(),
+        water: emptyMagicProgress(),
+        wind: emptyMagicProgress(),
+        light: emptyMagicProgress(),
+        dark: emptyMagicProgress(),
+      };
+      if (!raw || typeof raw !== "object") return base;
+      for (const el of ["fire", "water", "wind", "light", "dark"] as const) {
+        const slot = (raw as Record<string, unknown>)[el];
+        if (!slot || typeof slot !== "object") continue;
+        const ranks =
+          (slot as { ranks?: Record<string, number> }).ranks &&
+          typeof (slot as { ranks: unknown }).ranks === "object"
+            ? (slot as { ranks: Record<string, number> }).ranks
+            : {};
+        const branch = (slot as { branch?: string }).branch;
+        base[el] = {
+          ranks: { ...ranks },
+          branch: branch === "A" || branch === "B" ? branch : null,
+        };
+      }
+      return base;
+    })(),
     equipVaultWeekKey:
       typeof p.equipVaultWeekKey === "string" ? p.equipVaultWeekKey : null,
     equipVaultWeekEntries:
@@ -1294,15 +1328,36 @@ function renderStagePrepDock(): string {
       },
     ).join("")}</div>`;
   } else if (stagePrepInvTab === "skill") {
-    dockBody = `<p class="stage-prep-dock-hint">${escapeHtml(t("ui.stagePrepSkillGrowHint"))}</p>
-      <div class="stage-prep-skill-grid">${SKILL_TREE_NODES.map((n) => {
-        const on = unlockedSkills.has(n.id);
-        const isLeader = n.branch === "leader";
-        return `<div class="stage-prep-skill-tile${on ? " is-on" : ""}${isLeader ? " is-leader" : ""}" title="${escapeHtml(n.descKo)}">
-          <strong>${escapeHtml(n.nameKo)}</strong>
-          <small>${on ? escapeHtml(n.descKo) : escapeHtml(t("ui.stagePrepSkillLocked"))}</small>
+    const el = activeEl;
+    const kit = getSummonerKit(el);
+    const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
+    const unlocked = unlockedMagicSkills(el, prog);
+    const unlockedIds = new Set(unlocked.map((s) => s.id));
+    const leader = kit.leader;
+    const skillTiles = (["A", "B", "A1", "A2", "B1", "B2"] as const)
+      .map((slot) => {
+        const sk = kit.skills[slot];
+        const open = unlockedIds.has(sk.id);
+        const rank = magicRank(prog, sk.id);
+        const lockedHint =
+          slot.startsWith("A") && slot !== "A" && prog.branch !== "A"
+            ? `A +${MAX_MAGIC_RANK}`
+            : slot.startsWith("B") && slot !== "B" && prog.branch !== "B"
+              ? `B +${MAX_MAGIC_RANK}`
+              : "";
+        return `<div class="stage-prep-skill-tile${open ? " is-on" : ""}">
+          <strong>${escapeHtml(sk.nameKo)}</strong>
+          <small>${open ? `+${rank}/${MAX_MAGIC_RANK} · ${escapeHtml(sk.kind)}` : escapeHtml(lockedHint || t("ui.stagePrepSkillLocked"))}</small>
+          ${
+            open && rank < MAX_MAGIC_RANK
+              ? `<button type="button" class="auth-btn-primary stage-prep-magic-enh" data-magic-enhance="${sk.id}">+1</button>`
+              : ""
+          }
         </div>`;
-      }).join("")}</div>`;
+      })
+      .join("");
+    dockBody = `<p class="stage-prep-dock-hint">${escapeHtml(leader.nameKo)} · branch ${prog.branch ?? "-"}</p>
+      <div class="stage-prep-skill-grid">${skillTiles}</div>`;
   } else {
     const sorted = sortRosterForSlots(save.roster, stagePrepSortMode);
     const invTiles = sorted
@@ -1408,24 +1463,33 @@ function stagePrepLeaderPassive(saveRef: PlayerSave): {
   pct: number;
 } {
   const active = getActiveSummoner(saveRef);
+  const el = saveRef.activeSummoner ?? "light";
+  const leader = getSummonerLeader(el);
   const tree = skillTreeBonuses(saveRef.skillTree ?? []);
   const pct =
+    (leader.atkPct ?? 0) +
     awakenLeaderAtkPct(active.awaken) +
     gearLeaderAtkPct(normalizeSummonerGear(saveRef.gear)) +
     tree.leaderAtkBonus;
-  const unlocked = new Set(saveRef.skillTree ?? []);
-  const leaderNodes = SKILL_TREE_NODES.filter(
-    (n) => n.branch === "leader" && unlocked.has(n.id),
-  );
-  const title = leaderNodes.length
-    ? leaderNodes.map((n) => n.nameKo).join(` ${MIDDOT} `)
-    : t("ui.stagePrepLeaderBasic");
-  const detail =
-    pct > 0
-      ? t("ui.stagePrepLeaderAtk", {
-          pct: String(Math.round(pct * 1000) / 10),
-        })
-      : t("ui.stagePrepLeaderNone");
+  const title = leader.nameKo;
+  const bits: string[] = [];
+  if (leader.atkPct) bits.push(`ATK +${Math.round(leader.atkPct * 100)}%`);
+  if (leader.elementAtkPct)
+    bits.push(`same-el ATK +${Math.round(leader.elementAtkPct * 100)}%`);
+  if (leader.hpPct) bits.push(`HP +${Math.round(leader.hpPct * 100)}%`);
+  if (leader.spdPct) bits.push(`SPD +${Math.round(leader.spdPct * 100)}%`);
+  if (leader.accuracyFlat) bits.push(`ACC +${leader.accuracyFlat}`);
+  if (leader.critRateFlat) bits.push(`CR +${leader.critRateFlat}%`);
+  if (leader.critDmgFlat) bits.push(`CD +${leader.critDmgFlat}%`);
+  if (leader.damageTakenMul != null)
+    bits.push(`DR ${Math.round((1 - leader.damageTakenMul) * 100)}%`);
+  if (pct > (leader.atkPct ?? 0))
+    bits.push(
+      t("ui.stagePrepLeaderAtk", {
+        pct: String(Math.round(pct * 1000) / 10),
+      }),
+    );
+  const detail = bits.length ? bits.join(` ${MIDDOT} `) : t("ui.stagePrepLeaderNone");
   return { title, detail, pct };
 }
 
@@ -1525,16 +1589,30 @@ function renderStageEntryModal(): string {
   }).join("");
 
   const unlockedSkills = new Set(save.skillTree ?? []);
-  const skillIcons = SKILL_TREE_NODES.filter(
-    (n) =>
-      n.branch === "leader" || n.branch === "mastery" || n.branch === "power",
+  const magicProg =
+    save.summonerMagic?.[save.activeSummoner ?? "light"] ??
+    emptyMagicProgress();
+  const magicIcons = unlockedMagicSkills(
+    save.activeSummoner ?? "light",
+    magicProg,
   )
-    .slice(0, 2)
+    .slice(0, 4)
     .map((n) => {
-      const on = unlockedSkills.has(n.id);
-      return `<span class="stage-prep-skill-ico${on ? " is-on" : ""}" title="${escapeHtml(n.nameKo)}">${escapeHtml(n.nameKo.slice(0, 1))}</span>`;
+      return `<span class="stage-prep-skill-ico is-on" title="${escapeHtml(n.nameKo)}">${escapeHtml(n.nameKo.slice(0, 1))}</span>`;
     })
     .join("");
+  const skillIcons =
+    magicIcons ||
+    SKILL_TREE_NODES.filter(
+      (n) =>
+        n.branch === "leader" || n.branch === "mastery" || n.branch === "power",
+    )
+      .slice(0, 2)
+      .map((n) => {
+        const on = unlockedSkills.has(n.id);
+        return `<span class="stage-prep-skill-ico${on ? " is-on" : ""}" title="${escapeHtml(n.nameKo)}">${escapeHtml(n.nameKo.slice(0, 1))}</span>`;
+      })
+      .join("");
 
   const titleText = `${stage.nameKo}(${diff.labelKo})`;
   const canStart = selected.size > 0 && energyNow >= cost;
@@ -2213,21 +2291,35 @@ function autoAllyTurn(): void {
     );
   }
   if (battle.phase === "await_skill") {
-    const hits = battle.canUseSummonerSkill(unit)
-      ? battle.useSkill({ summonerSkill: "open" })
-      : battle.canUseSummonerClean(unit) &&
-          battle.countEnemyStones(unit.team) >= 4
-        ? battle.useSkill({ summonerSkill: "clean" })
-        : battle.canUseSummonerGuard(unit) &&
-            battle.allyMonstersWounded(unit.team, 0.55)
-          ? battle.useSkill({ summonerSkill: "guard" })
-          : battle.canUseSummonerDeclare(unit)
-            ? battle.useSkill({ summonerSkill: "declare" })
-            : battle.canUseSummonerDual(unit)
-              ? battle.useSkill({ summonerSkill: "dual" })
-              : battle.useSkill({
-                  skillIndex: pickAutoSkillIndex(unit, battle.units),
-                });
+    const hits = (() => {
+      const magics = battle!.summonerOf(unit.team).magicSkills ?? [];
+      const full = magics.find(
+        (s) =>
+          s.manaCostFrac >= 0.95 && battle!.canUseMagicSkill(unit, s.id),
+      );
+      if (full) return battle!.useSkill({ summonerSkill: full.id });
+      const any = magics.find((s) => battle!.canUseMagicSkill(unit, s.id));
+      if (any) return battle!.useSkill({ summonerSkill: any.id });
+      if (battle!.canUseSummonerSkill(unit))
+        return battle!.useSkill({ summonerSkill: "open" });
+      if (
+        battle!.canUseSummonerClean(unit) &&
+        battle!.countEnemyStones(unit.team) >= 4
+      )
+        return battle!.useSkill({ summonerSkill: "clean" });
+      if (
+        battle!.canUseSummonerGuard(unit) &&
+        battle!.allyMonstersWounded(unit.team, 0.55)
+      )
+        return battle!.useSkill({ summonerSkill: "guard" });
+      if (battle!.canUseSummonerDeclare(unit))
+        return battle!.useSkill({ summonerSkill: "declare" });
+      if (battle!.canUseSummonerDual(unit))
+        return battle!.useSkill({ summonerSkill: "dual" });
+      return battle!.useSkill({
+        skillIndex: pickAutoSkillIndex(unit, battle!.units),
+      });
+    })();
     pushDamageFloats(hits);
   }
   afterPlayerAction();
@@ -2284,6 +2376,17 @@ async function castSkillAsync(
   battleFxBusy = true;
   try {
     if (mode === "ult") {
+      const magics = battle.summonerOf(unit.team).magicSkills ?? [];
+      const full = magics.find(
+        (s) =>
+          s.manaCostFrac >= 0.95 && battle!.canUseMagicSkill(unit, s.id),
+      );
+      if (full) {
+        const hits = battle.useSkill({ summonerSkill: full.id });
+        await playStrikeFx(hits, { ult: true });
+        afterPlayerAction();
+        return;
+      }
       if (!battle.canUseSummonerSkill(unit)) {
         flash(t("ui.711b4aaddc"));
         render();
@@ -4436,7 +4539,7 @@ function monsterSkillArtSrc(
 ): string {
   if (monsterId && skillIndex >= 0 && skillIndex <= 2) {
     const artKey = getMonsterArtKey(monsterId) ?? monsterId;
-    return `/art/monster/skill/${artKey}-s${skillIndex + 1}.webp`;
+    return `/art/monster/skill/${artKey}-s${skillIndex + 1}.svg`;
   }
   const kind = skill?.effects?.[0]?.kind;
   if (kind === "heal") return "/art/ui/skill/heal.svg";
@@ -4557,7 +4660,9 @@ function monsterArtImg(
 ): string {
   const src = monsterArtSrc(monsterId);
   if (!src) return "";
-  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
+  const el = getMonster(monsterId ?? "")?.element;
+  const tint = el ? ` el-tint-${el}` : "";
+  return `<img class="${className}${tint}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
 }
 
 /** Art used in battle / book hero: Spine still when available, else WebP. */
@@ -6867,7 +6972,7 @@ function bindAuth(): void {
 
     void (async () => {
       try {
-        const res = await fetch(path, {
+        const res = await fetch(apiUrl(path), {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -8176,6 +8281,18 @@ function bind(): void {
       if (id && r.message.includes(t('ui.d1496ce82d'))) {
         enhanceFx = { kind: "node", id };
       }
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-magic-enhance]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.magicEnhance ?? "";
+      if (!id) return;
+      const r = runEnhanceMagicSkill(save, id);
+      save = r.save;
       persist();
       flash(r.message);
       render();

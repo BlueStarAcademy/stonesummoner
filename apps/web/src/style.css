@@ -11912,6 +11912,28 @@ span.stage-drop-info-tab {
 .mon-slot.el-light { border-color: #e8d48a55; }
 .mon-slot.el-dark { border-color: #9a70d055; }
 
+/* Phase 2: shared family art + element tint */
+.el-tint-fire,
+img.el-tint-fire {
+  filter: sepia(0.35) hue-rotate(-15deg) saturate(1.45) brightness(1.05);
+}
+.el-tint-water,
+img.el-tint-water {
+  filter: sepia(0.25) hue-rotate(160deg) saturate(1.2) brightness(1.05);
+}
+.el-tint-wind,
+img.el-tint-wind {
+  filter: sepia(0.2) hue-rotate(70deg) saturate(1.25) brightness(1.08);
+}
+.el-tint-light,
+img.el-tint-light {
+  filter: sepia(0.4) hue-rotate(5deg) saturate(1.15) brightness(1.18);
+}
+.el-tint-dark,
+img.el-tint-dark {
+  filter: sepia(0.15) hue-rotate(240deg) saturate(1.1) brightness(0.88);
+}
+
 .mon-slot.is-active {
   border-color: #f0d878;
   border-width: 2px;

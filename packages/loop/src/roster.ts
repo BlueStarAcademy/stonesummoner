@@ -43,8 +43,8 @@ export const SCROLL_KIND_LABEL: Record<ScrollKind, string> = {
 };
 
 export const SCROLL_KIND_BLURB: Record<ScrollKind, string> = {
-  normal: "불·물·바람 3성",
-  premium: "불·물·바람 3~4성",
+  normal: "불·물·바람 1~3성",
+  premium: "불·물·바람 2~4성",
   mystic: "신성·심연 전용",
 };
 
@@ -141,20 +141,47 @@ export function scaledMonsterStats(
 }
 
 const STARTER_IDS = [
-  "seokrang_fire",
-  "yeonhwa_water",
-  "cheokhu_wind",
-  "jinmunsa_light",
+  "cinder_imp_fire",
+  "dew_slime_water",
+  "gale_bat_wind",
+  "seal_apprentice_light",
 ] as const;
 
 const ELEMENTAL = new Set(["fire", "water", "wind"]);
 
-/** 일반: 속성(불·물·바람) 3성 */
+function weightedPick(pool: MonsterDef[], rng: () => number): MonsterDef {
+  if (pool.length === 0) return MONSTERS[0]!;
+  const weights = pool.map((m) => {
+    const s = m.naturalStars;
+    if (s <= 1) return 5;
+    if (s === 2) return 3;
+    if (s === 3) return 2;
+    if (s === 4) return 1;
+    return 0.4;
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = rng() * total;
+  for (let i = 0; i < pool.length; i++) {
+    r -= weights[i]!;
+    if (r <= 0) return pool[i]!;
+  }
+  return pool[pool.length - 1]!;
+}
+
+/** 일반: 속성(불·물·바람) 1~3성 */
 const NORMAL_POOL = MONSTERS.filter(
-  (m) => m.naturalStars === 3 && ELEMENTAL.has(m.element),
+  (m) =>
+    m.naturalStars >= 1 &&
+    m.naturalStars <= 3 &&
+    ELEMENTAL.has(m.element),
 );
-/** 고급: 속성 3성 */
-const PREMIUM_3_POOL = NORMAL_POOL;
+/** 고급: 속성 2~3성 */
+const PREMIUM_LOW_POOL = MONSTERS.filter(
+  (m) =>
+    m.naturalStars >= 2 &&
+    m.naturalStars <= 3 &&
+    ELEMENTAL.has(m.element),
+);
 /** 고급: 속성 4성 */
 const PREMIUM_4_POOL = MONSTERS.filter(
   (m) => m.naturalStars === 4 && ELEMENTAL.has(m.element),
@@ -200,9 +227,7 @@ export function createStarterRoster(): {
 }
 
 function pickFrom(pool: MonsterDef[], rng: () => number): MonsterDef {
-  if (pool.length === 0) return MONSTERS[0]!;
-  const idx = Math.floor(rng() * pool.length) % pool.length;
-  return pool[idx]!;
+  return weightedPick(pool, rng);
 }
 
 export function pickSummonMonster(
@@ -212,7 +237,7 @@ export function pickSummonMonster(
   if (kind === "mystic") return pickFrom(MYSTIC_POOL, rng);
   if (kind === "premium") {
     const useFour = rng() < 0.45 && PREMIUM_4_POOL.length > 0;
-    return pickFrom(useFour ? PREMIUM_4_POOL : PREMIUM_3_POOL, rng);
+    return pickFrom(useFour ? PREMIUM_4_POOL : PREMIUM_LOW_POOL, rng);
   }
   return pickFrom(NORMAL_POOL, rng);
 }

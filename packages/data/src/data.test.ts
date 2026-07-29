@@ -39,16 +39,26 @@ import {
 } from "./index.js";
 
 describe("phase1 data", () => {
-  it("has 10 families × 5 elements and 16 symbol sets", () => {
-    assert.equal(MONSTERS.length, 50);
+  it("has 50 families x 5 elements and 16 symbol sets", () => {
+    assert.equal(MONSTERS.length, 250);
     assert.equal(SYMBOL_SETS.length, 16);
-    assert.ok(getMonster("seokrang_fire"));
-    assert.ok(getMonster("yeongmae_wind"));
-    assert.ok(getMonster("jegwan_dark"));
+    assert.ok(getMonster("wolf_fighter_fire"));
+    assert.ok(getMonster("lotus_dancer_wind"));
+    assert.ok(getMonster("abyss_priest_dark"));
+    assert.ok(getMonster("magic_archer_fire"));
+    assert.ok(getMonster("cinder_imp_fire"));
     // Legacy ids still resolve
-    assert.equal(getMonster("fire_fang")?.id, "seokrang_fire");
+    assert.equal(getMonster("fire_fang")?.id, "wolf_fighter_fire");
+    assert.equal(getMonster("seokrang_fire")?.id, "wolf_fighter_fire");
     const families = new Set(MONSTERS.map((m) => m.familyId));
-    assert.equal(families.size, 10);
+    assert.equal(families.size, 50);
+    const byStars = [1, 2, 3, 4, 5].map(
+      (s) =>
+        new Set(
+          MONSTERS.filter((m) => m.naturalStars === s).map((m) => m.familyId),
+        ).size,
+    );
+    assert.deepEqual(byStars, [10, 10, 12, 12, 6]);
     for (const fam of families) {
       const variants = MONSTERS.filter((m) => m.familyId === fam);
       assert.equal(variants.length, 5);

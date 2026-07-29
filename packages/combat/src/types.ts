@@ -52,6 +52,37 @@ export interface Unit {
   atkBuffPct?: number;
   /** Remaining ATB-ready ticks for atkBuffPct. */
   atkBuffTicks?: number;
+  /** Temporary DEF% buff. */
+  defBuffPct?: number;
+  defBuffTicks?: number;
+  /** Temporary SPD% buff (applied on ATB). */
+  spdBuffPct?: number;
+  spdBuffTicks?: number;
+  /** Temporary critRate flat bonus. */
+  critRateBuff?: number;
+  critRateBuffTicks?: number;
+  /** Temporary critDmg flat bonus. */
+  critDmgBuff?: number;
+  critDmgBuffTicks?: number;
+  /** Temporary accuracy flat bonus. */
+  accuracyBuff?: number;
+  accuracyBuffTicks?: number;
+  /** Incoming ATK% reduction from debuffs. */
+  atkDebuffPct?: number;
+  atkDebuffTicks?: number;
+  defDebuffPct?: number;
+  defDebuffTicks?: number;
+  spdDebuffPct?: number;
+  spdDebuffTicks?: number;
+  /** DoT: fraction of source ATK dealt each ATB-ready tick. */
+  dotAtkCoeff?: number;
+  dotTicks?: number;
+  dotSourceAtk?: number;
+  /** Provoke: must target this unit id when set. */
+  provokeTargetId?: string;
+  provokeTicks?: number;
+  /** Damage taken multiplier (e.g. 0.92 = -8%). */
+  damageTakenMul?: number;
   /** 보강: fraction of max HP contributed to ally shield pool at battle start. */
   startShieldPct?: number;
   /** 환격: % chance to counter after taking a hit. */
@@ -94,6 +125,17 @@ export interface SummonerState {
   cleanAmpBonus?: number;
   /** Unlocked skill-tree node ids — shapes the full-mana signature ult. */
   skillTreeUnlocked?: string[];
+  /** Phase 2 magic skills available this battle. */
+  magicSkills?: Array<{
+    id: string;
+    nameKo: string;
+    manaCostFrac: number;
+    kind: string;
+    power: number;
+    turns?: number;
+  }>;
+  /** Active summoner element for leader / kit. */
+  summonerElement?: Element;
   /** 속성의뢰: matching element stone plays consume charges for Amp. */
   elementWardElement?: Element;
   elementWardCharges?: number;

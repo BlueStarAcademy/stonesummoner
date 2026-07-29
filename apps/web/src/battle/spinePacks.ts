@@ -70,6 +70,8 @@ export function resolveSpinePackId(
   if (SPINE_PACKS[monsterOrSummonerKey]) return monsterOrSummonerKey;
   // Family variants share the family's pilot artKey until per-element Spine skins ship.
   if (monsterOrSummonerKey.startsWith("seokrang_")) return "fire_fang";
+  if (monsterOrSummonerKey.startsWith("wolf_fighter_")) return "fire_fang";
+  if (monsterOrSummonerKey === "wolf_fighter") return "fire_fang";
   if (monsterOrSummonerKey === "fire_fang") return "fire_fang";
   return null;
 }

@@ -22,3 +22,14 @@ docs/art/auth/refs/*.png
 !docs/art/auth/refs/.gitkeep
 apps/web/public/art/auth/auth-hero-*.png
 apps/web/public/art/auth/auth-og.png
+
+# Android release signing (never commit secrets)
+*.jks
+*.keystore
+apps/web/android/key.properties
+apps/web/android/app/key.properties
+apps/web/android/.gradle/
+apps/web/android/app/build/
+apps/web/android/build/
+apps/web/android/local.properties
+apps/web/android/captures/

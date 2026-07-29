@@ -78,3 +78,14 @@ npm test
 
 프로덕션 빌드에 Service Worker + Web Manifest가 포함됩니다 (`vite-plugin-pwa`).  
 HTTPS(Railway 기본)에서 설치·오프라인 캐시가 동작합니다.
+
+## Google Play (Android)
+
+Capacitor로 `apps/web`을 APK/AAB로 패키징합니다. 절차·서명·스토어 문구 초안은 [docs/play-store.md](docs/play-store.md)를 보세요.
+
+```bash
+# Railway 등 HTTPS API를 가리킨 뒤 동기화
+$env:VITE_API_BASE="https://YOUR-RAILWAY-HOST"
+npm run android:sync
+npm run cap:open   # Android Studio
+```

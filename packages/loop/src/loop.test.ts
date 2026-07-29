@@ -258,10 +258,13 @@ describe("game loop", () => {
       assert.ok((raid.reward.contribution ?? 0) > 0);
     }
 
-    const banned = runSetArenaBans(raid.save, ["changsu_light", "yeongmae_wind"]);
+    const banned = runSetArenaBans(raid.save, [
+      "storm_spearmaster_light",
+      "lotus_dancer_wind",
+    ]);
     assert.deepEqual(banned.save.arenaBanIds, [
-      "changsu_light",
-      "yeongmae_wind",
+      "storm_spearmaster_light",
+      "lotus_dancer_wind",
     ]);
     const battle = createStageBattle(
       getStage("warena_qual")!,
@@ -272,7 +275,7 @@ describe("game loop", () => {
       (u) => u.team === "enemy" && u.kind === "monster",
     );
     assert.equal(enemyMons.length, 2);
-    assert.ok(!enemyMons.some((u) => /천둥창병|안개무녀/.test(u.name)));
+    assert.ok(!enemyMons.some((u) => /폭풍창술사|연꽃무희/.test(u.name)));
   });
 
   it("crafts scroll/essence and buys energy", () => {
