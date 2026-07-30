@@ -2032,6 +2032,10 @@
     "ko": "{n}성",
     "en": "{n}★"
   },
+  "ui.codexStarFilter": {
+    "ko": "{element} 성급 필터",
+    "en": "{element} star filter"
+  },
   "ui.codexDetailSkills": {
     "ko": "스킬",
     "en": "Skills"
@@ -2135,5 +2139,57 @@
   "ui.skillLockedHint": {
     "ko": "{branch} +{n} 필요",
     "en": "Needs {branch} +{n}"
+  },
+  "ui.resultVictory": {
+    "ko": "승리",
+    "en": "Victory"
+  },
+  "ui.resultDefeat": {
+    "ko": "패배",
+    "en": "Defeat"
+  },
+  "ui.resultRewards": {
+    "ko": "획득 보상",
+    "en": "Rewards"
+  },
+  "ui.resultWinSub": {
+    "ko": "전리품을 확인하세요",
+    "en": "Review your spoils"
+  },
+  "ui.resultSymbolDrop": {
+    "ko": "상징 드롭",
+    "en": "Symbol drop"
+  },
+  "ui.resultLevelUp": {
+    "ko": "레벨 업",
+    "en": "Level up"
+  },
+  "ui.resultSummonerExp": {
+    "ko": "소환사 경험치",
+    "en": "Summoner EXP"
+  },
+  "ui.resultEmptySub": {
+    "ko": "표시할 결과가 없습니다",
+    "en": "Nothing to show"
+  },
+  "ui.resultExpUser": {
+    "ko": "모험가",
+    "en": "Adventurer"
+  },
+  "ui.resultExpSummoner": {
+    "ko": "소환사",
+    "en": "Summoner"
+  },
+  "ui.resultExpMonster": {
+    "ko": "소환수",
+    "en": "Monster"
+  },
+  "ui.resultExpGain": {
+    "ko": "+{n}",
+    "en": "+{n}"
+  },
+  "ui.resultExpToNext": {
+    "ko": "{cur}/{max}",
+    "en": "{cur}/{max}"
   }
 }

@@ -581,6 +581,7 @@ const messages: MessageDict = {
   "ui.codexLocked": "Locked",
   "ui.codexClose": "Close",
   "ui.codexStarN": "{n}★",
+  "ui.codexStarFilter": "{element} star filter",
   "ui.codexDetailSkills": "Skills",
   "ui.sumBookTabGear": "Gear",
   "ui.sumBookLeader": "Leader skill",
@@ -606,7 +607,20 @@ const messages: MessageDict = {
   "ui.gearSlotRing": "Ring",
   "ui.gearEnhanceCost": "Enhance gold {mana}",
   "ui.gearEnhanceCostCrystal": "Enhance gold {mana} · crystal {crystal}",
-  "ui.skillLockedHint": "Needs {branch} +{n}"
+  "ui.skillLockedHint": "Needs {branch} +{n}",
+  "ui.resultVictory": "Victory",
+  "ui.resultDefeat": "Defeat",
+  "ui.resultRewards": "Rewards",
+  "ui.resultWinSub": "Review your spoils",
+  "ui.resultSymbolDrop": "Symbol drop",
+  "ui.resultLevelUp": "Level up",
+  "ui.resultSummonerExp": "Summoner EXP",
+  "ui.resultEmptySub": "Nothing to show",
+  "ui.resultExpUser": "Adventurer",
+  "ui.resultExpSummoner": "Summoner",
+  "ui.resultExpMonster": "Monster",
+  "ui.resultExpGain": "+{n}",
+  "ui.resultExpToNext": "{cur}/{max}"
 };
 
 export default messages;

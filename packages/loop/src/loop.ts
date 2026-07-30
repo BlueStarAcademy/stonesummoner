@@ -82,6 +82,7 @@ import {
   tickProduction,
   upgradeBuilding,
   spendEnergy,
+  SUMMONER_EXP_PER_LEVEL,
   type BuildingId,
   type IslandState,
 } from "stonesummoner-home";
@@ -115,6 +116,8 @@ import {
   SUMMON_SCROLL_COST,
   type OwnedMonster,
   type ScrollKind,
+  addOwnedMonsterExp,
+  MONSTER_EXP_PER_LEVEL,
 } from "./roster.js";
 import { expForStage, isStageUnlocked, stageUnlockLabel } from "./progress.js";
 
@@ -128,6 +131,7 @@ export {
   MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
+  MONSTER_EXP_PER_LEVEL,
   normalizeSkillLevels,
   pickRandomSkillUpIndex,
   skillUpgradableIndices,
@@ -510,6 +514,22 @@ export interface PlayerSave {
   symbolBagSlots: number;
 }
 
+export interface ExpTrackGain {
+  kind: "user" | "summoner" | "monster";
+  id: string;
+  /** Display name for monster rows (content). */
+  nameKo?: string;
+  monsterId?: string;
+  element?: SummonerElement;
+  gained: number;
+  beforeLevel: number;
+  beforeExp: number;
+  afterLevel: number;
+  afterExp: number;
+  expPerLevel: number;
+  levelsGained: number;
+}
+
 export interface BattleReward {
   mana: number;
   crystal?: number;
@@ -523,6 +543,8 @@ export interface BattleReward {
   victory: boolean;
   summonerExp?: number;
   levelsGained?: number;
+  /** User / summoner / party monster EXP progress for the result screen. */
+  expTracks?: ExpTrackGain[];
 }
 
 export interface LoopStepResult {
@@ -1528,6 +1550,7 @@ export function runSummon(
       uid: nextUid("sum"),
       monsterId: def.id,
       level: 1,
+      exp: 0,
       symbolSlots: emptySymbolSlots(),
       evolve: 0,
       skillLevels: defaultSkillLevels(),
@@ -2560,7 +2583,12 @@ export function applyRewards(
   if (!victory) {
     return {
       save,
-      reward: { mana: 0, expNote: "패배 — 보상 없음", victory: false },
+      reward: {
+        mana: 0,
+        expNote: "패배 — 보상 없음",
+        victory: false,
+        expTracks: [],
+      },
     };
   }
 
@@ -2585,6 +2613,7 @@ export function applyRewards(
   const jinmunGain = stage.jinmunReward ?? 0;
   const dropChance = stage.dropChance ?? 0.65;
   const expGain = expForStage(stage);
+  const monsterExpGain = Math.max(1, Math.round(expGain * 0.75));
 
   let working = syncSummonerMirrors({
     ...save,
@@ -2594,8 +2623,78 @@ export function applyRewards(
       crystal: save.island.crystal + crystalGain,
     },
   });
+
+  const beforeAccountLv = accountSummonerLevel(
+    working.summoners ?? createSummonerRoster(),
+  );
+  const beforeActive = getActiveSummoner(working);
+  const beforeParty = working.party
+    .map((uid) => working.roster.find((m) => m.uid === uid))
+    .filter((m): m is OwnedMonster => !!m)
+    .map((m) => ({
+      uid: m.uid,
+      monsterId: m.monsterId,
+      level: m.level,
+      exp: m.exp ?? 0,
+      nameKo: describeOwned(m),
+    }));
+
   const leveled = addActiveSummonerExp(working, expGain);
   working = leveled.save;
+
+  const rosterAfter = working.roster.map((m) => {
+    if (!working.party.includes(m.uid)) return m;
+    return addOwnedMonsterExp(m, monsterExpGain).monster;
+  });
+  working = { ...working, roster: rosterAfter };
+
+  const afterActive = getActiveSummoner(working);
+  const afterAccountLv = accountSummonerLevel(
+    working.summoners ?? createSummonerRoster(),
+  );
+  const expTracks: ExpTrackGain[] = [
+    {
+      kind: "user",
+      id: "user",
+      gained: expGain,
+      beforeLevel: beforeAccountLv,
+      beforeExp: beforeActive.exp,
+      afterLevel: afterAccountLv,
+      afterExp: afterActive.exp,
+      expPerLevel: SUMMONER_EXP_PER_LEVEL,
+      levelsGained: Math.max(0, afterAccountLv - beforeAccountLv),
+    },
+    {
+      kind: "summoner",
+      id: working.activeSummoner ?? "light",
+      element: working.activeSummoner ?? "light",
+      gained: expGain,
+      beforeLevel: beforeActive.level,
+      beforeExp: beforeActive.exp,
+      afterLevel: afterActive.level,
+      afterExp: afterActive.exp,
+      expPerLevel: SUMMONER_EXP_PER_LEVEL,
+      levelsGained: leveled.levelsGained,
+    },
+    ...beforeParty.map((bp) => {
+      const after = working.roster.find((m) => m.uid === bp.uid)!;
+      const gainedLevels = Math.max(0, after.level - bp.level);
+      return {
+        kind: "monster" as const,
+        id: bp.uid,
+        nameKo: bp.nameKo,
+        monsterId: bp.monsterId,
+        gained: monsterExpGain,
+        beforeLevel: bp.level,
+        beforeExp: bp.exp,
+        afterLevel: after.level,
+        afterExp: after.exp ?? 0,
+        expPerLevel: MONSTER_EXP_PER_LEVEL,
+        levelsGained: gainedLevels,
+      };
+    }),
+  ];
+
   let island = working.island;
 
   const symbols = [...save.symbols];
@@ -2733,6 +2832,7 @@ export function applyRewards(
       victory: true,
       summonerExp: expGain,
       levelsGained: leveled.levelsGained,
+      expTracks,
     },
   };
 }

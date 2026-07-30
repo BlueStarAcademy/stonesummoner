@@ -136,6 +136,11 @@ export interface SkillResult {
 }
 
 export class Battle {
+  /**
+   * Last team that placed a stone. Go-like alternation: if the same team
+   * acts again (SPD / violent), skip stone and go straight to skill.
+   */
+  lastStoneTeam: TeamId | null = null;
   /** One or two boards (쌍국). Prefer `board` getter for the active one. */
   readonly boards: Board[];
   activeBoardIndex = 0;
@@ -406,7 +411,9 @@ export class Battle {
           this.tickStatus(u);
         }
         this.activeUnitId = unit.id;
-        this.phase = "await_stone";
+        // Go-like stone alternation: same team consecutive ATB skips stone.
+        this.phase =
+          this.lastStoneTeam === unit.team ? "await_skill" : "await_stone";
         this.skillAmplifyBonus = 0;
         return unit;
       }
@@ -1019,6 +1026,7 @@ export class Battle {
     this.log.push(
       `${unit.name} stone (${point.x},${point.y}) cap=${result.capturedCount} amp=${this.currentAmplify().toFixed(2)}`,
     );
+    this.lastStoneTeam = unit.team;
     if (this.pendingCaptureShop) {
       this.phase = "await_capture_shop";
       this.log.push(`사석상점: 보상을 선택하세요`);
@@ -1571,7 +1579,8 @@ export class Battle {
     ) {
       unit.atb = ATB_THRESHOLD;
       this.log.push(`${unit.name} 격노 — 추가 턴`);
-      this.phase = "await_stone";
+      // Extra turn from SPD/violent: no stone (Go alternation).
+      this.phase = "await_skill";
       this.activeUnitId = unit.id;
       this.checkFinish();
       return results;
@@ -2136,10 +2145,13 @@ export class Battle {
   runAutoTurn(): SkillResult[] {
     const unit = this.tickUntilReady();
     if (!unit) return [];
-    if (!this.autoStone()) return [];
+    if (this.phase === "await_stone") {
+      if (!this.autoStone()) return [];
+    }
     if (this.phase === "await_capture_shop") {
       this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
     }
+    if (this.phase !== "await_skill") return [];
     const sm = this.summonerOf(unit.team);
     const magics = sm.magicSkills ?? [];
     if (magics.length > 0) {

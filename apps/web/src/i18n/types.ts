@@ -602,6 +602,7 @@ export type MessageKey =
   | "ui.codexLocked"
   | "ui.codexClose"
   | "ui.codexStarN"
+  | "ui.codexStarFilter"
   | "ui.codexDetailSkills"
   | "ui.sumBookTabGear"
   | "ui.sumBookLeader"
@@ -627,7 +628,20 @@ export type MessageKey =
   | "ui.gearSlotRing"
   | "ui.gearEnhanceCost"
   | "ui.gearEnhanceCostCrystal"
-  | "ui.skillLockedHint";
+  | "ui.skillLockedHint"
+  | "ui.resultVictory"
+  | "ui.resultDefeat"
+  | "ui.resultRewards"
+  | "ui.resultWinSub"
+  | "ui.resultSymbolDrop"
+  | "ui.resultLevelUp"
+  | "ui.resultSummonerExp"
+  | "ui.resultEmptySub"
+  | "ui.resultExpUser"
+  | "ui.resultExpSummoner"
+  | "ui.resultExpMonster"
+  | "ui.resultExpGain"
+  | "ui.resultExpToNext";
 
 export type MessageDict = Record<MessageKey, string>;
 

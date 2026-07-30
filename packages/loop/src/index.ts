@@ -20,6 +20,7 @@ export {
   MAX_EVOLVE,
   MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
+  MONSTER_EXP_PER_LEVEL,
   MAX_SUMMONER_AWAKEN,
   MAX_GEAR_BAG,
   EQUIP_VAULT_WEEKLY_LIMIT,
@@ -121,6 +122,7 @@ export {
 export type {
   BattleReward,
   ElementSummonerProfile,
+  ExpTrackGain,
   GuildRankRow,
   LoopStepResult,
   OwnedMonster,

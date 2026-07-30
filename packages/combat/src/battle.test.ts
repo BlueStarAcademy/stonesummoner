@@ -98,6 +98,31 @@ describe("Battle flow", () => {
     assert.ok(hits[0]!.damage > 0);
   });
 
+  it("skips stone when the same team acts again (Go alternation)", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("a-m1")!.atb = 100;
+    const u1 = b.tickUntilReady();
+    assert.equal(u1?.id, "a-m1");
+    assert.equal(b.phase, "await_stone");
+    assert.equal(b.autoStone(), true);
+    assert.equal(b.lastStoneTeam, "ally");
+    b.useSkill();
+    // Same team again (summoner) — no stone.
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("a-sum")!.atb = 100;
+    const u2 = b.tickUntilReady();
+    assert.equal(u2?.id, "a-sum");
+    assert.equal(b.phase, "await_skill");
+    assert.equal(b.lastStoneTeam, "ally");
+  });
+
   it("summoner skill when mana full hits all enemy summons", () => {
     const b = new Battle({
       boardSize: 5,
@@ -639,7 +664,18 @@ describe("Battle flow", () => {
       resetThreshold: 3,
     });
     for (let i = 0; i < 3; i++) {
-      b.runAutoTurn();
+      const team = i % 2 === 0 ? "ally" : "enemy";
+      for (const u of b.units) u.atb = 0;
+      const actor = b.units.find(
+        (u) => u.team === team && u.kind === "monster" && u.alive,
+      )!;
+      actor.atb = 100;
+      // Ensure this team must place (Go alternation).
+      b.lastStoneTeam = team === "ally" ? "enemy" : "ally";
+      b.tickUntilReady();
+      assert.equal(b.phase, "await_stone");
+      assert.equal(b.autoStone(), true);
+      b.useSkill();
     }
     assert.equal(b.circle.boardPhase, 1);
     assert.equal(b.circle.stoneSummonCount, 0);
@@ -660,7 +696,16 @@ describe("Battle flow", () => {
       resetThreshold: 2,
     });
     for (let i = 0; i < 2; i++) {
-      b.runAutoTurn();
+      const team = i % 2 === 0 ? "ally" : "enemy";
+      for (const u of b.units) u.atb = 0;
+      const actor = b.units.find(
+        (u) => u.team === team && u.kind === "monster" && u.alive,
+      )!;
+      actor.atb = 100;
+      b.lastStoneTeam = team === "ally" ? "enemy" : "ally";
+      b.tickUntilReady();
+      assert.equal(b.autoStone(), true);
+      b.useSkill();
     }
     assert.equal(b.openingBonusPending, true);
     const sug = b.suggestStones(b.getUnit("a-m1")!);
@@ -671,7 +716,9 @@ describe("Battle flow", () => {
     const topDist = Math.abs(top.x - cx) + Math.abs(top.y - cy);
     assert.ok(topDist <= 4);
 
-    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("a-m1")!.atb = 100;
+    b.lastStoneTeam = "enemy";
     b.tickUntilReady();
     const amp0 = b.amplify;
     const mana0 = b.allySummoner.mana;

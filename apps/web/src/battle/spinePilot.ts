@@ -2,6 +2,8 @@
  * Public Spine API — Pixi + spine-pixi-v8 mounts.
  * Falls back silently when assets/runtime fail (WebP stays visible).
  */
+import { getSpinePack } from "./spinePacks";
+
 export {
   destroyAllSpine,
   getSpineController,

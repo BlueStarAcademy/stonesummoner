@@ -19,6 +19,7 @@ import {
 } from "./battle/fx";
 import { destroyAllSpine, mountBattleSpines, playSpineClip } from "./battle/spinePilot";
 import { getBattleStillSrc } from "./battle/spinePacks";
+import { BATTLE_STILL_FAMILY_SET } from "./battle/battleStills";
 import { dematteArtInTree } from "./ui/dematteArt";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
 import {
@@ -207,6 +208,7 @@ import {
   equipVaultRemaining,
   syncEquipVaultWeek,
   type BattleReward,
+  type ExpTrackGain,
   type PlayerSave,
   type ScrollKind,
   type SummonerElement,
@@ -511,6 +513,8 @@ let legalHints: Point[] = [];
 let stoneSuggestions: StoneSuggestion[] = [];
 let selectedTargetId: string | null = null;
 let lastReward: BattleReward | null = null;
+/** Normal / premium scroll deltas granted with the last battle reward. */
+let lastScrollPremiumGain = 0;
 let lastScrollGain = 0;
 /** Most recently summoned monster uids (summon reveal card / multi). */
 let lastSummonUids: string[] = [];
@@ -537,8 +541,15 @@ let sumDetailTab: SumDetailTab = "info";
 let codexOpen = false;
 type CodexTab = "monsters" | "summoners";
 let codexTab: CodexTab = "monsters";
-let codexElementFilter: "all" | SummonerElement = "all";
-let codexStarsFilter: "all" | 1 | 2 | 3 | 4 | 5 = "all";
+type CodexStarsFilter = "all" | 1 | 2 | 3 | 4 | 5;
+/** Per-element star filter on the monster codex (sections by attribute). */
+let codexStarsByElement: Record<SummonerElement, CodexStarsFilter> = {
+  fire: "all",
+  water: "all",
+  wind: "all",
+  light: "all",
+  dark: "all",
+};
 /** Selected monster id inside the codex detail popover. */
 let codexDetailMonsterId: string | null = null;
 /** Skill-feed material picker modal (same-species fodder). */
@@ -960,6 +971,7 @@ function migrateSave(raw: unknown): PlayerSave | null {
     ...m,
     monsterId: resolveMonsterId(m.monsterId),
     evolve: m.evolve ?? 0,
+    exp: typeof m.exp === "number" ? m.exp : 0,
     skillLevels: (m.skillLevels ?? [1, 1, 1]) as [number, number, number],
     symbolSlots: m.symbolSlots ?? [null, null, null, null, null, null],
   }));
@@ -1320,6 +1332,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   currentStage = stage;
   lastReward = null;
   lastScrollGain = 0;
+  lastScrollPremiumGain = 0;
   autoMode = false;
   clearAutoTimer();
   dmgFloats = [];
@@ -1337,6 +1350,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   ensureTarget();
   view = "battle";
   render();
+  void resolveCombatUntilAllyInput();
 }
 
 function renderStagePrepDock(): string {
@@ -1938,9 +1952,6 @@ function refreshLegal(): void {
   legalHints = battle.board
     .legalMoves(color)
     .filter((p) => !battle!.isForbidden(p));
-  if (unit.team === "ally") {
-    stoneSuggestions = battle.suggestStones(unit);
-  }
 }
 
 function ensureTarget(): string | undefined {
@@ -1964,12 +1975,77 @@ function grantRewardIfNeeded(): void {
   if (lastReward) return;
   const victory = battle.finishReason === "ally_win";
   const scrollsBefore = save.scrolls;
+  const scrollsPremiumBefore = save.scrollsPremium ?? 0;
   const { save: next, reward } = applyRewards(save, currentStage, victory);
   save = next;
   persist();
   lastScrollGain = Math.max(0, save.scrolls - scrollsBefore);
+  lastScrollPremiumGain = Math.max(
+    0,
+    (save.scrollsPremium ?? 0) - scrollsPremiumBefore,
+  );
   lastReward = reward;
   view = "result";
+}
+
+function resultLootTile(opts: {
+  icon: string;
+  label: string;
+  amount: string;
+  tone?: string;
+  badge?: string;
+}): string {
+  const tone = opts.tone ? ` result-loot-tile--${opts.tone}` : "";
+  const badge = opts.badge
+    ? `<span class="result-loot-badge">${opts.badge}</span>`
+    : "";
+  return `<li class="result-loot-tile${tone}">
+    <span class="result-loot-frame" aria-hidden="true">
+      <img class="result-loot-ico" src="${opts.icon}" width="40" height="40" alt="" draggable="false" />
+      ${badge}
+    </span>
+    <strong class="result-loot-amt">${opts.amount}</strong>
+    <span class="result-loot-name">${opts.label}</span>
+  </li>`;
+}
+
+function resultExpTrackRow(track: ExpTrackGain): string {
+  const per = Math.max(1, track.expPerLevel);
+  const cur = Math.min(per, Math.max(0, track.afterExp));
+  const pct = Math.round((cur / per) * 100);
+  const leveled = track.levelsGained > 0;
+  let icon = "/art/auth/logo-mark-192.png";
+  let label = t("ui.resultExpUser");
+  if (track.kind === "summoner") {
+    const el = track.element ?? save.activeSummoner ?? "light";
+    icon = summonerArtSrc(el);
+    label = t("ui.resultExpSummoner");
+  } else if (track.kind === "monster") {
+    icon =
+      monsterBattleArtSrc(track.monsterId, "front") ??
+      monsterArtSrc(track.monsterId) ??
+      "/art/auth/logo-mark-192.png";
+    label = track.nameKo || t("ui.resultExpMonster");
+  }
+  const lvBadge = leveled
+    ? `<span class="result-exp-lvup">Lv.${track.beforeLevel}${ARROW_RIGHT}${track.afterLevel}</span>`
+    : `<span class="result-exp-lv">Lv.${track.afterLevel}</span>`;
+  return `<li class="result-exp-row result-exp-row--${track.kind}${leveled ? " is-levelup" : ""}">
+    <span class="result-exp-art" aria-hidden="true">
+      <img src="${icon}" width="40" height="40" alt="" draggable="false" />
+    </span>
+    <div class="result-exp-body">
+      <div class="result-exp-top">
+        <strong class="result-exp-name">${escapeHtml(label)}</strong>
+        ${lvBadge}
+        <span class="result-exp-frac">${t("ui.resultExpToNext", { cur, max: per })}</span>
+        <strong class="result-exp-delta">+${fmtRes(track.gained)}</strong>
+      </div>
+      <div class="result-exp-bar" role="progressbar" aria-valuenow="${cur}" aria-valuemin="0" aria-valuemax="${per}">
+        <i class="result-exp-bar-fill" style="width:${pct}%"></i>
+      </div>
+    </div>
+  </li>`;
 }
 
 function renderResult(): string {
@@ -1977,96 +2053,226 @@ function renderResult(): string {
   const reward = lastReward;
   if (!stage || !reward) {
     return `<div class="result-wrap">
-      ${navBackBtn({ nav: "stages", label: t('ui.1a7f31cadb') })}
+      ${navBackBtn({ nav: "stages", label: t("ui.1a7f31cadb") })}
       <div class="battle-sky" aria-hidden="true">
         <img class="battle-sky-img" src="/art/battle/battle-arena-bg.webp" alt="" decoding="async" />
         <div class="battle-sky-veil"></div>
       </div>
       <div class="result-screen is-lose">
-        <div class="result-banner">
-          <p class="result-kicker">${t('ui.be85833944')}</p>
-          <h2 class="result-title">${t('ui.70088c999d')}</h2>
-          <p class="result-sub">${t('ui.41281baf5a')}</p>
+        <div class="result-banner result-banner--compact">
+          <h2 class="result-title">${t("ui.70088c999d")}</h2>
+        </div>
+        <div class="result-cta">
+          <button type="button" class="auth-btn-primary" data-nav="stages">${t("ui.0f9f095864")}</button>
+          <div class="result-cta-row">
+            <button type="button" class="secondary auth-btn-ghost" data-nav="home">${t("ui.d8c261904f")}</button>
+          </div>
         </div>
       </div>
     </div>`;
   }
   const win = reward.victory;
-  const rows: string[] = [];
+  const title = win ? t("ui.resultVictory") : t("ui.resultDefeat");
+  const stageLine = escapeHtml(stage.nameKo);
+
+  const lootTiles: string[] = [];
   if (win) {
-    rows.push(`<li><span>${t('ui.dc78e6a251')}</span><strong>+${reward.mana}</strong></li>`);
-    if (reward.crystal)
-      rows.push(`<li><span>${t('ui.5d0bf3b101')}</span><strong>+${reward.crystal}</strong></li>`);
-    if (reward.glory)
-      rows.push(`<li><span>${t('ui.ba0c9e096f')}</span><strong>+${reward.glory}</strong></li>`);
-    if (reward.jinmun)
-      rows.push(`<li><span>${t('ui.4b482b3675')}</span><strong>+${reward.jinmun}</strong></li>`);
-    if (reward.contribution)
-      rows.push(
-        `<li><span>${t('ui.443ac89859')}</span><strong>+${reward.contribution}</strong></li>`,
+    if (reward.mana > 0) {
+      lootTiles.push(
+        resultLootTile({
+          icon: "/art/ui/res/gold.svg",
+          label: t("res.gold"),
+          amount: `+${fmtRes(reward.mana)}`,
+          tone: "gold",
+        }),
       );
-    if (reward.summonerExp)
-      rows.push(
-        `<li><span>${t('ui.fd3c4455cd')} EXP</span><strong>+${reward.summonerExp}</strong></li>`,
+    }
+    if (reward.crystal) {
+      lootTiles.push(
+        resultLootTile({
+          icon: "/art/ui/res/crystal.svg",
+          label: t("res.crystal"),
+          amount: `+${fmtRes(reward.crystal)}`,
+          tone: "crystal",
+        }),
       );
-    if (reward.levelsGained)
-      rows.push(
-        `<li><span>${t('ui.453d0d2df5')}</span><strong>Lv.${save.island.summonerLevel}</strong></li>`,
+    }
+    if (reward.glory) {
+      lootTiles.push(
+        resultLootTile({
+          icon: "/art/ui/res/glory.svg",
+          label: t("res.glory"),
+          amount: `+${fmtRes(reward.glory)}`,
+          tone: "glory",
+        }),
       );
-    if (lastScrollGain)
-      rows.push(
-        `<li><span>${t('ui.fa73f3a42f')}</span><strong>+${lastScrollGain}</strong></li>`,
+    }
+    if (reward.jinmun) {
+      lootTiles.push(
+        resultLootTile({
+          icon: "/art/ui/res/jinmun.svg",
+          label: t("res.jinmun"),
+          amount: `+${fmtRes(reward.jinmun)}`,
+          tone: "jinmun",
+        }),
       );
+    }
+    if (reward.contribution) {
+      lootTiles.push(
+        resultLootTile({
+          icon: "/art/ui/res/guild.svg",
+          label: t("res.guild"),
+          amount: `+${fmtRes(reward.contribution)}`,
+          tone: "guild",
+        }),
+      );
+    }
+    if (lastScrollGain) {
+      lootTiles.push(
+        resultLootTile({
+          icon: scrollArtSrc("normal"),
+          label: t("res.scrollNormal"),
+          amount: `+${lastScrollGain}`,
+          tone: "scroll",
+        }),
+      );
+    }
+    if (lastScrollPremiumGain) {
+      lootTiles.push(
+        resultLootTile({
+          icon: scrollArtSrc("premium"),
+          label: t("res.scrollPremium"),
+          amount: `+${lastScrollPremiumGain}`,
+          tone: "scroll",
+        }),
+      );
+    }
   }
-  const drop = [
-    reward.gear
-      ? `<div class="result-drop">
-        <p class="section-label">${t('ui.6be738a130')}</p>
-        <p class="result-drop-card">${describeGear(reward.gear)}</p>
-        <div class="result-drop-cta">
-          <button type="button" class="auth-btn-primary" data-nav="enhance">${t('ui.bbef9e1b47')}</button>
+
+  const tracks = reward.expTracks?.length
+    ? reward.expTracks
+    : win
+      ? ([
+          {
+            kind: "summoner",
+            id: "summoner",
+            element: save.activeSummoner ?? "light",
+            gained: reward.summonerExp ?? 0,
+            beforeLevel: Math.max(
+              1,
+              save.island.summonerLevel - (reward.levelsGained ?? 0),
+            ),
+            beforeExp: 0,
+            afterLevel: save.island.summonerLevel,
+            afterExp: Math.floor(save.island.summonerExp ?? 0),
+            expPerLevel: 100,
+            levelsGained: reward.levelsGained ?? 0,
+          },
+        ] satisfies ExpTrackGain[])
+      : [];
+
+  const progressSection =
+    win && tracks.length
+      ? `<section class="result-progress" aria-label="${t("ui.resultExpUser")}">
+        <ul class="result-exp-list">${tracks.map(resultExpTrackRow).join("")}</ul>
+      </section>`
+      : "";
+
+  const lootSection =
+    win && lootTiles.length
+      ? `<section class="result-loot" aria-label="${t("ui.resultRewards")}">
+        <ul class="result-loot-grid">${lootTiles.join("")}</ul>
+      </section>`
+      : "";
+
+  const dropCards: string[] = [];
+  if (reward.gear) {
+    dropCards.push(`<article class="result-drop-card result-drop-card--gear">
+      <p class="result-section-label">${t("ui.6be738a130")}</p>
+      <div class="result-drop-body">
+        <span class="result-drop-art" aria-hidden="true">
+          <img src="/art/ui/symbol/gear.svg" width="56" height="56" alt="" draggable="false" />
+        </span>
+        <div class="result-drop-copy">
+          <strong>${escapeHtml(describeGear(reward.gear))}</strong>
+          <small>${escapeHtml(gearSlotLabel(reward.gear.slot))}</small>
         </div>
-      </div>`
-      : "",
-    reward.symbol
-      ? `<div class="result-drop">
-        <p class="section-label">${t('ui.6be738a130')}</p>
-        <p class="result-drop-card">${describeSymbol(reward.symbol)}</p>
-        <div class="result-drop-cta">
-          <button type="button" class="auth-btn-primary" data-nav="enhance">${t('ui.7533294263')}</button>
-          <button type="button" class="secondary" data-nav="shop">${t('ui.9efcf019b7')}</button>
+      </div>
+      <div class="result-drop-acts">
+        <button type="button" class="auth-btn-primary" data-nav="enhance">${t("ui.bbef9e1b47")}</button>
+      </div>
+    </article>`);
+  }
+  if (reward.symbol) {
+    const rarity = symbolQualityMeta(reward.symbol.quality);
+    dropCards.push(`<article class="result-drop-card result-drop-card--symbol rarity--${rarity.id}">
+      <p class="result-section-label">${t("ui.resultSymbolDrop")}</p>
+      <div class="result-drop-body">
+        <span class="result-drop-art result-drop-art--sym" aria-hidden="true">
+          ${renderSymIco({
+            setId: reward.symbol.setId,
+            slot: reward.symbol.slot,
+            enhance: reward.symbol.enhance,
+            rarityId: rarity.id,
+            stars: reward.symbol.stars,
+            size: "md",
+          })}
+        </span>
+        <div class="result-drop-copy">
+          <strong>${escapeHtml(describeSymbol(reward.symbol))}</strong>
+          <small>${escapeHtml(rarity.label)}</small>
         </div>
-      </div>`
-      : "",
-  ].join("");
+      </div>
+      <div class="result-drop-acts${reward.symbol ? " result-drop-acts--split" : ""}">
+        <button type="button" class="auth-btn-primary" data-nav="enhance">${t("ui.7533294263")}</button>
+        <button type="button" class="secondary auth-btn-ghost" data-nav="shop">${t("ui.9efcf019b7")}</button>
+      </div>
+    </article>`);
+  }
+  const dropSection = dropCards.length
+    ? `<section class="result-drops">${dropCards.join("")}</section>`
+    : "";
+
+  const loseNote = !win
+    ? `<p class="result-empty">${escapeHtml(reward.expNote || t("ui.41281baf5a"))}</p>`
+    : "";
+
   return `<div class="result-wrap">
-    ${navBackBtn({ nav: "stages", label: t('ui.1a7f31cadb') })}
+    ${navBackBtn({ nav: "stages", label: t("ui.1a7f31cadb") })}
     <div class="battle-sky" aria-hidden="true">
       <img class="battle-sky-img" src="/art/battle/battle-arena-bg.webp" alt="" decoding="async" />
       <div class="battle-sky-veil"></div>
     </div>
     <div class="result-screen ${win ? "is-win" : "is-lose"}">
-    <div class="result-banner">
-          <p class="result-kicker">${t('ui.be85833944')}</p>
-          <h2 class="result-title">${t('ui.70088c999d')}</h2>
-          <p class="result-sub">${t('ui.41281baf5a')}</p>
+      <div class="result-banner result-banner--compact">
+        <h2 class="result-title">${title}</h2>
+        <p class="result-stage">${stageLine}</p>
+      </div>
+      <div class="result-body">
+        ${
+          progressSection
+            ? `<div class="result-exp-panel">${progressSection}</div>`
+            : ""
+        }
+        ${loseNote}
+      </div>
+      <div class="result-foot">
+        ${lootSection}
+        ${dropSection}
+        <div class="result-cta">
+          <button type="button" class="auth-btn-primary result-cta-primary" id="btn-result-again">${t("ui.03d1f975cb")}</button>
+          <div class="result-cta-row">
+            <button type="button" class="secondary auth-btn-ghost" data-nav="stages">${t("ui.0f9f095864")}</button>
+            ${
+              win
+                ? `<button type="button" class="secondary auth-btn-ghost" data-nav="party">${t("ui.108f04ca6e")}</button>`
+                : ""
+            }
+            <button type="button" class="secondary auth-btn-ghost" data-nav="home">${t("ui.d8c261904f")}</button>
+          </div>
+        </div>
+      </div>
     </div>
-    ${
-      win
-        ? `<ul class="result-rewards">${rows.join("")}</ul>${drop}`
-        : `<p class="muted result-empty">${reward.expNote}</p>`
-    }
-    <div class="result-cta">
-      <button type="button" class="auth-btn-primary" id="btn-result-again">${t('ui.03d1f975cb')}</button>
-      <button type="button" class="secondary auth-btn-ghost" data-nav="stages">${t('ui.0f9f095864')}</button>
-      ${
-        win
-          ? `<button type="button" class="secondary auth-btn-ghost" data-nav="party">${t('ui.108f04ca6e')}</button>`
-          : ""
-      }
-      <button type="button" class="secondary auth-btn-ghost" data-nav="home">${t('ui.d8c261904f')}</button>
-    </div>
-  </div>
   </div>`;
 }
 
@@ -2111,7 +2317,10 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
         fxDurationMs(380, battleSpeed),
       );
     }
-    await waitFx(Math.max(dropMs, capBonus > 0 ? fxDurationMs(380, battleSpeed) : 0));
+    await waitFx(
+      Math.max(dropMs, capBonus > 0 ? fxDurationMs(380, battleSpeed) : 0),
+    );
+    await resolveCombatUntilAllyInput({ holdBusy: true });
   } finally {
     battleFxBusy = false;
   }
@@ -2153,63 +2362,201 @@ function renderDmgLayer(): string {
     .join("");
 }
 
-function frontRow(units: Unit[]): Unit[] {
-  return units.filter((u) => u.kind === "monster");
+/** Monsters with summoner seated in the middle of the line (e.g. M M S M M). */
+function battleLine(units: Unit[]): Unit[] {
+  const monsters = units.filter((u) => u.kind === "monster");
+  const summoner = units.find((u) => u.kind === "summoner");
+  if (!summoner) return monsters;
+  const mid = Math.floor(monsters.length / 2);
+  return [...monsters.slice(0, mid), summoner, ...monsters.slice(mid)];
 }
 
-function backSummoner(units: Unit[]): Unit | undefined {
-  return units.find((u) => u.kind === "summoner");
-}
-
-/** SW-style formation: monsters flanking a center summoner. */
+/** Facing across the board: one rim line per side, summoner among summons. */
 function renderBattleFront(
   units: Unit[],
   side: "enemy" | "ally",
   opts?: { targetable?: boolean },
 ): string {
-  const monsters = frontRow(units);
-  const summoner = backSummoner(units);
-  const mid = Math.ceil(monsters.length / 2);
-  const left = monsters.slice(0, mid);
-  const right = monsters.slice(mid);
-  const summonerOpts =
-    side === "enemy" && opts?.targetable ? opts : undefined;
-  const parts = [
-    ...left.map((u) => renderUnit(u, opts)),
-    summoner ? renderUnit(summoner, summonerOpts) : "",
-    ...right.map((u) => renderUnit(u, opts)),
-  ];
-  return `<div class="battle-front ${side}">${parts.join("")}</div>`;
+  const line = battleLine(units);
+  return `<div class="battle-formation ${side}">
+    <div class="battle-front ${side}">${line
+      .map((u) => renderUnit(u, opts))
+      .join("")}</div>
+  </div>`;
 }
 
 function afterPlayerAction(): void {
+  void resolveCombatUntilAllyInput();
+}
+
+/** Auto-pick skill for the active unit (summoner skills preferred when ready). */
+function resolveActiveUnitSkillHits(unit: Unit): SkillResult[] {
+  if (!battle) return [];
+  const magics = battle.summonerOf(unit.team).magicSkills ?? [];
+  const full = magics.find(
+    (s) => s.manaCostFrac >= 0.95 && battle!.canUseMagicSkill(unit, s.id),
+  );
+  if (full) return battle.useSkill({ summonerSkill: full.id });
+  const any = magics.find((s) => battle!.canUseMagicSkill(unit, s.id));
+  if (any) return battle.useSkill({ summonerSkill: any.id });
+  if (battle.canUseSummonerSkill(unit))
+    return battle.useSkill({ summonerSkill: "open" });
+  if (
+    battle.canUseSummonerClean(unit) &&
+    battle.countEnemyStones(unit.team) >= 4
+  )
+    return battle.useSkill({ summonerSkill: "clean" });
+  if (
+    battle.canUseSummonerGuard(unit) &&
+    battle.allyMonstersWounded(unit.team, 0.55)
+  )
+    return battle.useSkill({ summonerSkill: "guard" });
+  if (battle.canUseSummonerDeclare(unit))
+    return battle.useSkill({ summonerSkill: "declare" });
+  if (battle.canUseSummonerDual(unit))
+    return battle.useSkill({ summonerSkill: "dual" });
+  const targetId = unit.team === "ally" ? ensureTarget() : undefined;
+  return battle.useSkill({
+    skillIndex: pickAutoSkillIndex(unit, battle.units),
+    targetId,
+  });
+}
+
+/**
+ * Drive combat until the player must place a stone (or capture shop / finish).
+ * Manual: only ally stone placement is player-driven; attacks resolve with FX.
+ * Stones alternate by team (Go-like) — consecutive same-team ATB skips stone.
+ */
+async function resolveCombatUntilAllyInput(opts?: {
+  holdBusy?: boolean;
+  autoAlly?: boolean;
+}): Promise<void> {
   if (!battle) return;
-  for (let i = 0; i < 12 && !battle.finishReason; i++) {
-    const u = battle.tickUntilReady();
-    if (!u) break;
-    if (u.team === "ally") {
-      refreshLegal();
-      if (autoMode) {
-        scheduleAuto();
-      } else {
+  const autoAlly = opts?.autoAlly ?? autoMode;
+  const ownBusy = !opts?.holdBusy;
+  if (ownBusy) {
+    if (battleFxBusy) return;
+    battleFxBusy = true;
+  }
+  try {
+    for (let guard = 0; battle && !battle.finishReason && guard < 80; guard++) {
+      if (
+        battle.phase === "idle" ||
+        battle.phase === "resolved" ||
+        !battle.activeUnitId
+      ) {
+        const next = battle.tickUntilReady();
+        if (!next) break;
+        refreshLegal();
         render();
+        await waitFx(fxDurationMs(140, battleSpeed));
       }
-      return;
+
+      const unit = battle.activeUnitId
+        ? battle.getUnit(battle.activeUnitId)
+        : null;
+      if (!unit) break;
+
+      if (unit.team === "ally" && !autoAlly) {
+        if (battle.phase === "await_stone") {
+          refreshLegal();
+          render();
+          return;
+        }
+        if (battle.phase === "await_capture_shop") {
+          render();
+          return;
+        }
+        if (battle.phase === "await_skill") {
+          // Manual: player picks target + skill (no auto-attack).
+          ensureTarget();
+          refreshLegal();
+          render();
+          return;
+        }
+      }
+
+      if (battle.phase === "await_stone") {
+        if (unit.team === "ally" && autoAlly) {
+          const allySum = battle.units.find(
+            (u) => u.team === "ally" && u.kind === "summoner" && u.alive,
+          );
+          const castMs = fxDurationMs(320, battleSpeed);
+          if (allySum) {
+            pulseUnitClass(app, allySum.id, "fx-cast-place", castMs);
+            playSpineClip(allySum.id, "cast");
+          }
+          await waitFx(castMs);
+        }
+        const before = battle.board.getBoard().map((row) => [...row]);
+        if (!battle.autoStone()) {
+          // No legal stone — fall through to skill if phase advanced, else bail.
+          if (battle.phase === "await_stone") break;
+        } else {
+          refreshLegal();
+          render();
+          // Pulse first changed empty→stone cell if we can find it.
+          const after = battle.board.getBoard();
+          outer: for (let y = 0; y < after.length; y++) {
+            for (let x = 0; x < (after[y]?.length ?? 0); x++) {
+              if (before[y]?.[x] == null && after[y]?.[x] != null) {
+                pulseBoardCell(
+                  app,
+                  x,
+                  y,
+                  "fx-stone-drop",
+                  fxDurationMs(240, battleSpeed),
+                );
+                break outer;
+              }
+            }
+          }
+          await waitFx(fxDurationMs(240, battleSpeed));
+        }
+      }
+
+      if (battle.phase === "await_capture_shop") {
+        if (unit.team === "ally" && !autoAlly) {
+          render();
+          return;
+        }
+        battle.chooseCaptureShop(
+          (["mana", "amplify", "cleanse"] as CaptureShopChoice[])[
+            Math.floor(Math.random() * 3)
+          ]!,
+        );
+      }
+
+      if (battle.phase === "await_skill") {
+        const hits = resolveActiveUnitSkillHits(unit);
+        if (battle.phase === "await_skill" && !hits.length) {
+          // Skill no-op / soft — end the turn so we never spin.
+          battle.phase = "resolved";
+          battle.activeUnitId = null;
+          continue;
+        }
+        const ult = hits.some((h) => h.usedSummonerSkill);
+        await playStrikeFx(hits, { ult });
+        refreshLegal();
+        render();
+        continue;
+      }
+
+      // Unexpected phase — stop to avoid spin.
+      break;
     }
-    battle.autoStone();
-    const hits = battle.useSkill({
-      useSummonerSkill: battle.canUseSummonerSkill(u),
-    });
-    pushDamageFloats(hits);
+
+    if (battle?.finishReason) {
+      autoMode = false;
+      clearAutoTimer();
+      grantRewardIfNeeded();
+    }
+    refreshLegal();
+    render();
+    if (autoMode && battle && !battle.finishReason) scheduleAuto();
+  } finally {
+    if (ownBusy) battleFxBusy = false;
   }
-  if (battle.finishReason) {
-    autoMode = false;
-    clearAutoTimer();
-    grantRewardIfNeeded();
-  }
-  refreshLegal();
-  render();
-  if (autoMode && battle && !battle.finishReason) scheduleAuto();
 }
 
 function clearAutoTimer(): void {
@@ -2286,73 +2633,12 @@ function scheduleAuto(): void {
   clearAutoTimer();
   if (!autoMode || !battle || battle.finishReason) return;
   autoTimer = setTimeout(() => {
-    autoAllyTurn();
+    void resolveCombatUntilAllyInput({ autoAlly: true });
   }, 420 / battleSpeed);
 }
 
 function autoAllyTurn(): void {
-  if (!battle || battle.finishReason) {
-    autoMode = false;
-    clearAutoTimer();
-    if (battle?.finishReason) grantRewardIfNeeded();
-    render();
-    return;
-  }
-  if (battle.phase === "idle" || battle.phase === "resolved") {
-    battle.tickUntilReady();
-  }
-  const unit = battle.activeUnitId
-    ? battle.getUnit(battle.activeUnitId)
-    : null;
-  if (!unit) {
-    render();
-    return;
-  }
-  if (unit.team === "enemy") {
-    afterPlayerAction();
-    return;
-  }
-  if (battle.phase === "await_stone") battle.autoStone();
-  if (battle.phase === "await_capture_shop") {
-    battle.chooseCaptureShop(
-      (["mana", "amplify", "cleanse"] as CaptureShopChoice[])[
-        Math.floor(Math.random() * 3)
-      ]!,
-    );
-  }
-  if (battle.phase === "await_skill") {
-    const hits = (() => {
-      const magics = battle!.summonerOf(unit.team).magicSkills ?? [];
-      const full = magics.find(
-        (s) =>
-          s.manaCostFrac >= 0.95 && battle!.canUseMagicSkill(unit, s.id),
-      );
-      if (full) return battle!.useSkill({ summonerSkill: full.id });
-      const any = magics.find((s) => battle!.canUseMagicSkill(unit, s.id));
-      if (any) return battle!.useSkill({ summonerSkill: any.id });
-      if (battle!.canUseSummonerSkill(unit))
-        return battle!.useSkill({ summonerSkill: "open" });
-      if (
-        battle!.canUseSummonerClean(unit) &&
-        battle!.countEnemyStones(unit.team) >= 4
-      )
-        return battle!.useSkill({ summonerSkill: "clean" });
-      if (
-        battle!.canUseSummonerGuard(unit) &&
-        battle!.allyMonstersWounded(unit.team, 0.55)
-      )
-        return battle!.useSkill({ summonerSkill: "guard" });
-      if (battle!.canUseSummonerDeclare(unit))
-        return battle!.useSkill({ summonerSkill: "declare" });
-      if (battle!.canUseSummonerDual(unit))
-        return battle!.useSkill({ summonerSkill: "dual" });
-      return battle!.useSkill({
-        skillIndex: pickAutoSkillIndex(unit, battle!.units),
-      });
-    })();
-    pushDamageFloats(hits);
-  }
-  afterPlayerAction();
+  void resolveCombatUntilAllyInput({ autoAlly: true });
 }
 
 function castSkill(
@@ -2414,7 +2700,7 @@ async function castSkillAsync(
       if (full) {
         const hits = battle.useSkill({ summonerSkill: full.id });
         await playStrikeFx(hits, { ult: true });
-        afterPlayerAction();
+        await resolveCombatUntilAllyInput({ holdBusy: true });
         return;
       }
       if (!battle.canUseSummonerSkill(unit)) {
@@ -2424,7 +2710,7 @@ async function castSkillAsync(
       }
       const hits = battle.useSkill({ summonerSkill: "open" });
       await playStrikeFx(hits, { ult: true });
-      afterPlayerAction();
+      await resolveCombatUntilAllyInput({ holdBusy: true });
       return;
     }
     if (mode === "declare") {
@@ -2435,7 +2721,7 @@ async function castSkillAsync(
       }
       const hits = battle.useSkill({ summonerSkill: "declare" });
       pushDamageFloats(hits);
-      afterPlayerAction();
+      await resolveCombatUntilAllyInput({ holdBusy: true });
       return;
     }
     if (mode === "dual") {
@@ -2446,7 +2732,7 @@ async function castSkillAsync(
       }
       const hits = battle.useSkill({ summonerSkill: "dual" });
       pushDamageFloats(hits);
-      afterPlayerAction();
+      await resolveCombatUntilAllyInput({ holdBusy: true });
       return;
     }
     if (mode === "clean") {
@@ -2457,7 +2743,7 @@ async function castSkillAsync(
       }
       const hits = battle.useSkill({ summonerSkill: "clean" });
       pushDamageFloats(hits);
-      afterPlayerAction();
+      await resolveCombatUntilAllyInput({ holdBusy: true });
       return;
     }
     if (mode === "guard") {
@@ -2468,7 +2754,7 @@ async function castSkillAsync(
       }
       const hits = battle.useSkill({ summonerSkill: "guard" });
       pushDamageFloats(hits);
-      afterPlayerAction();
+      await resolveCombatUntilAllyInput({ holdBusy: true });
       return;
     }
 
@@ -2487,7 +2773,7 @@ async function castSkillAsync(
       return;
     }
     await playStrikeFx(hits);
-    afterPlayerAction();
+    await resolveCombatUntilAllyInput({ holdBusy: true });
   } finally {
     battleFxBusy = false;
   }
@@ -2525,25 +2811,50 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
     opts?.targetable && u.alive
       ? `type="button" data-target="${u.id}"`
       : "";
-  const artSize = isSummoner ? 128 : 160;
+  const artSize = isSummoner ? 112 : 160;
+  const facing: "front" | "back" = u.team === "ally" ? "back" : "front";
   const art =
     u.kind === "monster"
-      ? monsterArtImg(u.monsterId, "battle-unit-img", artSize)
+      ? monsterBattleArtImg(u.monsterId, "battle-unit-img", artSize, facing) ||
+        monsterArtImg(u.monsterId, "battle-unit-img", artSize)
       : `<img class="battle-unit-img" src="${summonerArtSrc(u.element)}" width="${artSize}" height="${artSize}" alt="" draggable="false" decoding="async" />`;
   const showName = isActive || isTargeted;
   const spineId =
     u.kind === "monster"
       ? u.monsterId ?? ""
       : `summoner-${u.element}`;
-  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""} el-${u.element}${active}${targeted}${dead}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${u.name}">
-    <div class="battle-unit-bars">
+
+  let barsHtml = "";
+  if (isSummoner && battle) {
+    const manaState =
+      u.team === "ally" ? battle.allySummoner : battle.enemySummoner;
+    const manaPctUnit = Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round((manaState.mana / Math.max(1, manaState.manaMax)) * 100),
+      ),
+    );
+    barsHtml = `<div class="battle-unit-bars battle-unit-bars--mana">
+      <div class="battle-unit-mana-row">
+        <span class="battle-unit-mana-num">${Math.floor(manaState.mana)}<small>/${manaState.manaMax}</small></span>
+      </div>
+      <div class="bar mana"><i style="width:${manaPctUnit}%"></i></div>
+      <div class="bar atb"><i style="width:${atbPct}%"></i></div>
+    </div>`;
+  } else {
+    barsHtml = `<div class="battle-unit-bars">
       <div class="battle-unit-hp-row">
         <span class="battle-unit-hp-num">${Math.max(0, Math.round(u.hp))}</span>
-      ${shield ? `<span class="shield-badge" title="${t('ui.e234157c2f')}">+${shield}</span>` : ""}
+      ${shield ? `<span class="shield-badge" title="${t("ui.e234157c2f")}">+${shield}</span>` : ""}
       </div>
       <div class="bar hp"><i style="width:${hpPct}%"></i></div>
       <div class="bar atb"><i style="width:${atbPct}%"></i></div>
-    </div>
+    </div>`;
+  }
+
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""} el-${u.element}${active}${targeted}${dead}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${u.name}">
+    ${barsHtml}
     ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
     <span class="battle-unit-glow" aria-hidden="true"></span>
     <span class="battle-unit-art" aria-hidden="true">${art}</span>
@@ -2551,14 +2862,12 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
   </${tag}>`;
 }
 
+
 function renderBoard(): string {
   if (!battle) return "";
   const size = battle.board.size;
   const grid = battle.board.getBoard();
   const legalSet = new Set(legalHints.map((p) => `${p.x},${p.y}`));
-  const suggestMap = new Map(
-    stoneSuggestions.map((s) => [`${s.point.x},${s.point.y}`, s]),
-  );
   const starSet = new Set(
     (battle.modules.moduleB ? starPoints(size) : []).map((p) => `${p.x},${p.y}`),
   );
@@ -2596,10 +2905,8 @@ function renderBoard(): string {
       const key = `${x},${y}`;
       const stone = grid[y]![x];
       const legal = legalSet.has(key);
-      const sug = suggestMap.get(key);
       const token = battle.tokenAt(x, y);
       const tokenClass = token ? ` token token-${token.id}` : "";
-      const sugClass = sug ? ` suggest suggest-${sug.rank}` : "";
       const forbid = battle.isForbidden({ x, y });
       const forbidClass = forbid && !stone ? " forbid" : "";
       const starClass = starSet.has(key) && !stone ? " star" : "";
@@ -2628,22 +2935,21 @@ function renderBoard(): string {
         battle.baitLure.y === y &&
         !stone;
       const baitClass = bait ? " bait" : "";
+      const placeable = canClick && legal && !stone && !forbid;
       const stoneHtml = stone
-        ? `<span class="stone ${stone}"></span>`
-        : sug
-          ? `<span class="suggest-mark">${sug.rank}</span>`
-          : token
-            ? `<span class="token-mark">${tokenLabel}</span>`
-            : forbid
-              ? `<span class="forbid-mark">${Mark.forbid}</span>`
-              : bait
-                ? `<span class="bait-mark">${Mark.bait}</span>`
-                : victory === key
-                  ? `<span class="victory-mark">${Mark.victory}</span>`
-                  : starSet.has(key)
-                    ? `<span class="star-mark">${Mark.starDot}</span>`
-                    : "";
-      cells += `<button type="button" class="cell${legal && canClick ? " legal" : ""}${tokenClass}${sugClass}${forbidClass}${baitClass}${starClass}${victoryClass}" data-x="${x}" data-y="${y}" ${canClick && !stone && !forbid ? "" : "disabled"}>${stoneHtml}</button>`;
+        ? `<span class="stone magic-stone ${stone}" aria-hidden="true"><i class="magic-stone-core"></i><i class="magic-stone-flare"></i></span>`
+        : token
+          ? `<span class="token-mark">${tokenLabel}</span>`
+          : forbid
+            ? `<span class="forbid-mark">${Mark.forbid}</span>`
+            : bait
+              ? `<span class="bait-mark">${Mark.bait}</span>`
+              : victory === key
+                ? `<span class="victory-mark">${Mark.victory}</span>`
+                : starSet.has(key)
+                  ? `<span class="star-mark">${Mark.starDot}</span>`
+                  : `<span class="node-mark" aria-hidden="true"></span>`;
+      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${tokenClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
   const resetPct = Math.min(
@@ -2653,12 +2959,14 @@ function renderBoard(): string {
         100,
     ),
   );
-  return `<div class="board-frame board-frame--tilted phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}" data-element="${battle.circleElement ?? ""}">
+  return `<div class="board-frame board-frame--tilted board-frame--circle phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}${canClick ? " is-placeable" : ""}" data-element="${battle.circleElement ?? ""}">
+    <div class="board-circle-aura" aria-hidden="true"></div>
+    <div class="board-circle-ring" aria-hidden="true"></div>
     <div class="board-phase-tag">${rebuildTag}${openingHint}</div>
     <div class="board-phase-meter" aria-hidden="true"><i style="width:${resetPct}%"></i></div>
     <div class="board-stage">
       <div class="board-hit" aria-hidden="false">
-        <div class="board size-${size} phase-${Math.min(phase, 3)}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${cells}</div>
+        <div class="board magic-circle size-${size} phase-${Math.min(phase, 3)}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${cells}</div>
       </div>
     </div>
   </div>`;
@@ -2684,26 +2992,7 @@ function renderBoardTabs(): string {
 }
 
 function renderSuggestStrip(): string {
-  if (!stoneSuggestions.length || battle?.phase !== "await_stone") return "";
-  const manaMax = battle?.allySummoner.manaMax ?? 100;
-  return `<div class="suggest-strip">
-    <p class="suggest-strip-title">${t('ui.c943a2bfc5')}</p>
-    ${stoneSuggestions
-      .map((s) => {
-        const manaTotal =
-          s.manaGain + Math.round(manaMax * (s.captureManaFrac ?? 0));
-        const dmgPct = Math.round((s.captureDamageBonus ?? 0) * 100);
-        const dmgBit = dmgPct > 0 ? ` ${MIDDOT} +${dmgPct}%` : "";
-        return `<button type="button" class="suggest-chip suggest-chip--${s.rank}" data-sgx="${s.point.x}" data-sgy="${s.point.y}">
-            <span class="suggest-rank">${s.rank}</span>
-            <span class="suggest-body">
-              <strong>${s.point.x},${s.point.y}</strong>
-              <small>${t('ui.b61d5e36ba')} ${s.capturedCount}${dmgBit} ${MIDDOT} ${t('ui.dc78e6a251')} +${manaTotal} ${MIDDOT} amp +${s.amplifyDelta.toFixed(2)}${s.hasToken ? t('ui.67082f387a') : ""}</small>
-            </span>
-          </button>`;
-      })
-      .join("")}
-  </div>`;
+  return "";
 }
 
 function authHeroLayer(): string {
@@ -4556,7 +4845,7 @@ function monsterElementLabel(el: string | undefined): string {
 function monsterElementArtSrc(el: string | undefined | null): string | null {
   if (!el) return null;
   if (!(SUMMONER_ELEMENTS as readonly string[]).includes(el)) return null;
-  return `/art/ui/element/${el}.svg`;
+  return `/art/ui/element/${el}.webp`;
 }
 
 function monsterSkillArtSrc(
@@ -4672,6 +4961,9 @@ function scrollArtSrc(kind: ScrollKind): string {
 function monsterArtSrc(monsterId: string | undefined | null): string | null {
   const artKey = getMonsterArtKey(monsterId);
   if (!artKey) return null;
+  if (BATTLE_STILL_FAMILY_SET.has(artKey)) {
+    return `/art/monster/battle/${artKey}-front.png`;
+  }
   return `/art/monster/${artKey}.webp`;
 }
 
@@ -4710,12 +5002,14 @@ function monsterBattleArtImg(
 ): string {
   const src = monsterBattleArtSrc(monsterId, facing);
   if (!src) return "";
-  const front = getBattleStillSrc(monsterId, "front") ?? "";
+  const front = getBattleStillSrc(monsterId, "front") ?? monsterArtSrc(monsterId) ?? "";
   const back = getBattleStillSrc(monsterId, "back") ?? front;
   const stillAttrs = front
     ? ` data-still-front="${front}" data-still-back="${back || front}"`
     : "";
-  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${stillAttrs} />`;
+  const el = getMonster(monsterId ?? "")?.element;
+  const tint = el ? ` el-tint-${el}` : "";
+  return `<img class="${className}${tint}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${stillAttrs} />`;
 }
 
 function renderSummonRevealCell(uid: string): string {
@@ -5619,52 +5913,72 @@ function renderCodexLayer(): string {
   if (!codexOpen) return "";
   const owned = ownedMonsterIdSet();
   const ownedCount = MONSTERS.filter((m) => owned.has(m.id)).length;
-  const filterBar = `<div class="codex-filters" role="toolbar" aria-label="filters">
-    <div class="codex-filter-row">
-      <button type="button" class="codex-filter-chip${codexElementFilter === "all" ? " is-on" : ""}" data-codex-el="all">${escapeHtml(t("ui.codexFilterAll"))}</button>
-      ${SUMMONER_ELEMENTS.map(
-        (el) =>
-          `<button type="button" class="codex-filter-chip el-${el}${codexElementFilter === el ? " is-on" : ""}" data-codex-el="${el}">${escapeHtml(elementLabel(el))}</button>`,
-      ).join("")}
-    </div>
-    <div class="codex-filter-row">
-      <button type="button" class="codex-filter-chip${codexStarsFilter === "all" ? " is-on" : ""}" data-codex-stars="all">${escapeHtml(t("ui.codexFilterAll"))}</button>
-      ${([1, 2, 3, 4, 5] as const)
-        .map(
-          (n) =>
-            `<button type="button" class="codex-filter-chip${codexStarsFilter === n ? " is-on" : ""}" data-codex-stars="${n}">${escapeHtml(t("ui.codexStarN", { n }))}</button>`,
-        )
-        .join("")}
-    </div>
-  </div>`;
 
   let body = "";
   if (codexTab === "monsters") {
-    const cells = MONSTERS.filter((m) => {
-      if (codexElementFilter !== "all" && m.element !== codexElementFilter) {
-        return false;
-      }
-      if (codexStarsFilter !== "all" && m.naturalStars !== codexStarsFilter) {
-        return false;
-      }
-      return true;
-    })
-      .map((m) => {
-        const have = owned.has(m.id);
-        const art =
-          monsterArtImg(m.id, "codex-cell-img", 52) ||
-          `<span class="codex-cell-fallback">${m.element[0]?.toUpperCase() ?? "?"}</span>`;
-        const stars = Array.from(
-          { length: Math.max(1, m.naturalStars) },
-          () => `<span class="mon-star" aria-hidden="true">&#9733;</span>`,
-        ).join("");
-        return `<button type="button" class="codex-cell el-${m.element}${have ? " is-owned" : " is-locked"}${codexDetailMonsterId === m.id ? " is-active" : ""}" data-codex-mon="${m.id}" title="${have ? escapeHtml(m.nameKo) : escapeHtml(t("ui.codexLocked"))}">
+    const starOptions = (el: SummonerElement): string => {
+      const cur = codexStarsByElement[el];
+      const opts = (
+        [
+          ["all", t("ui.codexFilterAll")],
+          ["1", t("ui.codexStarN", { n: 1 })],
+          ["2", t("ui.codexStarN", { n: 2 })],
+          ["3", t("ui.codexStarN", { n: 3 })],
+          ["4", t("ui.codexStarN", { n: 4 })],
+          ["5", t("ui.codexStarN", { n: 5 })],
+        ] as const
+      )
+        .map(
+          ([v, label]) =>
+            `<option value="${v}"${String(cur) === v ? " selected" : ""}>${escapeHtml(label)}</option>`,
+        )
+        .join("");
+      return `<label class="codex-el-stars">
+        <span class="sr-only">${escapeHtml(t("ui.codexStarFilter", { element: elementLabel(el) }))}</span>
+        <select class="codex-el-stars-select" data-codex-el-stars="${el}" aria-label="${escapeHtml(t("ui.codexStarFilter", { element: elementLabel(el) }))}">${opts}</select>
+      </label>`;
+    };
+
+    const cellHtml = (m: (typeof MONSTERS)[number]): string => {
+      const have = owned.has(m.id);
+      const art =
+        monsterArtImg(m.id, "codex-cell-img", 52) ||
+        `<span class="codex-cell-fallback">${m.element[0]?.toUpperCase() ?? "?"}</span>`;
+      const stars = Array.from(
+        { length: Math.max(1, m.naturalStars) },
+        () => `<span class="mon-star" aria-hidden="true">&#9733;</span>`,
+      ).join("");
+      return `<button type="button" class="codex-cell el-${m.element}${have ? " is-owned" : " is-locked"}${codexDetailMonsterId === m.id ? " is-active" : ""}" data-codex-mon="${m.id}" data-codex-stars="${m.naturalStars}" title="${have ? escapeHtml(m.nameKo) : escapeHtml(t("ui.codexLocked"))}">
         <span class="codex-cell-art" aria-hidden="true">${art}</span>
         <span class="codex-cell-stars">${stars}</span>
         ${have ? "" : `<span class="codex-cell-lock" aria-hidden="true">${Mark.forbid}</span>`}
       </button>`;
-      })
-      .join("");
+    };
+
+    const sections = SUMMONER_ELEMENTS.map((el) => {
+      const starFilter = codexStarsByElement[el];
+      const list = MONSTERS.filter((m) => m.element === el).sort(
+        (a, b) =>
+          a.naturalStars - b.naturalStars || a.nameKo.localeCompare(b.nameKo),
+      );
+      const visible = list.filter(
+        (m) => starFilter === "all" || m.naturalStars === starFilter,
+      );
+      const elOwned = list.filter((m) => owned.has(m.id)).length;
+      const elSrc = monsterElementArtSrc(el) ?? "";
+      return `<section class="codex-el-section el-${el}" data-codex-section="${el}">
+        <header class="codex-el-head">
+          <span class="codex-el-ico" title="${escapeHtml(elementLabel(el))}" aria-label="${escapeHtml(elementLabel(el))}">
+            <img class="codex-el-ico-img" src="${elSrc}" width="40" height="40" alt="" draggable="false" decoding="async" />
+          </span>
+          <span class="codex-el-count" aria-hidden="true">${elOwned}/${list.length}</span>
+          ${starOptions(el)}
+        </header>
+        <div class="codex-grid" data-codex-grid="${el}">
+          ${visible.map(cellHtml).join("")}
+        </div>
+      </section>`;
+    }).join("");
 
     const detail = (() => {
       if (!codexDetailMonsterId) return "";
@@ -5679,11 +5993,15 @@ function renderCodexLayer(): string {
       const art =
         monsterArtImg(def.id, "codex-detail-img", 72) ||
         `<span class="codex-cell-fallback">${def.element[0]?.toUpperCase() ?? "?"}</span>`;
+      const elSrc = monsterElementArtSrc(def.element) ?? "";
       return `<div class="codex-detail" role="dialog" aria-label="${escapeHtml(def.nameKo)}">
         <div class="codex-detail-art el-${def.element}${have ? "" : " is-locked"}">${art}</div>
         <div class="codex-detail-body">
           <strong>${escapeHtml(def.nameKo)}</strong>
-          <small>${escapeHtml(monsterElementLabel(def.element))} ${MIDDOT} ${STAR}${def.naturalStars} ${MIDDOT} ${escapeHtml(role)}</small>
+          <small class="codex-detail-meta">
+            <img class="codex-detail-el" src="${elSrc}" width="18" height="18" alt="" draggable="false" />
+            ${STAR}${def.naturalStars} ${MIDDOT} ${escapeHtml(role)}
+          </small>
           <small>${escapeHtml(have ? t("ui.codexOwned") : t("ui.codexLocked"))}</small>
           ${skillLine ? `<p class="codex-detail-skills"><span>${escapeHtml(t("ui.codexDetailSkills"))}</span> ${escapeHtml(skillLine)}</p>` : ""}
         </div>
@@ -5691,9 +6009,8 @@ function renderCodexLayer(): string {
       </div>`;
     })();
 
-    body = `${filterBar}
-      <p class="codex-count">${escapeHtml(t("ui.codexOwnedCount", { n: ownedCount, total: MONSTERS.length }))}</p>
-      <div class="codex-grid">${cells}</div>
+    body = `<p class="codex-count">${escapeHtml(t("ui.codexOwnedCount", { n: ownedCount, total: MONSTERS.length }))}</p>
+      <div class="codex-el-list">${sections}</div>
       ${detail}`;
   } else {
     const roster = save.summoners ?? createSummonerRoster();
@@ -5701,10 +6018,14 @@ function renderCodexLayer(): string {
       const p = roster[el];
       const leader = getSummonerLeader(el);
       const on = el === (save.activeSummoner ?? "light");
+      const elSrc = monsterElementArtSrc(el) ?? "";
       return `<button type="button" class="codex-summoner-card el-${el}${on ? " is-active" : ""}" data-codex-summoner="${el}">
         <img class="codex-summoner-art" src="${summonerArtSrc(el)}" width="64" height="64" alt="" draggable="false" decoding="async" />
         <strong>${escapeHtml(leader.nameKo)}</strong>
-        <small>${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${p.level}${p.awaken > 0 ? ` ${MIDDOT} +${p.awaken}` : ""}</small>
+        <small class="codex-summoner-meta">
+          <img class="codex-detail-el" src="${elSrc}" width="18" height="18" alt="" draggable="false" />
+          Lv.${p.level}${p.awaken > 0 ? ` ${MIDDOT} +${p.awaken}` : ""}
+        </small>
       </button>`;
     }).join("");
     body = `<div class="codex-summoner-grid">${cards}</div>`;
@@ -7263,11 +7584,11 @@ function renderBattle(manaPct: number): string {
       ? t('ui.62b39a7abd')
       : awaitShop
         ? t('ui.e724206861')
-      : awaitSkill
-        ? t('ui.250a3a4d15')
-        : autoMode
-          ? `AUTO x${battleSpeed}`
-          : "";
+        : awaitSkill
+          ? t('ui.250a3a4d15')
+          : autoMode
+            ? `AUTO x${battleSpeed}`
+            : "";
 
   const showBoardSwitch =
     battle.boards.length > 1 &&
@@ -7291,14 +7612,12 @@ function renderBattle(manaPct: number): string {
         <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>${t('ui.4b0ea2fcd0')}</button>
         ${
           showBoardSwitch
-            ? `<button type="button" class="secondary board-switch" id="btn-board-switch">${t('ui.bf185333fe')} ${battle.boardLabel === t('ui.8bbc778e36') ? "?B" : "?A"}</button>`
+            ? `<button type="button" class="secondary board-switch" id="btn-board-switch">${t('ui.bf185333fe')} ${battle.boardLabel === t('ui.8bbc778e36') ? `${ARROW_RIGHT}B` : `${ARROW_RIGHT}A`}</button>`
             : ""
         }
       </div>
     </div>`;
 
-  const manaTone =
-    manaPct >= 99 ? " is-full" : manaPct >= 40 ? " is-charged" : "";
   const stageTitle = escapeHtml(currentStage.nameKo);
 
   return `<div class="battle-screen">
@@ -7320,7 +7639,7 @@ function renderBattle(manaPct: number): string {
       ${renderBattleTicker()}
       <div class="battle-stage-pill" title="${stageTitle}">
         <strong class="battle-stage-name">${stageTitle}</strong>
-        <span class="battle-wave">${currentStage.boardSize}?${currentStage.boardSize} (${battle.currentWave}/${battle.totalWaves})</span>
+        <span class="battle-wave">${currentStage.boardSize}${TIMES}${currentStage.boardSize} (${battle.currentWave}/${battle.totalWaves})</span>
       </div>
     </header>
     <div class="battle-layout battle-layout--framed battle-layout--stage">
@@ -7332,21 +7651,13 @@ function renderBattle(manaPct: number): string {
       ${renderBoardTabs()}
       <div class="dmg-layer">${renderDmgLayer()}</div>
       ${renderBoard()}
-      ${renderSuggestStrip()}
       ${renderCaptureShop()}
-      <div class="mana-block mana-block--compact${manaTone}">
-        <div class="mana-head">
-          <span class="mana-label">${t('ui.7ff9ee538f')}</span>
-          <span class="mana-nums">${Math.floor(battle.allySummoner.mana)}<small>/${battle.allySummoner.manaMax}</small></span>
-        </div>
-        <div class="bar mana mana-lg"><i style="width:${manaPct}%"></i></div>
-      </div>
     </div>
-    ${skillRow}
-    ${skillHint ? `<p class="skill-hint">${skillHint}</p>` : ""}
     <div class="battle-lane ally">
       ${renderBattleFront(allyUnits, "ally")}
     </div>
+    ${skillRow}
+    ${skillHint ? `<p class="skill-hint">${skillHint}</p>` : ""}
     <div class="battle-hud battle-hud--stage">
       ${navBackBtn({ id: "btn-back", label: t('ui.1a7f31cadb') })}
       <div class="battle-hud-actions">
@@ -8289,6 +8600,7 @@ function bind(): void {
               currentStage = null;
               lastReward = null;
               lastScrollGain = 0;
+              lastScrollPremiumGain = 0;
             }
           }
         }
@@ -8570,32 +8882,20 @@ function bind(): void {
       }
     });
   });
-  app.querySelectorAll<HTMLButtonElement>("[data-codex-el]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const raw = btn.dataset.codexEl;
+  app.querySelectorAll<HTMLSelectElement>("[data-codex-el-stars]").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      const el = sel.dataset.codexElStars as SummonerElement | undefined;
+      if (!el || !(SUMMONER_ELEMENTS as readonly string[]).includes(el)) return;
+      const raw = sel.value;
+      let next: CodexStarsFilter = "all";
       if (raw === "all") {
-        codexElementFilter = "all";
-      } else if ((SUMMONER_ELEMENTS as readonly string[]).includes(raw ?? "")) {
-        codexElementFilter = raw as SummonerElement;
-      } else {
-        return;
-      }
-      render();
-    });
-  });
-  app.querySelectorAll<HTMLButtonElement>("[data-codex-stars]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const raw = btn.dataset.codexStars;
-      if (raw === "all") {
-        codexStarsFilter = "all";
+        next = "all";
       } else {
         const n = Number(raw);
-        if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) {
-          codexStarsFilter = n;
-        } else {
-          return;
-        }
+        if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) next = n;
+        else return;
       }
+      codexStarsByElement = { ...codexStarsByElement, [el]: next };
       render();
     });
   });
@@ -9372,8 +9672,7 @@ function bind(): void {
       if (!battle) return;
       const choice = btn.dataset.shop as CaptureShopChoice;
       if (!battle.chooseCaptureShop(choice)) return;
-      refreshLegal();
-      render();
+      void resolveCombatUntilAllyInput();
     });
   });
 
@@ -9466,6 +9765,21 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-target]").forEach((btn) => {
     btn.addEventListener("click", () => {
       selectedTargetId = btn.dataset.target ?? null;
+      if (
+        battle &&
+        battle.phase === "await_skill" &&
+        !autoMode &&
+        !battleFxBusy
+      ) {
+        const unit = battle.activeUnitId
+          ? battle.getUnit(battle.activeUnitId)
+          : null;
+        if (unit?.team === "ally") {
+          // Manual: tapping an enemy fires the ready skill at that target.
+          castSkill("smart");
+          return;
+        }
+      }
       render();
     });
   });
@@ -9522,6 +9836,7 @@ function bind(): void {
     currentStage = null;
     lastReward = null;
     lastScrollGain = 0;
+    lastScrollPremiumGain = 0;
     dmgFloats = [];
     view = "stages";
     render();
@@ -9550,7 +9865,7 @@ function bind(): void {
     // Only dematte opaque WebP mattes — Spine still PNGs are already transparent.
     dematteArtInTree(
       app,
-      "img.mon-preview-img:not([data-still-front]), img.mon-inspect-art-img, img.mon-slot-img, img.mon-skill-feed-img, img.sum-preview-img, img.sum-rail-img, img.codex-cell-img",
+      "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.mon-skill-feed-img, img.sum-preview-img, img.sum-rail-img, img.codex-cell-img",
     );
   } else if (view !== "result") {
     destroyAllSpine();

@@ -4,6 +4,8 @@ export interface OwnedMonster {
   uid: string;
   monsterId: string;
   level: number;
+  /** Battle EXP toward next level (0 .. MONSTER_EXP_PER_LEVEL-1). */
+  exp?: number;
   /** Equipped symbol instance ids by slot index 0..5 (slot 1..6). */
   symbolSlots: (string | null)[];
   /** Evolution stage 0–2 (강화진 진화 스텁). */
@@ -13,8 +15,36 @@ export interface OwnedMonster {
 }
 
 export const MAX_MONSTER_LEVEL = 15;
+export const MONSTER_EXP_PER_LEVEL = 100;
 export const MAX_EVOLVE = 2;
 export const MAX_SKILL_LEVEL = 3;
+
+export function addOwnedMonsterExp(
+  owned: OwnedMonster,
+  amount: number,
+): { monster: OwnedMonster; levelsGained: number } {
+  const gain = Math.max(0, Math.floor(amount));
+  if (gain <= 0 || owned.level >= MAX_MONSTER_LEVEL) {
+    return {
+      monster: { ...owned, exp: owned.exp ?? 0 },
+      levelsGained: 0,
+    };
+  }
+  let exp = (owned.exp ?? 0) + gain;
+  let level = owned.level;
+  let levelsGained = 0;
+  while (exp >= MONSTER_EXP_PER_LEVEL && level < MAX_MONSTER_LEVEL) {
+    exp -= MONSTER_EXP_PER_LEVEL;
+    level += 1;
+    levelsGained += 1;
+  }
+  if (level >= MAX_MONSTER_LEVEL) exp = 0;
+  return {
+    monster: { ...owned, level, exp },
+    levelsGained,
+  };
+}
+
 export const SUMMON_SCROLL_COST = 1;
 /** Multi-summon pull count (10연). */
 export const SUMMON_MULTI_COUNT = 10;
@@ -213,6 +243,7 @@ export function createStarterRoster(): {
     uid: `starter_${i}`,
     monsterId: id,
     level: 1,
+    exp: 0,
     symbolSlots: emptySymbolSlots(),
     evolve: 0,
     skillLevels: defaultSkillLevels(),

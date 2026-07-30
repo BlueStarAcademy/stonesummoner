@@ -581,6 +581,7 @@ const messages: MessageDict = {
   "ui.codexLocked": "미보유",
   "ui.codexClose": "닫기",
   "ui.codexStarN": "{n}성",
+  "ui.codexStarFilter": "{element} 성급 필터",
   "ui.codexDetailSkills": "스킬",
   "ui.sumBookTabGear": "장비",
   "ui.sumBookLeader": "리더 스킬",
@@ -606,7 +607,20 @@ const messages: MessageDict = {
   "ui.gearSlotRing": "반지",
   "ui.gearEnhanceCost": "강화 골드 {mana}",
   "ui.gearEnhanceCostCrystal": "강화 골드 {mana} · 크리스탈 {crystal}",
-  "ui.skillLockedHint": "{branch} +{n} 필요"
+  "ui.skillLockedHint": "{branch} +{n} 필요",
+  "ui.resultVictory": "승리",
+  "ui.resultDefeat": "패배",
+  "ui.resultRewards": "획득 보상",
+  "ui.resultWinSub": "전리품을 확인하세요",
+  "ui.resultSymbolDrop": "상징 드롭",
+  "ui.resultLevelUp": "레벨 업",
+  "ui.resultSummonerExp": "소환사 경험치",
+  "ui.resultEmptySub": "표시할 결과가 없습니다",
+  "ui.resultExpUser": "모험가",
+  "ui.resultExpSummoner": "소환사",
+  "ui.resultExpMonster": "소환수",
+  "ui.resultExpGain": "+{n}",
+  "ui.resultExpToNext": "{cur}/{max}"
 };
 
 export default messages;

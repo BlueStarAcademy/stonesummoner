@@ -4,6 +4,9 @@
  * public/art/spine/pilot/; see docs/art/spine/fire_fang-brief.md).
  */
 
+import { getMonsterArtKey } from "stonesummoner-data";
+import { BATTLE_STILL_FAMILY_SET } from "./battleStills";
+
 export type SpineClip =
   | "idle"
   | "walk"
@@ -80,15 +83,25 @@ export function getSpinePack(packId: string): SpinePack | null {
   return SPINE_PACKS[packId] ?? null;
 }
 
-/** Battle-character still for monster book / UI (transparent; falls back to null). */
+/** Battle-character still for monster book / battle UI (falls back to null). */
 export function getBattleStillSrc(
   monsterId: string | undefined | null,
   facing: "front" | "back" = "front",
 ): string | null {
   const packId = resolveSpinePackId(monsterId);
-  if (!packId) return null;
-  const pack = getSpinePack(packId);
-  if (!pack) return null;
-  if (facing === "back") return pack.stillBackUrl ?? pack.stillFrontUrl ?? null;
-  return pack.stillFrontUrl ?? null;
+  if (packId) {
+    const pack = getSpinePack(packId);
+    if (pack) {
+      if (facing === "back") {
+        return pack.stillBackUrl ?? pack.stillFrontUrl ?? null;
+      }
+      return pack.stillFrontUrl ?? null;
+    }
+  }
+  const artKey = getMonsterArtKey(monsterId);
+  if (!artKey || !BATTLE_STILL_FAMILY_SET.has(artKey)) return null;
+  if (facing === "back") {
+    return `/art/monster/battle/${artKey}-back.png`;
+  }
+  return `/art/monster/battle/${artKey}-front.png`;
 }
