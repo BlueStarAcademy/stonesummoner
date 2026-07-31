@@ -1,11 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
   <defs>
+    <linearGradient id="emptys3-face" x1="14" y1="8" x2="58" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8C84A"/>
+      <stop offset=".35" stop-color="#C9A227"/>
+      <stop offset=".7" stop-color="#8A6A20"/>
+      <stop offset="1" stop-color="#4A3810"/>
+    </linearGradient>
     <linearGradient id="emptys3-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFF8D6"/>
-      <stop offset=".4" stop-color="#C9A227"/>
+      <stop offset=".3" stop-color="#F0D878"/>
+      <stop offset=".65" stop-color="#C9A227"/>
       <stop offset="1" stop-color="#7A5A18"/>
     </linearGradient>
+    <linearGradient id="emptys3-bevel" x1="16" y1="8" x2="40" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D6" stop-opacity=".8"/>
+      <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="emptys3-well" cx="42%" cy="34%" r="68%">
+      <stop stop-color="#3A2C14" stop-opacity=".95"/>
+      <stop offset=".55" stop-color="#14100A"/>
+      <stop offset="1" stop-color="#050402"/>
+    </radialGradient>
+    <filter id="emptys3-depth" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.4" flood-color="#000" flood-opacity=".55"/>
+    </filter>
   </defs>
-  <circle cx="36" cy="36" r="14" fill="#050402" fill-opacity=".35" stroke="url(#emptys3-gold)" stroke-width="1.2" opacity=".55"/>
-  <path d="M36 28v16M28 36h16" stroke="url(#emptys3-gold)" stroke-width="2.2" stroke-linecap="round" opacity=".7"/>
+  <g filter="url(#emptys3-depth)">
+    <path d="M10 14 L54 4 L62 58 L18 68 Z" fill="none" stroke="#0A0806" stroke-width="5.4" stroke-linejoin="round" opacity=".92"/>
+    <path d="M10 14 L54 4 L62 58 L18 68 Z" fill="url(#emptys3-face)" stroke="url(#emptys3-gold)" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M10 14 L54 4 L62 58 L18 68 Z" fill="none" stroke="#FFF8D6" stroke-width="1.1" opacity=".3" transform="translate(0 .5)"/>
+    <path d="M10 14 L54 4 L50 12 L18 20 Z" fill="url(#emptys3-bevel)" opacity=".5"/>
+    <path d="M18 20 L50 12 L55 52 L23 60 Z" fill="url(#emptys3-well)" stroke="#C9A227" stroke-width="1" stroke-opacity=".4"/>
+    <path d="M36 28v16M28 36h16" stroke="url(#emptys3-gold)" stroke-width="2.1" stroke-linecap="round" opacity=".55"/>
+  </g>
 </svg>

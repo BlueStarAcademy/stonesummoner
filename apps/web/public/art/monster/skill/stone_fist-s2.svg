@@ -1,24 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none" aria-hidden="true">
   <defs>
-    <linearGradient id="bg_stone_fist_s2" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#102028"/><stop offset="1" stop-color="#081018"/>
+    <linearGradient id="bg_stone_fist_s2" x1="20" y1="16" x2="108" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2c2410"/><stop offset="1" stop-color="#141008"/>
     </linearGradient>
-    <linearGradient id="a1_stone_fist_s2" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#C8F0FF"/><stop offset=".45" stop-color="#4AA8E0"/><stop offset="1" stop-color="#185888"/>
+    <radialGradient id="gl_stone_fist_s2" cx="50%" cy="45%" r="45%">
+      <stop stop-color="#F0D050" stop-opacity=".40"/><stop offset="1" stop-color="#F0D050" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="a1_stone_fist_s2" x1="28" y1="16" x2="100" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D0"/><stop offset=".45" stop-color="#F0D060"/><stop offset="1" stop-color="#A89028"/>
     </linearGradient>
-    <linearGradient id="a2_stone_fist_s2" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#C8F0FF"/><stop offset="1" stop-color="#4AA8E0"/>
+    <linearGradient id="a2_stone_fist_s2" x1="36" y1="24" x2="96" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D0"/><stop offset="1" stop-color="#F0D060"/>
     </linearGradient>
-    <linearGradient id="a3_stone_fist_s2" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4AA8E0"/><stop offset="1" stop-color="#185888"/>
+    <linearGradient id="fr_stone_fist_s2" x1="8" y1="6" x2="120" y2="122" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF0A8"/><stop offset=".45" stop-color="#E8C84A"/><stop offset="1" stop-color="#887818"/>
+    </linearGradient>
+    <linearGradient id="fd_stone_fist_s2" x1="24" y1="24" x2="104" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#887818"/><stop offset="1" stop-color="#E8C84A"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#bg_stone_fist_s2)"/>
-  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#4AA8E0" stroke-opacity=".35" stroke-width="1.5"/>
-  <circle cx="32" cy="32" r="24" fill="#4AA8E0" fill-opacity=".10"/>
-  
-      <path d="M32 14L48 48H16L32 14Z" fill="url(#a1_stone_fist_s2)" stroke="#C8F0FF" stroke-width="1.3" stroke-linejoin="round"/>
-      <circle cx="32" cy="36" r="3.5" fill="#102028"/>
-      <rect x="30.5" y="24" width="3" height="8" rx="1.5" fill="#102028"/>
+  <rect width="128" height="128" rx="16" fill="url(#bg_stone_fist_s2)"/>
+  <circle cx="64" cy="60" r="36" fill="url(#gl_stone_fist_s2)"/>
+  <g transform="translate(32,30)">
+      <path d="M32 10L52 50H12L32 10Z" fill="url(#a1_stone_fist_s2)" stroke="#F0D050" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="32" cy="38" r="4" fill="#0a0810"/>
+      <rect x="30" y="22" width="4" height="10" rx="2" fill="#0a0810"/>
+      <path d="M18 52H46" stroke="#F0D050" stroke-width="2" stroke-linecap="round" opacity=".35"/></g>
+  <rect x="5" y="5" width="118" height="118" rx="14" fill="none" stroke="url(#fr_stone_fist_s2)" stroke-width="6"/>
+  <rect x="10" y="10" width="108" height="108" rx="11" fill="none" stroke="url(#fd_stone_fist_s2)" stroke-width="2"/>
+  <rect x="13" y="13" width="102" height="102" rx="9" fill="none" stroke="#050308" stroke-opacity=".55" stroke-width="1.5"/>
 </svg>

@@ -13,6 +13,7 @@ import {
   MAIN_QUEST_PIN_LAYOUT,
   MAIN_QUEST_STAGES,
   STAGES_PER_AREA,
+  canEquipGearOnElement,
   createStarterGear,
   createStarterHwalro,
   createSymbol,
@@ -21,6 +22,7 @@ import {
   gearSellCrystal,
   gearSellMana,
   gearSetBonuses,
+  gearStarsToInvGrade,
   getMonster,
   getStage,
   grindSymbolPrefix,
@@ -146,6 +148,8 @@ describe("phase1 data", () => {
     const g = rollGearDrop(() => 0.2, "test");
     assert.ok(g.slot);
     assert.ok(g.setId);
+    assert.ok(g.stars >= 1 && g.stars <= 5);
+    assert.ok(g.quality);
     assert.ok(g.nameKo.length > 0);
   });
 
@@ -156,11 +160,36 @@ describe("phase1 data", () => {
   });
 
   it("creates starter gear with six slots", () => {
-    const g = createStarterGear();
+    const g = createStarterGear("fire");
     assert.ok(g.weapon);
-    assert.ok(g.robe || g.armor || g.helm || true);
-    const pieces = Object.values(g).filter(Boolean);
-    assert.ok(pieces.length >= 4);
+    assert.equal(g.weapon.element, "fire");
+    assert.ok(g.top && g.bottom && g.shoes && g.ring && g.necklace);
+    assert.equal(g.weapon.stars, 1);
+    assert.equal(g.weapon.quality, "normal");
+  });
+
+  it("migrates legacy robe/orb slots", () => {
+    const g = normalizeSummonerGear({
+      weapon: createStarterGear("light").weapon,
+      robe: { ...createStarterGear("light").top, slot: "robe" as never },
+      orb: { ...createStarterGear("light").necklace, slot: "orb" as never },
+    } as never);
+    assert.equal(g.top.slot, "top");
+    assert.equal(g.necklace.slot, "necklace");
+  });
+
+  it("locks weapons to summoner element and maps stars to inv grade", () => {
+    const fire = createStarterGear("fire").weapon;
+    assert.equal(canEquipGearOnElement(fire, "fire"), true);
+    assert.equal(canEquipGearOnElement(fire, "water"), false);
+    assert.equal(canEquipGearOnElement(createStarterGear("fire").top, "water"), true);
+    assert.equal(gearStarsToInvGrade(1), "gray");
+    assert.equal(gearStarsToInvGrade(5), "red");
+    const drop = rollGearDrop(() => 0.01, "t", { preferredSlot: "weapon", preferredElement: "dark" });
+    assert.equal(drop.slot, "weapon");
+    assert.equal(drop.element, "dark");
+    assert.ok(drop.stars >= 1 && drop.stars <= 5);
+    assert.ok(drop.quality);
   });
 
   it("applies hwalro 2-set hp bonus", () => {

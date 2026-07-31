@@ -23,20 +23,24 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="yongmaengs1-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#e07040" stop-opacity="0"/>
     </linearGradient>
     <filter id="yongmaengs1-depth" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="20" fill="url(#yongmaengs1-aura)" opacity=".85"/>
-  <g filter="url(#yongmaengs1-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
+  <circle cx="36" cy="36" r="18" fill="url(#yongmaengs1-aura)" opacity=".8"/>
+  <g filter="url(#yongmaengs1-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
     
-      <path d="M36 14 40 34h10l-8 8 3 14-9-7-9 7 3-14-8-8h10z"
-        fill="#2A1C10" stroke="url(#yongmaengs1-gold)" stroke-width="1.8" stroke-linejoin="round"/>
-      <path d="M36 20 38.5 33h6.5l-5 5 2 9-4.5-4-4.5 4 2-9-5-5H33.5z"
+      <path d="M36 10 42 30h12l-9 8 4 16-13-9-13 9 4-16-9-8h12z"
+        fill="#24140C" stroke="url(#yongmaengs1-gold)" stroke-width="1.9" stroke-linejoin="round"/>
+      <path d="M36 16 40 32h8l-6 5.5 2.5 11-6.5-4.5-6.5 4.5 2.5-11-6-5.5h8z"
         fill="url(#yongmaengs1-ink)" stroke="#5A4214" stroke-width="1"/>
-      <circle cx="36" cy="36" r="2.6" fill="url(#yongmaengs1-gold)"/>
+      <path d="M36 10v8" stroke="url(#yongmaengs1-gold)" stroke-width="2" stroke-linecap="round"/>
+      <path d="M22 34h-6M50 34h6" stroke="url(#yongmaengs1-gold)" stroke-width="1.8" stroke-linecap="round" opacity=".75"/>
+      <circle cx="36" cy="36" r="3.2" fill="#1A140C" stroke="url(#yongmaengs1-gold)" stroke-width="1.4"/>
+      <circle cx="36" cy="36" r="1.3" fill="url(#yongmaengs1-gold)"/>
+      <ellipse cx="32" cy="24" rx="2" ry="3" fill="url(#yongmaengs1-shine)" opacity=".7"/>
   </g>
 </svg>

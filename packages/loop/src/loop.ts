@@ -11,6 +11,7 @@ import {
   applySymbolsToStats,
   bumpGearEnhance,
   bumpSymbolEnhance,
+  canEquipGearOnElement,
   createStarterGear,
   createStarterHwalro,
   describeGear,
@@ -31,6 +32,7 @@ import {
   resolveMonsterId,
   symbolCombatMods,
   MAX_GEAR_BAG,
+  normalizeGearPiece,
   normalizeSummonerGear,
   rollGearDrop,
   rollSymbolDrop,
@@ -205,6 +207,27 @@ export interface ElementSummonerProfile {
   level: number;
   exp: number;
   awaken: number;
+  /** Per-summoner equipped gear set (weapons are element-locked). */
+  gear?: SummonerGear;
+}
+
+/** Active summoner's equipped gear (mirrored on save.gear). */
+export function getActiveGear(save: PlayerSave): SummonerGear {
+  const el = save.activeSummoner ?? "light";
+  const fromProfile = save.summoners?.[el]?.gear;
+  return normalizeSummonerGear(fromProfile ?? save.gear, el);
+}
+
+/** Write gear onto the active summoner profile and legacy save.gear mirror. */
+export function withActiveGear(save: PlayerSave, gear: SummonerGear): PlayerSave {
+  const synced = syncSummonerMirrors(save);
+  const el = synced.activeSummoner;
+  const nextGear = normalizeSummonerGear(gear, el);
+  const summoners = {
+    ...synced.summoners,
+    [el]: { ...synced.summoners[el], gear: nextGear },
+  };
+  return { ...synced, summoners, gear: nextGear };
 }
 
 /** Saved favorite deck: summoner element + up to 4 monster uids. */
@@ -348,14 +371,22 @@ export function createSummonerRoster(
     level: Math.max(1, Math.floor(seed?.level ?? 1)),
     exp: Math.max(0, Math.floor(seed?.exp ?? 0)),
     awaken: Math.max(0, Math.floor(seed?.awaken ?? 0)),
+    gear: seed?.gear
+      ? normalizeSummonerGear(seed.gear, "light")
+      : createStarterGear("light"),
   };
-  const blank = (): ElementSummonerProfile => ({ level: 1, exp: 0, awaken: 0 });
+  const blank = (el: SummonerElement): ElementSummonerProfile => ({
+    level: 1,
+    exp: 0,
+    awaken: 0,
+    gear: createStarterGear(el),
+  });
   return {
-    fire: blank(),
-    water: blank(),
-    wind: blank(),
+    fire: blank("fire"),
+    water: blank("water"),
+    wind: blank("wind"),
     light,
-    dark: blank(),
+    dark: blank("dark"),
   };
 }
 
@@ -394,25 +425,47 @@ export function getActiveSummoner(save: PlayerSave): ElementSummonerProfile {
 
 /** Mirror active awaken + account max level onto legacy island/awaken fields. */
 export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
-  const summoners = save.summoners ?? createSummonerRoster({
+  let summoners = save.summoners ?? createSummonerRoster({
     level: save.island.summonerLevel,
     exp: save.island.summonerExp ?? 0,
     awaken: save.summonerAwaken ?? 0,
   });
   const activeSummoner = save.activeSummoner ?? "light";
+  const nextSummoners = { ...summoners };
+  for (const el of SUMMONER_ELEMENTS) {
+    const cur = nextSummoners[el] ?? {
+      level: 1,
+      exp: 0,
+      awaken: 0,
+    };
+    const seedGear =
+      cur.gear ??
+      (el === activeSummoner && save.gear ? save.gear : undefined);
+    nextSummoners[el] = {
+      ...cur,
+      gear: normalizeSummonerGear(seedGear, el),
+    };
+  }
+  summoners = nextSummoners;
   const active = summoners[activeSummoner] ?? summoners.light;
+  const activeGear = normalizeSummonerGear(active.gear, activeSummoner);
   const summonerMagic = {
     ...(save.summonerMagic ?? createEmptySummonerMagic()),
   };
   for (const el of SUMMONER_ELEMENTS) {
     if (!summonerMagic[el]) summonerMagic[el] = emptyMagicProgress();
   }
+  const gearBag = (save.gearBag ?? []).map((g) =>
+    normalizeGearPiece(g, g.slot),
+  );
   return {
     ...save,
     summoners,
     activeSummoner,
     summonerAwaken: active.awaken,
     summonerMagic,
+    gear: activeGear,
+    gearBag,
     island: {
       ...save.island,
       summonerLevel: accountSummonerLevel(summoners),
@@ -610,8 +663,8 @@ function buildSummonerState(
   magicSkills: SummonerState["magicSkills"] = [],
   summonerElement?: Element,
 ): SummonerState {
-  const g = normalizeSummonerGear(gear);
-  const pieces = [g.weapon, g.robe, g.accessory, g.orb, g.cloak, g.ring];
+  const g = normalizeSummonerGear(gear, summonerElement);
+  const pieces = [g.weapon, g.top, g.bottom, g.shoes, g.ring, g.necklace];
   const sets = gearSetBonuses(g);
   const tree = skillTreeBonuses(skillTree);
   const a = Math.max(0, awaken);
@@ -790,14 +843,14 @@ function unitFromMonsterId(
 export function createNewSave(now = Date.now()): PlayerSave {
   const { roster, party, scrolls, scrollsPremium, scrollsMystic } =
     createStarterRoster();
-  const gear = createStarterGear();
+  const summoners = createSummonerRoster();
+  const gear = normalizeSummonerGear(summoners.light.gear, "light");
   const s1 = { ...createStarterHwalro(1), id: "starter_sym_1" };
   const s2 = { ...createStarterHwalro(2), id: "starter_sym_2" };
   roster[0] = {
     ...roster[0]!,
     symbolSlots: [s1.id, s2.id, null, null, null, null],
   };
-  const summoners = createSummonerRoster();
   return {
     island: createStarterIsland(now),
     symbols: [s1, s2],
@@ -1428,7 +1481,7 @@ export function listRoster(save: PlayerSave): string[] {
 }
 
 export function listGear(save: PlayerSave): string[] {
-  const gear = normalizeSummonerGear(save.gear);
+  const gear = getActiveGear(save);
   const leader = (gearLeaderAtkPct(gear) * 100).toFixed(1);
   const sets = summarizeGearSets(gear)
     .filter((s) => s.count > 0)
@@ -1439,11 +1492,11 @@ export function listGear(save: PlayerSave): string[] {
     .join(" · ");
   return [
     `무기 ${describeGear(gear.weapon)} · 스킬+${(gear.weapon.skillPowerBonus * 100).toFixed(0)}%`,
-    `로브 ${describeGear(gear.robe)} · HP+${gear.robe.summonerHpBonus} DEF+${gear.robe.summonerDefBonus}`,
-    `장신구 ${describeGear(gear.accessory)} · regen+${gear.accessory.manaRegenBonus.toFixed(2)} max+${gear.accessory.manaMaxBonus}`,
-    `마법구 ${describeGear(gear.orb)} · sense+${gear.orb.boardSenseBonus.toFixed(2)}`,
-    `망토 ${describeGear(gear.cloak)} · HP+${gear.cloak.summonerHpBonus} 리더+${(gear.cloak.leaderAtkBonus * 100).toFixed(1)}%`,
+    `상의 ${describeGear(gear.top)} · HP+${gear.top.summonerHpBonus} DEF+${gear.top.summonerDefBonus}`,
+    `하의 ${describeGear(gear.bottom)} · HP+${gear.bottom.summonerHpBonus} 리더+${(gear.bottom.leaderAtkBonus * 100).toFixed(1)}%`,
+    `신발 ${describeGear(gear.shoes)} · regen+${gear.shoes.manaRegenBonus.toFixed(2)} max+${gear.shoes.manaMaxBonus}`,
     `반지 ${describeGear(gear.ring)} · 스킬+${(gear.ring.skillPowerBonus * 100).toFixed(0)}% 리더+${(gear.ring.leaderAtkBonus * 100).toFixed(1)}%`,
+    `목걸이 ${describeGear(gear.necklace)} · sense+${gear.necklace.boardSenseBonus.toFixed(2)}`,
     `세트 ${sets || "없음"}`,
     `리더 합산 ATK +${leader}%`,
     `가방 ${(save.gearBag ?? []).length}/${MAX_GEAR_BAG}`,
@@ -1820,41 +1873,42 @@ export function runEnhanceGear(
   save: PlayerSave,
   slot: GearSlot,
 ): LoopStepResult {
-  const gearNorm = normalizeSummonerGear(save.gear);
+  const synced = syncSummonerMirrors(save);
+  const gearNorm = getActiveGear(synced);
   const piece = gearNorm[slot];
   if (piece.enhance >= MAX_GEAR_ENHANCE) {
     return {
-      save: { ...save, gear: gearNorm },
+      save: withActiveGear(synced, gearNorm),
       message: `${describeGear(piece)} 이미 최대(+${MAX_GEAR_ENHANCE})`,
     };
   }
   const cost = gearEnhanceManaCost(piece.enhance);
   const crystalCost = gearEnhanceCrystalCost(piece.enhance);
-  if (save.island.mana < cost) {
+  if (synced.island.mana < cost) {
     return {
-      save: { ...save, gear: gearNorm },
-      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+      save: withActiveGear(synced, gearNorm),
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(synced.island.mana)})`,
     };
   }
-  if ((save.island.crystal ?? 0) < crystalCost) {
+  if ((synced.island.crystal ?? 0) < crystalCost) {
     return {
-      save: { ...save, gear: gearNorm },
-      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${save.island.crystal ?? 0})`,
+      save: withActiveGear(synced, gearNorm),
+      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${synced.island.crystal ?? 0})`,
     };
   }
   const next = bumpGearEnhance(piece);
   const gear = { ...gearNorm, [slot]: next };
   const island = {
-    ...save.island,
-    mana: save.island.mana - cost,
-    crystal: (save.island.crystal ?? 0) - crystalCost,
+    ...synced.island,
+    mana: synced.island.mana - cost,
+    crystal: (synced.island.crystal ?? 0) - crystalCost,
   };
   const costNote =
     crystalCost > 0
       ? `−골드 ${cost} · −크리스탈 ${crystalCost}`
       : `−골드 ${cost}`;
   return {
-    save: { ...save, island, gear },
+    save: withActiveGear({ ...synced, island }, gear),
     message: `장비 강화: ${describeGear(next)} (${costNote})`,
   };
 }
@@ -1865,25 +1919,26 @@ export function runAffixGearSet(
   slot: GearSlot,
   setId: GearSetId,
 ): LoopStepResult {
-  const gearNorm = normalizeSummonerGear(save.gear);
+  const synced = syncSummonerMirrors(save);
+  const gearNorm = getActiveGear(synced);
   const piece = gearNorm[slot];
   if (piece.setId === setId) {
     return {
-      save: { ...save, gear: gearNorm },
+      save: withActiveGear(synced, gearNorm),
       message: `${describeGear(piece)} 이미 ${getGearSet(setId)?.nameKo ?? setId} 세트`,
     };
   }
-  if (save.island.mana < GEAR_SET_AFFIX_MANA) {
+  if (synced.island.mana < GEAR_SET_AFFIX_MANA) {
     return {
-      save: { ...save, gear: gearNorm },
-      message: `골드 부족 (필요 ${GEAR_SET_AFFIX_MANA}, 보유 ${Math.floor(save.island.mana)})`,
+      save: withActiveGear(synced, gearNorm),
+      message: `골드 부족 (필요 ${GEAR_SET_AFFIX_MANA}, 보유 ${Math.floor(synced.island.mana)})`,
     };
   }
   const next = { ...piece, setId };
   const gear = { ...gearNorm, [slot]: next };
   const island = {
-    ...save.island,
-    mana: save.island.mana - GEAR_SET_AFFIX_MANA,
+    ...synced.island,
+    mana: synced.island.mana - GEAR_SET_AFFIX_MANA,
   };
   const active = summarizeGearSets(gear)
     .filter((s) => s.active2)
@@ -1893,7 +1948,7 @@ export function runAffixGearSet(
     )
     .join("·");
   return {
-    save: { ...save, island, gear },
+    save: withActiveGear({ ...synced, island }, gear),
     message: `세트 부여: ${describeGear(next)} (−골드 ${GEAR_SET_AFFIX_MANA})${active ? ` · 활성 ${active}` : ""}`,
   };
 }
@@ -1903,19 +1958,28 @@ export function runEquipGearBag(
   save: PlayerSave,
   bagIndex: number,
 ): LoopStepResult {
-  const bag = [...(save.gearBag ?? [])];
+  const synced = syncSummonerMirrors(save);
+  const bag = [...(synced.gearBag ?? [])];
   const piece = bag[bagIndex];
   if (!piece) {
-    return { save, message: `가방 인덱스 없음: ${bagIndex}` };
+    return { save: synced, message: `가방 인덱스 없음: ${bagIndex}` };
   }
-  const gearNorm = normalizeSummonerGear(save.gear);
-  const displaced = gearNorm[piece.slot];
+  const el = synced.activeSummoner ?? "light";
+  const normPiece = normalizeGearPiece(piece, piece.slot);
+  if (!canEquipGearOnElement(normPiece, el)) {
+    return {
+      save: synced,
+      message: `${describeGear(normPiece)}는 ${SUMMONER_ELEMENT_LABEL[normPiece.element ?? "light"]} 소환사 전용 무기입니다`,
+    };
+  }
+  const gearNorm = getActiveGear(synced);
+  const displaced = gearNorm[normPiece.slot];
   bag.splice(bagIndex, 1);
   bag.push(displaced);
-  const gear = { ...gearNorm, [piece.slot]: piece };
+  const gear = { ...gearNorm, [normPiece.slot]: normPiece };
   return {
-    save: { ...save, gear, gearBag: bag },
-    message: `장비 장착: ${describeGear(piece)} · 해제 ${describeGear(displaced)} → 가방`,
+    save: withActiveGear({ ...synced, gearBag: bag }, gear),
+    message: `장비 장착: ${describeGear(normPiece)} · 해제 ${describeGear(displaced)} → 가방`,
   };
 }
 
@@ -2361,7 +2425,10 @@ export function createStageBattle(
     difficulty?: "normal" | "hard" | "hell";
   },
 ): Battle {
-  const gear = normalizeSummonerGear(save?.gear ?? createStarterGear());
+  const activeEl = save?.activeSummoner ?? "light";
+  const gear = save
+    ? getActiveGear(save)
+    : createStarterGear(activeEl);
   const allyMonsters: Unit[] = [];
   if (save?.party.length) {
     for (const uid of save.party.slice(0, 4)) {
@@ -2381,7 +2448,6 @@ export function createStageBattle(
     );
   }
 
-  const activeEl = save?.activeSummoner ?? "light";
   const activeProfile = save
     ? getActiveSummoner(save)
     : { level: 1, exp: 0, awaken: 0 };
@@ -2392,13 +2458,13 @@ export function createStageBattle(
   const magicProg =
     save?.summonerMagic?.[activeEl] ?? emptyMagicProgress();
   const robeHp =
-    (gear.robe.summonerHpBonus ?? 0) +
-    (gear.cloak.summonerHpBonus ?? 0) +
+    (gear.top.summonerHpBonus ?? 0) +
+    (gear.bottom.summonerHpBonus ?? 0) +
     gearSetBonuses(gear).summonerHpBonus +
     tree.summonerHpBonus;
   const robeDef =
-    (gear.robe.summonerDefBonus ?? 0) +
-    (gear.cloak.summonerDefBonus ?? 0) +
+    (gear.top.summonerDefBonus ?? 0) +
+    (gear.bottom.summonerDefBonus ?? 0) +
     gearSetBonuses(gear).summonerDefBonus;
   const leader = getSummonerLeader(activeEl);
   const awakenAtk = awakenLeaderAtkPct(awaken);
@@ -2434,13 +2500,13 @@ export function createStageBattle(
       hp:
         500 +
         lvl * 20 +
-        gear.accessory.manaMaxBonus * 2 +
+        gear.shoes.manaMaxBonus * 2 +
         robeHp +
         awaken * 30,
       atk: 85 + lvl * 3,
       def:
         42 +
-        Math.floor(gear.accessory.enhance) +
+        Math.floor(gear.shoes.enhance) +
         Math.floor(lvl / 2) +
         robeDef +
         awaken * 3,
@@ -2718,33 +2784,50 @@ export function applyRewards(
     }
   }
 
-  let gear = normalizeSummonerGear(save.gear);
-  let gearBag = [...(save.gearBag ?? [])];
+  let gear = getActiveGear(working);
+  let gearBag = [...(working.gearBag ?? [])].map((g) =>
+    normalizeGearPiece(g, g.slot),
+  );
   let gearDrop: GearPiece | undefined;
   let bagSoldNote = "";
-  if (stage.mode === "equip") {
-    const gearChance = stage.gearDropChance ?? 0.75;
-    if (rng() < gearChance) {
-      gearDrop = rollGearDrop(rng, `equip_${stage.id}`);
-      if (stage.stage >= 2 && gearDrop.enhance < MAX_GEAR_ENHANCE) {
-        gearDrop = bumpGearEnhance(gearDrop);
-      }
-      if (gearBag.length >= MAX_GEAR_BAG) {
-        const sold = gearBag.shift()!;
-        const gain = gearSellMana(sold);
-        const crystalGain = gearSellCrystal(sold);
-        island = {
-          ...island,
-          mana: island.mana + gain,
-          crystal: (island.crystal ?? 0) + crystalGain,
-        };
-        bagSoldNote =
-          crystalGain > 0
-            ? ` · 가방초과 판매 ${describeGear(sold)}(+${gain}/+크${crystalGain})`
-            : ` · 가방초과 판매 ${describeGear(sold)}(+${gain})`;
-      }
-      gearBag.push(gearDrop);
+  const defaultGearChance =
+    stage.mode === "equip"
+      ? 0.75
+      : stage.mode === "scenario" ||
+          stage.mode === "depth" ||
+          stage.mode === "weekday" ||
+          stage.mode === "trial"
+        ? 0.18
+        : 0;
+  const gearChance = stage.gearDropChance ?? defaultGearChance;
+  if (gearChance > 0 && rng() < gearChance) {
+    gearDrop = rollGearDrop(
+      rng,
+      stage.mode === "equip" ? `equip_${stage.id}` : `gear_${stage.id}`,
+      { preferredElement: working.activeSummoner },
+    );
+    if (
+      stage.mode === "equip" &&
+      stage.stage >= 2 &&
+      gearDrop.enhance < MAX_GEAR_ENHANCE
+    ) {
+      gearDrop = bumpGearEnhance(gearDrop);
     }
+    if (gearBag.length >= MAX_GEAR_BAG) {
+      const sold = gearBag.shift()!;
+      const gain = gearSellMana(sold);
+      const crystalGain = gearSellCrystal(sold);
+      island = {
+        ...island,
+        mana: island.mana + gain,
+        crystal: (island.crystal ?? 0) + crystalGain,
+      };
+      bagSoldNote =
+        crystalGain > 0
+          ? ` · 가방초과 판매 ${describeGear(sold)}(+${gain}/+크${crystalGain})`
+          : ` · 가방초과 판매 ${describeGear(sold)}(+${gain})`;
+    }
+    gearBag.push(gearDrop);
   }
 
   let scrolls = save.scrolls;
@@ -2950,7 +3033,7 @@ export function runDemoLoop(rng: () => number = () => 0.2): LoopStepResult[] {
   steps.push(enh);
   save = enh.save;
 
-  const g = runEnhanceGear(save, "accessory");
+  const g = runEnhanceGear(save, "shoes");
   steps.push(g);
   save = g.save;
 

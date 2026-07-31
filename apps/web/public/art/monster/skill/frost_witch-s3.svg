@@ -1,23 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none" aria-hidden="true">
   <defs>
-    <linearGradient id="bg_frost_witch_s3" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2a1410"/><stop offset="1" stop-color="#100806"/>
+    <linearGradient id="bg_frost_witch_s3" x1="20" y1="16" x2="108" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2c2410"/><stop offset="1" stop-color="#141008"/>
     </linearGradient>
-    <linearGradient id="a1_frost_witch_s3" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFE2A8"/><stop offset=".45" stop-color="#E07040"/><stop offset="1" stop-color="#8A2818"/>
+    <radialGradient id="gl_frost_witch_s3" cx="50%" cy="45%" r="45%">
+      <stop stop-color="#F0D050" stop-opacity=".40"/><stop offset="1" stop-color="#F0D050" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="a1_frost_witch_s3" x1="28" y1="16" x2="100" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D0"/><stop offset=".45" stop-color="#F0D060"/><stop offset="1" stop-color="#A89028"/>
     </linearGradient>
-    <linearGradient id="a2_frost_witch_s3" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFE2A8"/><stop offset="1" stop-color="#E07040"/>
+    <linearGradient id="a2_frost_witch_s3" x1="36" y1="24" x2="96" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D0"/><stop offset="1" stop-color="#F0D060"/>
     </linearGradient>
-    <linearGradient id="a3_frost_witch_s3" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#E07040"/><stop offset="1" stop-color="#8A2818"/>
+    <linearGradient id="fr_frost_witch_s3" x1="8" y1="6" x2="120" y2="122" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF0A8"/><stop offset=".45" stop-color="#E8C84A"/><stop offset="1" stop-color="#887818"/>
+    </linearGradient>
+    <linearGradient id="fd_frost_witch_s3" x1="24" y1="24" x2="104" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#887818"/><stop offset="1" stop-color="#E8C84A"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#bg_frost_witch_s3)"/>
-  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#E07040" stroke-opacity=".35" stroke-width="1.5"/>
-  <circle cx="32" cy="32" r="24" fill="#E07040" fill-opacity=".10"/>
-  
-      <path d="M32 12L40 28L56 30L44 42L48 58L32 48L16 58L20 42L8 30L24 28Z" fill="url(#a1_frost_witch_s3)" stroke="#D8FFE0" stroke-width="1.2" stroke-linejoin="round"/>
-      <circle cx="32" cy="34" r="6" fill="#081208" stroke="#E07040" stroke-width="2"/>
+  <rect width="128" height="128" rx="16" fill="url(#bg_frost_witch_s3)"/>
+  <circle cx="64" cy="60" r="36" fill="url(#gl_frost_witch_s3)"/>
+  <g transform="translate(32,30)">
+      <path d="M10 50L28 18L36 24L22 50Z" fill="url(#a1_frost_witch_s3)"/>
+      <path d="M28 44L46 12L54 18L40 46Z" fill="url(#a2_frost_witch_s3)" opacity=".9"/>
+      <path d="M18 54H50" stroke="#F0D050" stroke-width="2.6" stroke-linecap="round" opacity=".45"/>
+      <circle cx="48" cy="16" r="2.2" fill="#fff" opacity=".55"/></g>
+  <rect x="5" y="5" width="118" height="118" rx="14" fill="none" stroke="url(#fr_frost_witch_s3)" stroke-width="6"/>
+  <rect x="10" y="10" width="108" height="108" rx="11" fill="none" stroke="url(#fd_frost_witch_s3)" stroke-width="2"/>
+  <rect x="13" y="13" width="102" height="102" rx="9" fill="none" stroke="#050308" stroke-opacity=".55" stroke-width="1.5"/>
 </svg>

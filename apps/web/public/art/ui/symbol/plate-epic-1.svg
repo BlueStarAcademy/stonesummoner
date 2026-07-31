@@ -7,7 +7,7 @@
     </radialGradient>
     <linearGradient id="pltepics1-face" x1="14" y1="8" x2="58" y2="64" gradientUnits="userSpaceOnUse">
       <stop stop-color="#482868"/>
-      <stop offset=".4" stop-color="#281438"/>
+      <stop offset=".38" stop-color="#281438"/>
       <stop offset="1" stop-color="#140818"/>
     </linearGradient>
     <linearGradient id="pltepics1-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
@@ -16,26 +16,31 @@
       <stop offset=".62" stop-color="#C9A227"/>
       <stop offset="1" stop-color="#7A5A18"/>
     </linearGradient>
+    <linearGradient id="pltepics1-bevel" x1="16" y1="8" x2="40" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D6" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#b46bff" stop-opacity="0"/>
+    </linearGradient>
     <linearGradient id="pltepics1-shine" x1="18" y1="12" x2="42" y2="36" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".85"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
       <stop offset="1" stop-color="#b46bff" stop-opacity="0"/>
     </linearGradient>
     <radialGradient id="pltepics1-gem" cx="38%" cy="32%" r="70%">
-      <stop stop-color="#482868" stop-opacity=".9"/>
+      <stop stop-color="#482868" stop-opacity=".92"/>
       <stop offset=".55" stop-color="#100614"/>
-      <stop offset="1" stop-color="#000" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".88"/>
     </radialGradient>
     <filter id="pltepics1-depth" x="-25%" y="-25%" width="150%" height="150%">
-      <feDropShadow dx="0" dy="1.6" stdDeviation="1.3" flood-color="#000" flood-opacity=".55"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000" flood-opacity=".58"/>
     </filter>
   </defs>
   <circle cx="36" cy="36" r="28" fill="url(#pltepics1-aura)"/>
   <g filter="url(#pltepics1-depth)">
-    <path d="M18 12 L60 10 L64 36 L60 62 L18 60 L8 36 Z" fill="none" stroke="#0A0806" stroke-width="5.4" stroke-linejoin="round" opacity=".92"/>
-    <path d="M18 12 L60 10 L64 36 L60 62 L18 60 L8 36 Z" fill="url(#pltepics1-face)" stroke="url(#pltepics1-gold)" stroke-width="3" stroke-linejoin="round"/>
-    <path d="M18 12 L60 10 L64 36 L60 62 L18 60 L8 36 Z" fill="none" stroke="#FFF8D6" stroke-width="1.15" opacity=".32" transform="translate(0 .6)"/>
-    <path d="M24 20 L56 18 L58 36 L56 54 L24 52 L18 36 Z" fill="url(#pltepics1-gem)" stroke="#e0c0ff" stroke-width="1" stroke-opacity=".55"/>
-    <path d="M24 20 L56 18 L58 36 L56 54 L24 52 L18 36 Z" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".18" transform="translate(0 .4)"/>
-    <ellipse cx="26" cy="19" rx="8" ry="3.4" fill="url(#pltepics1-shine)" transform="rotate(-26 26 19)" opacity=".8"/>
+    <path d="M22 8 L50 8 L66 64 L6 64 Z" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
+    <path d="M22 8 L50 8 L66 64 L6 64 Z" fill="url(#pltepics1-face)" stroke="url(#pltepics1-gold)" stroke-width="3.1" stroke-linejoin="round"/>
+    <path d="M22 8 L50 8 L66 64 L6 64 Z" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
+    <path d="M22 8 L50 8 L45 16 L27 16 Z" fill="url(#pltepics1-bevel)" opacity=".55"/>
+    <path d="M27 16 L45 16 L56 56 L16 56 Z" fill="url(#pltepics1-gem)" stroke="#e0c0ff" stroke-width="1" stroke-opacity=".55"/>
+    <path d="M27 16 L45 16 L56 56 L16 56 Z" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".2" transform="translate(0 .35)"/>
+    <ellipse cx="27" cy="18" rx="7.5" ry="3.2" fill="url(#pltepics1-shine)" transform="rotate(-24 27 18)" opacity=".82"/>
   </g>
 </svg>

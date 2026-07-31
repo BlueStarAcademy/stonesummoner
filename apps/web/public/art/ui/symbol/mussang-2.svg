@@ -23,21 +23,23 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="mussangs2-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#d0b070" stop-opacity="0"/>
     </linearGradient>
     <filter id="mussangs2-depth" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="20" fill="url(#mussangs2-aura)" opacity=".85"/>
-  <g filter="url(#mussangs2-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
+  <circle cx="36" cy="36" r="18" fill="url(#mussangs2-aura)" opacity=".8"/>
+  <g filter="url(#mussangs2-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
     
-      <path d="M20 18 34 36 24 56l6 2 8-16 8 16 6-2-10-20 14-18-6-2-12 14L28 16z"
-        fill="#2A1C10" stroke="url(#mussangs2-gold)" stroke-width="1.7" stroke-linejoin="round"/>
-      <path d="M26 22 34 34 28 48l3 1 5-12 5 12 3-1-6-14 8-12-3-1-7 9-7-10z"
-        fill="url(#mussangs2-ink)" stroke="#5A4214" stroke-width=".9"/>
-      <circle cx="36" cy="36" r="3.4" fill="#1A140C" stroke="url(#mussangs2-gold)" stroke-width="1.6"/>
-      <circle cx="36" cy="36" r="1.4" fill="url(#mussangs2-gold)"/>
+      <path d="M18 16 34 36 22 58l7 2 9-18 9 18 7-2-12-22 16-20-7-2-13 16L28 14z"
+        fill="#22180C" stroke="url(#mussangs2-gold)" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M24 20 34 34 26 50l4 1 6-13 6 13 4-1-8-16 10-14-4-1-8 10-8-11z"
+        fill="url(#mussangs2-ink)" stroke="#5A4214" stroke-width=".95"/>
+      <circle cx="36" cy="36" r="5" fill="#1A140C" stroke="url(#mussangs2-gold)" stroke-width="1.7"/>
+      <circle cx="36" cy="36" r="2.4" fill="url(#mussangs2-ink)" stroke="#5A4214" stroke-width=".8"/>
+      <circle cx="36" cy="36" r="1.1" fill="url(#mussangs2-gold)"/>
+      <ellipse cx="28" cy="22" rx="2.5" ry="1.4" fill="url(#mussangs2-shine)" opacity=".65" transform="rotate(-40 28 22)"/>
   </g>
 </svg>

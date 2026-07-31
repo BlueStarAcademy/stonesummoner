@@ -23,22 +23,23 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="tagaes5-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#a03050" stop-opacity="0"/>
     </linearGradient>
     <filter id="tagaes5-depth" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="20" fill="url(#tagaes5-aura)" opacity=".85"/>
-  <g filter="url(#tagaes5-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
+  <circle cx="36" cy="36" r="18" fill="url(#tagaes5-aura)" opacity=".8"/>
+  <g filter="url(#tagaes5-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
     
-      <path d="M36 14c10 10 16 18 16 28 0 10-7 16-16 16s-16-6-16-16c0-10 6-18 16-28z"
-        fill="#241018" stroke="url(#tagaes5-gold)" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M36 22c6 7 10 13 10 20 0 6-4.5 10-10 10s-10-4-10-10c0-7 4-13 10-20z"
+      <path d="M36 10c12 12 18 20 18 30 0 12-8 18-18 18S18 52 18 40c0-10 6-18 18-30z"
+        fill="#241018" stroke="url(#tagaes5-gold)" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M36 18c8 8 12 15 12 22 0 8-5.5 12-12 12s-12-4-12-12c0-7 4-14 12-22z"
         fill="url(#tagaes5-ink)" stroke="#5A4214" stroke-width="1"/>
-      <path d="M36 30v18" stroke="#5A4214" stroke-width="3" stroke-linecap="round"/>
-      <path d="M36 30v18" stroke="url(#tagaes5-gold)" stroke-width="1.6" stroke-linecap="round"/>
-      <ellipse cx="32" cy="26" rx="2.2" ry="3" fill="#FFF8D6" opacity=".5"/>
+      <path d="M36 28v20" stroke="#3A2010" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M36 28v20" stroke="url(#tagaes5-gold)" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M30 36 36 48 42 36" fill="none" stroke="#5A4214" stroke-width="1.4" stroke-linejoin="round"/>
+      <ellipse cx="31" cy="24" rx="2.4" ry="3.4" fill="url(#tagaes5-shine)" opacity=".6"/>
   </g>
 </svg>

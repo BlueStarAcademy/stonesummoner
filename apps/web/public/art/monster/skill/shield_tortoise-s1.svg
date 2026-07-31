@@ -1,24 +1,71 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none" aria-hidden="true">
   <defs>
-    <linearGradient id="bg_shield_tortoise_s1" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#102028"/><stop offset="1" stop-color="#081018"/>
+    <linearGradient id="bg_steel_armor_s1" x1="16" y1="12" x2="112" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2a1410"/><stop offset="1" stop-color="#100806"/>
     </linearGradient>
-    <linearGradient id="a1_shield_tortoise_s1" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#C8F0FF"/><stop offset=".45" stop-color="#4AA8E0"/><stop offset="1" stop-color="#185888"/>
+    <radialGradient id="stone_steel_armor_s1" cx="45%" cy="35%" r="70%">
+      <stop stop-color="#2a1410"/><stop offset=".55" stop-color="#100806"/><stop offset="1" stop-color="#050308"/>
+    </radialGradient>
+    <radialGradient id="vig_steel_armor_s1" cx="50%" cy="48%" r="55%">
+      <stop stop-color="#E07040" stop-opacity=".22"/><stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow_steel_armor_s1" cx="50%" cy="50%" r="40%">
+      <stop stop-color="#E07040" stop-opacity=".45"/><stop offset="1" stop-color="#E07040" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="a1_steel_armor_s1" x1="32" y1="20" x2="100" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE2A8"/><stop offset=".45" stop-color="#E07040"/><stop offset="1" stop-color="#8A2818"/>
     </linearGradient>
-    <linearGradient id="a2_shield_tortoise_s1" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#C8F0FF"/><stop offset="1" stop-color="#4AA8E0"/>
+    <linearGradient id="a2_steel_armor_s1" x1="40" y1="28" x2="96" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE2A8"/><stop offset="1" stop-color="#E07040"/>
     </linearGradient>
-    <linearGradient id="a3_shield_tortoise_s1" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4AA8E0"/><stop offset="1" stop-color="#185888"/>
+    <linearGradient id="a3_steel_armor_s1" x1="48" y1="36" x2="88" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E07040"/><stop offset="1" stop-color="#8A2818"/>
+    </linearGradient>
+    
+    <linearGradient id="gold_steel_armor_s1" x1="8" y1="6" x2="120" y2="122" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF0C0"/><stop offset=".35" stop-color="#E0B84A"/><stop offset=".7" stop-color="#A87818"/><stop offset="1" stop-color="#F0D878"/>
+    </linearGradient>
+    <linearGradient id="goldd_steel_armor_s1" x1="20" y1="20" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6A4810"/><stop offset="1" stop-color="#C9A227"/>
+    </linearGradient>
+    <radialGradient id="gem_steel_armor_s1" cx="50%" cy="40%" r="60%">
+      <stop stop-color="#fff"/><stop offset=".35" stop-color="#FF6A3A"/><stop offset="1" stop-color="#2a1810"/>
+    </radialGradient>
+    <linearGradient id="edge_steel_armor_s1" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff6d0" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity=".35"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#bg_shield_tortoise_s1)"/>
-  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#4AA8E0" stroke-opacity=".35" stroke-width="1.5"/>
-  <circle cx="32" cy="32" r="24" fill="#4AA8E0" fill-opacity=".10"/>
+  <rect width="128" height="128" rx="18" fill="url(#bg_steel_armor_s1)"/>
+  <rect x="12" y="12" width="104" height="104" rx="12" fill="url(#stone_steel_armor_s1)"/>
+  <rect x="12" y="12" width="104" height="104" rx="12" fill="url(#vig_steel_armor_s1)"/>
+  <circle cx="64" cy="64" r="34" fill="url(#glow_steel_armor_s1)"/>
+  <!-- subtle rune ring -->
+  <circle cx="64" cy="64" r="38" fill="none" stroke="#E07040" stroke-opacity=".14" stroke-width="1.2" stroke-dasharray="3 5"/>
+  <g transform="translate(32,32)">
+      <ellipse cx="32" cy="42" rx="18" ry="11" fill="url(#a1_steel_armor_s1)"/>
+      <rect x="20" y="14" width="24" height="28" rx="7" fill="url(#a2_steel_armor_s1)" stroke="#C8F0FF" stroke-width="1.4"/>
+      <path d="M25 28H39M25 35H39" stroke="#185888" stroke-width="2.2" stroke-linecap="round" opacity=".65"/></g>
   
-      <ellipse cx="32" cy="40" rx="16" ry="10" fill="url(#a1_shield_tortoise_s1)"/>
-      <rect x="22" y="16" width="20" height="24" rx="6" fill="url(#a2_shield_tortoise_s1)" stroke="#C8F0FF" stroke-width="1.2"/>
-      <path d="M26 28H38M26 34H38" stroke="#185888" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+  <!-- ornate gold frame -->
+  <rect x="3" y="3" width="122" height="122" rx="18" fill="none" stroke="url(#gold_steel_armor_s1)" stroke-width="7"/>
+  <rect x="7" y="7" width="114" height="114" rx="15" fill="none" stroke="url(#goldd_steel_armor_s1)" stroke-width="2.2"/>
+  <rect x="10.5" y="10.5" width="107" height="107" rx="13" fill="none" stroke="#1a1208" stroke-width="2.5" opacity=".75"/>
+  <rect x="3" y="3" width="122" height="122" rx="18" fill="none" stroke="url(#edge_steel_armor_s1)" stroke-width="1.2"/>
+  <!-- corner flourishes -->
+  <path d="M14 28V16H28" fill="none" stroke="url(#gold_steel_armor_s1)" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M100 16H114V28" fill="none" stroke="url(#gold_steel_armor_s1)" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M114 100V112H100" fill="none" stroke="url(#gold_steel_armor_s1)" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M28 112H14V100" fill="none" stroke="url(#gold_steel_armor_s1)" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M18 18L26 22L22 26Z" fill="url(#gold_steel_armor_s1)"/>
+  <path d="M110 18L102 22L106 26Z" fill="url(#gold_steel_armor_s1)"/>
+  <path d="M18 110L26 106L22 102Z" fill="url(#gold_steel_armor_s1)"/>
+  <path d="M110 110L102 106L106 102Z" fill="url(#gold_steel_armor_s1)"/>
+  <!-- mid-side diamond studs -->
+  <g>
+    <path d="M64 6L70 12L64 18L58 12Z" fill="url(#gem_steel_armor_s1)" stroke="#F0D878" stroke-width="1"/>
+    <path d="M64 110L70 116L64 122L58 116Z" fill="url(#gem_steel_armor_s1)" stroke="#F0D878" stroke-width="1"/>
+    <path d="M6 64L12 58L18 64L12 70Z" fill="url(#gem_steel_armor_s1)" stroke="#F0D878" stroke-width="1"/>
+    <path d="M110 64L116 58L122 64L116 70Z" fill="url(#gem_steel_armor_s1)" stroke="#F0D878" stroke-width="1"/>
+  </g>
 </svg>

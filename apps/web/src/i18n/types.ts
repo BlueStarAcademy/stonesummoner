@@ -542,9 +542,12 @@ export type MessageKey =
   | "ui.symCompareSelected"
   | "ui.symCompareEquipped"
   | "ui.symFilter"
+  | "ui.symFilterSlot"
   | "ui.symFilterAll"
   | "ui.symFilterNone"
   | "ui.symFilterN"
+  | "ui.symFilterSlotN"
+  | "ui.symSlotLabel"
   | "ui.symFilterEmpty"
   | "ui.stagePrepTitle"
   | "ui.stagePrepStart"
@@ -590,6 +593,10 @@ export type MessageKey =
   | "ui.stageDropScrollPremium"
   | "ui.stageDropCrystal"
   | "ui.stageDropGear"
+  | "ui.stageDropGearRandom"
+  | "ui.stageDropGearRandomHint"
+  | "ui.gearWeaponElementLock"
+  | "ui.gearPerSummonerHint"
   | "ui.stageDropJinmun"
   | "ui.stageDropPiece"
   | "ui.codex"
@@ -641,7 +648,11 @@ export type MessageKey =
   | "ui.resultExpSummoner"
   | "ui.resultExpMonster"
   | "ui.resultExpGain"
-  | "ui.resultExpToNext";
+  | "ui.resultExpToNext"
+  | "ui.gearSlotTop"
+  | "ui.gearSlotBottom"
+  | "ui.gearSlotShoes"
+  | "ui.gearSlotNecklace";
 
 export type MessageDict = Record<MessageKey, string>;
 

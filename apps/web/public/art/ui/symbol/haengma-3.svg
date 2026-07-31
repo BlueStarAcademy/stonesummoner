@@ -23,20 +23,23 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="haengmas3-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#4aa0d0" stop-opacity="0"/>
     </linearGradient>
     <filter id="haengmas3-depth" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="20" fill="url(#haengmas3-aura)" opacity=".85"/>
-  <g filter="url(#haengmas3-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
+  <circle cx="36" cy="36" r="18" fill="url(#haengmas3-aura)" opacity=".8"/>
+  <g filter="url(#haengmas3-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
     
-      <path d="M14 38c8-14 14-20 22-20s14 6 22 20c-8-6-14-8-22-8s-14 2-22 8z"
-        fill="#1A2030" stroke="url(#haengmas3-gold)" stroke-width="1.9" stroke-linejoin="round"/>
-      <path d="M20 42c7-8 12-10 16-10s9 2 16 10" fill="none" stroke="url(#haengmas3-ink)" stroke-width="2.2" stroke-linecap="round"/>
-      <path d="M26 46c5-5 8-5 10-5s5 0 10 5" fill="none" stroke="url(#haengmas3-gold)" stroke-width="1.6" stroke-linecap="round"/>
-      <circle cx="36" cy="30" r="2.4" fill="url(#haengmas3-gold)"/>
+      <path d="M12 40c9-18 16-24 24-24s15 6 24 24c-9-8-16-10-24-10s-15 2-24 10z"
+        fill="#101828" stroke="url(#haengmas3-gold)" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M18 42c7-10 13-13 18-13s11 3 18 13" fill="none" stroke="url(#haengmas3-ink)" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M24 46c5-6 9-7 12-7s7 1 12 7" fill="none" stroke="url(#haengmas3-gold)" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M28 50c4-4 6-4 8-4s4 0 8 4" fill="none" stroke="url(#haengmas3-ink)" stroke-width="1.3" stroke-linecap="round" opacity=".8"/>
+      <circle cx="36" cy="28" r="3.2" fill="#1A140C" stroke="url(#haengmas3-gold)" stroke-width="1.5"/>
+      <circle cx="36" cy="28" r="1.3" fill="url(#haengmas3-gold)"/>
+      <ellipse cx="30" cy="34" rx="3" ry="1.5" fill="url(#haengmas3-shine)" opacity=".55" transform="rotate(-18 30 34)"/>
   </g>
 </svg>

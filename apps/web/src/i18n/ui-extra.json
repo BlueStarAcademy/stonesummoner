@@ -1375,7 +1375,6 @@
     "ko": "이 브라우저에서는 설치를 지원하지 않습니다.",
     "en": "Install is not available in this browser."
   },
-
   "ui.tabInfo": {
     "ko": "정보",
     "en": "Info"
@@ -1792,6 +1791,10 @@
     "ko": "세트 필터",
     "en": "Set filter"
   },
+  "ui.symFilterSlot": {
+    "ko": "번호 필터",
+    "en": "Slot filter"
+  },
   "ui.symFilterAll": {
     "ko": "전체",
     "en": "All"
@@ -1803,6 +1806,14 @@
   "ui.symFilterN": {
     "ko": "{n}종",
     "en": "{n} sets"
+  },
+  "ui.symFilterSlotN": {
+    "ko": "{n}개",
+    "en": "{n} slots"
+  },
+  "ui.symSlotLabel": {
+    "ko": "{n}번",
+    "en": "Slot {n}"
   },
   "ui.symFilterEmpty": {
     "ko": "필터에 맞는 상징이 없습니다",
@@ -1984,6 +1995,22 @@
     "ko": "장비",
     "en": "Gear"
   },
+  "ui.stageDropGearRandom": {
+    "ko": "소환사 장비",
+    "en": "Summoner gear"
+  },
+  "ui.stageDropGearRandomHint": {
+    "ko": "속성 전용 무기 · 소환사별 장착 · 슬롯·등급·품질 무작위",
+    "en": "Element-locked weapons · per-summoner sets · random slot/stars/quality"
+  },
+  "ui.gearWeaponElementLock": {
+    "ko": "{element} 소환사 전용 무기",
+    "en": "{element}-only weapon"
+  },
+  "ui.gearPerSummonerHint": {
+    "ko": "장비는 소환사(속성)마다 따로 장착됩니다",
+    "en": "Gear is equipped separately per summoner element"
+  },
   "ui.stageDropJinmun": {
     "ko": "진문석",
     "en": "Circle stone"
@@ -2109,20 +2136,20 @@
     "en": "Weapon"
   },
   "ui.gearSlotRobe": {
-    "ko": "로브",
-    "en": "Robe"
+    "ko": "상의",
+    "en": "Top"
   },
   "ui.gearSlotOrb": {
-    "ko": "마법구",
-    "en": "Orb"
+    "ko": "목걸이",
+    "en": "Necklace"
   },
   "ui.gearSlotAccessory": {
-    "ko": "장신구",
-    "en": "Accessory"
+    "ko": "신발",
+    "en": "Shoes"
   },
   "ui.gearSlotCloak": {
-    "ko": "망토",
-    "en": "Cloak"
+    "ko": "하의",
+    "en": "Bottom"
   },
   "ui.gearSlotRing": {
     "ko": "반지",
@@ -2191,5 +2218,21 @@
   "ui.resultExpToNext": {
     "ko": "{cur}/{max}",
     "en": "{cur}/{max}"
+  },
+  "ui.gearSlotTop": {
+    "ko": "상의",
+    "en": "Top"
+  },
+  "ui.gearSlotBottom": {
+    "ko": "하의",
+    "en": "Bottom"
+  },
+  "ui.gearSlotShoes": {
+    "ko": "신발",
+    "en": "Shoes"
+  },
+  "ui.gearSlotNecklace": {
+    "ko": "목걸이",
+    "en": "Necklace"
   }
 }

@@ -23,20 +23,22 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="pamyeols2-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#5a4068" stop-opacity="0"/>
     </linearGradient>
     <filter id="pamyeols2-depth" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="20" fill="url(#pamyeols2-aura)" opacity=".85"/>
-  <g filter="url(#pamyeols2-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
+  <circle cx="36" cy="36" r="18" fill="url(#pamyeols2-aura)" opacity=".8"/>
+  <g filter="url(#pamyeols2-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
     
-      <path d="M36 14 52 24v20L36 58 20 44V24z" fill="#1A1420" stroke="url(#pamyeols2-gold)" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M36 20 46 26v14L36 50 26 40V26z" fill="url(#pamyeols2-ink)" stroke="#5A4214" stroke-width="1"/>
-      <path d="M28 28 44 44M40 26 30 42" stroke="#5A4214" stroke-width="2.2" stroke-linecap="round"/>
-      <path d="M28 28 44 44M40 26 30 42" stroke="url(#pamyeols2-gold)" stroke-width="1.2" stroke-linecap="round"/>
-      <circle cx="36" cy="36" r="2.5" fill="url(#pamyeols2-gold)"/>
+      <path d="M36 10 54 22v24L36 60 18 46V22z" fill="#16101C" stroke="url(#pamyeols2-gold)" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M36 16 48 25v18L36 54 24 43V25z" fill="url(#pamyeols2-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M26 26 46 46M44 24 28 44" stroke="#2A1830" stroke-width="2.8" stroke-linecap="round"/>
+      <path d="M26 26 46 46M44 24 28 44" stroke="url(#pamyeols2-gold)" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="36" cy="36" r="3.2" fill="#1A140C" stroke="url(#pamyeols2-gold)" stroke-width="1.3"/>
+      <circle cx="36" cy="36" r="1.2" fill="url(#pamyeols2-gold)"/>
+      <ellipse cx="30" cy="20" rx="3" ry="1.5" fill="url(#pamyeols2-shine)" opacity=".5" transform="rotate(-25 30 20)"/>
   </g>
 </svg>

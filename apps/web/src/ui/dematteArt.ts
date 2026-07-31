@@ -1,14 +1,21 @@
-/** Punch near-black matte pixels to alpha so monster WebPs sit on transparent UI. */
+/** Punch outer near-black matte pixels to alpha so monster art sits on transparent UI. */
 
 const cache = new Map<string, string>();
 
-function isNearBlack(r: number, g: number, b: number, lim = 18): boolean {
-  return r <= lim && g <= lim && b <= lim;
+function isMatte(r: number, g: number, b: number, a: number, lim = 28): boolean {
+  if (a < 8) return true;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const chroma = max - min;
+  const lum = (r + g + b) / 3;
+  if (lum <= lim && chroma <= 18) return true;
+  if (r <= lim && g <= lim && b <= lim + 8 && chroma <= 22) return true;
+  return false;
 }
 
 /**
- * Load an image URL, convert near-black backdrop to transparency, return a blob URL.
- * Falls back to the original src on failure / CORS / already-transparent assets.
+ * Load an image URL, convert outer black/dark backdrop to transparency, return a blob URL.
+ * Falls back to the original src on failure / already-transparent assets.
  */
 export async function dematteBlackSrc(src: string): Promise<string> {
   if (!src || src.startsWith("blob:") || src.startsWith("data:")) return src;
@@ -30,26 +37,73 @@ export async function dematteBlackSrc(src: string): Promise<string> {
     const image = ctx.getImageData(0, 0, w, h);
     const d = image.data;
 
+    const visited = new Uint8Array(w * h);
+    const q: number[] = [];
+    const push = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= w || y >= h) return;
+      const i = y * w + x;
+      if (visited[i]) return;
+      const o = i * 4;
+      if (!isMatte(d[o]!, d[o + 1]!, d[o + 2]!, d[o + 3]!)) return;
+      visited[i] = 1;
+      q.push(i);
+    };
+
+    for (let x = 0; x < w; x++) {
+      push(x, 0);
+      push(x, h - 1);
+    }
+    for (let y = 0; y < h; y++) {
+      push(0, y);
+      push(w - 1, y);
+    }
+
     let punched = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      const a = d[i + 3] ?? 255;
-      if (a < 8) continue;
-      const r = d[i] ?? 0;
-      const g = d[i + 1] ?? 0;
-      const b = d[i + 2] ?? 0;
-      if (isNearBlack(r, g, b)) {
-        d[i + 3] = 0;
-        punched += 1;
-      } else if (r < 34 && g < 34 && b < 34) {
-        // Soft edge: fade dark fringe instead of hard cut.
+    while (q.length) {
+      const i = q.pop()!;
+      d[i * 4 + 3] = 0;
+      punched += 1;
+      const x = i % w;
+      const y = (i / w) | 0;
+      push(x - 1, y);
+      push(x + 1, y);
+      push(x, y - 1);
+      push(x, y + 1);
+    }
+
+    // Soft fringe next to punched matte
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x;
+        if (visited[i]) continue;
+        const o = i * 4;
+        const r = d[o]!;
+        const g = d[o + 1]!;
+        const b = d[o + 2]!;
+        const a = d[o + 3]!;
+        if (a < 8) continue;
+        if (!(r < 48 && g < 48 && b < 48)) continue;
+        let near = false;
+        for (const [dx, dy] of [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ] as const) {
+          if (visited[(y + dy) * w + (x + dx)]) {
+            near = true;
+            break;
+          }
+        }
+        if (!near) continue;
         const lum = (r + g + b) / 3;
-        d[i + 3] = Math.round(a * (lum / 34));
+        d[o + 3] = Math.round(a * Math.min(1, lum / 40));
         punched += 1;
       }
     }
 
     // Skip rewrite if almost nothing was punched (true alpha art).
-    if (punched < (w * h) / 80) {
+    if (punched < (w * h) / 100) {
       cache.set(src, src);
       return src;
     }
@@ -80,17 +134,23 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/** Apply dematte to a single img (re-runs when src path changes). */
+export function dematteArtImg(img: HTMLImageElement): void {
+  const src = img.getAttribute("src") || img.currentSrc || img.src;
+  if (!src || src.startsWith("blob:") || src.startsWith("data:")) return;
+  if (img.dataset.dematteSrc === src) return;
+  img.dataset.dematteSrc = src;
+  void dematteBlackSrc(src).then((next) => {
+    if (!next || next === src) return;
+    // Only swap if this img still wants the same logical source.
+    if (img.dataset.dematteSrc === src) img.src = next;
+  });
+}
+
 /** Apply dematte to all matching imgs under root (in place). */
 export function dematteArtInTree(
   root: ParentNode,
-  selector = "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.battle-unit-img",
+  selector = "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.battle-unit-img, img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.codex-cell-img, img.codex-detail-img",
 ): void {
-  root.querySelectorAll<HTMLImageElement>(selector).forEach((img) => {
-    const src = img.currentSrc || img.src;
-    if (!src || img.dataset.dematte === "1") return;
-    img.dataset.dematte = "1";
-    void dematteBlackSrc(src).then((next) => {
-      if (next && next !== src) img.src = next;
-    });
-  });
+  root.querySelectorAll<HTMLImageElement>(selector).forEach(dematteArtImg);
 }

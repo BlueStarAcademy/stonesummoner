@@ -87,6 +87,8 @@ export {
   setActiveSummoner,
   syncSummonerMirrors,
   getActiveSummoner,
+  getActiveGear,
+  withActiveGear,
   addActiveSummonerExp,
   createSummonerRoster,
   accountSummonerLevel,

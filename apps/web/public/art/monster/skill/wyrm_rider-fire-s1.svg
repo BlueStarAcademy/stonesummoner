@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg_wyrm_rider_fire_s1" x1="20" y1="16" x2="108" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3a1810"/><stop offset="1" stop-color="#140806"/>
+    </linearGradient>
+    <radialGradient id="gl_wyrm_rider_fire_s1" cx="50%" cy="45%" r="45%">
+      <stop stop-color="#FF6A30" stop-opacity=".40"/><stop offset="1" stop-color="#FF6A30" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="a1_wyrm_rider_fire_s1" x1="28" y1="16" x2="100" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE2A8"/><stop offset=".45" stop-color="#FF7A3A"/><stop offset="1" stop-color="#B03018"/>
+    </linearGradient>
+    <linearGradient id="a2_wyrm_rider_fire_s1" x1="36" y1="24" x2="96" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE2A8"/><stop offset="1" stop-color="#FF7A3A"/>
+    </linearGradient>
+    <linearGradient id="fr_wyrm_rider_fire_s1" x1="8" y1="6" x2="120" y2="122" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFB06A"/><stop offset=".45" stop-color="#E07040"/><stop offset="1" stop-color="#8A2818"/>
+    </linearGradient>
+    <linearGradient id="fd_wyrm_rider_fire_s1" x1="24" y1="24" x2="104" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8A2818"/><stop offset="1" stop-color="#E07040"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="16" fill="url(#bg_wyrm_rider_fire_s1)"/>
+  <circle cx="64" cy="60" r="36" fill="url(#gl_wyrm_rider_fire_s1)"/>
+  <g transform="translate(32,30)">
+      <path d="M14 42L40 10L50 18L28 46Z" fill="url(#a1_wyrm_rider_fire_s1)" stroke="#FF6A30" stroke-width="1.4"/>
+      <path d="M40 10L54 6L50 18" fill="url(#a2_wyrm_rider_fire_s1)"/>
+      <path d="M18 48L10 58" stroke="#FF6A30" stroke-width="3" stroke-linecap="round"/>
+      <path d="M22 36L34 22" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".45"/></g>
+  <rect x="5" y="5" width="118" height="118" rx="14" fill="none" stroke="url(#fr_wyrm_rider_fire_s1)" stroke-width="6"/>
+  <rect x="10" y="10" width="108" height="108" rx="11" fill="none" stroke="url(#fd_wyrm_rider_fire_s1)" stroke-width="2"/>
+  <rect x="13" y="13" width="102" height="102" rx="9" fill="none" stroke="#050308" stroke-opacity=".55" stroke-width="1.5"/>
+</svg>

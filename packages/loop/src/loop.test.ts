@@ -28,6 +28,8 @@ import {
   runAffixGearSet,
   runEquipGearBag,
   runSellGearBag,
+  getActiveGear,
+  withActiveGear,
   runAwakenSummoner,
   setActiveSummoner,
   runUnlockSkillNode,
@@ -126,6 +128,17 @@ describe("game loop", () => {
     const buy = runBuyGlory(save, "ancient_sword");
     assert.match(buy.message, /고대의 검/);
     assert.equal(buy.save.gloryLevels.ancient_sword, 1);
+  });
+
+  it("drops summoner gear randomly from scenario clears", () => {
+    let save = createNewSave(0);
+    save = { ...save, island: { ...save.island, energy: 50 } };
+    const r = runSortie(save, "garen_1_1", { rng: () => 0.01 });
+    assert.ok(r.reward?.victory);
+    assert.ok(r.reward?.gear, "scenario clear should be able to drop summoner gear");
+    assert.ok(
+      (r.save.gearBag ?? []).some((g) => g.id === r.reward!.gear!.id),
+    );
   });
 
   it("drops gear from equip vault dungeon", () => {
@@ -590,14 +603,16 @@ describe("game loop", () => {
   it("enhances gear and symbols, equips drops", () => {
     let save = createNewSave(0);
     assert.ok(save.gear.weapon);
-    assert.ok(save.gear.robe);
-    assert.ok(save.gear.accessory);
+    assert.ok(save.gear.top);
+    assert.ok(save.gear.shoes);
+    assert.equal(save.gear.weapon.element, "light");
+    assert.ok(save.summoners.fire.gear?.weapon.element === "fire");
     assert.equal(listGear(save).length, 9);
     assert.ok(listSymbols(save).length >= 2);
 
-    const g = runEnhanceGear(save, "orb");
+    const g = runEnhanceGear(save, "necklace");
     assert.match(g.message, /장비 강화/);
-    assert.equal(g.save.gear.orb.enhance, 1);
+    assert.equal(g.save.gear.necklace.enhance, 1);
     save = g.save;
 
     const w = runEnhanceGear(save, "weapon");
@@ -608,13 +623,13 @@ describe("game loop", () => {
     );
     save = w.save;
 
-    const cloak = runEnhanceGear(save, "cloak");
-    assert.match(cloak.message, /장비 강화/);
-    assert.equal(cloak.save.gear.cloak.enhance, 1);
+    const bottom = runEnhanceGear(save, "bottom");
+    assert.match(bottom.message, /장비 강화/);
+    assert.equal(bottom.save.gear.bottom.enhance, 1);
     assert.ok(
-      cloak.save.gear.cloak.leaderAtkBonus > save.gear.cloak.leaderAtkBonus,
+      bottom.save.gear.bottom.leaderAtkBonus > save.gear.bottom.leaderAtkBonus,
     );
-    save = cloak.save;
+    save = bottom.save;
 
     const ring = runEnhanceGear(save, "ring");
     assert.match(ring.message, /장비 강화/);
@@ -624,15 +639,14 @@ describe("game loop", () => {
     );
     save = ring.save;
 
-    // Late enhance (+12) needs crystals
-    save = {
-      ...save,
-      gear: {
-        ...save.gear,
-        weapon: { ...save.gear.weapon, enhance: 12 },
+    // Late enhance (+12) needs crystals (mutate active summoner gear, not legacy mirror alone)
+    save = withActiveGear(
+      { ...save, island: { ...save.island, mana: 50_000, crystal: 0 } },
+      {
+        ...getActiveGear(save),
+        weapon: { ...getActiveGear(save).weapon, enhance: 12 },
       },
-      island: { ...save.island, mana: 50_000, crystal: 0 },
-    };
+    );
     const needCrystal = runEnhanceGear(save, "weapon");
     assert.match(needCrystal.message, /크리스탈/);
     save = {
@@ -656,9 +670,9 @@ describe("game loop", () => {
     assert.ok(sold.save.island.mana > save.island.mana);
     save = { ...sold.save, gearBag: [] };
 
-    const affix = runAffixGearSet(save, "orb", "mana");
+    const affix = runAffixGearSet(save, "necklace", "mana");
     assert.match(affix.message, /세트 부여/);
-    assert.equal(affix.save.gear.orb.setId, "mana");
+    assert.equal(affix.save.gear.necklace.setId, "mana");
     assert.ok(affix.save.island.mana < save.island.mana);
     save = affix.save;
 
@@ -847,5 +861,46 @@ describe("game loop", () => {
     assert.match(steps[4]!.message, /상징/);
     assert.match(steps[5]!.message, /승리|패배/);
     assert.match(steps[6]!.message, /골드/);
+  });
+
+  it("rejects equipping a weapon for the wrong summoner element", () => {
+    let save = createNewSave(0);
+    assert.equal(save.activeSummoner, "light");
+    const fireWeapon = {
+      ...save.summoners.fire.gear!.weapon,
+      id: "bag_fire_wpn",
+      enhance: 0,
+    };
+    save = { ...save, gearBag: [fireWeapon] };
+    const blocked = runEquipGearBag(save, 0);
+    assert.match(blocked.message, /전용/);
+    assert.equal(blocked.save.gearBag?.length, 1);
+    assert.equal(blocked.save.gear.weapon.id, save.gear.weapon.id);
+
+    save = setActiveSummoner(blocked.save, "fire");
+    const ok = runEquipGearBag(save, 0);
+    assert.match(ok.message, /장착/);
+    assert.equal(ok.save.gear.weapon.id, "bag_fire_wpn");
+    assert.equal(ok.save.gear.weapon.element, "fire");
+  });
+
+  it("keeps separate gear sets per summoner element", () => {
+    let save = createNewSave(0);
+    const lightWpn = save.gear.weapon.id;
+    save = withActiveGear(save, {
+      ...getActiveGear(save),
+      weapon: { ...getActiveGear(save).weapon, enhance: 3 },
+    });
+    assert.equal(save.gear.weapon.enhance, 3);
+
+    save = setActiveSummoner(save, "water");
+    assert.equal(save.activeSummoner, "water");
+    assert.equal(save.gear.weapon.element, "water");
+    assert.equal(save.gear.weapon.enhance, 0);
+    assert.notEqual(save.gear.weapon.id, lightWpn);
+
+    save = setActiveSummoner(save, "light");
+    assert.equal(save.gear.weapon.enhance, 3);
+    assert.equal(save.gear.weapon.id, lightWpn);
   });
 });

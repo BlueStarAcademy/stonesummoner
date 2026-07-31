@@ -23,20 +23,22 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="chimtus3-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#c04070" stop-opacity="0"/>
     </linearGradient>
     <filter id="chimtus3-depth" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="20" fill="url(#chimtus3-aura)" opacity=".85"/>
-  <g filter="url(#chimtus3-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
+  <circle cx="36" cy="36" r="18" fill="url(#chimtus3-aura)" opacity=".8"/>
+  <g filter="url(#chimtus3-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
     
-      <path d="M36 12 50 36 36 60 22 36Z" fill="#241018" stroke="url(#chimtus3-gold)" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M36 20 44 36 36 52 28 36Z" fill="url(#chimtus3-ink)" stroke="#5A4214" stroke-width="1"/>
-      <circle cx="36" cy="36" r="4.2" fill="#1A140C" stroke="url(#chimtus3-gold)" stroke-width="1.5"/>
-      <circle cx="36" cy="36" r="1.8" fill="url(#chimtus3-gold)"/>
-      <path d="M36 14v6M36 52v6" stroke="url(#chimtus3-gold)" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>
+      <path d="M36 8 54 36 36 64 18 36Z" fill="#241018" stroke="url(#chimtus3-gold)" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M36 16 46 36 36 56 26 36Z" fill="url(#chimtus3-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M36 10v8M36 54v8" stroke="url(#chimtus3-gold)" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
+      <circle cx="36" cy="36" r="5.2" fill="#1A140C" stroke="url(#chimtus3-gold)" stroke-width="1.6"/>
+      <circle cx="36" cy="36" r="2.4" fill="url(#chimtus3-ink)" stroke="#5A4214" stroke-width=".8"/>
+      <circle cx="36" cy="36" r="1.1" fill="url(#chimtus3-gold)"/>
+      <ellipse cx="32" cy="24" rx="2" ry="3.2" fill="url(#chimtus3-shine)" opacity=".55"/>
   </g>
 </svg>

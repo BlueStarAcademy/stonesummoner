@@ -23,7 +23,7 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="jipjungseal-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#9a70d0" stop-opacity="0"/>
     </linearGradient>
     <filter id="jipjungseal-depth" x="-30%" y="-30%" width="160%" height="160%">
@@ -37,15 +37,17 @@
   <g stroke="url(#jipjungseal-gold)" stroke-width="1.5" stroke-linecap="round" opacity=".8">
     <path d="M36 10.5v4.2"/><path d="M36 57.3v4.2"/><path d="M10.5 36h4.2"/><path d="M57.3 36h4.2"/>
   </g>
-  <g filter="url(#jipjungseal-depth)" transform="translate(36 36) scale(0.7) translate(-36 -36)">
+  <g filter="url(#jipjungseal-depth)" transform="translate(36 36) scale(0.68) translate(-36 -36)">
     
-      <circle cx="36" cy="36" r="16" fill="none" stroke="url(#jipjungseal-gold)" stroke-width="2.2"/>
-      <circle cx="36" cy="36" r="9.5" fill="none" stroke="url(#jipjungseal-ink)" stroke-width="1.8"/>
-      <circle cx="36" cy="36" r="3.6" fill="#1A140C" stroke="url(#jipjungseal-gold)" stroke-width="1.5"/>
-      <circle cx="36" cy="36" r="1.5" fill="url(#jipjungseal-gold)"/>
-      <path d="M36 14v7M36 51v7M14 36h7M51 36h7"
-        stroke="url(#jipjungseal-gold)" stroke-width="2.2" stroke-linecap="round"/>
-      <path d="M24 24 28 28M48 24 44 28M24 48 28 44M48 48 44 44"
-        stroke="url(#jipjungseal-ink)" stroke-width="1.5" stroke-linecap="round" opacity=".85"/>
+      <circle cx="36" cy="36" r="18" fill="none" stroke="url(#jipjungseal-gold)" stroke-width="2.3"/>
+      <circle cx="36" cy="36" r="12.5" fill="none" stroke="url(#jipjungseal-ink)" stroke-width="1.9"/>
+      <circle cx="36" cy="36" r="6.5" fill="#141018" stroke="url(#jipjungseal-gold)" stroke-width="1.6"/>
+      <circle cx="36" cy="36" r="3" fill="url(#jipjungseal-ink)" stroke="#5A4214" stroke-width=".8"/>
+      <circle cx="36" cy="36" r="1.3" fill="url(#jipjungseal-gold)"/>
+      <path d="M36 12v8M36 52v8M12 36h8M52 36h8" stroke="url(#jipjungseal-gold)" stroke-width="2.3" stroke-linecap="round"/>
+      <path d="M22 22 27 27M50 22 45 27M22 50 27 45M50 50 45 45"
+        stroke="url(#jipjungseal-ink)" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="36" cy="18" r="1.4" fill="url(#jipjungseal-gold)"/><circle cx="36" cy="54" r="1.4" fill="url(#jipjungseal-gold)"/>
+      <circle cx="18" cy="36" r="1.4" fill="url(#jipjungseal-gold)"/><circle cx="54" cy="36" r="1.4" fill="url(#jipjungseal-gold)"/>
   </g>
 </svg>

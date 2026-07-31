@@ -6,6 +6,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../src/i18n");
 fs.mkdirSync(path.join(root, "messages"), { recursive: true });
 
+/** Windows-safe write when editors lock existing files for overwrite. */
+function writeAtomic(file, body) {
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, body, "utf8");
+  fs.renameSync(tmp, file);
+}
+
 const LOCALES = [
   { id: "ko", htmlLang: "ko", bcp47: "ko-KR", nativeName: "한국어", englishName: "Korean", flagHint: "KR" },
   { id: "en", htmlLang: "en", bcp47: "en-US", nativeName: "English", englishName: "English", flagHint: "US" },
@@ -1359,7 +1366,7 @@ for (const loc of LOCALES) {
       null,
       2,
     )};\n\nexport default messages;\n`;
-  fs.writeFileSync(file, body, "utf8");
+  writeAtomic(file, body);
 }
 
 const typesBody = `export const LOCALE_IDS = [
@@ -1384,7 +1391,7 @@ export type LocaleMeta = {
 };
 `;
 
-fs.writeFileSync(path.join(root, "types.ts"), typesBody, "utf8");
+writeAtomic(path.join(root, "types.ts"), typesBody);
 
 const localesBody = `import type { LocaleId, LocaleMeta } from "./types";
 import { LOCALE_IDS } from "./types";
@@ -1402,6 +1409,6 @@ export function isLocaleId(value: string): value is LocaleId {
 export { LOCALE_IDS };
 `;
 
-fs.writeFileSync(path.join(root, "locales.ts"), localesBody, "utf8");
+writeAtomic(path.join(root, "locales.ts"), localesBody);
 
 console.log(`wrote ${LOCALES.length} packs, ${keys.length} keys -> ${root}`);

@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none" aria-hidden="true">
   <defs>
     <radialGradient id="cfMist" cx="50%" cy="48%" r="58%">
-      <stop stop-color="#C9A227" stop-opacity=".22"/>
-      <stop offset=".45" stop-color="#8A6A28" stop-opacity=".08"/>
+      <stop stop-color="#C9A227" stop-opacity=".2"/>
+      <stop offset=".5" stop-color="#8A6A28" stop-opacity=".07"/>
       <stop offset="1" stop-color="#1a1408" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="cfBoard" cx="42%" cy="30%" r="78%">
+    <radialGradient id="cfBoard" cx="40%" cy="28%" r="80%">
       <stop stop-color="#3A2E1C"/>
-      <stop offset=".48" stop-color="#1C160E"/>
+      <stop offset=".5" stop-color="#1C160E"/>
       <stop offset="1" stop-color="#0A0805"/>
     </radialGradient>
     <linearGradient id="cfGold" x1="36" y1="20" x2="210" y2="220" gradientUnits="userSpaceOnUse">
@@ -16,87 +16,62 @@
       <stop offset=".65" stop-color="#C9A227"/>
       <stop offset="1" stop-color="#6A4A14"/>
     </linearGradient>
-    <linearGradient id="cfEdge" x1="50" y1="24" x2="190" y2="210" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#F0D878"/>
-      <stop offset=".5" stop-color="#A88840"/>
-      <stop offset="1" stop-color="#5A4218"/>
+    <linearGradient id="cfStar" x1="40" y1="20" x2="200" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2A2214"/>
+      <stop offset=".5" stop-color="#16120C"/>
+      <stop offset="1" stop-color="#0A0805"/>
     </linearGradient>
-    <radialGradient id="cfWell" cx="38%" cy="30%" r="72%">
-      <stop stop-color="#1A140C"/>
-      <stop offset=".55" stop-color="#0A0805"/>
-      <stop offset="1" stop-color="#020100"/>
+    <radialGradient id="cfWell" cx="40%" cy="30%" r="70%">
+      <stop stop-color="#2A2214"/>
+      <stop offset="1" stop-color="#0A0805"/>
     </radialGradient>
-    <radialGradient id="cfWellRim" cx="40%" cy="28%" r="70%">
-      <stop stop-color="#5A4820"/>
-      <stop offset="1" stop-color="#2A1C0C"/>
-    </radialGradient>
-    <filter id="cfDepth" x="-15%" y="-15%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000" flood-opacity=".6"/>
+    <filter id="cfDepth" x="-18%" y="-18%" width="136%" height="136%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity=".55"/>
     </filter>
   </defs>
   <circle cx="120" cy="120" r="118" fill="url(#cfMist)"/>
+  <!-- 4-point star backdrop -->
+  <path d="M120 8 L148 72 L232 120 L148 168 L120 232 L92 168 L8 120 L92 72 Z"
+    fill="url(#cfStar)" stroke="url(#cfGold)" stroke-width="1.6" opacity=".92"/>
+  <path d="M120 28 L140 78 L212 120 L140 162 L120 212 L100 162 L28 120 L100 78 Z"
+    fill="none" stroke="#C9A227" stroke-width=".9" opacity=".28"/>
   <g filter="url(#cfDepth)">
-    <circle cx="120" cy="120" r="108" fill="url(#cfBoard)" stroke="url(#cfGold)" stroke-width="3.6"/>
-    <circle cx="120" cy="120" r="102" fill="none" stroke="#0A0805" stroke-width="2.2" opacity=".75"/>
-    <circle cx="120" cy="120" r="96" fill="none" stroke="url(#cfEdge)" stroke-width="1.3" opacity=".65"/>
-    <circle cx="120" cy="120" r="88" fill="none" stroke="#F0D878" stroke-width=".75" opacity=".2" stroke-dasharray="3 6"/>
-    <g stroke="#C9A227" stroke-width="1.15" stroke-linecap="round" opacity=".28">
-      <path d="M72 72 Q120 104 168 72"/>
-      <path d="M72 168 Q120 136 168 168"/>
-      <path d="M58 102 Q120 120 58 138"/>
-      <path d="M182 102 Q120 120 182 138"/>
-    </g>
-    <circle cx="120" cy="120" r="24" fill="#080604" stroke="url(#cfGold)" stroke-width="2"/>
-    <circle cx="120" cy="120" r="14" fill="#120E08" stroke="#F0D878" stroke-width="1.1" opacity=".55"/>
-    <circle cx="120" cy="120" r="4" fill="#F0D878" fill-opacity=".7"/>
+    <rect x="34" y="42" width="172" height="156" rx="22" ry="22"
+      fill="url(#cfBoard)" stroke="url(#cfGold)" stroke-width="3.2"/>
+    <rect x="40" y="48" width="160" height="144" rx="18" ry="18"
+      fill="none" stroke="#0A0805" stroke-width="2" opacity=".7"/>
+    <rect x="44" y="52" width="152" height="136" rx="15" ry="15"
+      fill="none" stroke="#F0D878" stroke-width=".8" opacity=".18"/>
     
-    <g>
-      <circle cx="43.2" cy="76.8" r="38" fill="url(#cfWellRim)" stroke="url(#cfGold)" stroke-width="1.8"/>
-      <circle cx="43.2" cy="76.8" r="33" fill="url(#cfWell)" stroke="#0A0806" stroke-width="2.4"/>
-      <circle cx="43.2" cy="76.8" r="29" fill="none" stroke="#C9A227" stroke-width="1" opacity=".28" stroke-dasharray="2.5 4"/>
-      <circle cx="43.2" cy="76.8" r="24" fill="#050402" fill-opacity=".65"/>
-      <ellipse cx="36.2" cy="67.8" rx="13" ry="5.5" fill="#FFF6D0" opacity=".07" transform="rotate(-28 43.2 76.8)"/>
-      <text x="43.2" y="80.8" text-anchor="middle" fill="#C9A227" fill-opacity=".22" font-family="Georgia, serif" font-size="11" font-weight="700">1</text>
+    <g opacity=".9">
+      <ellipse cx="58" cy="86" rx="30" ry="28" fill="url(#cfWell)" stroke="url(#cfGold)" stroke-width="1.2" opacity=".55"/>
+      <ellipse cx="58" cy="86" rx="22" ry="20" fill="#050402" fill-opacity=".55"/>
+      <ellipse cx="52" cy="78" rx="10" ry="4" fill="#FFF6D0" opacity=".05" transform="rotate(-24 58 86)"/>
     </g>
-    <g>
-      <circle cx="120" cy="38.4" r="38" fill="url(#cfWellRim)" stroke="url(#cfGold)" stroke-width="1.8"/>
-      <circle cx="120" cy="38.4" r="33" fill="url(#cfWell)" stroke="#0A0806" stroke-width="2.4"/>
-      <circle cx="120" cy="38.4" r="29" fill="none" stroke="#C9A227" stroke-width="1" opacity=".28" stroke-dasharray="2.5 4"/>
-      <circle cx="120" cy="38.4" r="24" fill="#050402" fill-opacity=".65"/>
-      <ellipse cx="113" cy="29.4" rx="13" ry="5.5" fill="#FFF6D0" opacity=".07" transform="rotate(-28 120 38.4)"/>
-      <text x="120" y="42.4" text-anchor="middle" fill="#C9A227" fill-opacity=".22" font-family="Georgia, serif" font-size="11" font-weight="700">2</text>
+    <g opacity=".9">
+      <ellipse cx="120" cy="74" rx="30" ry="28" fill="url(#cfWell)" stroke="url(#cfGold)" stroke-width="1.2" opacity=".55"/>
+      <ellipse cx="120" cy="74" rx="22" ry="20" fill="#050402" fill-opacity=".55"/>
+      <ellipse cx="114" cy="66" rx="10" ry="4" fill="#FFF6D0" opacity=".05" transform="rotate(-24 120 74)"/>
     </g>
-    <g>
-      <circle cx="196.8" cy="76.8" r="38" fill="url(#cfWellRim)" stroke="url(#cfGold)" stroke-width="1.8"/>
-      <circle cx="196.8" cy="76.8" r="33" fill="url(#cfWell)" stroke="#0A0806" stroke-width="2.4"/>
-      <circle cx="196.8" cy="76.8" r="29" fill="none" stroke="#C9A227" stroke-width="1" opacity=".28" stroke-dasharray="2.5 4"/>
-      <circle cx="196.8" cy="76.8" r="24" fill="#050402" fill-opacity=".65"/>
-      <ellipse cx="189.8" cy="67.8" rx="13" ry="5.5" fill="#FFF6D0" opacity=".07" transform="rotate(-28 196.8 76.8)"/>
-      <text x="196.8" y="80.8" text-anchor="middle" fill="#C9A227" fill-opacity=".22" font-family="Georgia, serif" font-size="11" font-weight="700">3</text>
+    <g opacity=".9">
+      <ellipse cx="182" cy="86" rx="30" ry="28" fill="url(#cfWell)" stroke="url(#cfGold)" stroke-width="1.2" opacity=".55"/>
+      <ellipse cx="182" cy="86" rx="22" ry="20" fill="#050402" fill-opacity=".55"/>
+      <ellipse cx="176" cy="78" rx="10" ry="4" fill="#FFF6D0" opacity=".05" transform="rotate(-24 182 86)"/>
     </g>
-    <g>
-      <circle cx="43.2" cy="163.2" r="38" fill="url(#cfWellRim)" stroke="url(#cfGold)" stroke-width="1.8"/>
-      <circle cx="43.2" cy="163.2" r="33" fill="url(#cfWell)" stroke="#0A0806" stroke-width="2.4"/>
-      <circle cx="43.2" cy="163.2" r="29" fill="none" stroke="#C9A227" stroke-width="1" opacity=".28" stroke-dasharray="2.5 4"/>
-      <circle cx="43.2" cy="163.2" r="24" fill="#050402" fill-opacity=".65"/>
-      <ellipse cx="36.2" cy="154.2" rx="13" ry="5.5" fill="#FFF6D0" opacity=".07" transform="rotate(-28 43.2 163.2)"/>
-      <text x="43.2" y="167.2" text-anchor="middle" fill="#C9A227" fill-opacity=".22" font-family="Georgia, serif" font-size="11" font-weight="700">4</text>
+    <g opacity=".9">
+      <ellipse cx="58" cy="158" rx="30" ry="28" fill="url(#cfWell)" stroke="url(#cfGold)" stroke-width="1.2" opacity=".55"/>
+      <ellipse cx="58" cy="158" rx="22" ry="20" fill="#050402" fill-opacity=".55"/>
+      <ellipse cx="52" cy="150" rx="10" ry="4" fill="#FFF6D0" opacity=".05" transform="rotate(-24 58 158)"/>
     </g>
-    <g>
-      <circle cx="120" cy="201.6" r="38" fill="url(#cfWellRim)" stroke="url(#cfGold)" stroke-width="1.8"/>
-      <circle cx="120" cy="201.6" r="33" fill="url(#cfWell)" stroke="#0A0806" stroke-width="2.4"/>
-      <circle cx="120" cy="201.6" r="29" fill="none" stroke="#C9A227" stroke-width="1" opacity=".28" stroke-dasharray="2.5 4"/>
-      <circle cx="120" cy="201.6" r="24" fill="#050402" fill-opacity=".65"/>
-      <ellipse cx="113" cy="192.6" rx="13" ry="5.5" fill="#FFF6D0" opacity=".07" transform="rotate(-28 120 201.6)"/>
-      <text x="120" y="205.6" text-anchor="middle" fill="#C9A227" fill-opacity=".22" font-family="Georgia, serif" font-size="11" font-weight="700">5</text>
+    <g opacity=".9">
+      <ellipse cx="120" cy="170" rx="30" ry="28" fill="url(#cfWell)" stroke="url(#cfGold)" stroke-width="1.2" opacity=".55"/>
+      <ellipse cx="120" cy="170" rx="22" ry="20" fill="#050402" fill-opacity=".55"/>
+      <ellipse cx="114" cy="162" rx="10" ry="4" fill="#FFF6D0" opacity=".05" transform="rotate(-24 120 170)"/>
     </g>
-    <g>
-      <circle cx="196.8" cy="163.2" r="38" fill="url(#cfWellRim)" stroke="url(#cfGold)" stroke-width="1.8"/>
-      <circle cx="196.8" cy="163.2" r="33" fill="url(#cfWell)" stroke="#0A0806" stroke-width="2.4"/>
-      <circle cx="196.8" cy="163.2" r="29" fill="none" stroke="#C9A227" stroke-width="1" opacity=".28" stroke-dasharray="2.5 4"/>
-      <circle cx="196.8" cy="163.2" r="24" fill="#050402" fill-opacity=".65"/>
-      <ellipse cx="189.8" cy="154.2" rx="13" ry="5.5" fill="#FFF6D0" opacity=".07" transform="rotate(-28 196.8 163.2)"/>
-      <text x="196.8" y="167.2" text-anchor="middle" fill="#C9A227" fill-opacity=".22" font-family="Georgia, serif" font-size="11" font-weight="700">6</text>
+    <g opacity=".9">
+      <ellipse cx="182" cy="158" rx="30" ry="28" fill="url(#cfWell)" stroke="url(#cfGold)" stroke-width="1.2" opacity=".55"/>
+      <ellipse cx="182" cy="158" rx="22" ry="20" fill="#050402" fill-opacity=".55"/>
+      <ellipse cx="176" cy="150" rx="10" ry="4" fill="#FFF6D0" opacity=".05" transform="rotate(-24 182 158)"/>
     </g>
   </g>
 </svg>

@@ -23,20 +23,23 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="eungjings3-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#c05040" stop-opacity="0"/>
     </linearGradient>
     <filter id="eungjings3-depth" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="20" fill="url(#eungjings3-aura)" opacity=".85"/>
-  <g filter="url(#eungjings3-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
+  <circle cx="36" cy="36" r="18" fill="url(#eungjings3-aura)" opacity=".8"/>
+  <g filter="url(#eungjings3-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
     
-      <path d="M22 50h28v4H22z" fill="#1A140C" stroke="url(#eungjings3-gold)" stroke-width="1.5"/>
-      <path d="M26 50V34l10-16 10 16v16z" fill="#241018" stroke="url(#eungjings3-gold)" stroke-width="1.8" stroke-linejoin="round"/>
-      <path d="M30 48V36l6-10 6 10v12z" fill="url(#eungjings3-ink)" stroke="#5A4214" stroke-width="1"/>
-      <path d="M36 22v8" stroke="url(#eungjings3-gold)" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="36" cy="18" r="2.5" fill="url(#eungjings3-gold)"/>
+      <path d="M20 52h32v5H20z" fill="#1A140C" stroke="url(#eungjings3-gold)" stroke-width="1.6"/>
+      <path d="M24 52V32l12-18 12 18v20z" fill="#241018" stroke="url(#eungjings3-gold)" stroke-width="1.9" stroke-linejoin="round"/>
+      <path d="M29 50V34l7-11 7 11v16z" fill="url(#eungjings3-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M36 18v10" stroke="url(#eungjings3-gold)" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="36" cy="14" r="3" fill="#1A140C" stroke="url(#eungjings3-gold)" stroke-width="1.3"/>
+      <circle cx="36" cy="14" r="1.2" fill="url(#eungjings3-gold)"/>
+      <path d="M26 44h20" stroke="url(#eungjings3-gold)" stroke-width="1.5" stroke-linecap="round" opacity=".7"/>
+      <ellipse cx="32" cy="28" rx="2" ry="3.2" fill="url(#eungjings3-shine)" opacity=".55"/>
   </g>
 </svg>

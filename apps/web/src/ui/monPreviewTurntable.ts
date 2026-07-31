@@ -1,5 +1,7 @@
 /** Drag to flip monster book preview front/back (battle stills or WebP mirror). */
 
+import { dematteArtImg } from "./dematteArt";
+
 export function bindMonPreviewTurntable(root: ParentNode): void {
   root.querySelectorAll<HTMLElement>("[data-mon-preview]").forEach((el) => {
     if (el.dataset.turntableBound === "1") return;
@@ -22,7 +24,11 @@ export function bindMonPreviewTurntable(root: ParentNode): void {
       el.dataset.facing = facingBack ? "back" : "front";
       if (stillFront) {
         const next = facingBack ? stillBack || stillFront : stillFront;
-        if (img.getAttribute("src") !== next) img.src = next;
+        const curLogical = img.dataset.dematteSrc || img.getAttribute("src") || "";
+        if (curLogical !== next) {
+          img.src = next;
+          dematteArtImg(img);
+        }
         art.classList.remove("is-mirrored");
       } else {
         art.classList.toggle("is-mirrored", facingBack);

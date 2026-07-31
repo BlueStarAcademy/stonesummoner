@@ -23,7 +23,7 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="bogangseal-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#8ec8f0" stop-opacity="0"/>
     </linearGradient>
     <filter id="bogangseal-depth" x="-30%" y="-30%" width="160%" height="160%">
@@ -37,14 +37,16 @@
   <g stroke="url(#bogangseal-gold)" stroke-width="1.5" stroke-linecap="round" opacity=".8">
     <path d="M36 10.5v4.2"/><path d="M36 57.3v4.2"/><path d="M10.5 36h4.2"/><path d="M57.3 36h4.2"/>
   </g>
-  <g filter="url(#bogangseal-depth)" transform="translate(36 36) scale(0.7) translate(-36 -36)">
+  <g filter="url(#bogangseal-depth)" transform="translate(36 36) scale(0.68) translate(-36 -36)">
     
-      <path d="M20 28h32v14c0 9-7 14-16 18-9-4-16-9-16-18z"
-        fill="#182028" stroke="url(#bogangseal-gold)" stroke-width="1.9" stroke-linejoin="round"/>
-      <path d="M26 20h20v10H26z" fill="url(#bogangseal-ink)" stroke="#5A4214" stroke-width="1.1"/>
-      <path d="M26 34h20v8c0 5-4.5 8-10 10.5-5.5-2.5-10-5.5-10-10.5z"
+      <path d="M18 30h36v16c0 10-8 16-18 20-10-4-18-10-18-20z"
+        fill="#101820" stroke="url(#bogangseal-gold)" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M24 16h24v12H24z" fill="url(#bogangseal-ink)" stroke="#5A4214" stroke-width="1.2" stroke-linejoin="round"/>
+      <path d="M24 36h24v10c0 6-5.5 10-12 13-6.5-3-12-7-12-13z"
         fill="url(#bogangseal-ink)" stroke="#5A4214" stroke-width="1"/>
-      <path d="M30 38h12" stroke="url(#bogangseal-gold)" stroke-width="2.2" stroke-linecap="round"/>
-      <circle cx="36" cy="25" r="2.2" fill="url(#bogangseal-gold)"/>
+      <path d="M28 40h16" stroke="url(#bogangseal-gold)" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M30 20h12M33 16v8" stroke="url(#bogangseal-gold)" stroke-width="1.6" stroke-linecap="round" opacity=".85"/>
+      <circle cx="36" cy="22" r="2.4" fill="url(#bogangseal-gold)"/>
+      <ellipse cx="28" cy="34" rx="3.5" ry="1.6" fill="url(#bogangseal-shine)" opacity=".45"/>
   </g>
 </svg>

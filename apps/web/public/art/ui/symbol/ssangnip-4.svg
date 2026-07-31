@@ -23,21 +23,23 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="ssangnips4-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#e8e0c8" stop-opacity="0"/>
     </linearGradient>
     <filter id="ssangnips4-depth" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="20" fill="url(#ssangnips4-aura)" opacity=".85"/>
-  <g filter="url(#ssangnips4-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
+  <circle cx="36" cy="36" r="18" fill="url(#ssangnips4-aura)" opacity=".8"/>
+  <g filter="url(#ssangnips4-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
     
-      <path d="M20 52V24l8-6 8 6v28z" fill="#1A1810" stroke="url(#ssangnips4-gold)" stroke-width="1.8" stroke-linejoin="round"/>
-      <path d="M36 52V24l8-6 8 6v28z" fill="#1A1810" stroke="url(#ssangnips4-gold)" stroke-width="1.8" stroke-linejoin="round"/>
-      <path d="M24 48V28l4-3 4 3v20z" fill="url(#ssangnips4-ink)" stroke="#5A4214" stroke-width=".9"/>
-      <path d="M40 48V28l4-3 4 3v20z" fill="url(#ssangnips4-ink)" stroke="#5A4214" stroke-width=".9"/>
-      <path d="M18 52h36" stroke="url(#ssangnips4-gold)" stroke-width="2.2" stroke-linecap="round"/>
-      <circle cx="36" cy="18" r="2.4" fill="url(#ssangnips4-gold)"/>
+      <path d="M18 54V22l9-8 9 8v32z" fill="#18160E" stroke="url(#ssangnips4-gold)" stroke-width="1.9" stroke-linejoin="round"/>
+      <path d="M36 54V22l9-8 9 8v32z" fill="#18160E" stroke="url(#ssangnips4-gold)" stroke-width="1.9" stroke-linejoin="round"/>
+      <path d="M22 50V28l5-4 5 4v22z" fill="url(#ssangnips4-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M40 50V28l5-4 5 4v22z" fill="url(#ssangnips4-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M16 54h40" stroke="url(#ssangnips4-gold)" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M20 18h10M42 18h10" stroke="url(#ssangnips4-gold)" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="36" cy="14" r="2.8" fill="url(#ssangnips4-gold)"/>
+      <ellipse cx="25" cy="30" rx="2" ry="4" fill="url(#ssangnips4-shine)" opacity=".45"/>
   </g>
 </svg>

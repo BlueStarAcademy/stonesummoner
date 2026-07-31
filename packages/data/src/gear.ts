@@ -1,12 +1,20 @@
-/** Summoner gear — 무기 · 로브 · 장신구 · 마법구 · 망토 · 반지 (+얕은 세트) */
+/** Summoner gear — 무기(속성전용) · 상의 · 하의 · 신발 · 반지 · 목걸이 (+얕은 세트) */
+
+import type { Element } from "./monsters/types.js";
+import { ELEMENTS } from "./monsters/types.js";
 
 export type GearSlot =
   | "weapon"
-  | "robe"
-  | "accessory"
-  | "orb"
-  | "cloak"
-  | "ring";
+  | "top"
+  | "bottom"
+  | "shoes"
+  | "ring"
+  | "necklace";
+
+export type GearStars = 1 | 2 | 3 | 4 | 5;
+
+/** Same keys as symbol quality (일반/고급/희귀/영웅/전설). */
+export type GearQuality = "normal" | "advanced" | "rare" | "epic" | "legend";
 
 /** Shallow gear sets — do not compete with symbol set depth. */
 export type GearSetId = "mana" | "assault" | "guardian" | "sense" | "tempo";
@@ -46,8 +54,12 @@ export interface GearPiece {
   id: string;
   slot: GearSlot;
   nameKo: string;
+  stars: GearStars;
+  quality: GearQuality;
   enhance: number;
   setId: GearSetId;
+  /** Required for weapons — element lock. */
+  element?: Element;
   /** Added to manaRegenPerTick */
   manaRegenBonus: number;
   /** Added to manaMax */
@@ -68,14 +80,23 @@ export interface GearPiece {
 
 export interface SummonerGear {
   weapon: GearPiece;
-  robe: GearPiece;
-  accessory: GearPiece;
-  orb: GearPiece;
-  cloak: GearPiece;
+  top: GearPiece;
+  bottom: GearPiece;
+  shoes: GearPiece;
   ring: GearPiece;
+  necklace: GearPiece;
 }
 
 export const MAX_GEAR_ENHANCE = 15;
+
+export const GEAR_SLOTS: readonly GearSlot[] = [
+  "weapon",
+  "top",
+  "bottom",
+  "shoes",
+  "ring",
+  "necklace",
+] as const;
 
 export const GEAR_SETS: GearSetDef[] = [
   {
@@ -117,11 +138,103 @@ export const GEAR_SETS: GearSetDef[] = [
 
 const DEFAULT_SET_BY_SLOT: Record<GearSlot, GearSetId> = {
   weapon: "assault",
-  robe: "guardian",
-  accessory: "mana",
-  orb: "sense",
-  cloak: "guardian",
+  top: "guardian",
+  bottom: "guardian",
+  shoes: "mana",
   ring: "assault",
+  necklace: "sense",
+};
+
+/** ★1 gray → ★5 red (same palette as inv-grade). */
+export function gearStarsToInvGrade(
+  stars: number,
+): "gray" | "green" | "blue" | "purple" | "red" {
+  const n = Math.max(1, Math.min(5, Math.floor(stars) || 1));
+  return (["gray", "green", "blue", "purple", "red"] as const)[n - 1]!;
+}
+
+export function gearStarMul(stars: GearStars): number {
+  return 0.7 + ((stars - 1) / 4) * 0.65;
+}
+
+export function gearQualityMul(quality: GearQuality): number {
+  switch (quality) {
+    case "advanced":
+      return 1.08;
+    case "rare":
+      return 1.16;
+    case "epic":
+      return 1.28;
+    case "legend":
+      return 1.4;
+    default:
+      return 1;
+  }
+}
+
+export function normalizeGearStars(raw: unknown): GearStars {
+  const n = Math.floor(Number(raw));
+  if (n >= 1 && n <= 5) return n as GearStars;
+  return 1;
+}
+
+export function normalizeGearQuality(raw: unknown): GearQuality {
+  if (
+    raw === "normal" ||
+    raw === "advanced" ||
+    raw === "rare" ||
+    raw === "epic" ||
+    raw === "legend"
+  ) {
+    return raw;
+  }
+  return "normal";
+}
+
+export function isGearSlot(raw: string): raw is GearSlot {
+  return (GEAR_SLOTS as readonly string[]).includes(raw);
+}
+
+/** Map legacy slot ids onto the redesigned 6 slots. */
+export function migrateGearSlot(raw: string | undefined | null): GearSlot {
+  switch (raw) {
+    case "weapon":
+      return "weapon";
+    case "top":
+    case "robe":
+    case "armor":
+      return "top";
+    case "bottom":
+    case "cloak":
+      return "bottom";
+    case "shoes":
+    case "accessory":
+      return "shoes";
+    case "ring":
+      return "ring";
+    case "necklace":
+    case "orb":
+    case "helm":
+      return "necklace";
+    default:
+      return "shoes";
+  }
+}
+
+const WEAPON_NAMES: Record<Element, string[]> = {
+  fire: ["염화검", "작열창"],
+  water: ["해연검", "파도창"],
+  wind: ["질풍검", "폭풍창"],
+  light: ["성휘검", "광염창"],
+  dark: ["심연검", "그림자창"],
+};
+
+const DROP_NAMES: Record<Exclude<GearSlot, "weapon">, string[]> = {
+  top: ["수호 상의", "비늘 상의", "요새 상의"],
+  bottom: ["지휘 하의", "전장 하의", "결속 하의"],
+  shoes: ["진액 신발", "질주 신발", "감응 신발"],
+  ring: ["결속 반지", "돌격 반지", "진액 반지"],
+  necklace: ["감응 목걸이", "국면 목걸이", "따냄 목걸이"],
 };
 
 function emptyBonus(): GearSetBonus {
@@ -166,6 +279,96 @@ export function isGearSetId(raw: string): raw is GearSetId {
   );
 }
 
+function scaleStat(base: number, stars: GearStars, quality: GearQuality): number {
+  return base * gearStarMul(stars) * gearQualityMul(quality);
+}
+
+function baseBonusesForSlot(
+  slot: GearSlot,
+  stars: GearStars,
+  quality: GearQuality,
+): Pick<
+  GearPiece,
+  | "manaRegenBonus"
+  | "manaMaxBonus"
+  | "boardSenseBonus"
+  | "startManaPct"
+  | "skillPowerBonus"
+  | "summonerHpBonus"
+  | "summonerDefBonus"
+  | "leaderAtkBonus"
+> {
+  const s = (n: number) => scaleStat(n, stars, quality);
+  switch (slot) {
+    case "weapon":
+      return {
+        skillPowerBonus: s(0.06),
+        manaRegenBonus: s(0.02),
+        manaMaxBonus: 0,
+        boardSenseBonus: 0,
+        startManaPct: 0,
+        summonerHpBonus: 0,
+        summonerDefBonus: 0,
+        leaderAtkBonus: 0,
+      };
+    case "top":
+      return {
+        summonerHpBonus: Math.round(s(40)),
+        summonerDefBonus: Math.round(s(4)),
+        manaMaxBonus: Math.round(s(2)),
+        manaRegenBonus: 0,
+        boardSenseBonus: 0,
+        startManaPct: 0,
+        skillPowerBonus: 0,
+        leaderAtkBonus: 0,
+      };
+    case "bottom":
+      return {
+        summonerHpBonus: Math.round(s(25)),
+        summonerDefBonus: Math.round(s(2)),
+        leaderAtkBonus: s(0.008),
+        manaRegenBonus: 0,
+        manaMaxBonus: 0,
+        boardSenseBonus: 0,
+        startManaPct: 0,
+        skillPowerBonus: 0,
+      };
+    case "shoes":
+      return {
+        manaRegenBonus: s(0.12),
+        manaMaxBonus: Math.round(s(10)),
+        startManaPct: s(0.05),
+        boardSenseBonus: s(0.01),
+        skillPowerBonus: 0,
+        summonerHpBonus: 0,
+        summonerDefBonus: 0,
+        leaderAtkBonus: 0,
+      };
+    case "ring":
+      return {
+        skillPowerBonus: s(0.02),
+        leaderAtkBonus: s(0.01),
+        manaRegenBonus: 0,
+        manaMaxBonus: 0,
+        boardSenseBonus: 0,
+        startManaPct: 0,
+        summonerHpBonus: 0,
+        summonerDefBonus: 0,
+      };
+    case "necklace":
+      return {
+        boardSenseBonus: s(0.08),
+        skillPowerBonus: s(0.01),
+        manaRegenBonus: 0,
+        manaMaxBonus: 0,
+        startManaPct: 0,
+        summonerHpBonus: 0,
+        summonerDefBonus: 0,
+        leaderAtkBonus: 0,
+      };
+  }
+}
+
 function basePiece(
   partial: Omit<
     GearPiece,
@@ -177,6 +380,8 @@ function basePiece(
     | "summonerHpBonus"
     | "summonerDefBonus"
     | "leaderAtkBonus"
+    | "stars"
+    | "quality"
   > &
     Partial<
       Pick<
@@ -189,68 +394,62 @@ function basePiece(
         | "summonerHpBonus"
         | "summonerDefBonus"
         | "leaderAtkBonus"
+        | "stars"
+        | "quality"
+        | "element"
       >
     >,
 ): GearPiece {
+  const stars = normalizeGearStars(partial.stars ?? 1);
+  const quality = normalizeGearQuality(partial.quality ?? "normal");
+  const scaled = baseBonusesForSlot(partial.slot, stars, quality);
   return {
-    manaRegenBonus: 0,
-    manaMaxBonus: 0,
-    boardSenseBonus: 0,
-    startManaPct: 0,
-    skillPowerBonus: 0,
-    summonerHpBonus: 0,
-    summonerDefBonus: 0,
-    leaderAtkBonus: 0,
+    ...scaled,
     ...partial,
+    stars,
+    quality,
   };
 }
 
-export function createStarterGear(): SummonerGear {
+export function createStarterGear(element: Element = "light"): SummonerGear {
+  const weaponNames = WEAPON_NAMES[element];
   return {
     weapon: basePiece({
-      id: "wpn_circle_blade",
+      id: `wpn_starter_${element}`,
       slot: "weapon",
-      nameKo: "진문검",
+      nameKo: weaponNames[0]!,
       enhance: 0,
       setId: "assault",
-      skillPowerBonus: 0.06,
+      element,
+      stars: 1,
+      quality: "normal",
     }),
-    robe: basePiece({
-      id: "robe_guardian",
-      slot: "robe",
-      nameKo: "수호 로브",
+    top: basePiece({
+      id: "top_guardian",
+      slot: "top",
+      nameKo: "수호 상의",
       enhance: 0,
       setId: "guardian",
-      summonerHpBonus: 40,
-      summonerDefBonus: 4,
+      stars: 1,
+      quality: "normal",
     }),
-    accessory: basePiece({
-      id: "acc_mana_circuit",
-      slot: "accessory",
-      nameKo: "진액 회로",
+    bottom: basePiece({
+      id: "bottom_command",
+      slot: "bottom",
+      nameKo: "지휘 하의",
+      enhance: 0,
+      setId: "guardian",
+      stars: 1,
+      quality: "normal",
+    }),
+    shoes: basePiece({
+      id: "shoes_mana",
+      slot: "shoes",
+      nameKo: "진액 신발",
       enhance: 0,
       setId: "mana",
-      manaRegenBonus: 0.12,
-      manaMaxBonus: 10,
-      startManaPct: 0.05,
-    }),
-    orb: basePiece({
-      id: "orb_board_sense",
-      slot: "orb",
-      nameKo: "감응 수정",
-      enhance: 0,
-      setId: "sense",
-      boardSenseBonus: 0.08,
-    }),
-    cloak: basePiece({
-      id: "cloak_command",
-      slot: "cloak",
-      nameKo: "지휘 망토",
-      enhance: 0,
-      setId: "guardian",
-      summonerHpBonus: 25,
-      summonerDefBonus: 2,
-      leaderAtkBonus: 0.008,
+      stars: 1,
+      quality: "normal",
     }),
     ring: basePiece({
       id: "ring_bond",
@@ -258,61 +457,103 @@ export function createStarterGear(): SummonerGear {
       nameKo: "결속 반지",
       enhance: 0,
       setId: "assault",
-      skillPowerBonus: 0.02,
-      leaderAtkBonus: 0.01,
+      stars: 1,
+      quality: "normal",
+    }),
+    necklace: basePiece({
+      id: "necklace_sense",
+      slot: "necklace",
+      nameKo: "감응 목걸이",
+      enhance: 0,
+      setId: "sense",
+      stars: 1,
+      quality: "normal",
     }),
   };
 }
 
 /** Ensure optional combat fields exist on a piece (legacy saves). */
 export function normalizeGearPiece(
-  piece: GearPiece,
+  piece: GearPiece | (Partial<GearPiece> & { slot?: string }),
   fallbackSlot?: GearSlot,
 ): GearPiece {
-  const slot = piece.slot ?? fallbackSlot ?? "accessory";
+  const slot = migrateGearSlot(piece.slot ?? fallbackSlot ?? "shoes");
   const setId =
     piece.setId && isGearSetId(piece.setId)
       ? piece.setId
       : DEFAULT_SET_BY_SLOT[slot];
+  const stars = normalizeGearStars(piece.stars);
+  const quality = normalizeGearQuality(piece.quality);
+  const element =
+    slot === "weapon"
+      ? ELEMENTS.includes(piece.element as Element)
+        ? (piece.element as Element)
+        : "light"
+      : undefined;
+  const scaled = baseBonusesForSlot(slot, stars, quality);
   return {
-    id: piece.id,
+    id: piece.id ?? `gear_${slot}_migrated`,
     slot,
-    nameKo: piece.nameKo,
+    nameKo:
+      piece.nameKo ??
+      (slot === "weapon"
+        ? WEAPON_NAMES[element ?? "light"][0]!
+        : DROP_NAMES[slot][0]!),
+    stars,
+    quality,
     enhance: piece.enhance ?? 0,
     setId,
-    manaRegenBonus: piece.manaRegenBonus ?? 0,
-    manaMaxBonus: piece.manaMaxBonus ?? 0,
-    boardSenseBonus: piece.boardSenseBonus ?? 0,
-    startManaPct: piece.startManaPct ?? 0,
-    skillPowerBonus: piece.skillPowerBonus ?? 0,
-    summonerHpBonus: piece.summonerHpBonus ?? 0,
-    summonerDefBonus: piece.summonerDefBonus ?? 0,
-    leaderAtkBonus: piece.leaderAtkBonus ?? 0,
+    element,
+    manaRegenBonus: piece.manaRegenBonus ?? scaled.manaRegenBonus,
+    manaMaxBonus: piece.manaMaxBonus ?? scaled.manaMaxBonus,
+    boardSenseBonus: piece.boardSenseBonus ?? scaled.boardSenseBonus,
+    startManaPct: piece.startManaPct ?? scaled.startManaPct,
+    skillPowerBonus: piece.skillPowerBonus ?? scaled.skillPowerBonus,
+    summonerHpBonus: piece.summonerHpBonus ?? scaled.summonerHpBonus,
+    summonerDefBonus: piece.summonerDefBonus ?? scaled.summonerDefBonus,
+    leaderAtkBonus: piece.leaderAtkBonus ?? scaled.leaderAtkBonus,
   };
 }
 
-/** Fill missing slots on legacy 2/4-slot saves. */
+type LegacySummonerGear = Partial<SummonerGear> & {
+  robe?: GearPiece;
+  accessory?: GearPiece;
+  orb?: GearPiece;
+  cloak?: GearPiece;
+  armor?: GearPiece;
+  helm?: GearPiece;
+};
+
+/** Fill missing slots; migrate robe/cloak/accessory/orb legacy fields. */
 export function normalizeSummonerGear(
-  gear: Partial<SummonerGear> | null | undefined,
+  gear: LegacySummonerGear | null | undefined,
+  element: Element = "light",
 ): SummonerGear {
-  const starter = createStarterGear();
+  const starter = createStarterGear(element);
   if (!gear) return starter;
+  const weaponSrc = gear.weapon ?? starter.weapon;
+  const topSrc = gear.top ?? gear.robe ?? gear.armor ?? starter.top;
+  const bottomSrc = gear.bottom ?? gear.cloak ?? starter.bottom;
+  const shoesSrc = gear.shoes ?? gear.accessory ?? starter.shoes;
+  const ringSrc = gear.ring ?? starter.ring;
+  const necklaceSrc = gear.necklace ?? gear.orb ?? gear.helm ?? starter.necklace;
+  const weapon = normalizeGearPiece(
+    { ...weaponSrc, element: weaponSrc.element ?? element },
+    "weapon",
+  );
   return {
-    weapon: normalizeGearPiece(gear.weapon ?? starter.weapon, "weapon"),
-    robe: normalizeGearPiece(gear.robe ?? starter.robe, "robe"),
-    accessory: normalizeGearPiece(
-      gear.accessory ?? starter.accessory,
-      "accessory",
-    ),
-    orb: normalizeGearPiece(gear.orb ?? starter.orb, "orb"),
-    cloak: normalizeGearPiece(gear.cloak ?? starter.cloak, "cloak"),
-    ring: normalizeGearPiece(gear.ring ?? starter.ring, "ring"),
+    weapon: { ...weapon, element: weapon.element ?? element },
+    top: normalizeGearPiece(topSrc, "top"),
+    bottom: normalizeGearPiece(bottomSrc, "bottom"),
+    shoes: normalizeGearPiece(shoesSrc, "shoes"),
+    ring: normalizeGearPiece(ringSrc, "ring"),
+    necklace: normalizeGearPiece(necklaceSrc, "necklace"),
   };
 }
 
 export function gearPieces(gear: SummonerGear): GearPiece[] {
   const g = normalizeSummonerGear(gear);
-  return [g.weapon, g.robe, g.accessory, g.orb, g.cloak, g.ring];
+  return [g.weapon, g.top, g.bottom, g.shoes, g.ring, g.necklace];
 }
 
 export function summarizeGearSets(gear: SummonerGear): GearSetProgress[] {
@@ -383,7 +624,7 @@ export function bumpGearEnhance(piece: GearPiece): GearPiece {
       manaRegenBonus: piece.manaRegenBonus + 0.005,
     };
   }
-  if (piece.slot === "robe") {
+  if (piece.slot === "top") {
     return {
       ...piece,
       enhance: next,
@@ -392,22 +633,22 @@ export function bumpGearEnhance(piece: GearPiece): GearPiece {
       manaMaxBonus: piece.manaMaxBonus + 2,
     };
   }
-  if (piece.slot === "accessory") {
-    return {
-      ...piece,
-      enhance: next,
-      manaRegenBonus: piece.manaRegenBonus + 0.04,
-      manaMaxBonus: piece.manaMaxBonus + 5,
-      startManaPct: piece.startManaPct + 0.01,
-    };
-  }
-  if (piece.slot === "cloak") {
+  if (piece.slot === "bottom") {
     return {
       ...piece,
       enhance: next,
       summonerHpBonus: piece.summonerHpBonus + 15,
       summonerDefBonus: piece.summonerDefBonus + 2,
       leaderAtkBonus: piece.leaderAtkBonus + 0.004,
+    };
+  }
+  if (piece.slot === "shoes") {
+    return {
+      ...piece,
+      enhance: next,
+      manaRegenBonus: piece.manaRegenBonus + 0.04,
+      manaMaxBonus: piece.manaMaxBonus + 5,
+      startManaPct: piece.startManaPct + 0.01,
     };
   }
   if (piece.slot === "ring") {
@@ -423,13 +664,24 @@ export function bumpGearEnhance(piece: GearPiece): GearPiece {
     ...piece,
     enhance: next,
     boardSenseBonus: piece.boardSenseBonus + 0.025,
+    skillPowerBonus: piece.skillPowerBonus + 0.005,
     manaRegenBonus: piece.manaRegenBonus + 0.01,
   };
 }
 
 export function describeGear(piece: GearPiece): string {
   const set = getGearSet(piece.setId)?.nameKo ?? piece.setId;
-  return `${piece.nameKo} +${piece.enhance} [${set}]`;
+  const star = `★${piece.stars}`;
+  return `${piece.nameKo} ${star} +${piece.enhance} [${set}]`;
+}
+
+/** True if a weapon can be worn by the given summoner element. */
+export function canEquipGearOnElement(
+  piece: GearPiece,
+  element: Element,
+): boolean {
+  if (piece.slot !== "weapon") return true;
+  return (piece.element ?? "light") === element;
 }
 
 /** Mana refund when selling a bag piece (scales harder past +9). */
@@ -437,7 +689,8 @@ export function gearSellMana(piece: GearPiece): number {
   const base = 40 + piece.enhance * 35;
   const late = piece.enhance >= 9 ? (piece.enhance - 8) * 50 : 0;
   const leader = Math.round((piece.leaderAtkBonus ?? 0) * 500);
-  return base + late + leader;
+  const grade = piece.stars * 8 + (piece.quality === "legend" ? 40 : 0);
+  return base + late + leader + grade;
 }
 
 /** Partial crystal refund for +12+ enhance investment (~50%). */
@@ -452,52 +705,83 @@ export function gearSellCrystal(piece: GearPiece): number {
 /** Max unequipped gear pieces in the bag. */
 export const MAX_GEAR_BAG = 20;
 
-const GEAR_SLOTS: GearSlot[] = [
-  "weapon",
-  "robe",
-  "accessory",
-  "orb",
-  "cloak",
-  "ring",
+const STAR_WEIGHTS: { value: GearStars; w: number }[] = [
+  { value: 1, w: 40 },
+  { value: 2, w: 30 },
+  { value: 3, w: 20 },
+  { value: 4, w: 8 },
+  { value: 5, w: 2 },
 ];
 
-const DROP_NAMES: Record<GearSlot, string[]> = {
-  weapon: ["진문검", "돌격 단검", "개방의 칼"],
-  robe: ["수호 로브", "비늘 로브", "요새 옷"],
-  accessory: ["진액 회로", "마나 반지끈", "충전 팔찌"],
-  orb: ["감응 수정", "국면의 눈", "따냄 구슬"],
-  cloak: ["지휘 망토", "전장의 망토", "결속 외투"],
-  ring: ["결속 반지", "돌격 반지", "진액 반지"],
+const QUALITY_WEIGHTS: { value: GearQuality; w: number }[] = [
+  { value: "normal", w: 45 },
+  { value: "advanced", w: 30 },
+  { value: "rare", w: 15 },
+  { value: "epic", w: 8 },
+  { value: "legend", w: 2 },
+];
+
+function pickWeighted<T>(
+  weights: { value: T; w: number }[],
+  rng: () => number,
+): T {
+  const total = weights.reduce((n, x) => n + x.w, 0);
+  let roll = rng() * total;
+  for (const row of weights) {
+    roll -= row.w;
+    if (roll <= 0) return row.value;
+  }
+  return weights[weights.length - 1]!.value;
+}
+
+export type RollGearDropOpts = {
+  preferredSlot?: GearSlot;
+  preferredElement?: Element;
+  starWeights?: { value: GearStars; w: number }[];
+  qualityWeights?: { value: GearQuality; w: number }[];
 };
 
-/** Weekly equip dungeon: roll a wearable piece for a random (or fixed) slot. */
+/** Roll a wearable piece (random slot/set/stars/quality; weapons get element). */
 export function rollGearDrop(
   rng: () => number = Math.random,
   idPrefix = "gear_drop",
-  preferredSlot?: GearSlot,
+  preferredSlotOrOpts?: GearSlot | RollGearDropOpts,
 ): GearPiece {
+  const opts: RollGearDropOpts =
+    typeof preferredSlotOrOpts === "string"
+      ? { preferredSlot: preferredSlotOrOpts }
+      : preferredSlotOrOpts ?? {};
   const slot =
-    preferredSlot ??
+    opts.preferredSlot ??
     GEAR_SLOTS[Math.floor(rng() * GEAR_SLOTS.length) % GEAR_SLOTS.length]!;
   const setId =
     GEAR_SETS[Math.floor(rng() * GEAR_SETS.length) % GEAR_SETS.length]!.id;
-  const names = DROP_NAMES[slot];
-  const nameKo = names[Math.floor(rng() * names.length) % names.length]!;
+  const stars = pickWeighted(opts.starWeights ?? STAR_WEIGHTS, rng);
+  const quality = pickWeighted(opts.qualityWeights ?? QUALITY_WEIGHTS, rng);
+  const element =
+    slot === "weapon"
+      ? opts.preferredElement && ELEMENTS.includes(opts.preferredElement)
+        ? opts.preferredElement
+        : ELEMENTS[Math.floor(rng() * ELEMENTS.length) % ELEMENTS.length]!
+      : undefined;
+  const nameKo =
+    slot === "weapon"
+      ? WEAPON_NAMES[element!][
+          Math.floor(rng() * WEAPON_NAMES[element!].length) %
+            WEAPON_NAMES[element!].length
+        ]!
+      : DROP_NAMES[slot][
+          Math.floor(rng() * DROP_NAMES[slot].length) % DROP_NAMES[slot].length
+        ]!;
   let piece = basePiece({
     id: `${idPrefix}_${slot}_${Math.floor(rng() * 1e6)}`,
     slot,
     nameKo,
     enhance: 0,
     setId,
-    skillPowerBonus: slot === "weapon" || slot === "ring" ? 0.05 : 0,
-    summonerHpBonus: slot === "robe" || slot === "cloak" ? 35 : 0,
-    summonerDefBonus: slot === "robe" || slot === "cloak" ? 3 : 0,
-    manaRegenBonus: slot === "accessory" ? 0.1 : 0,
-    manaMaxBonus: slot === "accessory" ? 8 : 0,
-    startManaPct: slot === "accessory" ? 0.04 : 0,
-    boardSenseBonus: slot === "orb" ? 0.07 : 0,
-    leaderAtkBonus:
-      slot === "cloak" ? 0.008 : slot === "ring" ? 0.01 : 0,
+    stars,
+    quality,
+    element,
   });
   const bumps = Math.floor(rng() * 3); // +0..+2
   for (let i = 0; i < bumps; i++) {

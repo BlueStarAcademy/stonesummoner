@@ -1,25 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none" aria-hidden="true">
   <defs>
-    <linearGradient id="bg_capture_hound_s3" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#282418"/><stop offset="1" stop-color="#141008"/>
+    <linearGradient id="bg_capture_hound_s3" x1="20" y1="16" x2="108" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2c2410"/><stop offset="1" stop-color="#141008"/>
     </linearGradient>
-    <linearGradient id="a1_capture_hound_s3" x1="16" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF4C8"/><stop offset=".45" stop-color="#E8C84A"/><stop offset="1" stop-color="#887818"/>
+    <radialGradient id="gl_capture_hound_s3" cx="50%" cy="45%" r="45%">
+      <stop stop-color="#F0D050" stop-opacity=".40"/><stop offset="1" stop-color="#F0D050" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="a1_capture_hound_s3" x1="28" y1="16" x2="100" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D0"/><stop offset=".45" stop-color="#F0D060"/><stop offset="1" stop-color="#A89028"/>
     </linearGradient>
-    <linearGradient id="a2_capture_hound_s3" x1="20" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF4C8"/><stop offset="1" stop-color="#E8C84A"/>
+    <linearGradient id="a2_capture_hound_s3" x1="36" y1="24" x2="96" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D0"/><stop offset="1" stop-color="#F0D060"/>
     </linearGradient>
-    <linearGradient id="a3_capture_hound_s3" x1="24" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#E8C84A"/><stop offset="1" stop-color="#887818"/>
+    <linearGradient id="fr_capture_hound_s3" x1="8" y1="6" x2="120" y2="122" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF0A8"/><stop offset=".45" stop-color="#E8C84A"/><stop offset="1" stop-color="#887818"/>
+    </linearGradient>
+    <linearGradient id="fd_capture_hound_s3" x1="24" y1="24" x2="104" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#887818"/><stop offset="1" stop-color="#E8C84A"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#bg_capture_hound_s3)"/>
-  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#E8C84A" stroke-opacity=".35" stroke-width="1.5"/>
-  <circle cx="32" cy="32" r="24" fill="#E8C84A" fill-opacity=".10"/>
-  
-      <path d="M20 14L24 28L18 28L26 44" stroke="url(#a1_capture_hound_s3)" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-      <path d="M32 10L36 26L30 26L38 44" stroke="url(#a2_capture_hound_s3)" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-      <path d="M44 14L48 28L42 28L50 44" stroke="url(#a1_capture_hound_s3)" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-      <path d="M16 50H48" stroke="#E8C84A" stroke-width="2" stroke-linecap="round" opacity=".45"/>
+  <rect width="128" height="128" rx="16" fill="url(#bg_capture_hound_s3)"/>
+  <circle cx="64" cy="60" r="36" fill="url(#gl_capture_hound_s3)"/>
+  <g transform="translate(32,30)">
+      <ellipse cx="32" cy="32" rx="22" ry="14" fill="url(#a1_capture_hound_s3)" opacity=".35"/>
+      <path d="M14 24C22 18 42 18 50 24" stroke="url(#a2_capture_hound_s3)" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M14 32C22 26 42 26 50 32" stroke="#F0D050" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M14 40C22 34 42 34 50 40" stroke="url(#a2_capture_hound_s3)" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="32" cy="32" r="5" fill="#fff" opacity=".7"/></g>
+  <rect x="5" y="5" width="118" height="118" rx="14" fill="none" stroke="url(#fr_capture_hound_s3)" stroke-width="6"/>
+  <rect x="10" y="10" width="108" height="108" rx="11" fill="none" stroke="url(#fd_capture_hound_s3)" stroke-width="2"/>
+  <rect x="13" y="13" width="102" height="102" rx="9" fill="none" stroke="#050308" stroke-opacity=".55" stroke-width="1.5"/>
 </svg>

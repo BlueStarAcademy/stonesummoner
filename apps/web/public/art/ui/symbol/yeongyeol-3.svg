@@ -23,21 +23,24 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="yeongyeols3-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#70b8a0" stop-opacity="0"/>
     </linearGradient>
     <filter id="yeongyeols3-depth" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="20" fill="url(#yeongyeols3-aura)" opacity=".85"/>
-  <g filter="url(#yeongyeols3-depth)" transform="translate(36 36) scale(0.8) translate(-36 -36)">
+  <circle cx="36" cy="36" r="18" fill="url(#yeongyeols3-aura)" opacity=".8"/>
+  <g filter="url(#yeongyeols3-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
     
-      <circle cx="28" cy="36" r="11" fill="none" stroke="url(#yeongyeols3-gold)" stroke-width="2.4"/>
-      <circle cx="44" cy="36" r="11" fill="none" stroke="url(#yeongyeols3-gold)" stroke-width="2.4"/>
-      <circle cx="28" cy="36" r="6.5" fill="url(#yeongyeols3-ink)" stroke="#5A4214" stroke-width="1"/>
-      <circle cx="44" cy="36" r="6.5" fill="url(#yeongyeols3-ink)" stroke="#5A4214" stroke-width="1"/>
-      <path d="M33 36h6" stroke="url(#yeongyeols3-gold)" stroke-width="2.2" stroke-linecap="round"/>
-      <circle cx="36" cy="36" r="2.2" fill="url(#yeongyeols3-gold)"/>
+      <circle cx="27" cy="36" r="13" fill="none" stroke="url(#yeongyeols3-gold)" stroke-width="2.6"/>
+      <circle cx="45" cy="36" r="13" fill="none" stroke="url(#yeongyeols3-gold)" stroke-width="2.6"/>
+      <circle cx="27" cy="36" r="8" fill="url(#yeongyeols3-ink)" stroke="#5A4214" stroke-width="1.1"/>
+      <circle cx="45" cy="36" r="8" fill="url(#yeongyeols3-ink)" stroke="#5A4214" stroke-width="1.1"/>
+      <circle cx="27" cy="36" r="3.2" fill="#1A140C" stroke="url(#yeongyeols3-gold)" stroke-width="1.2"/>
+      <circle cx="45" cy="36" r="3.2" fill="#1A140C" stroke="url(#yeongyeols3-gold)" stroke-width="1.2"/>
+      <path d="M32 36h8" stroke="url(#yeongyeols3-gold)" stroke-width="2.6" stroke-linecap="round"/>
+      <circle cx="36" cy="36" r="2.6" fill="url(#yeongyeols3-gold)"/>
+      <ellipse cx="24" cy="30" rx="3" ry="1.6" fill="url(#yeongyeols3-shine)" opacity=".5"/>
   </g>
 </svg>

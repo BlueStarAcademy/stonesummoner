@@ -23,7 +23,7 @@
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
     <linearGradient id="ssangnipseal-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#e8e0c8" stop-opacity="0"/>
     </linearGradient>
     <filter id="ssangnipseal-depth" x="-30%" y="-30%" width="160%" height="160%">
@@ -37,13 +37,15 @@
   <g stroke="url(#ssangnipseal-gold)" stroke-width="1.5" stroke-linecap="round" opacity=".8">
     <path d="M36 10.5v4.2"/><path d="M36 57.3v4.2"/><path d="M10.5 36h4.2"/><path d="M57.3 36h4.2"/>
   </g>
-  <g filter="url(#ssangnipseal-depth)" transform="translate(36 36) scale(0.7) translate(-36 -36)">
+  <g filter="url(#ssangnipseal-depth)" transform="translate(36 36) scale(0.68) translate(-36 -36)">
     
-      <path d="M20 52V24l8-6 8 6v28z" fill="#1A1810" stroke="url(#ssangnipseal-gold)" stroke-width="1.8" stroke-linejoin="round"/>
-      <path d="M36 52V24l8-6 8 6v28z" fill="#1A1810" stroke="url(#ssangnipseal-gold)" stroke-width="1.8" stroke-linejoin="round"/>
-      <path d="M24 48V28l4-3 4 3v20z" fill="url(#ssangnipseal-ink)" stroke="#5A4214" stroke-width=".9"/>
-      <path d="M40 48V28l4-3 4 3v20z" fill="url(#ssangnipseal-ink)" stroke="#5A4214" stroke-width=".9"/>
-      <path d="M18 52h36" stroke="url(#ssangnipseal-gold)" stroke-width="2.2" stroke-linecap="round"/>
-      <circle cx="36" cy="18" r="2.4" fill="url(#ssangnipseal-gold)"/>
+      <path d="M18 54V22l9-8 9 8v32z" fill="#18160E" stroke="url(#ssangnipseal-gold)" stroke-width="1.9" stroke-linejoin="round"/>
+      <path d="M36 54V22l9-8 9 8v32z" fill="#18160E" stroke="url(#ssangnipseal-gold)" stroke-width="1.9" stroke-linejoin="round"/>
+      <path d="M22 50V28l5-4 5 4v22z" fill="url(#ssangnipseal-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M40 50V28l5-4 5 4v22z" fill="url(#ssangnipseal-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M16 54h40" stroke="url(#ssangnipseal-gold)" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M20 18h10M42 18h10" stroke="url(#ssangnipseal-gold)" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="36" cy="14" r="2.8" fill="url(#ssangnipseal-gold)"/>
+      <ellipse cx="25" cy="30" rx="2" ry="4" fill="url(#ssangnipseal-shine)" opacity=".45"/>
   </g>
 </svg>

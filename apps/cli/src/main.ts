@@ -288,17 +288,21 @@ async function interactive(): Promise<void> {
 
     if (cmd === "enh-gear" || cmd === "eg") {
       const slot =
-        arg === "orb" || arg === "o"
-          ? "orb"
+        arg === "necklace" || arg === "n" || arg === "orb" || arg === "o"
+          ? "necklace"
           : arg === "weapon" || arg === "w" || arg === "wpn"
             ? "weapon"
-            : arg === "robe" || arg === "r"
-              ? "robe"
-              : arg === "cloak" || arg === "c" || arg === "mantle"
-                ? "cloak"
+            : arg === "top" || arg === "t" || arg === "robe" || arg === "r"
+              ? "top"
+              : arg === "bottom" ||
+                  arg === "b" ||
+                  arg === "cloak" ||
+                  arg === "c" ||
+                  arg === "mantle"
+                ? "bottom"
                 : arg === "ring" || arg === "rg"
                   ? "ring"
-                  : "accessory";
+                  : "shoes";
       const r = runEnhanceGear(save, slot);
       save = r.save;
       console.log(r.message);
@@ -308,17 +312,21 @@ async function interactive(): Promise<void> {
 
     if (cmd === "set-gear" || cmd === "sg") {
       const slot =
-        arg === "orb" || arg === "o"
-          ? "orb"
+        arg === "necklace" || arg === "n" || arg === "orb" || arg === "o"
+          ? "necklace"
           : arg === "weapon" || arg === "w" || arg === "wpn"
             ? "weapon"
-            : arg === "robe" || arg === "r"
-              ? "robe"
-              : arg === "cloak" || arg === "c" || arg === "mantle"
-                ? "cloak"
+            : arg === "top" || arg === "t" || arg === "robe" || arg === "r"
+              ? "top"
+              : arg === "bottom" ||
+                  arg === "b" ||
+                  arg === "cloak" ||
+                  arg === "c" ||
+                  arg === "mantle"
+                ? "bottom"
                 : arg === "ring" || arg === "rg"
                   ? "ring"
-                  : "accessory";
+                  : "shoes";
       const setId =
         arg2 === "mana" ||
         arg2 === "assault" ||
