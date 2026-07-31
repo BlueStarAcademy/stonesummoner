@@ -35,12 +35,12 @@
   </defs>
   <circle cx="36" cy="36" r="28" fill="url(#pltrares3-aura)"/>
   <g filter="url(#pltrares3-depth)">
-    <path d="M10 14 L54 4 L62 58 L18 68 Z" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
-    <path d="M10 14 L54 4 L62 58 L18 68 Z" fill="url(#pltrares3-face)" stroke="url(#pltrares3-gold)" stroke-width="3.1" stroke-linejoin="round"/>
-    <path d="M10 14 L54 4 L62 58 L18 68 Z" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
-    <path d="M10 14 L54 4 L50 12 L18 20 Z" fill="url(#pltrares3-bevel)" opacity=".55"/>
-    <path d="M18 20 L50 12 L55 52 L23 60 Z" fill="url(#pltrares3-gem)" stroke="#a8d0ff" stroke-width="1" stroke-opacity=".55"/>
-    <path d="M18 20 L50 12 L55 52 L23 60 Z" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".2" transform="translate(0 .35)"/>
+    <path d="M36 6 L64 62 L8 62 Z" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
+    <path d="M36 6 L64 62 L8 62 Z" fill="url(#pltrares3-face)" stroke="url(#pltrares3-gold)" stroke-width="3.1" stroke-linejoin="round"/>
+    <path d="M36 6 L64 62 L8 62 Z" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
+    <path d="M36 6 L64 62 L8 62 Z M36 18 L20 54 L52 54 Z" fill="url(#pltrares3-bevel)" opacity=".55" fill-rule="evenodd"/>
+    <path d="M36 18 L52 54 L20 54 Z" fill="url(#pltrares3-gem)" stroke="#a8d0ff" stroke-width="1" stroke-opacity=".55"/>
+    <path d="M36 18 L52 54 L20 54 Z" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".2" transform="translate(0 .35)"/>
     <ellipse cx="27" cy="18" rx="7.5" ry="3.2" fill="url(#pltrares3-shine)" transform="rotate(-24 27 18)" opacity=".82"/>
   </g>
 </svg>

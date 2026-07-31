@@ -35,12 +35,12 @@
   </defs>
   <circle cx="36" cy="36" r="28" fill="url(#pltmagics6-aura)"/>
   <g filter="url(#pltmagics6-depth)">
-    <path d="M10 4 L54 14 L62 68 L18 58 Z" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
-    <path d="M10 4 L54 14 L62 68 L18 58 Z" fill="url(#pltmagics6-face)" stroke="url(#pltmagics6-gold)" stroke-width="3.1" stroke-linejoin="round"/>
-    <path d="M10 4 L54 14 L62 68 L18 58 Z" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
-    <path d="M10 4 L54 14 L49 20 L17 12 Z" fill="url(#pltmagics6-bevel)" opacity=".55"/>
-    <path d="M17 12 L49 20 L55 60 L23 52 Z" fill="url(#pltmagics6-gem)" stroke="#c8f0a0" stroke-width="1" stroke-opacity=".55"/>
-    <path d="M17 12 L49 20 L55 60 L23 52 Z" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".2" transform="translate(0 .35)"/>
+    <path d="M36 4 L68 36 L36 68 L4 36 Z" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
+    <path d="M36 4 L68 36 L36 68 L4 36 Z" fill="url(#pltmagics6-face)" stroke="url(#pltmagics6-gold)" stroke-width="3.1" stroke-linejoin="round"/>
+    <path d="M36 4 L68 36 L36 68 L4 36 Z" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
+    <path d="M36 4 L68 36 L56 36 L36 14 L16 36 L4 36 Z" fill="url(#pltmagics6-bevel)" opacity=".55" fill-rule="evenodd"/>
+    <path d="M36 14 L56 36 L36 58 L16 36 Z" fill="url(#pltmagics6-gem)" stroke="#c8f0a0" stroke-width="1" stroke-opacity=".55"/>
+    <path d="M36 14 L56 36 L36 58 L16 36 Z" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".2" transform="translate(0 .35)"/>
     <ellipse cx="27" cy="18" rx="7.5" ry="3.2" fill="url(#pltmagics6-shine)" transform="rotate(-24 27 18)" opacity=".82"/>
   </g>
 </svg>

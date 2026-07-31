@@ -523,6 +523,8 @@ const messages: MessageDict = {
   "ui.symFilter": "Set filter",
   "ui.symFilterSlot": "Slot filter",
   "ui.symFilterAll": "All",
+  "ui.symFilterAllSets": "All (type)",
+  "ui.symFilterAllSlots": "All (slot)",
   "ui.symFilterNone": "None",
   "ui.symFilterN": "{n} sets",
   "ui.symFilterSlotN": "{n} slots",
@@ -631,7 +633,23 @@ const messages: MessageDict = {
   "ui.gearSlotTop": "Top",
   "ui.gearSlotBottom": "Bottom",
   "ui.gearSlotShoes": "Shoes",
-  "ui.gearSlotNecklace": "Necklace"
+  "ui.gearSlotNecklace": "Necklace",
+  "ui.islandEnter": "Enter",
+  "ui.islandInfo": "Info",
+  "ui.buildingInfoClose": "Close",
+  "ui.buildingInfoTitle": "About {name}",
+  "ui.bldgInfo.summon_hearth": "Spend scrolls to summon new monsters|Normal, premium, and mystic scrolls yield different grades|Results are added to your roster and codex",
+  "ui.bldgInfo.power_circle": "Manage monster levels, skills, and symbols|Also check summoner gear and the skill tree|Core facility for awakening and growth",
+  "ui.bldgInfo.gateway": "Enter scenarios and battles|Pick a region and challenge stages|Wins grant EXP, drops, and rewards",
+  "ui.bldgInfo.mana_pond": "Produces and stores gold over time|Tap the pond bubble to collect stored gold|Upgrade to raise production and capacity",
+  "ui.bldgInfo.shop": "Buy energy, scrolls, and consumables|Also access symbol grind and imprint services|Supply hub for battles and growth",
+  "ui.bldgInfo.party": "Form your battle party|Deploy up to four monsters|You can also adjust the party before fights",
+  "ui.bldgInfo.wish": "Draw rewards at the Temple of Wishes|Gain resources and growth rewards|Unlocks at summoner level 7",
+  "ui.bldgInfo.dojo": "Train at the Magic Circle Dojo|Earn gold and rewards from drills|Special rewards appear on a set cycle|Unlocks at summoner level 8",
+  "ui.bldgInfo.crystal_mine": "Produces and stores crystals over time|Tap the mine bubble to collect crystals|Upgrade to raise production and capacity|Unlocks at summoner level 10",
+  "ui.bldgInfo.glory": "Spend glory points to empower buff buildings|Gain lasting combat and growth bonuses|Bank points for long-term advantages",
+  "ui.bldgInfo.guild": "Access guild and community features|Chat with allies and check guild activity|Unlocks at summoner level 12",
+  "ui.bldgInfo.fusion": "Fuse same-species monsters to evolve|Keep the better level, skills, and symbols|Unlocks at summoner level 17"
 };
 
 export default messages;

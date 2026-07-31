@@ -38,7 +38,7 @@
     <path d="M6 8 L66 8 L50 64 L22 64 Z" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
     <path d="M6 8 L66 8 L50 64 L22 64 Z" fill="url(#pltmythics4-face)" stroke="url(#pltmythics4-gold)" stroke-width="3.1" stroke-linejoin="round"/>
     <path d="M6 8 L66 8 L50 64 L22 64 Z" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
-    <path d="M6 8 L66 8 L56 16 L16 16 Z" fill="url(#pltmythics4-bevel)" opacity=".55"/>
+    <path d="M6 8 L66 8 L56 16 L16 16 Z" fill="url(#pltmythics4-bevel)" opacity=".55" fill-rule="evenodd"/>
     <path d="M16 16 L56 16 L45 56 L27 56 Z" fill="url(#pltmythics4-gem)" stroke="#fff4c8" stroke-width="1" stroke-opacity=".55"/>
     <path d="M16 16 L56 16 L45 56 L27 56 Z" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".2" transform="translate(0 .35)"/>
     <ellipse cx="27" cy="18" rx="7.5" ry="3.2" fill="url(#pltmythics4-shine)" transform="rotate(-24 27 18)" opacity=".82"/>

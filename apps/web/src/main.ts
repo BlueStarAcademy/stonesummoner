@@ -94,6 +94,7 @@ import {
   MAX_SYMBOL_ENHANCE,
   normalizeGearPiece,
   normalizeSummonerGear,
+  normalizeSymbolQuality,
   qualityToPlateId,
   SKILL_TREE_NODES,
   skillTreeBonuses,
@@ -104,7 +105,6 @@ import {
   gearLeaderAtkPct,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_IMPRINT_CRYSTAL_COST,
-  symbolEnhanceManaCost,
   type GearPiece,
   type GearQuality,
   type GearSlot,
@@ -527,8 +527,6 @@ let lastScrollPremiumGain = 0;
 let lastScrollGain = 0;
 /** Most recently summoned monster uids (summon reveal card / multi). */
 let lastSummonUids: string[] = [];
-/** Symbol index awaiting monster pick for equip. */
-let equipPickSymIndex: number | null = null;
 /** Empty slot awaiting symbol pick (monster uid + slot 1-6). */
 let slotEquipPick: { uid: string; slot: number } | null = null;
 /** Grind/imprint before/after reveal card. */
@@ -647,8 +645,6 @@ let selectedEnhanceUid: string | null = null;
 /** Roster slot sort mode on enhance book. */
 type RosterSortMode = "default" | "level" | "stars" | "element" | "party";
 let rosterSortMode: RosterSortMode = "default";
-/** Symbol bag index open in detail modal. */
-let symbolDetailIndex: number | null = null;
 /** Symbol bag expand confirm modal. */
 let symbolBagExpandOpen = false;
 /** Which symbol inventory filter dropdown is open (set / slot). */
@@ -694,6 +690,10 @@ let summonerPickerOpen = false;
 let missionOpen = false;
 let communityOpen = false;
 let shopOpen = false;
+/** Floating action menu above an island building (`data-b` id). */
+let islandSpotMenuId: string | null = null;
+/** Building info sheet open for this island spot id. */
+let buildingInfoId: string | null = null;
 /** Island world chat panel. */
 let chatOpen = false;
 /** True while the player is connected to a world-chat channel session. */
@@ -811,6 +811,164 @@ function islandSpotTitle(id: string, fallback = ""): string {
   };
   const bid = remap[id] ?? id;
   return PHASE_BUILDINGS.find((b) => b.id === bid)?.nameKo ?? fallback;
+}
+
+const ISLAND_BLDG_INFO_KEYS: Record<string, string> = {
+  summon_hearth: "ui.bldgInfo.summon_hearth",
+  power_circle: "ui.bldgInfo.power_circle",
+  gateway: "ui.bldgInfo.gateway",
+  mana_pond: "ui.bldgInfo.mana_pond",
+  shop: "ui.bldgInfo.shop",
+  party: "ui.bldgInfo.party",
+  wish: "ui.bldgInfo.wish",
+  dojo: "ui.bldgInfo.dojo",
+  crystal_mine: "ui.bldgInfo.crystal_mine",
+  glory: "ui.bldgInfo.glory",
+  guild: "ui.bldgInfo.guild",
+  fusion: "ui.bldgInfo.fusion",
+};
+
+function buildingInfoLines(id: string): string[] {
+  const key = ISLAND_BLDG_INFO_KEYS[id];
+  if (!key) return [];
+  return t(key as Parameters<typeof t>[0])
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function renderBuildingInfoModal(): string {
+  const id = buildingInfoId;
+  const open = !!id;
+  const name = id ? islandSpotTitle(id) : "";
+  const lines = id ? buildingInfoLines(id) : [];
+  const body =
+    lines.length > 0
+      ? `<ul class="building-info-list">${lines
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .join("")}</ul>`
+      : `<p class="muted">${escapeHtml(t("ui.buildingInfoClose"))}</p>`;
+  return `<div class="settings-layer building-info-layer" id="building-info-layer" ${open ? "" : "hidden"} aria-hidden="${open ? "false" : "true"}">
+    <button type="button" class="settings-backdrop" id="btn-building-info-close" aria-label="${escapeHtml(t("ui.buildingInfoClose"))}"></button>
+    <div class="settings-sheet building-info-sheet" role="dialog" aria-modal="true" aria-labelledby="building-info-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.buildingInfoClose"), "btn-building-info-close")}
+      <h2 class="settings-title" id="building-info-title">${escapeHtml(t("ui.buildingInfoTitle", { name }))}</h2>
+      <div class="building-info-body" id="building-info-body">${body}</div>
+    </div>
+  </div>`;
+}
+
+function applyBuildingInfoOpen(): void {
+  const layer = app.querySelector<HTMLElement>("#building-info-layer");
+  if (!layer) return;
+  const open = !!buildingInfoId;
+  layer.hidden = !open;
+  layer.setAttribute("aria-hidden", open ? "false" : "true");
+  if (!open) return;
+  const id = buildingInfoId!;
+  const name = islandSpotTitle(id);
+  const title = layer.querySelector("#building-info-title");
+  if (title) title.textContent = t("ui.buildingInfoTitle", { name });
+  const body = layer.querySelector("#building-info-body");
+  if (body) {
+    const lines = buildingInfoLines(id);
+    body.innerHTML =
+      lines.length > 0
+        ? `<ul class="building-info-list">${lines
+            .map((line) => `<li>${escapeHtml(line)}</li>`)
+            .join("")}</ul>`
+        : "";
+  }
+  replayModalPop(layer);
+}
+
+function openBuildingInfoSoft(id: string): void {
+  setIslandSpotMenu(null);
+  buildingInfoId = id;
+  shopOpen = false;
+  communityOpen = false;
+  missionOpen = false;
+  settingsOpen = false;
+  mailboxOpen = false;
+  notifOpen = false;
+  summonerPickerOpen = false;
+  resMoreOpen = false;
+  closeChatOverlay();
+  applyBuildingInfoOpen();
+  applyShopOpen();
+  applyCommunityOpen();
+  applyMissionOpen();
+  applySettingsOpen();
+  applyMailboxOpen();
+  applyNotifOpen();
+  applySummonerPickerOpen();
+  applyResMoreOpen();
+}
+
+function closeBuildingInfoSoft(): void {
+  if (!buildingInfoId) return;
+  buildingInfoId = null;
+  applyBuildingInfoOpen();
+}
+
+function applyIslandSpotMenu(): void {
+  app.querySelectorAll<HTMLElement>("[data-b]").forEach((el) => {
+    const open = !!islandSpotMenuId && el.dataset.b === islandSpotMenuId;
+    el.classList.toggle("is-menu-open", open);
+    const fabs = el.querySelector<HTMLElement>(".island-spot-fabs");
+    if (fabs) {
+      fabs.hidden = !open;
+      fabs.setAttribute("aria-hidden", open ? "false" : "true");
+    }
+  });
+}
+
+function setIslandSpotMenu(id: string | null): void {
+  islandSpotMenuId = id;
+  applyIslandSpotMenu();
+}
+
+function enterIslandBuilding(id: string): void {
+  setIslandSpotMenu(null);
+  closeBuildingInfoSoft();
+  if (id === "gateway") {
+    view = "stages";
+    render();
+  } else if (id === "mana_pond") {
+    view = "pond";
+    renderPreservingIsland();
+  } else if (id === "crystal_mine") {
+    view = "mine";
+    renderPreservingIsland();
+  } else if (id === "wish") {
+    wishReveal = null;
+    view = "wish";
+    renderPreservingIsland();
+  } else if (id === "glory") {
+    view = "glory";
+    renderPreservingIsland();
+  } else if (id === "dojo") {
+    view = "dojo";
+    renderPreservingIsland();
+  } else if (id === "guild") {
+    openCommunityModalSoft();
+  } else if (id === "fusion") {
+    view = "fusion";
+    renderPreservingIsland();
+  } else if (id === "summon_hearth") {
+    view = "summon";
+    renderPreservingIsland();
+  } else if (id === "power_circle") {
+    view = "enhance";
+    render();
+  } else if (id === "shop") {
+    openShopModalSoft();
+  } else if (id === "party") {
+    view = "party";
+    partyDraft = new Set(save.party);
+    renderPreservingIsland();
+  }
 }
 
 function looksBrokenLabel(s: string): boolean {
@@ -1658,7 +1816,7 @@ function renderStageEntryModal(): string {
   )
     .slice(0, 4)
     .map((n) => {
-      return `<span class="stage-prep-skill-ico is-on" title="${escapeHtml(n.nameKo)}"><img class="stage-prep-skill-ico-img" src="${summonerSkillArtSrc(n.id)}" width="28" height="28" alt="" draggable="false" decoding="async" /></span>`;
+      return `<span class="stage-prep-skill-ico is-on" title="${escapeHtml(n.nameKo)}">${summonerSkillArtImg(n.id, "stage-prep-skill-ico-img", 28)}</span>`;
     })
     .join("");
   const skillIcons =
@@ -1670,7 +1828,7 @@ function renderStageEntryModal(): string {
       .slice(0, 2)
       .map((n) => {
         const on = unlockedSkills.has(n.id);
-        return `<span class="stage-prep-skill-ico${on ? " is-on" : ""}" title="${escapeHtml(n.nameKo)}"><img class="stage-prep-skill-ico-img" src="${summonerSkillArtSrc("open")}" width="28" height="28" alt="" draggable="false" decoding="async" /></span>`;
+        return `<span class="stage-prep-skill-ico${on ? " is-on" : ""}" title="${escapeHtml(n.nameKo)}">${summonerSkillArtImg("open", "stage-prep-skill-ico-img", 28)}</span>`;
       })
       .join("");
 
@@ -3254,6 +3412,8 @@ function openShopModalSoft(): void {
   notifOpen = false;
   summonerPickerOpen = false;
   resMoreOpen = false;
+  buildingInfoId = null;
+  setIslandSpotMenu(null);
   closeChatOverlay();
   applyShopOpen();
   applyCommunityOpen();
@@ -3263,6 +3423,7 @@ function openShopModalSoft(): void {
   applyNotifOpen();
   applySummonerPickerOpen();
   applyResMoreOpen();
+  applyBuildingInfoOpen();
 }
 
 function openCommunityModalSoft(): void {
@@ -3274,6 +3435,8 @@ function openCommunityModalSoft(): void {
   notifOpen = false;
   summonerPickerOpen = false;
   resMoreOpen = false;
+  buildingInfoId = null;
+  setIslandSpotMenu(null);
   closeChatOverlay();
   applyCommunityOpen();
   applyShopOpen();
@@ -3283,6 +3446,7 @@ function openCommunityModalSoft(): void {
   applyNotifOpen();
   applySummonerPickerOpen();
   applyResMoreOpen();
+  applyBuildingInfoOpen();
 }
 
 /** Compact display for wallet amounts in the app bar. */
@@ -3390,7 +3554,7 @@ function applyResMoreOpen(): void {
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet",
+    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .building-info-sheet",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -4386,6 +4550,7 @@ function renderScreen(): void {
     ${renderMissionModal()}
     ${renderCommunityModal()}
     ${renderShopModal()}
+    ${renderBuildingInfoModal()}
     <nav class="tabs tabs--overlay" aria-label="${escapeHtml(t("nav.main"))}">
       <button type="button" data-nav="stages" class="${tabBattle ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--battle" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/battle.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.battle"))}</span></span></button>
       <button type="button" id="btn-nav-summoner" class="${tabSummoner ? "active" : ""}" title="${escapeHtml(t("nav.summoner"))}">
@@ -4460,6 +4625,7 @@ function renderHome(): string {
     const toneKey = opts?.tone ?? "summon";
     const tone = opts?.tone ? ` island-spot--${opts.tone}` : "";
     const emblemSrc = `/art/hub/bldg-${toneKey}.webp`;
+    const emblemFb = `/art/hub/emblem-${toneKey}.svg`;
     const pos = resolveIslandSpotPos(id, x, y);
     x = pos.x;
     y = pos.y;
@@ -4487,16 +4653,26 @@ function renderHome(): string {
     const label = locked && opts?.unlockLv
       ? `${displayTitle} ${ARROW_RIGHT} Lv.${opts.unlockLv} ${t('ui.d1496ce82d')}`
       : displayTitle;
-    return `<button type="button" class="island-spot${tone}${locked ? " is-locked" : ""}${islandLayoutEdit ? " is-layout-edit" : ""}${focus}" style="left:${x}%;top:${y}%;--spot-scale:${spotScale};z-index:${spotZ}" data-b="${id}" data-locked="${locked ? "1" : "0"}" ${opts?.unlockLv ? `data-unlock="${opts.unlockLv}"` : ""} aria-label="${label}">
-      <span class="island-spot-art" aria-hidden="true">
-        <span class="island-spot-glow"></span>
-        <img class="island-spot-img" src="${emblemSrc}" width="512" height="512" alt="" draggable="false" decoding="async" />
-      </span>
-      ${locked ? lockSvg : ""}
-      <span class="island-spot-name">${displayTitle}</span>
-      ${unlock}
-      ${bubble}
-    </button>`;
+    const menuOpen = !locked && islandSpotMenuId === id;
+    const fabs = locked
+      ? ""
+      : `<div class="island-spot-fabs" ${menuOpen ? "" : "hidden"} aria-hidden="${menuOpen ? "false" : "true"}">
+      <button type="button" class="island-spot-fab island-spot-fab--enter" data-spot-enter="${id}">${escapeHtml(t("ui.islandEnter"))}</button>
+      <button type="button" class="island-spot-fab island-spot-fab--info" data-spot-info="${id}">${escapeHtml(t("ui.islandInfo"))}</button>
+    </div>`;
+    return `<div class="island-spot${tone}${locked ? " is-locked" : ""}${islandLayoutEdit ? " is-layout-edit" : ""}${focus}${menuOpen ? " is-menu-open" : ""}" style="left:${x}%;top:${y}%;--spot-scale:${spotScale};z-index:${spotZ}" data-b="${id}" data-locked="${locked ? "1" : "0"}" ${opts?.unlockLv ? `data-unlock="${opts.unlockLv}"` : ""} role="group" aria-label="${escapeHtml(label)}">
+      <button type="button" class="island-spot-hit" data-spot-open="${id}" aria-label="${escapeHtml(label)}">
+        <span class="island-spot-art" aria-hidden="true">
+          <span class="island-spot-glow"></span>
+          <img class="island-spot-img" src="${emblemSrc}" width="512" height="512" alt="" draggable="false" decoding="async" onerror="this.onerror=null;this.src='${emblemFb}'" />
+        </span>
+        ${locked ? lockSvg : ""}
+        <span class="island-spot-name">${displayTitle}</span>
+        ${unlock}
+        ${bubble}
+      </button>
+      ${fabs}
+    </div>`;
   };
 
   return `<div class="home-island">
@@ -4886,17 +5062,13 @@ function monsterSkillArtSrc(
   if (monsterId && skillIndex >= 0 && skillIndex <= 2) {
     const def = getMonster(monsterId);
     const artKey = def?.artKey ?? getMonsterArtKey(monsterId) ?? monsterId;
-    const el = def?.element;
-    if (el) {
-      return `/art/monster/skill/${artKey}-${el}-s${skillIndex + 1}.svg`;
-    }
-    return `/art/monster/skill/${artKey}-s${skillIndex + 1}.svg`;
+    return `/art/monster/skill/${artKey}-s${skillIndex + 1}.webp`;
   }
   const kind = skill?.effects?.[0]?.kind;
-  if (kind === "heal") return "/art/ui/skill/heal.svg";
-  if (kind === "shield") return "/art/ui/skill/shield.svg";
-  if (kind === "mana") return "/art/ui/skill/mana.svg";
-  return "/art/ui/skill/damage.svg";
+  if (kind === "heal") return "/art/ui/skill/heal.webp";
+  if (kind === "shield") return "/art/ui/skill/shield.webp";
+  if (kind === "mana") return "/art/ui/skill/mana.webp";
+  return "/art/ui/skill/damage.webp";
 }
 
 function monsterSkillArtImg(
@@ -4907,21 +5079,48 @@ function monsterSkillArtImg(
   size: number,
 ): string {
   const src = monsterSkillArtSrc(monsterId, skillIndex, skill);
-  const artKey = getMonsterArtKey(monsterId) ?? monsterId;
-  const fallback =
-    artKey && skillIndex >= 0 && skillIndex <= 2
-      ? `/art/monster/skill/${artKey}-s${skillIndex + 1}.svg`
-      : "";
-  const onerr =
-    fallback && fallback !== src
-      ? ` onerror="this.onerror=null;this.src='${fallback}'"`
-      : "";
+  const def = monsterId ? getMonster(monsterId) : null;
+  const artKey = def?.artKey ?? getMonsterArtKey(monsterId) ?? monsterId;
+  const el = def?.element;
+  const fallbacks: string[] = [];
+  if (artKey && skillIndex >= 0 && skillIndex <= 2) {
+    if (el) fallbacks.push(`/art/monster/skill/${artKey}-${el}-s${skillIndex + 1}.svg`);
+    fallbacks.push(`/art/monster/skill/${artKey}-s${skillIndex + 1}.svg`);
+  } else {
+    const kind = skill?.effects?.[0]?.kind;
+    if (kind === "heal") fallbacks.push("/art/ui/skill/heal.svg");
+    else if (kind === "shield") fallbacks.push("/art/ui/skill/shield.svg");
+    else if (kind === "mana") fallbacks.push("/art/ui/skill/mana.svg");
+    else fallbacks.push("/art/ui/skill/damage.svg");
+  }
+  const fb0 = fallbacks[0] ?? "";
+  const fb1 = fallbacks[1];
+  const onerr = fb0
+    ? fb1
+      ? ` onerror="this.onerror=function(){this.onerror=null;this.src='${fb1}'};this.src='${fb0}'"`
+      : ` onerror="this.onerror=null;this.src='${fb0}'"`
+    : "";
   return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${onerr} />`;
 }
 
 function summonerSkillArtSrc(skillId: string | undefined | null): string {
+  if (!skillId) return "/art/ui/skill/damage.webp";
+  return `/art/summoner/skill/${skillId}.webp`;
+}
+
+function summonerSkillArtFallbackSrc(skillId: string | undefined | null): string {
   if (!skillId) return "/art/ui/skill/damage.svg";
   return `/art/summoner/skill/${skillId}.svg`;
+}
+
+function summonerSkillArtImg(
+  skillId: string | undefined | null,
+  className: string,
+  size: number,
+): string {
+  const src = summonerSkillArtSrc(skillId);
+  const fb = summonerSkillArtFallbackSrc(skillId);
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" onerror="this.onerror=null;this.src='${fb}'" />`;
 }
 
 function monsterSkillDescLines(
@@ -5019,9 +5218,6 @@ function scrollArtSrc(kind: ScrollKind): string {
 function monsterArtSrc(monsterId: string | undefined | null): string | null {
   const artKey = getMonsterArtKey(monsterId);
   if (!artKey) return null;
-  if (BATTLE_STILL_FAMILY_SET.has(artKey)) {
-    return `/art/monster/battle/${artKey}-front.png`;
-  }
   return `/art/monster/${artKey}.webp`;
 }
 
@@ -5060,6 +5256,11 @@ function monsterBattleArtImg(
 ): string {
   const src = monsterBattleArtSrc(monsterId, facing);
   if (!src) return "";
+  const artKey = getMonsterArtKey(monsterId);
+  const pngFb =
+    artKey && src.endsWith(".webp")
+      ? src.replace(/\.webp$/i, ".png")
+      : "";
   const front = getBattleStillSrc(monsterId, "front") ?? monsterArtSrc(monsterId) ?? "";
   const back = getBattleStillSrc(monsterId, "back") ?? front;
   const stillAttrs = front
@@ -5067,7 +5268,10 @@ function monsterBattleArtImg(
     : "";
   const el = getMonster(monsterId ?? "")?.element;
   const tint = el ? ` el-tint-${el}` : "";
-  return `<img class="${className}${tint}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${stillAttrs} />`;
+  const onerr = pngFb
+    ? ` onerror="this.onerror=null;this.src='${pngFb}'"`
+    : "";
+  return `<img class="${className}${tint}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${stillAttrs}${onerr} />`;
 }
 
 function renderSummonRevealCell(uid: string): string {
@@ -5185,7 +5389,7 @@ function renderSummon(): string {
       `<div class="hub-panel summon-panel hub-panel--visual">
         <div class="summon-rite${hasReveal ? " is-revealed" : ""}${anyReady && !hasReveal ? " is-ready" : ""} el-${hasReveal ? revEl : "idle"}">
           <div class="summon-rite-glow" aria-hidden="true"></div>
-          <img class="summon-rite-circle" src="/art/hub/summon-circle.svg" width="320" height="320" alt="" draggable="false" />
+          <img class="summon-rite-circle" src="/art/hub/summon-circle.webp" width="320" height="320" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/summon-circle.svg'" />
           <div class="summon-rite-core">${riteCore}</div>
         </div>
         ${castRow}
@@ -5201,15 +5405,48 @@ function symbolWearer(symId: string): string | null {
   return mon ? describeOwned(mon) : null;
 }
 
-function symbolArtSrc(setId: string, slot: number): string {
+function symbolArtSrc(setId: string, _slot?: number): string {
+  return `/art/ui/symbol/${setId}-mark.webp`;
+}
+
+function symbolArtFallbackSrc(setId: string, slot: number): string {
   return `/art/ui/symbol/${setId}-${slot}.svg`;
 }
 
 function symbolSetArtSrc(setId: string): string {
+  return `/art/ui/symbol/${setId}-mark.webp`;
+}
+
+function symbolSetArtFallbackSrc(setId: string): string {
   return `/art/ui/symbol/${setId}.svg`;
 }
 
+function symbolArtImg(
+  setId: string,
+  slot: number,
+  className: string,
+  size: number,
+): string {
+  const src = symbolArtSrc(setId, slot);
+  const fallback = symbolArtFallbackSrc(setId, slot);
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" onerror="this.onerror=null;this.src='${fallback}'" />`;
+}
+
+function symbolSetArtImg(
+  setId: string,
+  className: string,
+  size: number,
+): string {
+  const src = symbolSetArtSrc(setId);
+  const fallback = symbolSetArtFallbackSrc(setId);
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" onerror="this.onerror=null;this.src='${fallback}'" />`;
+}
+
 function symbolEmptySlotArtSrc(slot: number): string {
+  return `/art/ui/symbol/empty-${slot}.webp`;
+}
+
+function symbolEmptySlotArtFallbackSrc(slot: number): string {
   return `/art/ui/symbol/empty-${slot}.svg`;
 }
 
@@ -5218,7 +5455,23 @@ function symbolCircleFrameSrc(): string {
 }
 
 function symbolPlateSrc(rarityId: string, slot: number): string {
+  return `/art/ui/symbol/plate-${rarityId}-${slot}.webp`;
+}
+
+function symbolPlateFallbackSrc(rarityId: string, slot: number): string {
   return `/art/ui/symbol/plate-${rarityId}-${slot}.svg`;
+}
+
+function symbolPlateImg(rarityId: string, slot: number, className: string, size = 72): string {
+  const src = symbolPlateSrc(rarityId, slot);
+  const fb = symbolPlateFallbackSrc(rarityId, slot);
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" aria-hidden="true" draggable="false" onerror="this.onerror=null;this.src='${fb}'" />`;
+}
+
+function symbolEmptySlotImg(slot: number, className: string, size = 72): string {
+  const src = symbolEmptySlotArtSrc(slot);
+  const fb = symbolEmptySlotArtFallbackSrc(slot);
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" onerror="this.onerror=null;this.src='${fb}'" />`;
 }
 
 const SYMBOL_SET_ACCENTS: Record<string, string> = {
@@ -5259,8 +5512,8 @@ function renderSymIco(opts: {
       ? `<span class="sym-ico-stars">${STAR}${opts.stars}</span>`
       : "";
   return `<span class="sym-ico sym-ico--${size} rarity--${opts.rarityId}">
-    <img class="sym-ico-plate" src="${symbolPlateSrc(opts.rarityId, opts.slot)}" width="72" height="72" alt="" aria-hidden="true" draggable="false" />
-    <img class="sym-ico-art" src="${symbolArtSrc(opts.setId, opts.slot)}" width="64" height="64" alt="" draggable="false" />
+    ${symbolPlateImg(opts.rarityId, opts.slot, "sym-ico-plate", 72)}
+    ${symbolArtImg(opts.setId, opts.slot, "sym-ico-art", 64)}
     ${starsBadge}
     <span class="sym-ico-plus">${opts.enhance}</span>
   </span>`;
@@ -5312,42 +5565,17 @@ function invGradeFromRarityId(rarityId: string): InvGradeId {
 }
 
 function invGradePlateSrc(grade: InvGradeId): string {
+  return `/art/ui/inv-grade/${grade}.webp`;
+}
+
+function invGradePlateFallbackSrc(grade: InvGradeId): string {
   return `/art/ui/inv-grade/${grade}.svg`;
 }
 
-function symbolStatLabelKo(stat: string): string {
-  switch (stat) {
-    case "ATK+": return t("ui.statAtk");
-    case "HP+": return t("ui.statHp");
-    case "DEF+": return t("ui.statDef");
-    case "SPD+": return t("ui.statSpd");
-    case "CRI Rate%": return t("ui.statCriRate");
-    case "CRI Dmg%": return t("ui.statCriDmg");
-    case "ACC%": return t("ui.statAcc");
-    case "RES%": return t("ui.statRes");
-    default: return stat;
-  }
-}
-
-function formatSymbolStatLine(stat: string, value: number): string {
-  const pct = stat.includes("%");
-  const n = Math.round(value);
-  return `${symbolStatLabelKo(stat)} +${n}${pct ? "%" : ""}`;
-}
-
-function symbolMainDisplayValue(sym: { mainValue: number; enhance?: number }): number {
-  return sym.mainValue;
-}
-
-function symbolSubstatCapacity(stars: number): number {
-  if (stars >= 6) return 4;
-  if (stars >= 5) return 3;
-  if (stars >= 3) return 2;
-  return 1;
-}
-
-function findSymbolIndexById(id: string): number {
-  return save.symbols.findIndex((x) => x.id === id);
+function invGradePlateImg(grade: InvGradeId, className: string, size = 112): string {
+  const src = invGradePlateSrc(grade);
+  const fb = invGradePlateFallbackSrc(grade);
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" aria-hidden="true" draggable="false" onerror="this.onerror=null;this.src='${fb}'" />`;
 }
 
 /** Same-species fodder only (excludes the skill-up target). */
@@ -5409,7 +5637,7 @@ function skillFeedSlotsHtml(targetUid: string | null): string {
         ? `${describeOwned(m)} · ${t("ui.7b191a9f9f")}`
         : describeOwned(m);
       return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${el}${inParty ? " is-party" : ""}${on ? " is-on" : ""}" data-skill-feed-fodder="${m.uid}" role="option" aria-selected="${on}" title="${escapeHtml(title)}">
-        <img class="mon-slot-grade-plate" src="${invGradePlateSrc(grade)}" width="112" height="112" alt="" aria-hidden="true" draggable="false" />
+        ${invGradePlateImg(grade, "mon-slot-grade-plate", 112)}
         <span class="mon-slot-art" aria-hidden="true">${art}</span>
         <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
         <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
@@ -5453,94 +5681,6 @@ function renderSkillFeedModal(): string {
   </div>`;
 }
 
-function renderSymbolDetailModal(): string {
-  if (symbolDetailIndex == null) return "";
-  const sym = save.symbols[symbolDetailIndex];
-  if (!sym) return "";
-  const set = SYMBOL_SETS.find((x) => x.id === sym.setId);
-  const rarity = symbolQualityMeta(sym.quality);
-  const wornUid =
-    save.roster.find((m) => (m.symbolSlots ?? []).includes(sym.id))?.uid ?? null;
-  const wornMon = wornUid ? save.roster.find((m) => m.uid === wornUid) : null;
-  const wornName = wornMon ? describeOwned(wornMon) : null;
-  const mainLine = formatSymbolStatLine(sym.mainStat, symbolMainDisplayValue(sym));
-  const subs: string[] = [];
-  for (const sub of sym.substats ?? []) {
-    subs.push(formatSymbolStatLine(sub.stat, sub.value));
-  }
-  if (sym.prefixStat && sym.prefixValue) {
-    subs.push(formatSymbolStatLine(sym.prefixStat, sym.prefixValue));
-  }
-  const cap = Math.max(symbolSubstatCapacity(sym.stars), QUALITY_SUBSTAT_COUNT_SAFE(sym.quality));
-  while (subs.length < cap) subs.push("");
-  const subHtml = subs
-    .map((line) =>
-      line
-        ? `<p class="sym-detail-sub">${line}</p>`
-        : `<p class="sym-detail-sub is-empty">&mdash;</p>`,
-    )
-    .join("");
-  const setLine = set
-    ? `<span class="sym-detail-set-ico"><img src="${symbolSetArtSrc(set.id)}" width="20" height="20" alt="" draggable="false" /></span><span class="sym-detail-set-text">${t("ui.setPiecesN", { n: set.pieces })} ${set.effectKo}</span>`
-    : "";
-  const imprintable = canImprintSymbol(sym);
-  const maxed = sym.enhance >= MAX_SYMBOL_ENHANCE;
-  const title = `${set?.nameKo ?? sym.setId} ${STAR}${sym.stars} (${t("ui.slotN", { n: sym.slot })}) - ${rarity.label}`;
-  const thirdBtn = wornUid
-    ? `<button type="button" class="sym-detail-act" data-sym-detail-unequip>${t("ui.unequip")}</button>`
-    : `<button type="button" class="sym-detail-act" data-sym-detail-equip>${t("ui.818a75cd98")}</button>`;
-  return `<div class="settings-layer sym-detail-layer" id="sym-detail-layer" aria-hidden="false">
-    <button type="button" class="settings-backdrop" id="btn-sym-detail-close" aria-label="close"></button>
-    <div class="sym-detail-sheet rarity--${rarity.id}" role="dialog" aria-modal="true" aria-labelledby="sym-detail-title">
-      ${modalCloseX("close", "btn-sym-detail-close")}
-      <h3 class="sym-detail-title" id="sym-detail-title">${title}</h3>
-      <div class="sym-detail-body">
-        <div class="sym-detail-left">
-          <div class="sym-detail-hero">
-            ${renderSymIco({
-              setId: sym.setId,
-              slot: sym.slot,
-              enhance: sym.enhance,
-              rarityId: rarity.id,
-              stars: sym.stars,
-              size: "lg",
-            })}
-            <div class="sym-detail-main-wrap">
-              <p class="sym-detail-main">${mainLine}</p>
-              <small class="sym-detail-plus">+${sym.enhance}${wornName ? ` / ${wornName}` : ""}</small>
-            </div>
-          </div>
-          <div class="sym-detail-subs">${subHtml}</div>
-        </div>
-        <div class="sym-detail-right">
-          <p class="sym-detail-set">${setLine}</p>
-          <button type="button" class="sym-detail-act" data-sym-detail-imprint ${imprintable ? "" : "disabled"}>${t("ui.8b41b055f7")}</button>
-          <button type="button" class="sym-detail-act" data-sym-detail-enhance ${maxed ? "disabled" : ""}>${t("ui.3e1a337d93")}</button>
-          ${thirdBtn}
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
-
-function QUALITY_SUBSTAT_COUNT_SAFE(q: string | undefined): number {
-  switch (q) {
-    case "normal":
-      return 0;
-    case "advanced":
-    case "magic":
-      return 1;
-    case "rare":
-      return 2;
-    case "epic":
-    case "hero":
-      return 3;
-    case "legend":
-    default:
-      return 4;
-  }
-}
-
 function renderSymbolBagExpandModal(): string {
   if (!symbolBagExpandOpen) return "";
   const cur = symbolBagCapacity(save);
@@ -5548,7 +5688,7 @@ function renderSymbolBagExpandModal(): string {
   if (cost == null) return "";
   const add = SYMBOL_BAG_EXPAND_STEP;
   const next = Math.min(SYMBOL_BAG_MAX_SLOTS, cur + add);
-  return `<div class="settings-layer sym-detail-layer sym-bag-expand-layer" id="sym-bag-expand-layer" aria-hidden="false">
+  return `<div class="settings-layer sym-bag-expand-layer" id="sym-bag-expand-layer" aria-hidden="false">
     <button type="button" class="settings-backdrop" id="btn-sym-bag-expand-close" aria-label="close"></button>
     <div class="sym-bag-expand-sheet" role="dialog" aria-modal="true" aria-labelledby="sym-bag-expand-title">
       ${modalCloseX("close", "btn-sym-bag-expand-close")}
@@ -5575,37 +5715,6 @@ function renderSymbolBagExpandModal(): string {
   </div>`;
 }
 
-function renderSlotSymbolPicker(uid: string, slot: number): string {
-  const candidates = save.symbols
-    .map((s, i) => ({ s, i }))
-    .filter(({ s }) => s.slot === slot);
-  const mon = save.roster.find((m) => m.uid === uid);
-  return `<div class="equip-picker slot-sym-picker" aria-live="polite">
-    <p class="equip-picker-title">${t('ui.81d226110c')} ${slot} ${t('ui.0e69339fa1')}</p>
-    <p class="muted">${mon ? describeOwned(mon) : uid}</p>
-    <div class="stage-list">
-      ${
-        candidates.length
-          ? candidates
-              .map(({ s, i }) => {
-                const worn = symbolWearer(s.id);
-                const rarity = symbolQualityMeta(s.quality);
-                return `<button type="button" class="stage-card stage-card--sym" data-slot-equip-sym="${i}">
-                  ${renderSymIco({ setId: s.setId, slot: s.slot, enhance: s.enhance, rarityId: rarity.id, stars: s.stars, size: "sm" })}
-                  <span class="stage-card-body">
-                    <strong>${describeSymbol(s)}</strong>
-                    <small>${worn ? `${t('ui.ebe035bf0f')} ${worn} / ${t('ui.c686d05434')}` : t('ui.43d54a7358')}</small>
-                  </span>
-                </button>`;
-              })
-              .join("")
-          : `<p class="muted">${t("ui.noSymbolForSlot")}</p>`
-      }
-    </div>
-    <button type="button" class="secondary full" id="btn-slot-equip-cancel">${t('ui.19b2d19bc1')}</button>
-  </div>`;
-}
-
 function renderSymbolLoadout(uid: string, opts?: { slotsOnly?: boolean }): string {
   const mon = save.roster.find((m) => m.uid === uid);
   if (!mon) return "";
@@ -5618,8 +5727,7 @@ function renderSymbolLoadout(uid: string, opts?: { slotsOnly?: boolean }): strin
       const sym = id ? save.symbols.find((s) => s.id === id) : null;
       const slotNum = i + 1;
       if (sym) {
-        const symIdx = findSymbolIndexById(sym.id);
-        return `<button type="button" class="slot-cell filled" data-sym-detail="${symIdx}" title="${describeSymbol(sym)}">
+        return `<button type="button" class="slot-cell filled" data-unequip-uid="${uid}" data-unequip-slot="${slotNum}" title="${describeSymbol(sym)}">
           <span class="slot-num">${slotNum}</span>
           <span class="slot-label">${sym.setId}</span>
         </button>`;
@@ -5646,7 +5754,7 @@ function renderSymbolLoadout(uid: string, opts?: { slotsOnly?: boolean }): strin
               .map((s) => {
                 const accent = symbolSetAccent(s.setId);
                 return `<span class="set-chip${s.active ? " active" : ""}" style="--sym-accent:${accent}">
-                    <img class="set-chip-ico" src="${symbolSetArtSrc(s.setId)}" width="16" height="16" alt="" draggable="false" />
+                    <img class="set-chip-ico" src="${symbolSetArtSrc(s.setId)}" width="16" height="16" alt="" draggable="false" onerror="this.onerror=null;this.src='${symbolSetArtFallbackSrc(s.setId)}'" />
                     <span class="set-chip-label">${s.nameKo} ${s.count}/${s.pieces}${s.active ? ` / ${s.effectKo}` : ""}</span>
                   </span>`;
               })
@@ -5654,14 +5762,10 @@ function renderSymbolLoadout(uid: string, opts?: { slotsOnly?: boolean }): strin
           : `<p class="muted loadout-sets-empty">${t('ui.102350c0dd')}</p>`
       }`
     : "";
-  const picker =
-    slotEquipPick?.uid === uid
-      ? renderSlotSymbolPicker(uid, slotEquipPick.slot)
-      : "";
   if (opts?.slotsOnly) {
-    return `<div class="slot-row" aria-label="${t('ui.7cf8acb154')}">${cells}</div>${picker}`;
+    return `<div class="slot-row" aria-label="${t('ui.7cf8acb154')}">${cells}</div>`;
   }
-  return `<div class="slot-row" aria-label="${t('ui.7cf8acb154')}">${cells}</div>${stats}${picker}`;
+  return `<div class="slot-row" aria-label="${t('ui.7cf8acb154')}">${cells}</div>${stats}`;
 }
 
 
@@ -5678,31 +5782,52 @@ function renderMonsterRuneCircle(uid: string): string {
       const slotNum = i + 1;
       const picking = pickingSlot === slotNum ? " is-picking" : "";
       if (sym) {
-        const symIdx = findSymbolIndexById(sym.id);
         const rarity = symbolQualityMeta(sym.quality);
-        return `<button type="button" class="rune-slot rune-slot--${slotNum} filled rarity--${rarity.id}${picking}" data-sym-detail="${symIdx}" style="--sym-accent:${symbolSetAccent(sym.setId)}" title="${describeSymbol(sym)}">
+        return `<button type="button" class="rune-slot rune-slot--${slotNum} filled rarity--${rarity.id}${picking}" data-unequip-uid="${uid}" data-unequip-slot="${slotNum}" style="--sym-accent:${symbolSetAccent(sym.setId)}" title="${describeSymbol(sym)}">
           <span class="rune-slot-face">
-            <img class="rune-slot-plate" src="${symbolPlateSrc(rarity.id, slotNum)}" width="72" height="72" alt="" aria-hidden="true" draggable="false" />
-            <img class="rune-slot-art" src="${symbolArtSrc(sym.setId, slotNum)}" width="72" height="72" alt="" draggable="false" />
+            ${symbolPlateImg(rarity.id, slotNum, "rune-slot-plate", 72)}
+            ${symbolArtImg(sym.setId, slotNum, "rune-slot-art", 72)}
             <span class="rune-slot-plus">+${sym.enhance}</span>
           </span>
         </button>`;
       }
       return `<button type="button" class="rune-slot rune-slot--${slotNum} empty${picking}" data-slot-pick-uid="${uid}" data-slot-pick="${slotNum}" title="${t("ui.3f1100d730")}">
           <span class="rune-slot-face">
-            <img class="rune-slot-art" src="${symbolEmptySlotArtSrc(slotNum)}" width="72" height="72" alt="" draggable="false" />
+            ${symbolEmptySlotImg(slotNum, "rune-slot-art", 72)}
           </span>
         </button>`;
     })
     .join("");
-  const picker =
-    slotEquipPick?.uid === uid
-      ? renderSlotSymbolPicker(uid, slotEquipPick.slot)
-      : "";
   return `<div class="rune-circle" aria-label="${t("ui.7cf8acb154")}">
     <img class="rune-circle-frame" src="${symbolCircleFrameSrc()}" width="240" height="240" alt="" aria-hidden="true" draggable="false" />
     ${cells}
-  </div>${picker}`;
+  </div>`;
+}
+
+function symbolQualityRank(quality: string | undefined): number {
+  switch (normalizeSymbolQuality(quality)) {
+    case "legend":
+      return 5;
+    case "epic":
+      return 4;
+    case "rare":
+      return 3;
+    case "advanced":
+      return 2;
+    case "normal":
+      return 1;
+  }
+}
+
+function compareSymbolsByGradeDesc(
+  a: { quality?: string; enhance?: number; stars?: number },
+  b: { quality?: string; enhance?: number; stars?: number },
+): number {
+  const qd = symbolQualityRank(b.quality) - symbolQualityRank(a.quality);
+  if (qd !== 0) return qd;
+  const ed = (b.enhance ?? 0) - (a.enhance ?? 0);
+  if (ed !== 0) return ed;
+  return (b.stars ?? 0) - (a.stars ?? 0);
 }
 
 /** Compact symbol bag grid (SW inventory) for the symbols tab. */
@@ -5715,7 +5840,7 @@ function symbolInvFilterSlotsIsAll(): boolean {
 }
 
 function symbolInvFilterSetLabel(): string {
-  if (symbolInvFilterSetsIsAll()) return t("ui.symFilterAll");
+  if (symbolInvFilterSetsIsAll()) return t("ui.symFilterAllSets");
   if (symbolInvFilterSets.size === 0) return t("ui.symFilterNone");
   if (symbolInvFilterSets.size === 1) {
     const id = [...symbolInvFilterSets][0]!;
@@ -5725,7 +5850,7 @@ function symbolInvFilterSetLabel(): string {
 }
 
 function symbolInvFilterSlotLabel(): string {
-  if (symbolInvFilterSlotsIsAll()) return t("ui.symFilterAll");
+  if (symbolInvFilterSlotsIsAll()) return t("ui.symFilterAllSlots");
   if (symbolInvFilterSlots.size === 0) return t("ui.symFilterNone");
   if (symbolInvFilterSlots.size === 1) {
     const n = [...symbolInvFilterSlots][0]!;
@@ -5741,12 +5866,280 @@ function applySymbolInvSlotFilter(slot: SymbolSlotNum | "all"): void {
   symbolInvFilterOpen = null;
 }
 
+function renderSymbolSetBonusHtml(uid: string): string {
+  const preview = previewOwnedCombatStats(save, uid);
+  if (!preview?.sets.length) {
+    return `<p class="muted loadout-sets-empty">${t("ui.setBonusNone")}</p>`;
+  }
+  return `<div class="loadout-sets">${preview.sets
+    .map((set) => {
+      const accent = symbolSetAccent(set.setId);
+      return `<span class="set-chip${set.active ? " active" : ""}" style="--sym-accent:${accent}">
+        <img class="set-chip-ico" src="${symbolSetArtSrc(set.setId)}" width="16" height="16" alt="" draggable="false" onerror="this.onerror=null;this.src='${symbolSetArtFallbackSrc(set.setId)}'" />
+        <span class="set-chip-label">${set.nameKo} ${set.count}/${set.pieces}${set.active ? ` / ${set.effectKo}` : ""}</span>
+      </span>`;
+    })
+    .join("")}</div>`;
+}
+
+/** Soft-refresh symbol bag UI (filters + grid) without a full app re-render. */
+function refreshSymbolInventoryDom(): boolean {
+  const host = app.querySelector<HTMLElement>(".mon-sym-viewer-inv");
+  if (!host) return false;
+  host.innerHTML = renderSymbolInventoryGrid();
+  dematteArtInTree(host);
+  bindSymbolInventoryInteractions();
+  syncSymbolInvFilterMenuUi();
+  return true;
+}
+
+/** Soft-refresh rune circle, set bonuses, and inventory after equip/unequip/filter. */
+function refreshMonsterSymbolsPane(): boolean {
+  const uid = selectedEnhanceUid;
+  if (!uid) return false;
+  const pane = app.querySelector<HTMLElement>('.mon-pane[data-mon-pane="symbols"]');
+  if (!pane) return false;
+
+  const circle = pane.querySelector<HTMLElement>(".rune-circle");
+  if (circle) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = renderMonsterRuneCircle(uid);
+    const next = wrap.firstElementChild;
+    if (next) circle.replaceWith(next);
+  }
+
+  const effectBlock = pane.querySelector<HTMLElement>(".rune-effect-block");
+  if (effectBlock) {
+    [...effectBlock.children].forEach((child) => {
+      if (!(child as HTMLElement).classList.contains("rune-effect-head")) {
+        child.remove();
+      }
+    });
+    const wrap = document.createElement("div");
+    wrap.innerHTML = renderSymbolSetBonusHtml(uid);
+    while (wrap.firstChild) effectBlock.appendChild(wrap.firstChild);
+  }
+
+  const invHost = pane.querySelector<HTMLElement>(".mon-sym-viewer-inv");
+  if (invHost) {
+    invHost.innerHTML = renderSymbolInventoryGrid();
+    dematteArtInTree(invHost);
+  }
+
+  // Info-tab combat stats can change after equip — update if present.
+  const preview = previewOwnedCombatStats(save, uid);
+  const statsRoot = app.querySelector<HTMLElement>(
+    '.mon-pane[data-mon-pane="info"] .mon-inspect-stats',
+  );
+  if (preview && statsRoot) {
+    const vals = [
+      String(preview.final.hp),
+      String(preview.final.atk),
+      String(preview.final.def),
+      String(preview.final.spd),
+      `${preview.final.critRate}%`,
+      `${preview.final.critDmg}%`,
+      `${preview.final.accuracy}%`,
+      `${preview.final.resistance}%`,
+    ];
+    statsRoot.querySelectorAll<HTMLElement>(".stat-cell-v").forEach((el, i) => {
+      if (vals[i] != null) el.textContent = vals[i]!;
+    });
+  }
+
+  bindSymbolInventoryInteractions();
+  syncSymbolInvFilterMenuUi();
+  return true;
+}
+
+let symbolInvInteractAbort: AbortController | null = null;
+
+/** Bind filter / equip / slot-pick handlers (safe to re-call after soft DOM refresh). */
+function bindSymbolInventoryInteractions(): void {
+  symbolInvInteractAbort?.abort();
+  const ac = new AbortController();
+  symbolInvInteractAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+
+  app.querySelector("[data-expand-sym-bag]")?.addEventListener(
+    "click",
+    () => {
+      if (symbolBagExpandCost(save) == null) {
+        flash(t("ui.expandSymbolBagMax"));
+        return;
+      }
+      symbolBagExpandOpen = true;
+      render();
+    },
+    opts,
+  );
+
+  app.querySelectorAll<HTMLButtonElement>("[data-sym-filter-toggle]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      (ev) => {
+        ev.stopPropagation();
+        const kind = btn.dataset.symFilterToggle;
+        if (kind !== "set" && kind !== "slot") return;
+        symbolInvFilterOpen = symbolInvFilterOpen === kind ? null : kind;
+        if (!refreshSymbolInventoryDom()) render();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll(".mon-sym-filter-menu").forEach((menu) => {
+    menu.addEventListener(
+      "pointerdown",
+      (ev) => {
+        ev.stopPropagation();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll<HTMLInputElement>("[data-sym-filter-set]").forEach((input) => {
+    input.addEventListener(
+      "change",
+      () => {
+        const key = input.dataset.symFilterSet ?? "";
+        if (key === "all") {
+          if (input.checked) {
+            symbolInvFilterSets = new Set(SYMBOL_SETS.map((s) => s.id));
+          } else {
+            symbolInvFilterSets = new Set();
+          }
+        } else if (SYMBOL_SETS.some((s) => s.id === key)) {
+          const id = key as SymbolSetId;
+          if (input.checked) symbolInvFilterSets.add(id);
+          else symbolInvFilterSets.delete(id);
+        }
+        symbolInvFilterOpen = "set";
+        if (!refreshSymbolInventoryDom()) render();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll<HTMLInputElement>("[data-sym-filter-slot]").forEach((input) => {
+    input.addEventListener(
+      "change",
+      () => {
+        const key = input.dataset.symFilterSlot ?? "";
+        if (key === "all") {
+          symbolInvFilterSlots = input.checked
+            ? new Set(SYMBOL_SLOT_NUMS)
+            : new Set();
+        } else {
+          const n = Number(key) as SymbolSlotNum;
+          if (SYMBOL_SLOT_NUMS.includes(n)) {
+            if (input.checked) symbolInvFilterSlots.add(n);
+            else symbolInvFilterSlots.delete(n);
+          }
+        }
+        symbolInvFilterOpen = "slot";
+        if (!refreshSymbolInventoryDom()) render();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-equip-from-inv]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const idx = Number(btn.dataset.equipFromInv);
+        if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+        const sym = save.symbols[idx]!;
+        if (slotEquipPick) {
+          if (sym.slot !== slotEquipPick.slot) return;
+          const r = runEquipSymbol(save, slotEquipPick.uid, String(idx));
+          save = r.save;
+          persist();
+          slotEquipPick = null;
+          applySymbolInvSlotFilter("all");
+          flash(r.message);
+          if (!refreshMonsterSymbolsPane()) render();
+          return;
+        }
+        const uid = selectedEnhanceUid;
+        if (!uid) return;
+        const r = runEquipSymbol(save, uid, String(idx));
+        save = r.save;
+        persist();
+        monDetailTab = "symbols";
+        applyMonDetailTabUi();
+        flash(r.message);
+        if (!refreshMonsterSymbolsPane()) render();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-slot-pick]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const uid = btn.dataset.slotPickUid!;
+        const slot = Number(btn.dataset.slotPick);
+        if (!uid || !Number.isFinite(slot)) return;
+        const togglingOff =
+          slotEquipPick?.uid === uid && slotEquipPick.slot === slot;
+        if (togglingOff) {
+          slotEquipPick = null;
+          applySymbolInvSlotFilter("all");
+        } else {
+          slotEquipPick = { uid, slot };
+          if (SYMBOL_SLOT_NUMS.includes(slot as SymbolSlotNum)) {
+            applySymbolInvSlotFilter(slot as SymbolSlotNum);
+          }
+          symbolInvFilterSets = new Set(SYMBOL_SETS.map((s) => s.id));
+          monDetailTab = "symbols";
+          applyMonDetailTabUi();
+        }
+        if (!refreshMonsterSymbolsPane()) render();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-unequip-uid]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const uid = btn.dataset.unequipUid!;
+        const slot = Number(btn.dataset.unequipSlot);
+        const r = runUnequipSymbol(save, uid, slot);
+        save = r.save;
+        persist();
+        slotEquipPick = null;
+        flash(r.message);
+        if (!refreshMonsterSymbolsPane()) render();
+      },
+      opts,
+    );
+  });
+}
+
+function clearSymbolInvFilterMenuPortal(): void {
+  document.querySelectorAll("body > .mon-sym-filter-menu").forEach((el) => el.remove());
+}
+
+function findSymbolInvFilterMenu(kind: SymbolInvFilterKind): HTMLElement | null {
+  return (
+    document.querySelector<HTMLElement>(
+      `body > .mon-sym-filter-menu[data-sym-filter-menu="${kind}"]`,
+    ) ??
+    app.querySelector<HTMLElement>(`.mon-sym-filter-menu[data-sym-filter-menu="${kind}"]`)
+  );
+}
+
 /** Anchor the fixed filter menu to its toggle (avoids panel overflow clip). */
 function placeSymbolInvFilterMenu(): void {
   const kind = symbolInvFilterOpen;
   if (!kind) return;
   const btn = app.querySelector<HTMLElement>(`[data-sym-filter-toggle="${kind}"]`);
-  const menu = app.querySelector<HTMLElement>(`.mon-sym-filter-menu[data-sym-filter-menu="${kind}"]`);
+  const menu = findSymbolInvFilterMenu(kind);
   if (!btn || !menu) return;
   const r = btn.getBoundingClientRect();
   const pad = 8;
@@ -5765,16 +6158,34 @@ function placeSymbolInvFilterMenu(): void {
 function syncSymbolInvFilterMenuUi(): void {
   symbolInvFilterUiAbort?.abort();
   symbolInvFilterUiAbort = null;
+  clearSymbolInvFilterMenuPortal();
   if (!symbolInvFilterOpen) return;
+  const kind = symbolInvFilterOpen;
+  const menu = app.querySelector<HTMLElement>(
+    `.mon-sym-filter-menu[data-sym-filter-menu="${kind}"]`,
+  );
+  if (!menu) return;
+  // Portal to body so hub-screen transform / overflow cannot clip the menu.
+  document.body.appendChild(menu);
   placeSymbolInvFilterMenu();
   requestAnimationFrame(placeSymbolInvFilterMenu);
   const ac = new AbortController();
   symbolInvFilterUiAbort = ac;
   const onOutside = (ev: Event) => {
     const target = ev.target as HTMLElement | null;
-    if (target?.closest?.(".mon-sym-filter")) return;
+    if (
+      target?.closest?.(".mon-sym-filter") ||
+      target?.closest?.(".mon-sym-filter-menu")
+    ) {
+      return;
+    }
     symbolInvFilterOpen = null;
-    render();
+    symbolInvFilterUiAbort?.abort();
+    symbolInvFilterUiAbort = null;
+    clearSymbolInvFilterMenuPortal();
+    app.querySelectorAll<HTMLButtonElement>("[data-sym-filter-toggle]").forEach((btn) => {
+      btn.setAttribute("aria-expanded", "false");
+    });
   };
   // Defer so the opening click does not immediately close the menu.
   setTimeout(() => {
@@ -5790,6 +6201,13 @@ function syncSymbolInvFilterMenuUi(): void {
       if (symbolInvFilterOpen) placeSymbolInvFilterMenu();
     },
     { signal: ac.signal },
+  );
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (symbolInvFilterOpen) placeSymbolInvFilterMenu();
+    },
+    { capture: true, signal: ac.signal },
   );
 }
 
@@ -5827,18 +6245,19 @@ function renderSymbolInventoryGrid(): string {
       ({ sym }) =>
         symbolInvFilterSets.has(sym.setId) &&
         symbolInvFilterSlots.has(sym.slot as SymbolSlotNum),
-    );
+    )
+    .sort((a, b) => compareSymbolsByGradeDesc(a.sym, b.sym));
   const tiles: string[] = [];
   for (const { sym, i } of visible) {
     const worn = symbolWearer(sym.id);
     const rarity = symbolQualityMeta(sym.quality);
     const grade = invGradeFromRarityId(rarity.id);
     tiles.push(`<div class="mon-sym-inv-cell">
-        <button type="button" class="mon-sym-inv-tile inv-grade--${grade} rarity--${rarity.id}${worn ? " is-worn" : ""}" data-sym-detail="${i}" title="${describeSymbol(sym)}">
-          <img class="mon-sym-inv-grade-plate" src="${invGradePlateSrc(grade)}" width="112" height="112" alt="" aria-hidden="true" draggable="false" />
+        <button type="button" class="mon-sym-inv-tile inv-grade--${grade} rarity--${rarity.id}${worn ? " is-worn" : ""}" data-equip-from-inv="${i}" title="${describeSymbol(sym)}">
+          ${invGradePlateImg(grade, "mon-sym-inv-grade-plate", 112)}
           <span class="mon-sym-inv-ico" aria-hidden="true">
-            <img class="mon-sym-inv-plate" src="${symbolPlateSrc(rarity.id, sym.slot)}" alt="" draggable="false" />
-            <img class="mon-sym-inv-mark" src="${symbolArtSrc(sym.setId, sym.slot)}" alt="" draggable="false" />
+            ${symbolPlateImg(rarity.id, sym.slot, "mon-sym-inv-plate", 72)}
+            ${symbolArtImg(sym.setId, sym.slot, "mon-sym-inv-mark", 48)}
             <span class="mon-sym-inv-enh">${sym.enhance}</span>
           </span>
           ${worn ? `<span class="mon-sym-inv-worn">E</span>` : ""}
@@ -5850,7 +6269,7 @@ function renderSymbolInventoryGrid(): string {
     for (let e = 0; e < emptyCount; e++) {
       tiles.push(`<div class="mon-sym-inv-cell" aria-hidden="true">
         <div class="mon-sym-inv-tile is-empty">
-          <span class="mon-sym-inv-empty-face"></span>
+          ${symbolEmptySlotImg(((e % 6) + 1), "mon-sym-inv-empty-art", 48)}
         </div>
       </div>`);
     }
@@ -5858,12 +6277,12 @@ function renderSymbolInventoryGrid(): string {
   const setFilterRows = [
     `<label class="mon-sym-filter-row">
       <input type="checkbox" data-sym-filter-set="all" ${filterSetsAll ? "checked" : ""} />
-      <span>${escapeHtml(t("ui.symFilterAll"))}</span>
+      <span>${escapeHtml(t("ui.symFilterAllSets"))}</span>
     </label>`,
     ...SYMBOL_SETS.map(
       (s) => `<label class="mon-sym-filter-row">
       <input type="checkbox" data-sym-filter-set="${s.id}" ${symbolInvFilterSets.has(s.id) ? "checked" : ""} />
-      <img class="mon-sym-filter-ico" src="${symbolSetArtSrc(s.id)}" width="16" height="16" alt="" draggable="false" />
+      <img class="mon-sym-filter-ico" src="${symbolSetArtSrc(s.id)}" width="16" height="16" alt="" draggable="false" onerror="this.onerror=null;this.src='${symbolSetArtFallbackSrc(s.id)}'" />
       <span>${escapeHtml(s.nameKo)}</span>
     </label>`,
     ),
@@ -5871,12 +6290,12 @@ function renderSymbolInventoryGrid(): string {
   const slotFilterRows = [
     `<label class="mon-sym-filter-row">
       <input type="checkbox" data-sym-filter-slot="all" ${filterSlotsAll ? "checked" : ""} />
-      <span>${escapeHtml(t("ui.symFilterAll"))}</span>
+      <span>${escapeHtml(t("ui.symFilterAllSlots"))}</span>
     </label>`,
     ...SYMBOL_SLOT_NUMS.map(
       (n) => `<label class="mon-sym-filter-row">
       <input type="checkbox" data-sym-filter-slot="${n}" ${symbolInvFilterSlots.has(n) ? "checked" : ""} />
-      <img class="mon-sym-filter-ico mon-sym-filter-ico--slot" src="${symbolEmptySlotArtSrc(n)}" width="16" height="16" alt="" draggable="false" />
+      ${symbolEmptySlotImg(n, "mon-sym-filter-ico mon-sym-filter-ico--slot", 16)}
       <span>${escapeHtml(t("ui.symSlotLabel", { n }))}</span>
     </label>`,
     ),
@@ -6030,6 +6449,16 @@ function gearSlotArtSrc(
   element?: SummonerElement | string,
 ): string {
   if (slot === "weapon" && element) {
+    return `/art/ui/gear/weapon-${element}.webp`;
+  }
+  return `/art/ui/gear/${slot}.webp`;
+}
+
+function gearSlotArtFallbackSrc(
+  slot: GearSlot,
+  element?: SummonerElement | string,
+): string {
+  if (slot === "weapon" && element) {
     return `/art/ui/gear/weapon-${element}.svg`;
   }
   return `/art/ui/gear/${slot}.svg`;
@@ -6050,7 +6479,9 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
     const grade = gearStarsToInvGrade(piece.stars);
     const qLabel = gearQualityLabel(piece.quality);
     const art = gearSlotArtSrc(slot, piece.element ?? activeEl);
+    const artFb = gearSlotArtFallbackSrc(slot, piece.element ?? activeEl);
     return `<button type="button" class="gear-slot inv-grade--${grade}${fxGear === slot ? " is-flash" : ""}${maxed ? " is-max" : ""}" data-gear="${slot}" ${maxed ? "disabled" : ""} title="${escapeHtml(describeGear(piece))}">
+      <img class="gear-slot-ico" src="${art}" width="40" height="40" alt="" draggable="false" onerror="this.onerror=null;this.src='${artFb}'" />
       <span class="gear-slot-seal" aria-hidden="true"><img src="${art}" width="22" height="22" alt="" draggable="false" /></span>
       <span class="gear-slot-body">
         <span class="gear-slot-label">${escapeHtml(gearSlotLabel(slot))}</span>
@@ -6096,7 +6527,7 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
               : "";
           return `<div class="gear-tile inv-grade--${grade}${canEquip ? "" : " is-element-locked"}">
           <button type="button" class="gear-tile-main" data-gear-equip="${i}" title="${escapeHtml(describeGear(piece))}${lockHint ? ` · ${escapeHtml(lockHint)}` : ""}">
-            <span class="gear-tile-seal" aria-hidden="true"><img src="${gearSlotArtSrc(piece.slot, piece.element)}" width="28" height="28" alt="" draggable="false" /></span>
+            <span class="gear-tile-seal" aria-hidden="true"><img src="${gearSlotArtSrc(piece.slot, piece.element)}" width="28" height="28" alt="" draggable="false" onerror="this.onerror=null;this.src='${gearSlotArtFallbackSrc(piece.slot, piece.element)}'" /></span>
             <strong>${escapeHtml(describeGear(piece))}</strong>
             <small>${escapeHtml(gearSlotLabel(piece.slot))} · ${escapeHtml(gearQualityLabel(piece.quality))}${lockHint ? ` · ${escapeHtml(lockHint)}` : ""}</small>
           </button>
@@ -6142,7 +6573,7 @@ function codexCellHtml(
     `<span class="codex-cell-fallback">${m.element[0]?.toUpperCase() ?? "?"}</span>`;
   const stars = monStarsHtml(starN);
   return `<button type="button" class="codex-cell inv-grade--${grade} el-${m.element}${have ? " is-owned" : " is-locked"}${codexDetailMonsterId === m.id ? " is-active" : ""}" data-codex-mon="${m.id}" data-codex-stars="${m.naturalStars}" title="${have ? escapeHtml(m.nameKo) : escapeHtml(t("ui.codexLocked"))}">
-    <img class="codex-cell-grade-plate" src="${invGradePlateSrc(grade)}" width="112" height="112" alt="" aria-hidden="true" draggable="false" />
+    ${invGradePlateImg(grade, "codex-cell-grade-plate", 112)}
     <span class="codex-cell-art" aria-hidden="true">${art}</span>
     <span class="codex-cell-stars">${stars}</span>
     ${have ? "" : `<span class="codex-cell-lock" aria-hidden="true">${CODEX_LOCK_HTML}</span>`}
@@ -6177,7 +6608,7 @@ function codexMonsterDetailHtml(monsterId: string | null): string {
     .join("");
   return `<div class="codex-detail" role="dialog" aria-label="${escapeHtml(def.nameKo)}">
     <div class="codex-detail-art inv-grade--${grade} el-${def.element}${have ? "" : " is-locked"}">
-      <img class="codex-detail-grade-plate" src="${invGradePlateSrc(grade)}" width="112" height="112" alt="" aria-hidden="true" draggable="false" />
+      ${invGradePlateImg(grade, "codex-detail-grade-plate", 112)}
       ${art}
     </div>
     <div class="codex-detail-body">
@@ -6405,7 +6836,7 @@ function renderSummonerBook(): string {
             : "";
       return `<div class="sum-magic-tile${open ? " is-on" : " is-locked"}">
         <div class="sum-magic-tile-head">
-          <img class="sum-magic-ico" src="${summonerSkillArtSrc(sk.id)}" width="40" height="40" alt="" draggable="false" decoding="async" />
+          ${summonerSkillArtImg(sk.id, "sum-magic-ico", 40)}
           <div class="sum-magic-tile-copy">
             <strong>${escapeHtml(sk.nameKo)}</strong>
             <small>${open ? `+${rank}/${MAX_MAGIC_RANK}` : escapeHtml(lockedHint || t("ui.stagePrepSkillLocked"))}</small>
@@ -6551,9 +6982,7 @@ function renderSummonerBook(): string {
 function renderEnhance(): string {
   enhanceTab = "monsters";
   const dock: "roster" | "symbols" =
-    equipPickSymIndex != null || forgeReveal || monBookDock === "symbols"
-      ? "symbols"
-      : "roster";
+    forgeReveal || monBookDock === "symbols" ? "symbols" : "roster";
 
   if (
     !selectedEnhanceUid ||
@@ -6642,19 +7071,7 @@ function renderEnhance(): string {
               <div class="rune-effect-head">
                 <strong>${t("ui.effect")}</strong>
               </div>
-              ${
-                selectedPreview?.sets.length
-                  ? `<div class="loadout-sets">${selectedPreview.sets
-                      .map((set) => {
-                        const accent = symbolSetAccent(set.setId);
-                        return `<span class="set-chip${set.active ? " active" : ""}" style="--sym-accent:${accent}">
-                          <img class="set-chip-ico" src="${symbolSetArtSrc(set.setId)}" width="16" height="16" alt="" draggable="false" />
-                          <span class="set-chip-label">${set.nameKo} ${set.count}/${set.pieces}${set.active ? ` / ${set.effectKo}` : ""}</span>
-                        </span>`;
-                      })
-                      .join("")}</div>`
-                  : `<p class="muted loadout-sets-empty">${t("ui.setBonusNone")}</p>`
-              }
+              ${renderSymbolSetBonusHtml(m.uid)}
             </div>
           </div>
           <div class="mon-sym-viewer-inv">${renderSymbolInventoryGrid()}</div>
@@ -6743,45 +7160,19 @@ function renderEnhance(): string {
       })()
     : `<div class="mon-book-empty muted">${t("ui.079b50d844")}</div>`;
 
-  const symbolsDock = `${
-    equipPickSymIndex != null && save.symbols[equipPickSymIndex]
-      ? `<div class="equip-picker" aria-live="polite">
-            <p class="equip-picker-title">${t("ui.d3d3707997")}</p>
-            <p class="muted">${describeSymbol(save.symbols[equipPickSymIndex]!)}</p>
-            <div class="stage-list">
-              ${save.roster
-                .map((m) => {
-                  const inParty = save.party.includes(m.uid);
-                  const slots = m.symbolSlots ?? [];
-                  const slot = save.symbols[equipPickSymIndex!]!.slot - 1;
-                  const occupied = slots[slot] ? t("ui.50ce91ae85") : "";
-                  return `<button type="button" class="stage-card" data-equip-to="${m.uid}">
-                    <span class="stage-card-mark" aria-hidden="true">${monsterArtImg(m.monsterId, "mon-slot-img", 36) || STAR}</span>
-                    <span class="stage-card-body">
-                  <strong>${describeOwned(m)}${inParty ? t("ui.7b191a9f9f") : ""}</strong>
-                      <small>${t("ui.81d226110c")} ${save.symbols[equipPickSymIndex!]!.slot}${occupied}</small>
-                    </span>
-                  </button>`;
-                })
-                .join("")}
-            </div>
-            <button type="button" class="secondary full auth-btn-ghost" id="btn-equip-cancel">${t("ui.19b2d19bc1")}</button>
-          </div>`
-      : ""
-  }
-    <div class="mon-sym-grid">
+  const symbolsDock = `<div class="mon-sym-grid">
       ${save.symbols.length
-        ? save.symbols
-            .map((sym, i) => {
-              const maxed = sym.enhance >= MAX_SYMBOL_ENHANCE;
+        ? [...save.symbols]
+            .map((sym, i) => ({ sym, i }))
+            .sort((a, b) => compareSymbolsByGradeDesc(a.sym, b.sym))
+            .map(({ sym, i }) => {
               const imprintable = canImprintSymbol(sym);
               const grindable = canGrindSymbol(sym);
-              const picking = equipPickSymIndex === i;
               const worn = symbolWearer(sym.id);
               const rarity = symbolQualityMeta(sym.quality);
               const setDef = SYMBOL_SETS.find((x) => x.id === sym.setId);
-              return `<div class="mon-sym-tile${picking ? " is-picking" : ""}">
-            <button type="button" class="mon-sym-main" data-sym-detail="${i}" title="${describeSymbol(sym)}">
+              return `<div class="mon-sym-tile">
+            <div class="mon-sym-main" title="${describeSymbol(sym)}">
               ${renderSymIco({
                 setId: sym.setId,
                 slot: sym.slot,
@@ -6794,11 +7185,12 @@ function renderEnhance(): string {
                 <strong class="mon-sym-name">${worn ? "E / " : ""}${setDef?.nameKo ?? sym.setId}</strong>
                 <small>+${sym.enhance}${worn ? ` / ${worn}` : ""}</small>
               </span>
-            </button>
+            </div>
             <div class="mon-sym-actions">
               <button type="button" class="secondary" data-grind="${i}" ${grindable ? "" : "disabled"}>${t("ui.c14c1b1bc6")}</button>
               <button type="button" class="secondary" data-imprint="${i}" ${imprintable ? "" : "disabled"}>${imprintable ? t("ui.8b41b055f7") : t("ui.b5f528925f")}</button>
-              <button type="button" class="secondary sym-eq${picking ? " active" : ""}" data-equip-sym="${i}">${picking ? t("ui.d21c4c3248") : t("ui.818a75cd98")}</button>
+              <button type="button" class="secondary" data-enhance-sym="${i}" ${sym.enhance >= MAX_SYMBOL_ENHANCE ? "disabled" : ""}>${t("ui.3e1a337d93")}</button>
+              <button type="button" class="secondary sym-eq" data-equip-sym="${i}">${t("ui.818a75cd98")}</button>
               <button type="button" class="secondary" data-sell-sym="${i}">+${symbolSellMana(sym.enhance)}</button>
             </div>
           </div>`;
@@ -6841,7 +7233,7 @@ function renderEnhance(): string {
             monsterArtImg(m.monsterId, "mon-slot-img", 56) ||
             (def?.element?.[0]?.toUpperCase() ?? "?");
           return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${el}${on ? " is-active" : ""}" data-select-mon="${m.uid}" role="option" aria-selected="${on ? "true" : "false"}" title="${describeOwned(m)}">
-        <img class="mon-slot-grade-plate" src="${invGradePlateSrc(grade)}" width="112" height="112" alt="" aria-hidden="true" draggable="false" />
+        ${invGradePlateImg(grade, "mon-slot-grade-plate", 112)}
         <span class="mon-slot-art" aria-hidden="true">${art}</span>
         <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
         <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
@@ -6869,7 +7261,6 @@ function renderEnhance(): string {
 
   const body = `<div class="hub-panel enhance-panel enhance-panel--desk">
     ${renderForgeReveal()}
-    ${renderSymbolDetailModal()}
     ${renderSymbolBagExpandModal()}
     ${renderSkillFeedModal()}
     ${monstersPanel}
@@ -7556,13 +7947,16 @@ function renderStageDropInfoModal(region: StagesRegion): string {
     ? t("ui.stageDropSetBonus", { n: set.pieces, effect: set.effectKo })
     : t("ui.setBonusNone");
   const setIco = set ? symbolSetArtSrc(set.id) : symbolEmptySlotArtSrc(1);
+  const setIcoFallback = set
+    ? symbolSetArtFallbackSrc(set.id)
+    : symbolEmptySlotArtFallbackSrc(1);
   const setName = set?.nameKo ?? "—";
   const pieceExpand = stagesDropSetExpand && set
     ? `<div class="stage-drop-info-pieces">${[1, 2, 3, 4, 5, 6]
         .map(
           (slot) =>
             `<span class="stage-drop-info-piece" title="${t("ui.stageDropPiece", { name: set.nameKo, slot })}">
-              <img src="${symbolArtSrc(set.id, slot)}" width="36" height="36" alt="" draggable="false" />
+              ${symbolArtImg(set.id, slot, "", 36)}
               <small>${set.nameKo}${slot}</small>
             </span>`,
         )
@@ -7614,7 +8008,7 @@ function renderStageDropInfoModal(region: StagesRegion): string {
         </div>
         <div class="stage-drop-info-panel">
           <div class="stage-drop-info-row stage-drop-info-row--set">
-            <span class="stage-drop-info-ico" aria-hidden="true"><img src="${setIco}" width="44" height="44" alt="" draggable="false" /></span>
+            <span class="stage-drop-info-ico" aria-hidden="true"><img src="${setIco}" width="44" height="44" alt="" draggable="false"${setIcoFallback ? ` onerror="this.onerror=null;this.src='${setIcoFallback}'"` : ""} /></span>
             <span class="stage-drop-info-copy">
               <strong>${setName}</strong>
               <small>${setBonus}</small>
@@ -7879,11 +8273,11 @@ function renderBattle(manaPct: number): string {
         ${renderSkillButtons(active, awaitSkill)}
       </div>
       <div class="skill-cluster skill-cluster--summoner" aria-label="${t('ui.5618aec54c')}">
-        <button type="button" id="sk-ult" class="summoner-sk ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}><img class="sk-ico" src="${summonerSkillArtSrc("open")}" width="28" height="28" alt="" draggable="false" decoding="async" /><span class="sk-name">${t('ui.2d99fde255')}</span></button>
-        <button type="button" id="sk-declare" class="summoner-sk declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}><img class="sk-ico" src="${summonerSkillArtSrc("declare")}" width="28" height="28" alt="" draggable="false" decoding="async" /><span class="sk-name">${t('ui.bd1967124e')}</span></button>
-        <button type="button" id="sk-dual" class="summoner-sk dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}><img class="sk-ico" src="${summonerSkillArtSrc("dual")}" width="28" height="28" alt="" draggable="false" decoding="async" /><span class="sk-name">${t('ui.1fa6111a65')}</span></button>
-        <button type="button" id="sk-clean" class="summoner-sk clean${canClean ? " ready" : ""}" ${awaitSkill && canClean ? "" : "disabled"}><img class="sk-ico" src="${summonerSkillArtSrc("clean")}" width="28" height="28" alt="" draggable="false" decoding="async" /><span class="sk-name">${t('ui.ac2f6c7ca5')}</span></button>
-        <button type="button" id="sk-guard" class="summoner-sk guard${canGuard ? " ready" : ""}" ${awaitSkill && canGuard ? "" : "disabled"}><img class="sk-ico" src="${summonerSkillArtSrc("guard")}" width="28" height="28" alt="" draggable="false" decoding="async" /><span class="sk-name">${t('ui.0be109c051')}</span></button>
+        <button type="button" id="sk-ult" class="summoner-sk ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>${summonerSkillArtImg("open", "sk-ico", 28)}<span class="sk-name">${t('ui.2d99fde255')}</span></button>
+        <button type="button" id="sk-declare" class="summoner-sk declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}>${summonerSkillArtImg("declare", "sk-ico", 28)}<span class="sk-name">${t('ui.bd1967124e')}</span></button>
+        <button type="button" id="sk-dual" class="summoner-sk dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}>${summonerSkillArtImg("dual", "sk-ico", 28)}<span class="sk-name">${t('ui.1fa6111a65')}</span></button>
+        <button type="button" id="sk-clean" class="summoner-sk clean${canClean ? " ready" : ""}" ${awaitSkill && canClean ? "" : "disabled"}>${summonerSkillArtImg("clean", "sk-ico", 28)}<span class="sk-name">${t('ui.ac2f6c7ca5')}</span></button>
+        <button type="button" id="sk-guard" class="summoner-sk guard${canGuard ? " ready" : ""}" ${awaitSkill && canGuard ? "" : "disabled"}>${summonerSkillArtImg("guard", "sk-ico", 28)}<span class="sk-name">${t('ui.0be109c051')}</span></button>
       </div>
       <div class="skill-cluster skill-cluster--util">
         <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>${t('ui.4b0ea2fcd0')}</button>
@@ -8441,7 +8835,7 @@ function bindIslandLayoutEdit(): void {
     render();
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-b]").forEach((btn) => {
+  app.querySelectorAll<HTMLElement>("[data-b]").forEach((btn) => {
     btn.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0) return;
       const id = btn.dataset.b;
@@ -8476,6 +8870,7 @@ function bindIslandLayoutEdit(): void {
           } catch {
             /* ignore */
           }
+          setIslandSpotMenu(null);
           enterIslandLayoutEdit(id);
         }, 520),
       };
@@ -8648,6 +9043,8 @@ function bind(): void {
       resMoreOpen = false;
       communityOpen = false;
       shopOpen = false;
+      closeBuildingInfoSoft();
+      setIslandSpotMenu(null);
       closeChatOverlay();
       applySettingsOpen();
       applyMailboxOpen();
@@ -8718,6 +9115,8 @@ function bind(): void {
       resMoreOpen = false;
       missionOpen = false;
       shopOpen = false;
+      closeBuildingInfoSoft();
+      setIslandSpotMenu(null);
       closeChatOverlay();
       applySettingsOpen();
       applyMailboxOpen();
@@ -8744,6 +9143,8 @@ function bind(): void {
       resMoreOpen = false;
       missionOpen = false;
       communityOpen = false;
+      closeBuildingInfoSoft();
+      setIslandSpotMenu(null);
       closeChatOverlay();
       applySettingsOpen();
       applyMailboxOpen();
@@ -8968,9 +9369,13 @@ function bind(): void {
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-b]").forEach((btn) => {
+  app.querySelectorAll<HTMLElement>("[data-b]").forEach((btn) => {
     if (preserveIslandDom) return;
     btn.addEventListener("click", (ev) => {
+      const target = ev.target as HTMLElement | null;
+      if (target?.closest?.("[data-spot-enter], [data-spot-info], [data-collect]")) {
+        return;
+      }
       if (app.querySelector("#island-viewport")?.getAttribute("data-pan-moved") === "1") {
         ev.preventDefault();
         return;
@@ -8992,45 +9397,48 @@ function bind(): void {
         return;
       }
       const id = btn.dataset.b;
-      if (id === "gateway") {
-        view = "stages";
-        render();
-      } else if (id === "mana_pond") {
-        view = "pond";
-        renderPreservingIsland();
-      } else if (id === "crystal_mine") {
-        view = "mine";
-        renderPreservingIsland();
-      } else if (id === "wish") {
-        wishReveal = null;
-        view = "wish";
-        renderPreservingIsland();
-      } else if (id === "glory") {
-        view = "glory";
-        renderPreservingIsland();
-      } else if (id === "dojo") {
-        view = "dojo";
-        renderPreservingIsland();
-      } else if (id === "guild") {
-        openCommunityModalSoft();
-      } else if (id === "fusion") {
-        view = "fusion";
-        renderPreservingIsland();
-      } else if (id === "summon_hearth") {
-        view = "summon";
-        renderPreservingIsland();
-      } else if (id === "power_circle") {
-        view = "enhance";
-        render();
-      } else if (id === "shop") {
-        openShopModalSoft();
-      } else if (id === "party") {
-        view = "party";
-        partyDraft = new Set(save.party);
-        renderPreservingIsland();
-      }
+      if (!id) return;
+      setIslandSpotMenu(islandSpotMenuId === id ? null : id);
     });
   });
+
+  if (!preserveIslandDom) {
+    app.querySelectorAll<HTMLButtonElement>("[data-spot-enter]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (app.querySelector("#island-viewport")?.getAttribute("data-pan-moved") === "1") return;
+        const id = btn.dataset.spotEnter;
+        if (!id) return;
+        enterIslandBuilding(id);
+      });
+    });
+    app.querySelectorAll<HTMLButtonElement>("[data-spot-info]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (app.querySelector("#island-viewport")?.getAttribute("data-pan-moved") === "1") return;
+        const id = btn.dataset.spotInfo;
+        if (!id) return;
+        openBuildingInfoSoft(id);
+      });
+    });
+    const viewport = app.querySelector<HTMLElement>("#island-viewport");
+    viewport?.addEventListener("click", (ev) => {
+      if (islandLayoutEdit || !islandSpotMenuId) return;
+      const target = ev.target as HTMLElement | null;
+      if (target?.closest?.("[data-b], [data-spot-enter], [data-spot-info], [data-collect]")) {
+        return;
+      }
+      if (viewport.getAttribute("data-pan-moved") === "1") return;
+      setIslandSpotMenu(null);
+    });
+  } else {
+    applyIslandSpotMenu();
+  }
+
+  const closeBuildingInfo = () => closeBuildingInfoSoft();
+  app.querySelector("#btn-building-info-close")?.addEventListener("click", closeBuildingInfo);
 
   app.querySelectorAll<HTMLButtonElement>("[data-summon-kind]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -9128,7 +9536,6 @@ function bind(): void {
       if (!el || el === (save.activeSummoner ?? "light")) return;
       save = setActiveSummoner(save, el);
       persist();
-      flash(t("summonerPicker.switched", { element: elementLabel(el) }));
       render();
     });
   });
@@ -9211,9 +9618,7 @@ function bind(): void {
       const raw = btn.dataset.monDock;
       if (raw === "roster" || raw === "symbols") {
         monBookDock = raw;
-        if (raw === "roster") {
-          equipPickSymIndex = null;
-        } else {
+        if (raw === "symbols") {
           monDetailTab = "symbols";
         }
         enhanceTab = "monsters";
@@ -9422,84 +9827,8 @@ function bind(): void {
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-sym-detail]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = Number(btn.dataset.symDetail);
-      if (!Number.isFinite(idx) || !save.symbols[idx]) return;
-      symbolDetailIndex = idx;
-      enhanceTab = "monsters";
-      render();
-    });
-  });
-
-  const closeSymDetail = () => {
-    symbolDetailIndex = null;
-    render();
-  };
-  app.querySelector("#btn-sym-detail-close")?.addEventListener("click", closeSymDetail);
-
-  app.querySelector("[data-sym-detail-enhance]")?.addEventListener("click", () => {
-    if (symbolDetailIndex == null) return;
-    const id = save.symbols[symbolDetailIndex]?.id;
-    const r = runEnhanceSymbol(save, String(symbolDetailIndex));
-    save = r.save;
-    persist();
-    if (id) {
-      const next = save.symbols.findIndex((x) => x.id === id);
-      symbolDetailIndex = next >= 0 ? next : null;
-    }
-    flash(r.message);
-    render();
-  });
-
-  app.querySelector("[data-sym-detail-imprint]")?.addEventListener("click", () => {
-    if (symbolDetailIndex == null) return;
-    const prev = save.symbols[symbolDetailIndex];
-    const before = prev ? describeSymbol(prev) : "";
-    const id = prev?.id;
-    const r = runImprintSymbol(save, String(symbolDetailIndex));
-    save = r.save;
-    persist();
-    const next = id ? save.symbols.find((x) => x.id === id) : undefined;
-    if (next && before && r.message.startsWith(t("ui.d48858f588"))) {
-      forgeReveal = {
-        kind: "imprint",
-        before,
-        after: describeSymbol(next),
-        cost: `${MINUS}${t("ui.5d0bf3b101")} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
-      };
-    }
-    if (id) {
-      const ni = save.symbols.findIndex((x) => x.id === id);
-      symbolDetailIndex = ni >= 0 ? ni : null;
-    }
-    flash(r.message);
-    render();
-  });
-
-  app.querySelector("[data-sym-detail-unequip]")?.addEventListener("click", () => {
-    if (symbolDetailIndex == null) return;
-    const sym = save.symbols[symbolDetailIndex];
-    if (!sym) return;
-    const mon = save.roster.find((m) => (m.symbolSlots ?? []).includes(sym.id));
-    if (!mon) return;
-    const slot = (mon.symbolSlots ?? []).findIndex((id) => id === sym.id) + 1;
-    const r = runUnequipSymbol(save, mon.uid, slot);
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
-  });
-
-  app.querySelector("[data-sym-detail-equip]")?.addEventListener("click", () => {
-    if (symbolDetailIndex == null) return;
-    const idx = symbolDetailIndex;
-    symbolDetailIndex = null;
-    equipPickSymIndex = idx;
-    monBookDock = "symbols";
-    enhanceTab = "monsters";
-    render();
-  });
+  bindSymbolInventoryInteractions();
+  syncSymbolInvFilterMenuUi();
 
   app.querySelectorAll<HTMLButtonElement>("[data-grind]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -9519,6 +9848,17 @@ function bind(): void {
           cost: `${MINUS}${t('ui.dc78e6a251')} ${SYMBOL_GRIND_MANA_COST}`,
         };
       }
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-enhance-sym]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = btn.dataset.enhanceSym!;
+      const r = runEnhanceSymbol(save, idx);
+      save = r.save;
+      persist();
       flash(r.message);
       render();
     });
@@ -9591,65 +9931,6 @@ function bind(): void {
     flash(r.message);
     render();
   });
-  app.querySelector("[data-expand-sym-bag]")?.addEventListener("click", () => {
-    if (symbolBagExpandCost(save) == null) {
-      flash(t("ui.expandSymbolBagMax"));
-      return;
-    }
-    symbolBagExpandOpen = true;
-    render();
-  });
-  app.querySelectorAll<HTMLButtonElement>("[data-sym-filter-toggle]").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const kind = btn.dataset.symFilterToggle;
-      if (kind !== "set" && kind !== "slot") return;
-      symbolInvFilterOpen = symbolInvFilterOpen === kind ? null : kind;
-      render();
-    });
-  });
-  app.querySelectorAll(".mon-sym-filter-menu").forEach((menu) => {
-    menu.addEventListener("pointerdown", (ev) => {
-      ev.stopPropagation();
-    });
-  });
-  app.querySelectorAll<HTMLInputElement>("[data-sym-filter-set]").forEach((input) => {
-    input.addEventListener("change", () => {
-      const key = input.dataset.symFilterSet ?? "";
-      if (key === "all") {
-        if (input.checked) {
-          symbolInvFilterSets = new Set(SYMBOL_SETS.map((s) => s.id));
-        } else {
-          symbolInvFilterSets = new Set();
-        }
-      } else if (SYMBOL_SETS.some((s) => s.id === key)) {
-        const id = key as SymbolSetId;
-        if (input.checked) symbolInvFilterSets.add(id);
-        else symbolInvFilterSets.delete(id);
-      }
-      symbolInvFilterOpen = "set";
-      render();
-    });
-  });
-  app.querySelectorAll<HTMLInputElement>("[data-sym-filter-slot]").forEach((input) => {
-    input.addEventListener("change", () => {
-      const key = input.dataset.symFilterSlot ?? "";
-      if (key === "all") {
-        symbolInvFilterSlots = input.checked
-          ? new Set(SYMBOL_SLOT_NUMS)
-          : new Set();
-      } else {
-        const n = Number(key) as SymbolSlotNum;
-        if (SYMBOL_SLOT_NUMS.includes(n)) {
-          if (input.checked) symbolInvFilterSlots.add(n);
-          else symbolInvFilterSlots.delete(n);
-        }
-      }
-      symbolInvFilterOpen = "slot";
-      render();
-    });
-  });
-  syncSymbolInvFilterMenuUi();
   const closeSymBagExpand = () => {
     if (!symbolBagExpandOpen) return;
     symbolBagExpandOpen = false;
@@ -9802,91 +10083,15 @@ function bind(): void {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.equipSym);
       if (!Number.isFinite(idx) || !save.symbols[idx]) return;
-      slotEquipPick = null;
-      equipPickSymIndex = equipPickSymIndex === idx ? null : idx;
-      if (equipPickSymIndex != null) {
-        monBookDock = "symbols";
-        enhanceTab = "monsters";
-      }
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-equip-to]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (equipPickSymIndex == null) return;
-      const uid = btn.dataset.equipTo!;
-      const r = runEquipSymbol(save, uid, String(equipPickSymIndex));
+      const uid = selectedEnhanceUid;
+      if (!uid) return;
+      const r = runEquipSymbol(save, uid, String(idx));
       save = r.save;
       persist();
-      equipPickSymIndex = null;
       slotEquipPick = null;
-      flash(r.message);
-      render();
-    });
-  });
-
-  app.querySelector("#btn-equip-cancel")?.addEventListener("click", () => {
-    equipPickSymIndex = null;
-    render();
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-slot-pick]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const uid = btn.dataset.slotPickUid!;
-      const slot = Number(btn.dataset.slotPick);
-      if (!uid || !Number.isFinite(slot)) return;
-      equipPickSymIndex = null;
-      const togglingOff =
-        slotEquipPick?.uid === uid && slotEquipPick.slot === slot;
-      if (togglingOff) {
-        slotEquipPick = null;
-        applySymbolInvSlotFilter("all");
-      } else {
-        slotEquipPick = { uid, slot };
-        if (SYMBOL_SLOT_NUMS.includes(slot as SymbolSlotNum)) {
-          applySymbolInvSlotFilter(slot as SymbolSlotNum);
-        }
-        // Show every set for the chosen slot number.
-        symbolInvFilterSets = new Set(SYMBOL_SETS.map((s) => s.id));
-        monDetailTab = "symbols";
-      }
+      monDetailTab = "symbols";
+      monBookDock = "symbols";
       enhanceTab = "monsters";
-      monBookDock = "roster";
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-slot-equip-sym]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (!slotEquipPick) return;
-      const idx = Number(btn.dataset.slotEquipSym);
-      if (!Number.isFinite(idx) || !save.symbols[idx]) return;
-      const r = runEquipSymbol(save, slotEquipPick.uid, String(idx));
-      save = r.save;
-      persist();
-      slotEquipPick = null;
-      equipPickSymIndex = null;
-      applySymbolInvSlotFilter("all");
-      flash(r.message);
-      render();
-    });
-  });
-
-  app.querySelector("#btn-slot-equip-cancel")?.addEventListener("click", () => {
-    slotEquipPick = null;
-    applySymbolInvSlotFilter("all");
-    render();
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-unequip-uid]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const uid = btn.dataset.unequipUid!;
-      const slot = Number(btn.dataset.unequipSlot);
-      const r = runUnequipSymbol(save, uid, slot);
-      save = r.save;
-      persist();
-      slotEquipPick = null;
       flash(r.message);
       render();
     });

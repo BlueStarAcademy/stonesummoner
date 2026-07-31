@@ -89,14 +89,14 @@ const RARITIES = [
 ];
 
 /**
- * Slot silhouettes (72×72) — clearly distinct, mockup-matched:
- * 1 trapezoid↑  2 house↑  3 parallelogram/  4 trapezoid↓  5 house↓  6 parallelogram\
+ * Slot silhouettes (72×72) — SW-like distinct plates, balanced & centered:
+ * 1 circle  2 house↑  3 triangle↑  4 trapezoid↓  5 hexagon  6 diamond
  */
 const SLOT = {
   1: {
-    outer: "M22 8 L50 8 L66 64 L6 64 Z",
-    inner: "M27 16 L45 16 L56 56 L16 56 Z",
-    edge: "M22 8 L50 8 L45 16 L27 16 Z",
+    outer: "M36 5a31 31 0 1 1 0 62a31 31 0 1 1 0-62",
+    inner: "M36 14a22 22 0 1 1 0 44a22 22 0 1 1 0-44",
+    edge: "M12 26a26 26 0 0 1 48 0a31 31 0 0 0-48 0",
   },
   2: {
     outer: "M36 2 L66 28 L58 66 L14 66 L6 28 Z",
@@ -104,9 +104,9 @@ const SLOT = {
     edge: "M36 2 L66 28 L56 32 L36 12 L16 32 L6 28 Z",
   },
   3: {
-    outer: "M10 14 L54 4 L62 58 L18 68 Z",
-    inner: "M18 20 L50 12 L55 52 L23 60 Z",
-    edge: "M10 14 L54 4 L50 12 L18 20 Z",
+    outer: "M36 6 L64 62 L8 62 Z",
+    inner: "M36 18 L52 54 L20 54 Z",
+    edge: "M36 6 L64 62 L8 62 Z M36 18 L20 54 L52 54 Z",
   },
   4: {
     outer: "M6 8 L66 8 L50 64 L22 64 Z",
@@ -114,216 +114,245 @@ const SLOT = {
     edge: "M6 8 L66 8 L56 16 L16 16 Z",
   },
   5: {
-    outer: "M14 6 L58 6 L66 44 L36 70 L6 44 Z",
-    inner: "M22 14 L50 14 L56 40 L36 60 L16 40 Z",
-    edge: "M14 6 L58 6 L50 14 L22 14 Z",
+    outer: "M36 4 L62 18 L62 50 L36 68 L10 50 L10 18 Z",
+    inner: "M36 14 L52 24 L52 46 L36 58 L20 46 L20 24 Z",
+    edge: "M36 4 L62 18 L52 24 L36 14 L20 24 L10 18 Z",
   },
   6: {
-    outer: "M10 4 L54 14 L62 68 L18 58 Z",
-    inner: "M17 12 L49 20 L55 60 L23 52 Z",
-    edge: "M10 4 L54 14 L49 20 L17 12 Z",
+    outer: "M36 4 L68 36 L36 68 L4 36 Z",
+    inner: "M36 14 L56 36 L36 58 L16 36 Z",
+    edge: "M36 4 L68 36 L56 36 L36 14 L16 36 L4 36 Z",
   },
 };
 
 /**
- * High-detail set glyphs — layered volume, gold rim, cream ink, specular.
+ * Ultra-detail set glyphs (SW rune mark language):
+ * dark volume shell → accent ink face → cream highlight → gold rim/gems/sparks.
  * Coordinates centered on 36,36 (72 viewBox).
  */
 function glyph(setId, uid) {
   const g = `url(#${uid}-gold)`;
   const ink = `url(#${uid}-ink)`;
   const shine = `url(#${uid}-shine)`;
+  const core = `url(#${uid}-core)`;
+  const deep = `url(#${uid}-deep)`;
   switch (setId) {
     case "hwalro":
-      // Living flame — triple petal + core ember
       return `
-      <path d="M36 12c4 6 9 12 11 20 2 8-2 16-11 22-9-6-13-14-11-22 2-8 7-14 11-20z"
-        fill="#142018" stroke="${g}" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M28 30c2-8 5-14 8-18 3 4 6 10 8 18 1 6-1 12-8 17-7-5-9-11-8-17z"
-        fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M32 34c1.2-5 2.8-9 4-12 1.2 3 2.8 7 4 12 .6 4-.6 8-4 11-3.4-3-4.6-7-4-11z"
-        fill="#FFF8D6" opacity=".55"/>
-      <ellipse cx="33" cy="28" rx="2.2" ry="4" fill="${shine}" opacity=".85"/>
-      <circle cx="36" cy="42" r="3.4" fill="#1A140C" stroke="${g}" stroke-width="1.4"/>
-      <circle cx="36" cy="42" r="1.5" fill="${g}"/>`;
+      <ellipse cx="36" cy="52" rx="14" ry="5" fill="${deep}" opacity=".55"/>
+      <path d="M22 48c2-16 7-26 14-36 7 10 12 20 14 36-5-4-9-5-14-5s-9 1-14 5z"
+        fill="${deep}" stroke="${g}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M26 46c2-12 5-20 10-28 5 8 8 16 10 28-3.5-3-6.5-4-10-4s-6.5 1-10 4z"
+        fill="${ink}" stroke="#5A4214" stroke-width="1.1"/>
+      <path d="M30 44c1.5-8 3.5-14 6-20 2.5 6 4.5 12 6 20-2-2-4-2.5-6-2.5s-4 .5-6 2.5z"
+        fill="#FFF8D6" opacity=".5"/>
+      <path d="M28 34c3-2 8-3 13-1" fill="none" stroke="${shine}" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>
+      <path d="M20 40 16 34M52 40 56 34M24 28 20 22M48 28 52 22"
+        stroke="${g}" stroke-width="1.5" stroke-linecap="round" opacity=".75"/>
+      <circle cx="36" cy="46" r="5" fill="${deep}" stroke="${g}" stroke-width="1.5"/>
+      <circle cx="36" cy="46" r="2.6" fill="${core}"/>
+      <circle cx="36" cy="46" r="1.1" fill="#FFF8D6"/>
+      <ellipse cx="32" cy="26" rx="2.4" ry="4" fill="${shine}" opacity=".85"/>`;
     case "yongmaeng":
-      // Fatal spearhead + wing barbs
       return `
-      <path d="M36 10 42 30h12l-9 8 4 16-13-9-13 9 4-16-9-8h12z"
-        fill="#24140C" stroke="${g}" stroke-width="1.9" stroke-linejoin="round"/>
-      <path d="M36 16 40 32h8l-6 5.5 2.5 11-6.5-4.5-6.5 4.5 2.5-11-6-5.5h8z"
+      <path d="M36 8 42 26h14l-11 9 5 20-14-11-14 11 5-20-11-9h14z"
+        fill="${deep}" stroke="${g}" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M36 14 40 28h9l-7 5.5 3 13-8-6.5-8 6.5 3-13-7-5.5h9z"
         fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M36 10v8" stroke="${g}" stroke-width="2" stroke-linecap="round"/>
-      <path d="M22 34h-6M50 34h6" stroke="${g}" stroke-width="1.8" stroke-linecap="round" opacity=".75"/>
-      <circle cx="36" cy="36" r="3.2" fill="#1A140C" stroke="${g}" stroke-width="1.4"/>
-      <circle cx="36" cy="36" r="1.3" fill="${g}"/>
-      <ellipse cx="32" cy="24" rx="2" ry="3" fill="${shine}" opacity=".7"/>`;
+      <path d="M36 8v10" stroke="${g}" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M18 30 12 26M54 30 60 26M20 36h-7M52 36h7"
+        stroke="${g}" stroke-width="1.7" stroke-linecap="round" opacity=".8"/>
+      <path d="M28 22 36 18 44 22" fill="none" stroke="${shine}" stroke-width="1.4" stroke-linecap="round" opacity=".65"/>
+      <circle cx="36" cy="36" r="4.2" fill="${deep}" stroke="${g}" stroke-width="1.5"/>
+      <circle cx="36" cy="36" r="2.2" fill="${core}"/>
+      <circle cx="36" cy="36" r=".9" fill="#FFF8D6"/>
+      <ellipse cx="31" cy="22" rx="2.2" ry="3.2" fill="${shine}" opacity=".75"/>`;
     case "mussang":
-      // Crossed blades with jewel hub
       return `
-      <path d="M18 16 34 36 22 58l7 2 9-18 9 18 7-2-12-22 16-20-7-2-13 16L28 14z"
-        fill="#22180C" stroke="${g}" stroke-width="1.7" stroke-linejoin="round"/>
-      <path d="M24 20 34 34 26 50l4 1 6-13 6 13 4-1-8-16 10-14-4-1-8 10-8-11z"
+      <path d="M16 14 34 36 20 60l8 2.5 10-20 10 20 8-2.5-14-24 18-22-8-2.5-14 17L28 12z"
+        fill="${deep}" stroke="${g}" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M22 18 34 34 24 52l5 1.2 7-14 7 14 5-1.2-9-17 11-15-5-1.2-9 11-8-12z"
         fill="${ink}" stroke="#5A4214" stroke-width=".95"/>
-      <circle cx="36" cy="36" r="5" fill="#1A140C" stroke="${g}" stroke-width="1.7"/>
-      <circle cx="36" cy="36" r="2.4" fill="${ink}" stroke="#5A4214" stroke-width=".8"/>
-      <circle cx="36" cy="36" r="1.1" fill="${g}"/>
-      <ellipse cx="28" cy="22" rx="2.5" ry="1.4" fill="${shine}" opacity=".65" transform="rotate(-40 28 22)"/>`;
+      <path d="M24 20 30 28M42 20 48 28" stroke="${shine}" stroke-width="1.3" stroke-linecap="round" opacity=".55"/>
+      <circle cx="36" cy="36" r="6.2" fill="${deep}" stroke="${g}" stroke-width="1.8"/>
+      <circle cx="36" cy="36" r="4" fill="${ink}" stroke="#5A4214" stroke-width=".9"/>
+      <circle cx="36" cy="36" r="2.2" fill="${core}"/>
+      <circle cx="36" cy="36" r=".95" fill="#FFF8D6"/>
+      <ellipse cx="27" cy="20" rx="2.6" ry="1.5" fill="${shine}" opacity=".7" transform="rotate(-38 27 20)"/>`;
     case "haengma":
-      // Swift wing — layered feathers
       return `
-      <path d="M12 40c9-18 16-24 24-24s15 6 24 24c-9-8-16-10-24-10s-15 2-24 10z"
-        fill="#101828" stroke="${g}" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M18 42c7-10 13-13 18-13s11 3 18 13" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M24 46c5-6 9-7 12-7s7 1 12 7" fill="none" stroke="${g}" stroke-width="1.7" stroke-linecap="round"/>
-      <path d="M28 50c4-4 6-4 8-4s4 0 8 4" fill="none" stroke="${ink}" stroke-width="1.3" stroke-linecap="round" opacity=".8"/>
-      <circle cx="36" cy="28" r="3.2" fill="#1A140C" stroke="${g}" stroke-width="1.5"/>
-      <circle cx="36" cy="28" r="1.3" fill="${g}"/>
-      <ellipse cx="30" cy="34" rx="3" ry="1.5" fill="${shine}" opacity=".55" transform="rotate(-18 30 34)"/>`;
+      <path d="M10 42c10-20 18-28 26-28s16 8 26 28c-10-9-17-12-26-12S20 33 10 42z"
+        fill="${deep}" stroke="${g}" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M16 44c8-12 14-16 20-16s12 4 20 16" fill="none" stroke="${ink}" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M22 48c6-7 10-9 14-9s8 2 14 9" fill="none" stroke="${g}" stroke-width="1.9" stroke-linecap="round"/>
+      <path d="M26 52c4.5-4.5 7-5 10-5s5.5.5 10 5" fill="none" stroke="${ink}" stroke-width="1.4" stroke-linecap="round" opacity=".85"/>
+      <path d="M18 36 14 30M54 36 58 30M24 30 20 24M48 30 52 24"
+        stroke="${g}" stroke-width="1.4" stroke-linecap="round" opacity=".7"/>
+      <circle cx="36" cy="26" r="4.2" fill="${deep}" stroke="${g}" stroke-width="1.6"/>
+      <circle cx="36" cy="26" r="2.2" fill="${core}"/>
+      <circle cx="36" cy="26" r=".9" fill="#FFF8D6"/>
+      <ellipse cx="28" cy="34" rx="3.5" ry="1.6" fill="${shine}" opacity=".6" transform="rotate(-16 28 34)"/>`;
     case "jipjung":
-      // Focus — ornate crosshair
       return `
-      <circle cx="36" cy="36" r="18" fill="none" stroke="${g}" stroke-width="2.3"/>
-      <circle cx="36" cy="36" r="12.5" fill="none" stroke="${ink}" stroke-width="1.9"/>
-      <circle cx="36" cy="36" r="6.5" fill="#141018" stroke="${g}" stroke-width="1.6"/>
-      <circle cx="36" cy="36" r="3" fill="${ink}" stroke="#5A4214" stroke-width=".8"/>
-      <circle cx="36" cy="36" r="1.3" fill="${g}"/>
-      <path d="M36 12v8M36 52v8M12 36h8M52 36h8" stroke="${g}" stroke-width="2.3" stroke-linecap="round"/>
-      <path d="M22 22 27 27M50 22 45 27M22 50 27 45M50 50 45 45"
-        stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/>
-      <circle cx="36" cy="18" r="1.4" fill="${g}"/><circle cx="36" cy="54" r="1.4" fill="${g}"/>
-      <circle cx="18" cy="36" r="1.4" fill="${g}"/><circle cx="54" cy="36" r="1.4" fill="${g}"/>`;
+      <circle cx="36" cy="36" r="20" fill="none" stroke="${g}" stroke-width="2.4"/>
+      <circle cx="36" cy="36" r="20" fill="none" stroke="${shine}" stroke-width=".8" opacity=".35" stroke-dasharray="2 3"/>
+      <circle cx="36" cy="36" r="14" fill="none" stroke="${ink}" stroke-width="2"/>
+      <circle cx="36" cy="36" r="8" fill="${deep}" stroke="${g}" stroke-width="1.7"/>
+      <circle cx="36" cy="36" r="4.5" fill="${ink}" stroke="#5A4214" stroke-width=".9"/>
+      <circle cx="36" cy="36" r="2.2" fill="${core}"/>
+      <circle cx="36" cy="36" r=".95" fill="#FFF8D6"/>
+      <path d="M36 10v9M36 53v9M10 36h9M53 36h9" stroke="${g}" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M20 20 26 26M52 20 46 26M20 52 26 46M52 52 46 46"
+        stroke="${ink}" stroke-width="1.7" stroke-linecap="round"/>
+      <circle cx="36" cy="14" r="1.7" fill="${g}"/><circle cx="36" cy="58" r="1.7" fill="${g}"/>
+      <circle cx="14" cy="36" r="1.7" fill="${g}"/><circle cx="58" cy="36" r="1.7" fill="${g}"/>
+      <ellipse cx="30" cy="24" rx="2.2" ry="1.2" fill="${shine}" opacity=".55"/>`;
     case "gunhim":
-      // Guard tower shield
       return `
-      <path d="M36 10 56 18v18c0 14-10 22-20 26-10-4-20-12-20-26V18z"
-        fill="#18160E" stroke="${g}" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M36 16 48 22v14c0 10-7 16-12 19.5-5-3.5-12-9.5-12-19.5V22z"
-        fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M26 34h20M36 24v20" stroke="#3A2C10" stroke-width="3.6" stroke-linecap="round"/>
-      <path d="M26 34h20M36 24v20" stroke="${g}" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="36" cy="34" r="3.6" fill="#1A140C" stroke="${g}" stroke-width="1.4"/>
-      <circle cx="36" cy="34" r="1.4" fill="${g}"/>
-      <ellipse cx="30" cy="22" rx="4" ry="2" fill="${shine}" opacity=".55" transform="rotate(-20 30 22)"/>`;
+      <path d="M36 8 58 17v20c0 15-11 24-22 28C15 61 14 52 14 37V17z"
+        fill="${deep}" stroke="${g}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M36 14 50 21v16c0 11-8 17.5-14 21-6-3.5-14-10-14-21V21z"
+        fill="${ink}" stroke="#5A4214" stroke-width="1.05"/>
+      <path d="M24 34h24M36 22v24" stroke="#2A2010" stroke-width="3.8" stroke-linecap="round"/>
+      <path d="M24 34h24M36 22v24" stroke="${g}" stroke-width="2.1" stroke-linecap="round"/>
+      <circle cx="36" cy="34" r="4.5" fill="${deep}" stroke="${g}" stroke-width="1.5"/>
+      <circle cx="36" cy="34" r="2.4" fill="${core}"/>
+      <circle cx="36" cy="34" r="1" fill="#FFF8D6"/>
+      <circle cx="24" cy="24" r="1.5" fill="${g}"/><circle cx="48" cy="24" r="1.5" fill="${g}"/>
+      <circle cx="24" cy="44" r="1.5" fill="${g}"/><circle cx="48" cy="44" r="1.5" fill="${g}"/>
+      <ellipse cx="29" cy="20" rx="4.5" ry="2.2" fill="${shine}" opacity=".6" transform="rotate(-18 29 20)"/>`;
     case "yeongyeol":
-      // Linked rings / bond
       return `
-      <circle cx="27" cy="36" r="13" fill="none" stroke="${g}" stroke-width="2.6"/>
-      <circle cx="45" cy="36" r="13" fill="none" stroke="${g}" stroke-width="2.6"/>
-      <circle cx="27" cy="36" r="8" fill="${ink}" stroke="#5A4214" stroke-width="1.1"/>
-      <circle cx="45" cy="36" r="8" fill="${ink}" stroke="#5A4214" stroke-width="1.1"/>
-      <circle cx="27" cy="36" r="3.2" fill="#1A140C" stroke="${g}" stroke-width="1.2"/>
-      <circle cx="45" cy="36" r="3.2" fill="#1A140C" stroke="${g}" stroke-width="1.2"/>
-      <path d="M32 36h8" stroke="${g}" stroke-width="2.6" stroke-linecap="round"/>
-      <circle cx="36" cy="36" r="2.6" fill="${g}"/>
-      <ellipse cx="24" cy="30" rx="3" ry="1.6" fill="${shine}" opacity=".5"/>`;
+      <circle cx="26" cy="36" r="14.5" fill="none" stroke="${g}" stroke-width="2.8"/>
+      <circle cx="46" cy="36" r="14.5" fill="none" stroke="${g}" stroke-width="2.8"/>
+      <circle cx="26" cy="36" r="9.5" fill="${ink}" stroke="#5A4214" stroke-width="1.15"/>
+      <circle cx="46" cy="36" r="9.5" fill="${ink}" stroke="#5A4214" stroke-width="1.15"/>
+      <circle cx="26" cy="36" r="4.5" fill="${deep}" stroke="${g}" stroke-width="1.3"/>
+      <circle cx="46" cy="36" r="4.5" fill="${deep}" stroke="${g}" stroke-width="1.3"/>
+      <circle cx="26" cy="36" r="2" fill="${core}"/><circle cx="46" cy="36" r="2" fill="${core}"/>
+      <path d="M31 36h10" stroke="${g}" stroke-width="2.8" stroke-linecap="round"/>
+      <circle cx="36" cy="36" r="3.2" fill="${g}"/>
+      <circle cx="36" cy="36" r="1.3" fill="#FFF8D6"/>
+      <ellipse cx="22" cy="28" rx="3.2" ry="1.7" fill="${shine}" opacity=".55"/>
+      <ellipse cx="50" cy="28" rx="3.2" ry="1.7" fill="${shine}" opacity=".45"/>`;
     case "bogang":
-      // Braced crest / barrier plate
       return `
-      <path d="M18 30h36v16c0 10-8 16-18 20-10-4-18-10-18-20z"
-        fill="#101820" stroke="${g}" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M24 16h24v12H24z" fill="${ink}" stroke="#5A4214" stroke-width="1.2" stroke-linejoin="round"/>
-      <path d="M24 36h24v10c0 6-5.5 10-12 13-6.5-3-12-7-12-13z"
-        fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M28 40h16" stroke="${g}" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M30 20h12M33 16v8" stroke="${g}" stroke-width="1.6" stroke-linecap="round" opacity=".85"/>
-      <circle cx="36" cy="22" r="2.4" fill="${g}"/>
-      <ellipse cx="28" cy="34" rx="3.5" ry="1.6" fill="${shine}" opacity=".45"/>`;
+      <path d="M16 28h40v18c0 11-9 17-20 22-11-5-20-11-20-22z"
+        fill="${deep}" stroke="${g}" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M22 14h28v14H22z" fill="${ink}" stroke="#5A4214" stroke-width="1.25" stroke-linejoin="round"/>
+      <path d="M22 34h28v12c0 7-6 11.5-14 15-8-3.5-14-8-14-15z"
+        fill="${ink}" stroke="#5A4214" stroke-width="1.05"/>
+      <path d="M26 40h20" stroke="${g}" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M28 18h16M32 14v10" stroke="${g}" stroke-width="1.7" stroke-linecap="round" opacity=".9"/>
+      <circle cx="36" cy="20" r="3" fill="${deep}" stroke="${g}" stroke-width="1.2"/>
+      <circle cx="36" cy="20" r="1.3" fill="${core}"/>
+      <path d="M20 32 16 28M52 32 56 28" stroke="${g}" stroke-width="1.5" stroke-linecap="round" opacity=".7"/>
+      <ellipse cx="28" cy="32" rx="3.8" ry="1.7" fill="${shine}" opacity=".5"/>`;
     case "hwangyeok":
-      // Rebound crescents + tip
       return `
-      <path d="M16 44c5-18 16-28 30-30 2 12-2 22-11 30"
-        fill="none" stroke="${g}" stroke-width="2.8" stroke-linecap="round"/>
-      <path d="M20 46c4-14 12-22 22-24" fill="none" stroke="${ink}" stroke-width="2.1" stroke-linecap="round"/>
-      <path d="M48 16 58 22 50 32z" fill="${ink}" stroke="${g}" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M18 50 28 44 22 56z" fill="${g}" stroke="#5A4214" stroke-width="1.1" stroke-linejoin="round"/>
-      <circle cx="36" cy="36" r="4" fill="#1A140C" stroke="${g}" stroke-width="1.5"/>
-      <circle cx="36" cy="36" r="1.6" fill="${g}"/>
-      <ellipse cx="42" cy="24" rx="2.4" ry="1.4" fill="${shine}" opacity=".6" transform="rotate(30 42 24)"/>`;
+      <path d="M14 46c6-20 18-32 34-34 2 14-3 25-13 34" fill="none" stroke="${g}" stroke-width="3" stroke-linecap="round"/>
+      <path d="M18 48c5-16 14-25 26-27" fill="none" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M46 14 60 22 50 36z" fill="${ink}" stroke="${g}" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M16 52 30 44 22 60z" fill="${g}" stroke="#5A4214" stroke-width="1.15" stroke-linejoin="round"/>
+      <path d="M48 18 54 22" stroke="${shine}" stroke-width="1.3" stroke-linecap="round" opacity=".7"/>
+      <circle cx="36" cy="36" r="5.2" fill="${deep}" stroke="${g}" stroke-width="1.6"/>
+      <circle cx="36" cy="36" r="2.8" fill="${core}"/>
+      <circle cx="36" cy="36" r="1.1" fill="#FFF8D6"/>
+      <ellipse cx="42" cy="22" rx="2.6" ry="1.5" fill="${shine}" opacity=".65" transform="rotate(28 42 22)"/>`;
     case "ssangnip":
-      // Twin pillars / will
       return `
-      <path d="M18 54V22l9-8 9 8v32z" fill="#18160E" stroke="${g}" stroke-width="1.9" stroke-linejoin="round"/>
-      <path d="M36 54V22l9-8 9 8v32z" fill="#18160E" stroke="${g}" stroke-width="1.9" stroke-linejoin="round"/>
-      <path d="M22 50V28l5-4 5 4v22z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M40 50V28l5-4 5 4v22z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M16 54h40" stroke="${g}" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M20 18h10M42 18h10" stroke="${g}" stroke-width="1.8" stroke-linecap="round"/>
-      <circle cx="36" cy="14" r="2.8" fill="${g}"/>
-      <ellipse cx="25" cy="30" rx="2" ry="4" fill="${shine}" opacity=".45"/>`;
+      <path d="M16 56V20l10-10 10 10v36z" fill="${deep}" stroke="${g}" stroke-width="1.95" stroke-linejoin="round"/>
+      <path d="M36 56V20l10-10 10 10v36z" fill="${deep}" stroke="${g}" stroke-width="1.95" stroke-linejoin="round"/>
+      <path d="M20 52V26l6-5 6 5v26z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
+      <path d="M40 52V26l6-5 6 5v26z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
+      <path d="M14 56h44" stroke="${g}" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M18 16h12M42 16h12" stroke="${g}" stroke-width="1.9" stroke-linecap="round"/>
+      <circle cx="36" cy="12" r="3.6" fill="${deep}" stroke="${g}" stroke-width="1.4"/>
+      <circle cx="36" cy="12" r="1.7" fill="${core}"/>
+      <path d="M24 34h4M44 34h4M24 44h4M44 44h4" stroke="${g}" stroke-width="1.3" stroke-linecap="round" opacity=".7"/>
+      <ellipse cx="24" cy="28" rx="2.2" ry="4.2" fill="${shine}" opacity=".5"/>`;
     case "eungjing":
-      // Rising gauge / nemesis
       return `
-      <path d="M20 52h32v5H20z" fill="#1A140C" stroke="${g}" stroke-width="1.6"/>
-      <path d="M24 52V32l12-18 12 18v20z" fill="#241018" stroke="${g}" stroke-width="1.9" stroke-linejoin="round"/>
-      <path d="M29 50V34l7-11 7 11v16z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M36 18v10" stroke="${g}" stroke-width="2.2" stroke-linecap="round"/>
-      <circle cx="36" cy="14" r="3" fill="#1A140C" stroke="${g}" stroke-width="1.3"/>
-      <circle cx="36" cy="14" r="1.2" fill="${g}"/>
-      <path d="M26 44h20" stroke="${g}" stroke-width="1.5" stroke-linecap="round" opacity=".7"/>
-      <ellipse cx="32" cy="28" rx="2" ry="3.2" fill="${shine}" opacity=".55"/>`;
+      <path d="M18 54h36v6H18z" fill="${deep}" stroke="${g}" stroke-width="1.7"/>
+      <path d="M22 54V30l14-20 14 20v24z" fill="${deep}" stroke="${g}" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M28 52V34l8-12 8 12v18z" fill="${ink}" stroke="#5A4214" stroke-width="1.05"/>
+      <path d="M36 14v12" stroke="${g}" stroke-width="2.3" stroke-linecap="round"/>
+      <circle cx="36" cy="12" r="3.6" fill="${deep}" stroke="${g}" stroke-width="1.35"/>
+      <circle cx="36" cy="12" r="1.6" fill="${core}"/>
+      <path d="M24 42h24M26 48h20" stroke="${g}" stroke-width="1.5" stroke-linecap="round" opacity=".75"/>
+      <path d="M20 36 16 30M52 36 56 30" stroke="${g}" stroke-width="1.4" stroke-linecap="round" opacity=".65"/>
+      <ellipse cx="31" cy="26" rx="2.2" ry="3.4" fill="${shine}" opacity=".6"/>`;
     case "tagae":
-      // Vampire fang droplet
       return `
-      <path d="M36 10c12 12 18 20 18 30 0 12-8 18-18 18S18 52 18 40c0-10 6-18 18-30z"
-        fill="#241018" stroke="${g}" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M36 18c8 8 12 15 12 22 0 8-5.5 12-12 12s-12-4-12-12c0-7 4-14 12-22z"
-        fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M36 28v20" stroke="#3A2010" stroke-width="3.4" stroke-linecap="round"/>
-      <path d="M36 28v20" stroke="${g}" stroke-width="1.7" stroke-linecap="round"/>
-      <path d="M30 36 36 48 42 36" fill="none" stroke="#5A4214" stroke-width="1.4" stroke-linejoin="round"/>
-      <ellipse cx="31" cy="24" rx="2.4" ry="3.4" fill="${shine}" opacity=".6"/>`;
+      <path d="M36 8c14 13 20 22 20 33 0 13-9 19-20 19S16 54 16 41c0-11 6-20 20-33z"
+        fill="${deep}" stroke="${g}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M36 16c9 9 13 16 13 25 0 9-6 13-13 13s-13-4-13-13c0-9 4-16 13-25z"
+        fill="${ink}" stroke="#5A4214" stroke-width="1.05"/>
+      <path d="M36 26v24" stroke="#3A1810" stroke-width="3.6" stroke-linecap="round"/>
+      <path d="M36 26v24" stroke="${g}" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M28 34 36 50 44 34" fill="none" stroke="#5A4214" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M28 34 36 50 44 34" fill="none" stroke="${shine}" stroke-width=".7" opacity=".5"/>
+      <circle cx="36" cy="30" r="3.2" fill="${deep}" stroke="${g}" stroke-width="1.2"/>
+      <circle cx="36" cy="30" r="1.4" fill="${core}"/>
+      <ellipse cx="30" cy="22" rx="2.6" ry="3.6" fill="${shine}" opacity=".65"/>`;
     case "pamyeol":
-      // Destroy — cracked hex
       return `
-      <path d="M36 10 54 22v24L36 60 18 46V22z" fill="#16101C" stroke="${g}" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M36 16 48 25v18L36 54 24 43V25z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M26 26 46 46M44 24 28 44" stroke="#2A1830" stroke-width="2.8" stroke-linecap="round"/>
-      <path d="M26 26 46 46M44 24 28 44" stroke="${g}" stroke-width="1.4" stroke-linecap="round"/>
-      <circle cx="36" cy="36" r="3.2" fill="#1A140C" stroke="${g}" stroke-width="1.3"/>
-      <circle cx="36" cy="36" r="1.2" fill="${g}"/>
-      <ellipse cx="30" cy="20" rx="3" ry="1.5" fill="${shine}" opacity=".5" transform="rotate(-25 30 20)"/>`;
+      <path d="M36 8 56 21v26L36 62 16 47V21z" fill="${deep}" stroke="${g}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M36 14 50 24v20L36 56 22 44V24z" fill="${ink}" stroke="#5A4214" stroke-width="1.05"/>
+      <path d="M24 24 48 48M48 22 26 46" stroke="#2A1830" stroke-width="3" stroke-linecap="round"/>
+      <path d="M24 24 48 48M48 22 26 46" stroke="${g}" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M30 18 34 28M42 18 38 28" stroke="${shine}" stroke-width="1.2" stroke-linecap="round" opacity=".55"/>
+      <circle cx="36" cy="36" r="4.2" fill="${deep}" stroke="${g}" stroke-width="1.4"/>
+      <circle cx="36" cy="36" r="2.1" fill="${core}"/>
+      <circle cx="36" cy="36" r=".9" fill="#FFF8D6"/>
+      <ellipse cx="29" cy="18" rx="3.2" ry="1.6" fill="${shine}" opacity=".55" transform="rotate(-22 29 18)"/>`;
     case "myosu":
-      // Spiral maze / despair
       return `
-      <circle cx="36" cy="36" r="18" fill="#141020" stroke="${g}" stroke-width="2.2"/>
-      <path d="M36 18c12 0 16 9 16 16 0 12-9 16-16 16s-14-7-14-14 7-12 14-12 10 5 10 10-4 8-10 8-6-3-6-6 2-4 6-4"
-        fill="none" stroke="${ink}" stroke-width="2.3" stroke-linecap="round"/>
-      <circle cx="36" cy="36" r="4" fill="#1A140C" stroke="${g}" stroke-width="1.4"/>
-      <circle cx="36" cy="36" r="1.6" fill="${g}"/>
-      <path d="M26 26 31 31M46 26 41 31M26 46 31 41M46 46 41 41"
-        stroke="${g}" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>
-      <ellipse cx="30" cy="22" rx="2.5" ry="1.3" fill="${shine}" opacity=".45"/>`;
+      <circle cx="36" cy="36" r="20" fill="${deep}" stroke="${g}" stroke-width="2.3"/>
+      <circle cx="36" cy="36" r="15.5" fill="none" stroke="${ink}" stroke-width="1.6" opacity=".85"/>
+      <path d="M36 16c14 0 18 10 18 18 0 14-10 18-18 18s-16-8-16-16 8-14 16-14 12 6 12 12-5 9-12 9-7-3.5-7-7 2.5-5 7-5"
+        fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M36 22c8 0 10 5 10 9 0 7-5 9-10 9s-8-3.5-8-7 3.5-6 8-6"
+        fill="none" stroke="${g}" stroke-width="1.5" stroke-linecap="round" opacity=".75"/>
+      <circle cx="36" cy="36" r="5" fill="${deep}" stroke="${g}" stroke-width="1.5"/>
+      <circle cx="36" cy="36" r="2.6" fill="${core}"/>
+      <circle cx="36" cy="36" r="1.1" fill="#FFF8D6"/>
+      <path d="M24 24 30 30M48 24 42 30M24 48 30 42M48 48 42 42"
+        stroke="${g}" stroke-width="1.6" stroke-linecap="round" opacity=".85"/>
+      <ellipse cx="29" cy="20" rx="2.6" ry="1.4" fill="${shine}" opacity=".5"/>`;
     case "gyeongno":
-      // Violent — double chevron / extra turn
       return `
-      <path d="M18 42 36 12 54 42h-9l-9 18-9-18z" fill="#241010" stroke="${g}" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M25 40 36 20 47 40h-6l-5 11-5-11z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M22 50h28" stroke="${g}" stroke-width="2.6" stroke-linecap="round"/>
-      <path d="M26 56h20" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="36" cy="34" r="2.8" fill="#1A140C" stroke="${g}" stroke-width="1.3"/>
-      <circle cx="36" cy="34" r="1.1" fill="${g}"/>
-      <ellipse cx="32" cy="24" rx="2.2" ry="3" fill="${shine}" opacity=".55"/>`;
+      <path d="M16 44 36 8 56 44h-10l-10 20-10-20z" fill="${deep}" stroke="${g}" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M24 42 36 18 48 42h-7l-5 12-5-12z" fill="${ink}" stroke="#5A4214" stroke-width="1.05"/>
+      <path d="M20 52h32" stroke="${g}" stroke-width="2.8" stroke-linecap="round"/>
+      <path d="M24 58h24" stroke="${ink}" stroke-width="2.1" stroke-linecap="round"/>
+      <path d="M28 28 36 16 44 28" fill="none" stroke="${shine}" stroke-width="1.4" stroke-linecap="round" opacity=".55"/>
+      <circle cx="36" cy="34" r="3.6" fill="${deep}" stroke="${g}" stroke-width="1.35"/>
+      <circle cx="36" cy="34" r="1.7" fill="${core}"/>
+      <path d="M18 36 12 30M54 36 60 30" stroke="${g}" stroke-width="1.5" stroke-linecap="round" opacity=".7"/>
+      <ellipse cx="31" cy="22" rx="2.4" ry="3.2" fill="${shine}" opacity=".6"/>`;
     case "chimtu":
-      // Piercing diamond / rage
       return `
-      <path d="M36 8 54 36 36 64 18 36Z" fill="#241018" stroke="${g}" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M36 16 46 36 36 56 26 36Z" fill="${ink}" stroke="#5A4214" stroke-width="1"/>
-      <path d="M36 10v8M36 54v8" stroke="${g}" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
-      <circle cx="36" cy="36" r="5.2" fill="#1A140C" stroke="${g}" stroke-width="1.6"/>
-      <circle cx="36" cy="36" r="2.4" fill="${ink}" stroke="#5A4214" stroke-width=".8"/>
-      <circle cx="36" cy="36" r="1.1" fill="${g}"/>
-      <ellipse cx="32" cy="24" rx="2" ry="3.2" fill="${shine}" opacity=".55"/>`;
+      <path d="M36 6 56 36 36 66 16 36Z" fill="${deep}" stroke="${g}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M36 14 48 36 36 58 24 36Z" fill="${ink}" stroke="#5A4214" stroke-width="1.05"/>
+      <path d="M36 8v10M36 54v10" stroke="${g}" stroke-width="1.9" stroke-linecap="round" opacity=".85"/>
+      <path d="M20 28 14 24M52 28 58 24M20 44 14 48M52 44 58 48"
+        stroke="${g}" stroke-width="1.5" stroke-linecap="round" opacity=".75"/>
+      <circle cx="36" cy="36" r="6.2" fill="${deep}" stroke="${g}" stroke-width="1.7"/>
+      <circle cx="36" cy="36" r="3.6" fill="${ink}" stroke="#5A4214" stroke-width=".85"/>
+      <circle cx="36" cy="36" r="1.8" fill="${core}"/>
+      <circle cx="36" cy="36" r=".85" fill="#FFF8D6"/>
+      <ellipse cx="31" cy="22" rx="2.2" ry="3.4" fill="${shine}" opacity=".6"/>`;
     default:
-      return `<circle cx="36" cy="36" r="12" fill="${ink}" stroke="${g}" stroke-width="1.8"/>`;
+      return `<circle cx="36" cy="36" r="14" fill="${ink}" stroke="${g}" stroke-width="2"/>`;
   }
 }
 
 function sharedDefs(uid, accent) {
   return `
     <radialGradient id="${uid}-aura" cx="50%" cy="42%" r="58%">
-      <stop stop-color="${accent}" stop-opacity=".55"/>
-      <stop offset=".42" stop-color="${accent}" stop-opacity=".18"/>
+      <stop stop-color="${accent}" stop-opacity=".62"/>
+      <stop offset=".4" stop-color="${accent}" stop-opacity=".22"/>
       <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="${uid}-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
@@ -337,17 +366,27 @@ function sharedDefs(uid, accent) {
       <stop offset="1" stop-color="#14100A"/>
     </linearGradient>
     <linearGradient id="${uid}-ink" x1="22" y1="16" x2="52" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6E0"/>
-      <stop offset=".35" stop-color="${accent}"/>
-      <stop offset=".75" stop-color="#E8D9A8"/>
+      <stop stop-color="#FFF8E8"/>
+      <stop offset=".28" stop-color="${accent}"/>
+      <stop offset=".7" stop-color="#E8D9A8"/>
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
+    <radialGradient id="${uid}-core" cx="38%" cy="32%" r="70%">
+      <stop stop-color="#FFF8D6"/>
+      <stop offset=".45" stop-color="${accent}"/>
+      <stop offset="1" stop-color="#3A2810"/>
+    </radialGradient>
+    <radialGradient id="${uid}-deep" cx="40%" cy="30%" r="75%">
+      <stop stop-color="#2A2214"/>
+      <stop offset=".55" stop-color="#14100A"/>
+      <stop offset="1" stop-color="#060408"/>
+    </radialGradient>
     <linearGradient id="${uid}-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
     </linearGradient>
     <filter id="${uid}-depth" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
+      <feDropShadow dx="0" dy="1.4" stdDeviation="1.5" flood-color="#000" flood-opacity=".65"/>
     </filter>`;
 }
 
@@ -394,7 +433,7 @@ function plateSvg(rarity, slot) {
     <path d="${outer}" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
     <path d="${outer}" fill="url(#${uid}-face)" stroke="url(#${uid}-gold)" stroke-width="3.1" stroke-linejoin="round"/>
     <path d="${outer}" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
-    <path d="${edge}" fill="url(#${uid}-bevel)" opacity=".55"/>
+    <path d="${edge}" fill="url(#${uid}-bevel)" opacity=".55" fill-rule="evenodd"/>
     <path d="${inner}" fill="url(#${uid}-gem)" stroke="${rarity.dash}" stroke-width="1" stroke-opacity=".55"/>
     <path d="${inner}" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".2" transform="translate(0 .35)"/>
     <ellipse cx="27" cy="18" rx="7.5" ry="3.2" fill="url(#${uid}-shine)" transform="rotate(-24 27 18)" opacity=".82"/>
@@ -403,59 +442,74 @@ function plateSvg(rarity, slot) {
 `;
 }
 
-/** Glyph-only overlay — sits on top of rarity plate. */
+/** Glyph overlay on rarity plate — medallion seat + detailed mark. */
 function equippedSvg(set, slot) {
   const uid = `${set.id}s${slot}`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
   <defs>
     ${sharedDefs(uid, set.accent)}
   </defs>
-  <circle cx="36" cy="36" r="18" fill="url(#${uid}-aura)" opacity=".8"/>
-  <g filter="url(#${uid}-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
+  <circle cx="36" cy="36" r="20" fill="url(#${uid}-aura)" opacity=".85"/>
+  <circle cx="36" cy="36" r="17.5" fill="url(#${uid}-deep)" stroke="url(#${uid}-gold)" stroke-width="1.6" opacity=".92"/>
+  <circle cx="36" cy="36" r="15.2" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".22"/>
+  <g filter="url(#${uid}-depth)" transform="translate(36 36) scale(0.72) translate(-36 -36)">
     ${glyph(set.id, uid)}
   </g>
 </svg>
 `;
 }
 
-/** Empty socket — gold beveled plate silhouette (mockup language). */
+
+/** Empty socket — premium gold plate with dark well (matches filled plate language). */
 function emptySvg(slot) {
   const uid = `emptys${slot}`;
   const { outer, inner, edge } = SLOT[slot];
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
   <defs>
+    <radialGradient id="${uid}-aura" cx="50%" cy="42%" r="55%">
+      <stop stop-color="#C9A227" stop-opacity=".42"/>
+      <stop offset=".55" stop-color="#C9A227" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
+    </radialGradient>
     <linearGradient id="${uid}-face" x1="14" y1="8" x2="58" y2="64" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#E8C84A"/>
-      <stop offset=".35" stop-color="#C9A227"/>
-      <stop offset=".7" stop-color="#8A6A20"/>
-      <stop offset="1" stop-color="#4A3810"/>
+      <stop stop-color="#F0D878"/>
+      <stop offset=".32" stop-color="#C9A227"/>
+      <stop offset=".68" stop-color="#8A6A20"/>
+      <stop offset="1" stop-color="#3A2C10"/>
     </linearGradient>
     <linearGradient id="${uid}-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFF8D6"/>
-      <stop offset=".3" stop-color="#F0D878"/>
-      <stop offset=".65" stop-color="#C9A227"/>
+      <stop offset=".28" stop-color="#F0D878"/>
+      <stop offset=".62" stop-color="#C9A227"/>
       <stop offset="1" stop-color="#7A5A18"/>
     </linearGradient>
-    <linearGradient id="${uid}-bevel" x1="16" y1="8" x2="40" y2="28" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF8D6" stop-opacity=".8"/>
+    <linearGradient id="${uid}-bevel" x1="16" y1="8" x2="40" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D6" stop-opacity=".88"/>
       <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
     </linearGradient>
-    <radialGradient id="${uid}-well" cx="42%" cy="34%" r="68%">
-      <stop stop-color="#3A2C14" stop-opacity=".95"/>
-      <stop offset=".55" stop-color="#14100A"/>
+    <linearGradient id="${uid}-shine" x1="18" y1="12" x2="42" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6D0" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#C9A227" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="${uid}-well" cx="40%" cy="32%" r="70%">
+      <stop stop-color="#4A3A1C" stop-opacity=".98"/>
+      <stop offset=".45" stop-color="#1A140C"/>
       <stop offset="1" stop-color="#050402"/>
     </radialGradient>
     <filter id="${uid}-depth" x="-25%" y="-25%" width="150%" height="150%">
-      <feDropShadow dx="0" dy="2" stdDeviation="1.4" flood-color="#000" flood-opacity=".55"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000" flood-opacity=".58"/>
     </filter>
   </defs>
+  <circle cx="36" cy="36" r="28" fill="url(#${uid}-aura)"/>
   <g filter="url(#${uid}-depth)">
-    <path d="${outer}" fill="none" stroke="#0A0806" stroke-width="5.4" stroke-linejoin="round" opacity=".92"/>
-    <path d="${outer}" fill="url(#${uid}-face)" stroke="url(#${uid}-gold)" stroke-width="3" stroke-linejoin="round"/>
-    <path d="${outer}" fill="none" stroke="#FFF8D6" stroke-width="1.1" opacity=".3" transform="translate(0 .5)"/>
-    <path d="${edge}" fill="url(#${uid}-bevel)" opacity=".5"/>
-    <path d="${inner}" fill="url(#${uid}-well)" stroke="#C9A227" stroke-width="1" stroke-opacity=".4"/>
-    <path d="M36 28v16M28 36h16" stroke="url(#${uid}-gold)" stroke-width="2.1" stroke-linecap="round" opacity=".55"/>
+    <path d="${outer}" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
+    <path d="${outer}" fill="url(#${uid}-face)" stroke="url(#${uid}-gold)" stroke-width="3.1" stroke-linejoin="round"/>
+    <path d="${outer}" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
+    <path d="${edge}" fill="url(#${uid}-bevel)" opacity=".58" fill-rule="evenodd"/>
+    <path d="${inner}" fill="url(#${uid}-well)" stroke="#C9A227" stroke-width="1.1" stroke-opacity=".55"/>
+    <path d="${inner}" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".18" transform="translate(0 .35)"/>
+    <ellipse cx="27" cy="20" rx="7" ry="3" fill="url(#${uid}-shine)" transform="rotate(-24 27 20)" opacity=".75"/>
+    <text x="36" y="41" text-anchor="middle" dominant-baseline="middle" font-family="Georgia, 'Times New Roman', serif" font-size="16" font-weight="700" fill="url(#${uid}-gold)" opacity=".4">${slot}</text>
   </g>
 </svg>
 `;

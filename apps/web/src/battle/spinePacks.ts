@@ -101,7 +101,7 @@ export function getBattleStillSrc(
   const artKey = getMonsterArtKey(monsterId);
   if (!artKey || !BATTLE_STILL_FAMILY_SET.has(artKey)) return null;
   if (facing === "back") {
-    return `/art/monster/battle/${artKey}-back.png`;
+    return `/art/monster/battle/${artKey}-back.webp`;
   }
-  return `/art/monster/battle/${artKey}-front.png`;
+  return `/art/monster/battle/${artKey}-front.webp`;
 }

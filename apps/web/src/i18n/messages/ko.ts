@@ -523,6 +523,8 @@ const messages: MessageDict = {
   "ui.symFilter": "세트 필터",
   "ui.symFilterSlot": "번호 필터",
   "ui.symFilterAll": "전체",
+  "ui.symFilterAllSets": "전체(종류)",
+  "ui.symFilterAllSlots": "전체(번호)",
   "ui.symFilterNone": "선택 없음",
   "ui.symFilterN": "{n}종",
   "ui.symFilterSlotN": "{n}개",
@@ -631,7 +633,23 @@ const messages: MessageDict = {
   "ui.gearSlotTop": "상의",
   "ui.gearSlotBottom": "하의",
   "ui.gearSlotShoes": "신발",
-  "ui.gearSlotNecklace": "목걸이"
+  "ui.gearSlotNecklace": "목걸이",
+  "ui.islandEnter": "입장",
+  "ui.islandInfo": "정보",
+  "ui.buildingInfoClose": "닫기",
+  "ui.buildingInfoTitle": "{name} 안내",
+  "ui.bldgInfo.summon_hearth": "스크롤을 소모해 새로운 소환수를 소환합니다|일반·고급·신비 스크롤로 등급이 다른 소환수를 얻을 수 있습니다|소환 결과는 도감과 보유 목록에 반영됩니다",
+  "ui.bldgInfo.power_circle": "소환수의 레벨·스킬·상징을 관리합니다|소환사 장비와 스킬트리도 확인할 수 있습니다|각성과 성장에 필요한 핵심 시설입니다",
+  "ui.bldgInfo.gateway": "시나리오와 각종 전투에 출정합니다|지역을 선택해 스테이지에 도전하세요|승리 시 경험치·드롭·보상을 얻습니다",
+  "ui.bldgInfo.mana_pond": "시간이 지나면 골드를 생산·저장합니다|연못을 터치해 쌓인 골드를 수거하세요|업그레이드로 생산량과 저장 한도를 늘릴 수 있습니다",
+  "ui.bldgInfo.shop": "에너지·스크롤 등 소모품을 구매합니다|상징 연마·각인에 쓰는 재료도 이용할 수 있습니다|전투와 성장에 필요한 보급 시설입니다",
+  "ui.bldgInfo.party": "출전할 소환수 파티를 편성합니다|최대 4마리까지 배치할 수 있습니다|파티 구성은 전투 시작 전에도 조정할 수 있습니다",
+  "ui.bldgInfo.wish": "소원의 사당에서 보상을 뽑습니다|다양한 자원과 성장 보상을 얻을 수 있습니다|소환사 레벨 7에 해금됩니다",
+  "ui.bldgInfo.dojo": "마법진 도장에서 훈련을 진행합니다|훈련으로 골드와 보상을 얻습니다|일정 횟수마다 특별 보상이 준비됩니다|소환사 레벨 8에 해금됩니다",
+  "ui.bldgInfo.crystal_mine": "시간이 지나면 수정을 생산·저장합니다|광맥을 터치해 쌓인 수정을 수거하세요|업그레이드로 생산량과 저장 한도를 늘릴 수 있습니다|소환사 레벨 10에 해금됩니다",
+  "ui.bldgInfo.glory": "영광 포인트로 버프 건물을 강화합니다|전투와 성장에 도움이 되는 효과를 얻습니다|포인트를 모아 장기적인 이득을 쌓으세요",
+  "ui.bldgInfo.guild": "길드와 커뮤니티 기능을 이용합니다|동료와 교류하고 길드 활동을 확인하세요|소환사 레벨 12에 해금됩니다",
+  "ui.bldgInfo.fusion": "같은 종의 소환수를 융합해 진화합니다|높은 레벨·스킬·상징을 유지한 채 성장합니다|소환사 레벨 17에 해금됩니다"
 };
 
 export default messages;

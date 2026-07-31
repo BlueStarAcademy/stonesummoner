@@ -544,6 +544,8 @@ export type MessageKey =
   | "ui.symFilter"
   | "ui.symFilterSlot"
   | "ui.symFilterAll"
+  | "ui.symFilterAllSets"
+  | "ui.symFilterAllSlots"
   | "ui.symFilterNone"
   | "ui.symFilterN"
   | "ui.symFilterSlotN"
@@ -652,7 +654,23 @@ export type MessageKey =
   | "ui.gearSlotTop"
   | "ui.gearSlotBottom"
   | "ui.gearSlotShoes"
-  | "ui.gearSlotNecklace";
+  | "ui.gearSlotNecklace"
+  | "ui.islandEnter"
+  | "ui.islandInfo"
+  | "ui.buildingInfoClose"
+  | "ui.buildingInfoTitle"
+  | "ui.bldgInfo.summon_hearth"
+  | "ui.bldgInfo.power_circle"
+  | "ui.bldgInfo.gateway"
+  | "ui.bldgInfo.mana_pond"
+  | "ui.bldgInfo.shop"
+  | "ui.bldgInfo.party"
+  | "ui.bldgInfo.wish"
+  | "ui.bldgInfo.dojo"
+  | "ui.bldgInfo.crystal_mine"
+  | "ui.bldgInfo.glory"
+  | "ui.bldgInfo.guild"
+  | "ui.bldgInfo.fusion";
 
 export type MessageDict = Record<MessageKey, string>;
 

@@ -2,8 +2,8 @@
   <defs>
     
     <radialGradient id="ssangnips2-aura" cx="50%" cy="42%" r="58%">
-      <stop stop-color="#e8e0c8" stop-opacity=".55"/>
-      <stop offset=".42" stop-color="#e8e0c8" stop-opacity=".18"/>
+      <stop stop-color="#e8e0c8" stop-opacity=".62"/>
+      <stop offset=".4" stop-color="#e8e0c8" stop-opacity=".22"/>
       <stop offset="1" stop-color="#e8e0c8" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="ssangnips2-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
@@ -17,29 +17,43 @@
       <stop offset="1" stop-color="#14100A"/>
     </linearGradient>
     <linearGradient id="ssangnips2-ink" x1="22" y1="16" x2="52" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6E0"/>
-      <stop offset=".35" stop-color="#e8e0c8"/>
-      <stop offset=".75" stop-color="#E8D9A8"/>
+      <stop stop-color="#FFF8E8"/>
+      <stop offset=".28" stop-color="#e8e0c8"/>
+      <stop offset=".7" stop-color="#E8D9A8"/>
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
+    <radialGradient id="ssangnips2-core" cx="38%" cy="32%" r="70%">
+      <stop stop-color="#FFF8D6"/>
+      <stop offset=".45" stop-color="#e8e0c8"/>
+      <stop offset="1" stop-color="#3A2810"/>
+    </radialGradient>
+    <radialGradient id="ssangnips2-deep" cx="40%" cy="30%" r="75%">
+      <stop stop-color="#2A2214"/>
+      <stop offset=".55" stop-color="#14100A"/>
+      <stop offset="1" stop-color="#060408"/>
+    </radialGradient>
     <linearGradient id="ssangnips2-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#e8e0c8" stop-opacity="0"/>
     </linearGradient>
     <filter id="ssangnips2-depth" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
+      <feDropShadow dx="0" dy="1.4" stdDeviation="1.5" flood-color="#000" flood-opacity=".65"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="18" fill="url(#ssangnips2-aura)" opacity=".8"/>
-  <g filter="url(#ssangnips2-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
+  <circle cx="36" cy="36" r="20" fill="url(#ssangnips2-aura)" opacity=".85"/>
+  <circle cx="36" cy="36" r="17.5" fill="url(#ssangnips2-deep)" stroke="url(#ssangnips2-gold)" stroke-width="1.6" opacity=".92"/>
+  <circle cx="36" cy="36" r="15.2" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".22"/>
+  <g filter="url(#ssangnips2-depth)" transform="translate(36 36) scale(0.72) translate(-36 -36)">
     
-      <path d="M18 54V22l9-8 9 8v32z" fill="#18160E" stroke="url(#ssangnips2-gold)" stroke-width="1.9" stroke-linejoin="round"/>
-      <path d="M36 54V22l9-8 9 8v32z" fill="#18160E" stroke="url(#ssangnips2-gold)" stroke-width="1.9" stroke-linejoin="round"/>
-      <path d="M22 50V28l5-4 5 4v22z" fill="url(#ssangnips2-ink)" stroke="#5A4214" stroke-width="1"/>
-      <path d="M40 50V28l5-4 5 4v22z" fill="url(#ssangnips2-ink)" stroke="#5A4214" stroke-width="1"/>
-      <path d="M16 54h40" stroke="url(#ssangnips2-gold)" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M20 18h10M42 18h10" stroke="url(#ssangnips2-gold)" stroke-width="1.8" stroke-linecap="round"/>
-      <circle cx="36" cy="14" r="2.8" fill="url(#ssangnips2-gold)"/>
-      <ellipse cx="25" cy="30" rx="2" ry="4" fill="url(#ssangnips2-shine)" opacity=".45"/>
+      <path d="M16 56V20l10-10 10 10v36z" fill="url(#ssangnips2-deep)" stroke="url(#ssangnips2-gold)" stroke-width="1.95" stroke-linejoin="round"/>
+      <path d="M36 56V20l10-10 10 10v36z" fill="url(#ssangnips2-deep)" stroke="url(#ssangnips2-gold)" stroke-width="1.95" stroke-linejoin="round"/>
+      <path d="M20 52V26l6-5 6 5v26z" fill="url(#ssangnips2-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M40 52V26l6-5 6 5v26z" fill="url(#ssangnips2-ink)" stroke="#5A4214" stroke-width="1"/>
+      <path d="M14 56h44" stroke="url(#ssangnips2-gold)" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M18 16h12M42 16h12" stroke="url(#ssangnips2-gold)" stroke-width="1.9" stroke-linecap="round"/>
+      <circle cx="36" cy="12" r="3.6" fill="url(#ssangnips2-deep)" stroke="url(#ssangnips2-gold)" stroke-width="1.4"/>
+      <circle cx="36" cy="12" r="1.7" fill="url(#ssangnips2-core)"/>
+      <path d="M24 34h4M44 34h4M24 44h4M44 44h4" stroke="url(#ssangnips2-gold)" stroke-width="1.3" stroke-linecap="round" opacity=".7"/>
+      <ellipse cx="24" cy="28" rx="2.2" ry="4.2" fill="url(#ssangnips2-shine)" opacity=".5"/>
   </g>
 </svg>

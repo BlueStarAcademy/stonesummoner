@@ -2,8 +2,8 @@
   <defs>
     
     <radialGradient id="gunhims5-aura" cx="50%" cy="42%" r="58%">
-      <stop stop-color="#c9a227" stop-opacity=".55"/>
-      <stop offset=".42" stop-color="#c9a227" stop-opacity=".18"/>
+      <stop stop-color="#c9a227" stop-opacity=".62"/>
+      <stop offset=".4" stop-color="#c9a227" stop-opacity=".22"/>
       <stop offset="1" stop-color="#c9a227" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="gunhims5-gold" x1="14" y1="10" x2="58" y2="62" gradientUnits="userSpaceOnUse">
@@ -17,30 +17,45 @@
       <stop offset="1" stop-color="#14100A"/>
     </linearGradient>
     <linearGradient id="gunhims5-ink" x1="22" y1="16" x2="52" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF6E0"/>
-      <stop offset=".35" stop-color="#c9a227"/>
-      <stop offset=".75" stop-color="#E8D9A8"/>
+      <stop stop-color="#FFF8E8"/>
+      <stop offset=".28" stop-color="#c9a227"/>
+      <stop offset=".7" stop-color="#E8D9A8"/>
       <stop offset="1" stop-color="#8A7038"/>
     </linearGradient>
+    <radialGradient id="gunhims5-core" cx="38%" cy="32%" r="70%">
+      <stop stop-color="#FFF8D6"/>
+      <stop offset=".45" stop-color="#c9a227"/>
+      <stop offset="1" stop-color="#3A2810"/>
+    </radialGradient>
+    <radialGradient id="gunhims5-deep" cx="40%" cy="30%" r="75%">
+      <stop stop-color="#2A2214"/>
+      <stop offset=".55" stop-color="#14100A"/>
+      <stop offset="1" stop-color="#060408"/>
+    </radialGradient>
     <linearGradient id="gunhims5-shine" x1="20" y1="14" x2="40" y2="34" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFF6D0" stop-opacity=".95"/>
       <stop offset="1" stop-color="#c9a227" stop-opacity="0"/>
     </linearGradient>
     <filter id="gunhims5-depth" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="1.2" stdDeviation="1.4" flood-color="#000" flood-opacity=".6"/>
+      <feDropShadow dx="0" dy="1.4" stdDeviation="1.5" flood-color="#000" flood-opacity=".65"/>
     </filter>
   </defs>
-  <circle cx="36" cy="36" r="18" fill="url(#gunhims5-aura)" opacity=".8"/>
-  <g filter="url(#gunhims5-depth)" transform="translate(36 36) scale(0.78) translate(-36 -36)">
+  <circle cx="36" cy="36" r="20" fill="url(#gunhims5-aura)" opacity=".85"/>
+  <circle cx="36" cy="36" r="17.5" fill="url(#gunhims5-deep)" stroke="url(#gunhims5-gold)" stroke-width="1.6" opacity=".92"/>
+  <circle cx="36" cy="36" r="15.2" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".22"/>
+  <g filter="url(#gunhims5-depth)" transform="translate(36 36) scale(0.72) translate(-36 -36)">
     
-      <path d="M36 10 56 18v18c0 14-10 22-20 26-10-4-20-12-20-26V18z"
-        fill="#18160E" stroke="url(#gunhims5-gold)" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M36 16 48 22v14c0 10-7 16-12 19.5-5-3.5-12-9.5-12-19.5V22z"
-        fill="url(#gunhims5-ink)" stroke="#5A4214" stroke-width="1"/>
-      <path d="M26 34h20M36 24v20" stroke="#3A2C10" stroke-width="3.6" stroke-linecap="round"/>
-      <path d="M26 34h20M36 24v20" stroke="url(#gunhims5-gold)" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="36" cy="34" r="3.6" fill="#1A140C" stroke="url(#gunhims5-gold)" stroke-width="1.4"/>
-      <circle cx="36" cy="34" r="1.4" fill="url(#gunhims5-gold)"/>
-      <ellipse cx="30" cy="22" rx="4" ry="2" fill="url(#gunhims5-shine)" opacity=".55" transform="rotate(-20 30 22)"/>
+      <path d="M36 8 58 17v20c0 15-11 24-22 28C15 61 14 52 14 37V17z"
+        fill="url(#gunhims5-deep)" stroke="url(#gunhims5-gold)" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M36 14 50 21v16c0 11-8 17.5-14 21-6-3.5-14-10-14-21V21z"
+        fill="url(#gunhims5-ink)" stroke="#5A4214" stroke-width="1.05"/>
+      <path d="M24 34h24M36 22v24" stroke="#2A2010" stroke-width="3.8" stroke-linecap="round"/>
+      <path d="M24 34h24M36 22v24" stroke="url(#gunhims5-gold)" stroke-width="2.1" stroke-linecap="round"/>
+      <circle cx="36" cy="34" r="4.5" fill="url(#gunhims5-deep)" stroke="url(#gunhims5-gold)" stroke-width="1.5"/>
+      <circle cx="36" cy="34" r="2.4" fill="url(#gunhims5-core)"/>
+      <circle cx="36" cy="34" r="1" fill="#FFF8D6"/>
+      <circle cx="24" cy="24" r="1.5" fill="url(#gunhims5-gold)"/><circle cx="48" cy="24" r="1.5" fill="url(#gunhims5-gold)"/>
+      <circle cx="24" cy="44" r="1.5" fill="url(#gunhims5-gold)"/><circle cx="48" cy="44" r="1.5" fill="url(#gunhims5-gold)"/>
+      <ellipse cx="29" cy="20" rx="4.5" ry="2.2" fill="url(#gunhims5-shine)" opacity=".6" transform="rotate(-18 29 20)"/>
   </g>
 </svg>

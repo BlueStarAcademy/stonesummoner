@@ -35,12 +35,12 @@
   </defs>
   <circle cx="36" cy="36" r="28" fill="url(#pltmythics1-aura)"/>
   <g filter="url(#pltmythics1-depth)">
-    <path d="M22 8 L50 8 L66 64 L6 64 Z" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
-    <path d="M22 8 L50 8 L66 64 L6 64 Z" fill="url(#pltmythics1-face)" stroke="url(#pltmythics1-gold)" stroke-width="3.1" stroke-linejoin="round"/>
-    <path d="M22 8 L50 8 L66 64 L6 64 Z" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
-    <path d="M22 8 L50 8 L45 16 L27 16 Z" fill="url(#pltmythics1-bevel)" opacity=".55"/>
-    <path d="M27 16 L45 16 L56 56 L16 56 Z" fill="url(#pltmythics1-gem)" stroke="#fff4c8" stroke-width="1" stroke-opacity=".55"/>
-    <path d="M27 16 L45 16 L56 56 L16 56 Z" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".2" transform="translate(0 .35)"/>
+    <path d="M36 5a31 31 0 1 1 0 62a31 31 0 1 1 0-62" fill="none" stroke="#0A0806" stroke-width="5.6" stroke-linejoin="round" opacity=".94"/>
+    <path d="M36 5a31 31 0 1 1 0 62a31 31 0 1 1 0-62" fill="url(#pltmythics1-face)" stroke="url(#pltmythics1-gold)" stroke-width="3.1" stroke-linejoin="round"/>
+    <path d="M36 5a31 31 0 1 1 0 62a31 31 0 1 1 0-62" fill="none" stroke="#FFF8D6" stroke-width="1.2" opacity=".34" transform="translate(0 .55)"/>
+    <path d="M12 26a26 26 0 0 1 48 0a31 31 0 0 0-48 0" fill="url(#pltmythics1-bevel)" opacity=".55" fill-rule="evenodd"/>
+    <path d="M36 14a22 22 0 1 1 0 44a22 22 0 1 1 0-44" fill="url(#pltmythics1-gem)" stroke="#fff4c8" stroke-width="1" stroke-opacity=".55"/>
+    <path d="M36 14a22 22 0 1 1 0 44a22 22 0 1 1 0-44" fill="none" stroke="#FFF8D6" stroke-width=".7" opacity=".2" transform="translate(0 .35)"/>
     <ellipse cx="27" cy="18" rx="7.5" ry="3.2" fill="url(#pltmythics1-shine)" transform="rotate(-24 27 18)" opacity=".82"/>
   </g>
 </svg>
