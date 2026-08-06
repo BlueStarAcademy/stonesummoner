@@ -51,6 +51,14 @@ body {
 }
 
 #app {
+  /* Phone-frame design scale: same proportions from short phones → 430px frame */
+  --ui-scale: min(1, calc(100dvh / 760));
+  --ui-gap: clamp(4px, calc(8px * var(--ui-scale)), 8px);
+  --sym-tile: clamp(44px, calc(58px * var(--ui-scale)), 58px);
+  --sym-tile-gap: clamp(4px, calc(6px * var(--ui-scale)), 6px);
+  --sym-rail-pad: clamp(4px, calc(6px * var(--ui-scale)), 6px);
+  --sym-board-max-h: clamp(110px, 26dvh, 200px);
+  --mon-slot-size: clamp(48px, calc(56px * var(--ui-scale)), 56px);
   width: 100%;
   max-width: 430px;
   margin: 0 auto;
@@ -10779,9 +10787,9 @@ span.stage-drop-info-tab {
 .mon-inspect-body--full {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
+  gap: var(--ui-gap, 8px);
   align-items: stretch;
-  padding: 8px 10px 10px;
+  padding: clamp(6px, calc(8px * var(--ui-scale, 1)), 8px) 10px clamp(8px, calc(10px * var(--ui-scale, 1)), 10px);
   min-height: 0;
   flex: 1 1 auto;
   width: 100%;
@@ -10867,7 +10875,7 @@ span.stage-drop-info-tab {
   justify-content: space-between;
   gap: 8px;
   flex: 0 0 auto;
-  padding: 8px 10px;
+  padding: clamp(5px, calc(8px * var(--ui-scale, 1)), 8px) 10px;
   border-bottom: 1px solid #7a6a3a44;
   color: #e8d9a8;
   font-size: 0.72rem;
@@ -11047,7 +11055,7 @@ span.stage-drop-info-tab {
   align-items: center;
   justify-content: flex-end;
   flex: 0 0 auto;
-  padding: 6px 10px 8px;
+  padding: clamp(4px, calc(6px * var(--ui-scale, 1)), 6px) 10px clamp(5px, calc(8px * var(--ui-scale, 1)), 8px);
   border-top: 1px solid #7a6a3a44;
 }
 
@@ -11076,18 +11084,19 @@ span.stage-drop-info-tab {
   overscroll-behavior: contain;
 }
 
-/* Single-row horizontal rail under the equip row. */
+/* Single-row horizontal rail under the equip row — tile size tracks --sym-tile. */
 .mon-sym-inv-grid--rail {
   container-type: normal;
   flex: 0 0 auto;
   display: grid;
-  grid-template-rows: 58px;
+  grid-template-rows: var(--sym-tile, 58px);
   grid-auto-flow: column;
-  grid-auto-columns: 58px;
+  grid-auto-columns: var(--sym-tile, 58px);
   grid-template-columns: none;
-  gap: 6px;
-  height: calc(58px + 12px);
-  max-height: calc(58px + 12px);
+  gap: var(--sym-tile-gap, 6px);
+  padding: var(--sym-rail-pad, 6px);
+  height: calc(var(--sym-tile, 58px) + (var(--sym-rail-pad, 6px) * 2));
+  max-height: calc(var(--sym-tile, 58px) + (var(--sym-rail-pad, 6px) * 2));
   overflow-x: auto;
   overflow-y: hidden;
   align-content: start;
@@ -11095,9 +11104,9 @@ span.stage-drop-info-tab {
 }
 
 .mon-sym-inv-grid--rail .mon-sym-inv-cell {
-  width: 58px;
-  height: 58px;
-  max-height: 58px;
+  width: var(--sym-tile, 58px);
+  height: var(--sym-tile, 58px);
+  max-height: var(--sym-tile, 58px);
 }
 
 .mon-sym-inv-grid--rail .mon-sym-inv-empty {
@@ -11130,10 +11139,10 @@ span.stage-drop-info-tab {
   align-items: stretch;
   justify-content: stretch;
   height: auto;
-  min-height: 58px;
+  min-height: var(--sym-tile, 58px);
   max-height: none;
   overflow: visible;
-  padding: 4px;
+  padding: var(--sym-rail-pad, 4px);
 }
 
 /*
@@ -11702,7 +11711,7 @@ span.stage-drop-info-tab {
 .mon-sym-viewer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--ui-gap, 8px);
   align-items: stretch;
   min-height: 0;
   height: 100%;
@@ -11710,19 +11719,20 @@ span.stage-drop-info-tab {
 }
 
 .mon-sym-viewer--stack {
-  gap: 10px;
+  gap: clamp(6px, calc(10px * var(--ui-scale, 1)), 10px);
 }
 
+/* Equip row yields height so the inventory rail stays fully visible. */
 .mon-sym-viewer-equip {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  gap: 10px;
+  gap: clamp(6px, calc(10px * var(--ui-scale, 1)), 10px);
   align-items: stretch;
   justify-content: flex-start;
   min-width: 0;
   min-height: 0;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   overflow: hidden;
   width: 100%;
 }
@@ -11733,21 +11743,22 @@ span.stage-drop-info-tab {
   min-width: 0;
   min-height: 0;
   flex: 0 0 auto;
-  overflow: visible;
+  overflow: hidden;
   border-radius: 12px;
   border: 1px solid #7a6a3a44;
   background: #0e0b08cc;
 }
 
 .mon-inspect-shell .mon-pane--symbols .rune-circle {
-  flex: 0 0 auto;
-  width: min(58%, 280px);
-  max-width: 280px;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: min(58%, 280px);
   height: auto;
-  max-height: none;
+  max-height: var(--sym-board-max-h, 28dvh);
   aspect-ratio: 3 / 2;
   margin: 0;
   min-height: 0;
+  align-self: center;
 }
 
 .mon-inspect-shell .mon-pane--symbols .rune-effect-block {
@@ -12143,7 +12154,7 @@ span.stage-drop-info-tab {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 100%;
+  min-height: 0;
 }
 
 .mon-pane[hidden],
@@ -13343,12 +13354,11 @@ span.stage-drop-info-tab {
     gap: 3px;
   }
   .mon-sym-viewer {
-    gap: 8px;
+    gap: var(--ui-gap, 8px);
   }
   .mon-inspect-shell .mon-pane--symbols .rune-circle {
-    width: min(54%, 220px);
-    max-width: 220px;
-    max-height: none;
+    max-width: min(54%, 220px);
+    max-height: var(--sym-board-max-h, 24dvh);
   }
   .mon-sym-inv-grid:not(.mon-sym-inv-grid--rail) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -13356,17 +13366,9 @@ span.stage-drop-info-tab {
     padding: 4px;
   }
   .mon-sym-inv-grid--rail {
-    grid-template-rows: 52px;
-    grid-auto-columns: 52px;
-    height: calc(52px + 8px);
-    max-height: calc(52px + 8px);
-    gap: 5px;
-    padding: 4px;
-  }
-  .mon-sym-inv-grid--rail .mon-sym-inv-cell {
-    width: 52px;
-    height: 52px;
-    max-height: 52px;
+    /* sizes come from --sym-tile / --ui-scale on #app */
+    gap: var(--sym-tile-gap, 5px);
+    padding: var(--sym-rail-pad, 4px);
   }
   .rune-circle {
     width: min(100%, 240px);
@@ -13843,7 +13845,7 @@ img.el-tint-dark {
 }
 
 .mon-book-inv.mon-book-inv--rail {
-  --mon-slot-size: 56px;
+  --mon-slot-size: clamp(48px, calc(56px * var(--ui-scale, 1)), 56px);
   position: relative;
   left: auto;
   bottom: auto;
@@ -13859,10 +13861,10 @@ img.el-tint-dark {
   grid-template-rows: repeat(2, var(--mon-slot-size));
   grid-auto-flow: row;
   grid-auto-columns: var(--mon-slot-size);
-  gap: 6px;
+  gap: clamp(4px, calc(6px * var(--ui-scale, 1)), 6px);
   align-content: start;
   justify-content: start;
-  padding: 8px;
+  padding: clamp(6px, calc(8px * var(--ui-scale, 1)), 8px);
   margin: 0;
   border-radius: 14px;
   border: 1px solid #7a6a3a55;
@@ -13870,7 +13872,7 @@ img.el-tint-dark {
     linear-gradient(180deg, #1c1812f8 0%, #0e0c0afc 100%);
   box-shadow: inset 0 1px 0 #fff8e810, 0 -6px 18px #0008;
   max-height: none;
-  height: calc((var(--mon-slot-size) * 2) + 6px + 16px);
+  height: calc((var(--mon-slot-size) * 2) + clamp(4px, calc(6px * var(--ui-scale, 1)), 6px) + (clamp(6px, calc(8px * var(--ui-scale, 1)), 8px) * 2));
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
@@ -16816,6 +16818,9 @@ button.linkish {
   max-height: 100dvh;
   overflow: hidden;
   padding-bottom: env(safe-area-inset-bottom);
+  /* Slightly more aggressive scale on the locked monster viewport */
+  --ui-scale: min(1, calc(100dvh / 740));
+  --sym-board-max-h: clamp(100px, 24dvh, 180px);
 }
 
 /* Monster book: one-line chat only at top — hide profile/resource HUD */
