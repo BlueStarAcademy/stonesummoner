@@ -1,10 +1,25 @@
 /** Battle presentation FX — CSS choreography with Spine mount hooks. */
 
-export type BattleFxKind = "cast_place" | "stone_drop" | "capture" | "lunge" | "ult" | "hit";
+export type BattleFxKind =
+  | "cast_place"
+  | "stone_drop"
+  | "capture"
+  | "lunge"
+  | "ult"
+  | "hit";
+
+export type BattleVfxId = "strike" | "strike-ult" | "hit" | "hit-crit";
 
 const reduceMotion =
   typeof matchMedia !== "undefined" &&
   matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const VFX_SRC: Record<BattleVfxId, string> = {
+  strike: "/art/battle/fx/fx-strike.webp",
+  "strike-ult": "/art/battle/fx/fx-strike-ult.webp",
+  hit: "/art/battle/fx/fx-hit.webp",
+  "hit-crit": "/art/battle/fx/fx-hit-crit.webp",
+};
 
 export function fxDurationMs(baseMs: number, speed: number): number {
   if (reduceMotion) return 40;
@@ -28,6 +43,33 @@ export function pulseUnitClass(
   if (!el) return;
   el.classList.add(className);
   window.setTimeout(() => el.classList.remove(className), ms);
+}
+
+/**
+ * Spawn a painted VFX sprite over a battle unit (strike on attacker, hit on target).
+ * Auto-removes after `ms`.
+ */
+export function spawnUnitVfx(
+  root: ParentNode,
+  unitId: string,
+  vfx: BattleVfxId,
+  ms: number,
+): void {
+  if (reduceMotion) return;
+  const el = root.querySelector<HTMLElement>(
+    `.battle-unit[data-unit="${CSS.escape(unitId)}"]`,
+  );
+  if (!el) return;
+  // Attach to unit (not .battle-unit-art) so mask-image does not clip VFX.
+  const img = document.createElement("img");
+  img.className = `battle-vfx battle-vfx--${vfx}`;
+  img.src = VFX_SRC[vfx];
+  img.alt = "";
+  img.draggable = false;
+  img.decoding = "async";
+  img.setAttribute("aria-hidden", "true");
+  el.appendChild(img);
+  window.setTimeout(() => img.remove(), Math.max(80, ms));
 }
 
 /** Board cell flash after place / capture. */

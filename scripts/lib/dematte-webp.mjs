@@ -1,17 +1,21 @@
 /**
  * Shared flood-fill dematte + WebP encode helpers.
  */
+import fs from "node:fs";
+import path from "node:path";
 import sharp from "sharp";
 
+/** Default lim=36 for icons; battle stills use lim=44 via BATTLE_STILL_DEMATTE. */
 export function isMatte(r, g, b, a, lim = 36) {
   if (a < 8) return true;
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const chroma = max - min;
   const lum = (r + g + b) / 3;
-  if (lum <= lim && chroma <= 22) return true;
-  if (r <= lim + 4 && g <= lim + 4 && b <= lim + 10 && chroma <= 28) return true;
-  if (lum >= 245 && chroma <= 12) return true;
+  // Charcoal mats (#1a–#2c) with low chroma; rim-lit cloth usually has chroma > 20.
+  if (lum <= lim && chroma <= 18) return true;
+  if (r <= lim && g <= lim && b <= lim + 6 && chroma <= 20) return true;
+  if (lum >= 248 && chroma <= 10) return true;
   return false;
 }
 
@@ -48,7 +52,6 @@ export async function dematteBuffer(rgba, w, h, lim = 36) {
   return rgba;
 }
 
-/** Punch rounded-rect hole (normalized 0..1 insets). */
 export function punchRoundedRect(rgba, w, h, inset = 0.12, radius = 0.08) {
   const ix0 = Math.floor(w * inset);
   const iy0 = Math.floor(h * inset);
@@ -61,7 +64,6 @@ export function punchRoundedRect(rgba, w, h, inset = 0.12, radius = 0.08) {
     const ly = y - iy0;
     const rw = ix1 - ix0;
     const rh = iy1 - iy0;
-    // corner tests
     const cx = lx < rr ? rr - lx : lx > rw - rr ? lx - (rw - rr) : 0;
     const cy = ly < rr ? rr - ly : ly > rh - rr ? ly - (rh - rr) : 0;
     if (cx === 0 || cy === 0) return true;
@@ -77,9 +79,13 @@ export function punchRoundedRect(rgba, w, h, inset = 0.12, radius = 0.08) {
 export async function pngToDematteWebp(srcPng, dstWebp, opts = {}) {
   const size = opts.size ?? 256;
   const lim = opts.lim ?? 36;
+  const fit = opts.fit ?? "cover";
   const punchCenter = opts.punchCenter ?? false;
   const { data, info } = await sharp(srcPng)
-    .resize(size, size, { fit: "cover" })
+    .resize(size, size, {
+      fit,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -88,7 +94,27 @@ export async function pngToDematteWebp(srcPng, dstWebp, opts = {}) {
   const rgba = new Uint8ClampedArray(data);
   await dematteBuffer(rgba, w, h, lim);
   if (punchCenter) punchRoundedRect(rgba, w, h, opts.inset ?? 0.14, opts.radius ?? 0.07);
-  await sharp(Buffer.from(rgba), { raw: { width: w, height: h, channels: 4 } })
-    .webp({ quality: opts.quality ?? 88, alphaQuality: 95 })
-    .toFile(dstWebp);
+  const buf = await sharp(Buffer.from(rgba), {
+    raw: { width: w, height: h, channels: 4 },
+  })
+    .webp({ quality: opts.quality ?? 88, alphaQuality: 100 })
+    .toBuffer();
+  const tmp = `${dstWebp}.${process.pid}.tmp`;
+  await fs.promises.writeFile(tmp, buf);
+  try {
+    await fs.promises.unlink(dstWebp).catch(() => {});
+    await fs.promises.rename(tmp, dstWebp);
+  } catch {
+    await fs.promises.copyFile(tmp, dstWebp);
+    await fs.promises.unlink(tmp).catch(() => {});
+  }
+  await fs.promises.unlink(tmp).catch(() => {});
 }
+
+/** Preset for full-body battle stills. */
+export const BATTLE_STILL_DEMATTE = {
+  size: 768,
+  lim: 44,
+  fit: "contain",
+  quality: 90,
+};

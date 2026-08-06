@@ -15,6 +15,7 @@ import {
   playUltCutin,
   pulseBoardCell,
   pulseUnitClass,
+  spawnUnitVfx,
   waitFx,
 } from "./battle/fx";
 import { destroyAllSpine, mountBattleSpines, playSpineClip } from "./battle/spinePilot";
@@ -684,6 +685,10 @@ let battleSpeed: 1 | 2 | 3 = 1;
 let autoMode = false;
 /** Blocks input while place/strike choreography plays. */
 let battleFxBusy = false;
+/** Manual skill pick under the active unit (SW: select then tap enemy). */
+let selectedSkillIndex: number | null = null;
+type BattleSummonerSkillId = "open" | "declare" | "dual" | "clean" | "guard";
+let selectedSummonerSkill: BattleSummonerSkillId | null = null;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let energyRegenTimer: ReturnType<typeof setInterval> | null = null;
 let dmgFloats: { id: number; text: string; crit: boolean; ult: boolean }[] = [];
@@ -1542,6 +1547,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   clearAutoTimer();
   dmgFloats = [];
   selectedTargetId = null;
+  clearBattleSkillSelection();
   lastSeenBoardPhase = 0;
   boardRekindleFx = false;
   stageEntryId = null;
@@ -2503,6 +2509,11 @@ function refreshLegal(): void {
     .filter((p) => !battle!.isForbidden(p));
 }
 
+function clearBattleSkillSelection(): void {
+  selectedSkillIndex = null;
+  selectedSummonerSkill = null;
+}
+
 function ensureTarget(): string | undefined {
   if (!battle) return undefined;
   if (selectedTargetId) {
@@ -2517,6 +2528,20 @@ function ensureTarget(): string | undefined {
   const lowest = enemies.sort((a, b) => a.hp - b.hp)[0];
   selectedTargetId = lowest?.id ?? null;
   return selectedTargetId ?? undefined;
+}
+
+/** Manual cast: only use an explicitly tapped enemy (no auto lowest-HP). */
+function requireSelectedEnemyTarget(): string | undefined {
+  if (!battle || !selectedTargetId) return undefined;
+  const t = battle.getUnit(selectedTargetId);
+  if (t?.alive && t.kind === "monster" && t.team === "enemy") {
+    return selectedTargetId;
+  }
+  return undefined;
+}
+
+function summonerSkillNeedsEnemyTarget(id: BattleSummonerSkillId): boolean {
+  return id === "open";
 }
 
 function grantRewardIfNeeded(): void {
@@ -2601,7 +2626,7 @@ function renderResult(): string {
   const stage = currentStage;
   const reward = lastReward;
   if (!stage || !reward) {
-    return `<div class="result-wrap">
+    return `<div class="result-wrap result-wrap--enter">
       ${navBackBtn({ nav: "stages", label: t("ui.1a7f31cadb") })}
       ${battleSkyHtml(currentStage)}
       <div class="result-screen is-lose">
@@ -2783,7 +2808,7 @@ function renderResult(): string {
     ? `<p class="result-empty">${escapeHtml(reward.expNote || t("ui.41281baf5a"))}</p>`
     : "";
 
-  return `<div class="result-wrap">
+  return `<div class="result-wrap result-wrap--enter">
     ${navBackBtn({ nav: "stages", label: t("ui.1a7f31cadb") })}
     ${battleSkyHtml(stage)}
     <div class="result-screen ${win ? "is-win" : "is-lose"}">
@@ -3002,6 +3027,8 @@ async function resolveCombatUntilAllyInput(opts?: {
 
       if (unit.team === "ally" && !autoAlly) {
         if (battle.phase === "await_stone") {
+          clearBattleSkillSelection();
+          selectedTargetId = null;
           refreshLegal();
           render();
           return;
@@ -3011,8 +3038,12 @@ async function resolveCombatUntilAllyInput(opts?: {
           return;
         }
         if (battle.phase === "await_skill") {
-          // Manual: player picks target + skill (no auto-attack).
-          ensureTarget();
+          // Manual: select skill under unit, then tap an enemy.
+          clearBattleSkillSelection();
+          selectedTargetId = null;
+          if (unit.kind === "monster" && battle.canUseSkill(unit, 0)) {
+            selectedSkillIndex = 0;
+          }
           refreshLegal();
           render();
           return;
@@ -3185,9 +3216,13 @@ function autoAllyTurn(): void {
 }
 
 function castSkill(
-  mode: "ult" | "declare" | "dual" | "clean" | "guard" | "smart" | number,
+  mode: BattleSummonerSkillId | "ult" | "smart" | number,
+  targetId?: string,
 ): void {
-  void castSkillAsync(mode);
+  // Legacy "ult" id maps to open.
+  const resolved: BattleSummonerSkillId | "smart" | number =
+    mode === "ult" ? "open" : mode;
+  void castSkillAsync(resolved, targetId);
 }
 
 async function playStrikeFx(
@@ -3204,18 +3239,40 @@ async function playStrikeFx(
     const caster = hits[0]?.attackerId;
     if (caster) {
       pulseUnitClass(app, caster, "fx-ult", cutMs);
+      spawnUnitVfx(app, caster, "strike-ult", cutMs);
       playSpineClip(caster, "ult");
+    }
+    const firstTarget = hits[0]?.targetId;
+    if (firstTarget) {
+      const crit = hits.some((h) => h.crit);
+      window.setTimeout(() => {
+        pulseUnitClass(app, firstTarget, "fx-hit", fxDurationMs(320, battleSpeed));
+        spawnUnitVfx(
+          app,
+          firstTarget,
+          crit ? "hit-crit" : "hit",
+          fxDurationMs(360, battleSpeed),
+        );
+      }, Math.floor(cutMs * 0.45));
     }
     await waitFx(cutMs);
   } else {
     const attackerId = hits[0]!.attackerId;
     const targetId = hits[0]!.targetId;
+    const crit = hits.some((h) => h.crit);
     const lungeMs = fxDurationMs(380, battleSpeed);
     pulseUnitClass(app, attackerId, "fx-lunge", lungeMs);
-    pulseUnitClass(app, targetId, "fx-hit", lungeMs);
+    spawnUnitVfx(app, attackerId, "strike", lungeMs);
     playSpineClip(attackerId, "run", { loop: false });
     window.setTimeout(() => {
       playSpineClip(attackerId, "attack");
+      pulseUnitClass(app, targetId, "fx-hit", fxDurationMs(320, battleSpeed));
+      spawnUnitVfx(
+        app,
+        targetId,
+        crit ? "hit-crit" : "hit",
+        fxDurationMs(360, battleSpeed),
+      );
     }, Math.floor(lungeMs * 0.35));
     await waitFx(lungeMs);
   }
@@ -3223,7 +3280,8 @@ async function playStrikeFx(
 }
 
 async function castSkillAsync(
-  mode: "ult" | "declare" | "dual" | "clean" | "guard" | "smart" | number,
+  mode: BattleSummonerSkillId | "smart" | number,
+  forcedTargetId?: string,
 ): Promise<void> {
   if (!battle || battle.phase !== "await_skill" || autoMode || battleFxBusy)
     return;
@@ -3232,18 +3290,39 @@ async function castSkillAsync(
     : null;
   if (!unit || unit.team !== "ally") return;
 
+  if (forcedTargetId) selectedTargetId = forcedTargetId;
+
   battleFxBusy = true;
   try {
-    if (mode === "ult") {
+    const finish = async (hits: SkillResult[], opts?: { ult?: boolean }) => {
+      clearBattleSkillSelection();
+      selectedTargetId = null;
+      if (opts?.ult || hits.some((h) => h.damage !== 0 || h.crit)) {
+        await playStrikeFx(hits, opts);
+      } else {
+        pushDamageFloats(hits);
+      }
+      await resolveCombatUntilAllyInput({ holdBusy: true });
+    };
+
+    if (mode === "open") {
       const magics = battle.summonerOf(unit.team).magicSkills ?? [];
       const full = magics.find(
         (s) =>
           s.manaCostFrac >= 0.95 && battle!.canUseMagicSkill(unit, s.id),
       );
+      const targetId = requireSelectedEnemyTarget();
+      if (!targetId) {
+        flash(t("ui.battlePickEnemy"));
+        render();
+        return;
+      }
       if (full) {
-        const hits = battle.useSkill({ summonerSkill: full.id });
-        await playStrikeFx(hits, { ult: true });
-        await resolveCombatUntilAllyInput({ holdBusy: true });
+        const hits = battle.useSkill({
+          summonerSkill: full.id,
+          targetId,
+        });
+        await finish(hits, { ult: true });
         return;
       }
       if (!battle.canUseSummonerSkill(unit)) {
@@ -3251,9 +3330,8 @@ async function castSkillAsync(
         render();
         return;
       }
-      const hits = battle.useSkill({ summonerSkill: "open" });
-      await playStrikeFx(hits, { ult: true });
-      await resolveCombatUntilAllyInput({ holdBusy: true });
+      const hits = battle.useSkill({ summonerSkill: "open", targetId });
+      await finish(hits, { ult: true });
       return;
     }
     if (mode === "declare") {
@@ -3262,9 +3340,7 @@ async function castSkillAsync(
         render();
         return;
       }
-      const hits = battle.useSkill({ summonerSkill: "declare" });
-      pushDamageFloats(hits);
-      await resolveCombatUntilAllyInput({ holdBusy: true });
+      await finish(battle.useSkill({ summonerSkill: "declare" }));
       return;
     }
     if (mode === "dual") {
@@ -3273,9 +3349,7 @@ async function castSkillAsync(
         render();
         return;
       }
-      const hits = battle.useSkill({ summonerSkill: "dual" });
-      pushDamageFloats(hits);
-      await resolveCombatUntilAllyInput({ holdBusy: true });
+      await finish(battle.useSkill({ summonerSkill: "dual" }));
       return;
     }
     if (mode === "clean") {
@@ -3284,9 +3358,7 @@ async function castSkillAsync(
         render();
         return;
       }
-      const hits = battle.useSkill({ summonerSkill: "clean" });
-      pushDamageFloats(hits);
-      await resolveCombatUntilAllyInput({ holdBusy: true });
+      await finish(battle.useSkill({ summonerSkill: "clean" }));
       return;
     }
     if (mode === "guard") {
@@ -3295,28 +3367,35 @@ async function castSkillAsync(
         render();
         return;
       }
-      const hits = battle.useSkill({ summonerSkill: "guard" });
-      pushDamageFloats(hits);
-      await resolveCombatUntilAllyInput({ holdBusy: true });
+      await finish(battle.useSkill({ summonerSkill: "guard" }));
       return;
     }
 
+    // "smart" only for auto/AI — manual uses explicit index + target.
     const skillIndex =
       mode === "smart" ? pickAutoSkillIndex(unit, battle.units) : mode;
-    if (typeof skillIndex === "number" && !battle.canUseSkill(unit, skillIndex)) {
+    if (typeof skillIndex !== "number") return;
+    if (!battle.canUseSkill(unit, skillIndex)) {
       flash(t("ui.73743ba945"));
       render();
       return;
     }
-    const targetId = ensureTarget();
+    const targetId =
+      mode === "smart"
+        ? ensureTarget()
+        : requireSelectedEnemyTarget();
+    if (!targetId) {
+      flash(t("ui.battlePickEnemy"));
+      render();
+      return;
+    }
     const hits = battle.useSkill({ skillIndex, targetId });
     if (!hits.length) {
       flash(t("ui.b72f5a4752"));
       render();
       return;
     }
-    await playStrikeFx(hits);
-    await resolveCombatUntilAllyInput({ holdBusy: true });
+    await finish(hits);
   } finally {
     battleFxBusy = false;
   }
@@ -3329,20 +3408,90 @@ function renderSkillButtons(active: Unit | null, awaitSkill: boolean): string {
   const slots = [0, 1, 2].map((i) => {
     const sk = skills[i];
     const cd = cds[i] ?? 0;
-    const label = sk ? sk.nameKo : i === 0 ? t('ui.8a1893a931') : `S${i + 1}`;
+    const label = sk ? sk.nameKo : i === 0 ? t("ui.8a1893a931") : `S${i + 1}`;
     const disabled = !awaitSkill || (sk ? cd > 0 : i > 0);
+    const selected =
+      awaitSkill && !disabled && selectedSkillIndex === i ? " is-selected" : "";
     const state = cd > 0 ? " cooling" : awaitSkill && !disabled ? " ready" : "";
     const ico =
       monId != null
         ? monsterSkillArtImg(monId, i, sk, "skill-btn-ico", 40)
         : `<img class="skill-btn-ico" src="${monsterSkillArtSrc(null, -1, sk)}" width="40" height="40" alt="" draggable="false" decoding="async" />`;
-    return `<button type="button" class="skill-btn${state}" data-skill="${i}" ${disabled ? "disabled" : ""}>
+    return `<button type="button" class="skill-btn${state}${selected}" data-skill="${i}" ${disabled ? "disabled" : ""}>
       ${ico}
       <span class="skill-btn-label">${label}</span>
       ${cd > 0 ? `<span class="skill-btn-cd">${cd}</span>` : ""}
     </button>`;
   });
   return slots.join("");
+}
+
+function renderSummonerSkillButtons(
+  active: Unit,
+  awaitSkill: boolean,
+): string {
+  if (!battle || !awaitSkill || active.kind !== "summoner") return "";
+  const items: {
+    id: BattleSummonerSkillId;
+    ready: boolean;
+    label: string;
+    art: string;
+  }[] = [
+    {
+      id: "open",
+      ready: battle.canUseSummonerSkill(active),
+      label: t("ui.2d99fde255"),
+      art: "open",
+    },
+    {
+      id: "declare",
+      ready: battle.canUseSummonerDeclare(active),
+      label: t("ui.bd1967124e"),
+      art: "declare",
+    },
+    {
+      id: "dual",
+      ready: battle.canUseSummonerDual(active),
+      label: t("ui.1fa6111a65"),
+      art: "dual",
+    },
+    {
+      id: "clean",
+      ready: battle.canUseSummonerClean(active),
+      label: t("ui.ac2f6c7ca5"),
+      art: "clean",
+    },
+    {
+      id: "guard",
+      ready: battle.canUseSummonerGuard(active),
+      label: t("ui.0be109c051"),
+      art: "guard",
+    },
+  ];
+  return items
+    .map((it) => {
+      const selected =
+        selectedSummonerSkill === it.id ? " is-selected" : "";
+      const state = it.ready ? " ready" : "";
+      return `<button type="button" class="summoner-sk skill-btn ${it.id}${state}${selected}" data-summoner-skill="${it.id}" ${it.ready ? "" : "disabled"}>
+        ${summonerSkillArtImg(it.art, "skill-btn-ico", 40)}
+        <span class="skill-btn-label">${it.label}</span>
+      </button>`;
+    })
+    .join("");
+}
+
+function renderActiveUnitSkills(u: Unit): string {
+  if (!battle || autoMode) return "";
+  if (battle.phase !== "await_skill" || battle.activeUnitId !== u.id)
+    return "";
+  if (u.team !== "ally" || !u.alive) return "";
+  const body =
+    u.kind === "summoner"
+      ? renderSummonerSkillButtons(u, true)
+      : renderSkillButtons(u, true);
+  if (!body) return "";
+  return `<div class="battle-unit-skills" role="toolbar" aria-label="${escapeHtml(t("ui.battleUnitSkills"))}">${body}</div>`;
 }
 
 function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
@@ -3408,6 +3557,7 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
     <span class="battle-unit-glow" aria-hidden="true"></span>
     <span class="battle-unit-art" aria-hidden="true">${art}</span>
     ${showName ? `<span class="battle-unit-name">${u.name}</span>` : ""}
+    ${renderActiveUnitSkills(u)}
   </${tag}>`;
 }
 
@@ -4645,6 +4795,10 @@ function renderMissionModal(): string {
 }
 
 function render(): void {
+  // In-combat soft patch: avoid wiping the whole app (BG reload + fade flash).
+  if (view === "battle" && battle && app.querySelector(".battle-screen")) {
+    if (refreshBattleView()) return;
+  }
   const keepIsland =
     !islandLayoutEdit && (view === "home" || isFacilityView(view))
       ? app.querySelector<HTMLElement>(".home-island")
@@ -9059,11 +9213,6 @@ function renderBattle(manaPct: number): string {
     !autoMode;
   const awaitSkill =
     battle.phase === "await_skill" && active?.team === "ally" && !autoMode;
-  const canUlt = !!active && battle.canUseSummonerSkill(active);
-  const canDeclare = !!active && battle.canUseSummonerDeclare(active);
-  const canDual = !!active && battle.canUseSummonerDual(active);
-  const canClean = !!active && battle.canUseSummonerClean(active);
-  const canGuard = !!active && battle.canUseSummonerGuard(active);
   const mission =
     battle.modules.moduleG && !battle.finishReason
       ? ` ${MIDDOT} ${t('ui.511fa65e38')} ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? CHECK : ""}`
@@ -9076,13 +9225,18 @@ function renderBattle(manaPct: number): string {
       : t('ui.8d9e9106fa')
     : `${battle.phase} ${MIDDOT} amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} ${MIDDOT} ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}${boardTag}`;
 
+  const hasSkillPick =
+    awaitSkill &&
+    (selectedSkillIndex != null || selectedSummonerSkill != null);
   const skillHint =
     battle.phase === "await_stone" && active?.team === "ally"
-      ? t('ui.62b39a7abd')
+      ? t("ui.62b39a7abd")
       : awaitShop
-        ? t('ui.e724206861')
+        ? t("ui.e724206861")
         : awaitSkill
-          ? t('ui.250a3a4d15')
+          ? hasSkillPick
+            ? t("ui.battlePickEnemy")
+            : t("ui.battlePickSkill")
           : autoMode
             ? `AUTO x${battleSpeed}`
             : "";
@@ -9092,32 +9246,16 @@ function renderBattle(manaPct: number): string {
     battle.phase === "await_stone" &&
     active?.team === "ally" &&
     !autoMode;
-  const skillRow = awaitShop
-    ? ""
-    : `<div class="skill-dock skill-dock--stage${showBoardSwitch ? " has-switch" : ""}${awaitSkill ? " is-armed" : ""}">
-      <div class="skill-cluster skill-cluster--unit">
-        ${renderSkillButtons(active, awaitSkill)}
-      </div>
-      <div class="skill-cluster skill-cluster--summoner" aria-label="${t('ui.5618aec54c')}">
-        <button type="button" id="sk-ult" class="summoner-sk ult${canUlt ? " ready" : ""}" ${awaitSkill && canUlt ? "" : "disabled"}>${summonerSkillArtImg("open", "sk-ico", 28)}<span class="sk-name">${t('ui.2d99fde255')}</span></button>
-        <button type="button" id="sk-declare" class="summoner-sk declare${canDeclare ? " ready" : ""}" ${awaitSkill && canDeclare ? "" : "disabled"}>${summonerSkillArtImg("declare", "sk-ico", 28)}<span class="sk-name">${t('ui.bd1967124e')}</span></button>
-        <button type="button" id="sk-dual" class="summoner-sk dual${canDual ? " ready" : ""}" ${awaitSkill && canDual ? "" : "disabled"}>${summonerSkillArtImg("dual", "sk-ico", 28)}<span class="sk-name">${t('ui.1fa6111a65')}</span></button>
-        <button type="button" id="sk-clean" class="summoner-sk clean${canClean ? " ready" : ""}" ${awaitSkill && canClean ? "" : "disabled"}>${summonerSkillArtImg("clean", "sk-ico", 28)}<span class="sk-name">${t('ui.ac2f6c7ca5')}</span></button>
-        <button type="button" id="sk-guard" class="summoner-sk guard${canGuard ? " ready" : ""}" ${awaitSkill && canGuard ? "" : "disabled"}>${summonerSkillArtImg("guard", "sk-ico", 28)}<span class="sk-name">${t('ui.0be109c051')}</span></button>
-      </div>
-      <div class="skill-cluster skill-cluster--util">
-        <button type="button" id="sk-smart" class="smart" ${awaitSkill ? "" : "disabled"}>${t('ui.4b0ea2fcd0')}</button>
-        ${
-          showBoardSwitch
-            ? `<button type="button" class="secondary board-switch" id="btn-board-switch">${t('ui.bf185333fe')} ${battle.boardLabel === t('ui.8bbc778e36') ? `${ARROW_RIGHT}B` : `${ARROW_RIGHT}A`}</button>`
-            : ""
-        }
-      </div>
-    </div>`;
+  const utilRow =
+    showBoardSwitch
+      ? `<div class="battle-util-row">
+        <button type="button" class="secondary board-switch" id="btn-board-switch">${t("ui.bf185333fe")} ${battle.boardLabel === t("ui.8bbc778e36") ? `${ARROW_RIGHT}B` : `${ARROW_RIGHT}A`}</button>
+      </div>`
+      : "";
 
   const stageTitle = escapeHtml(currentStage.nameKo);
 
-  return `<div class="battle-screen">
+  return `<div class="battle-screen battle-screen--enter">
     ${battleSkyHtml(currentStage)}
     <header class="battle-chrome">
       ${renderBattleTicker()}
@@ -9140,7 +9278,7 @@ function renderBattle(manaPct: number): string {
     <div class="battle-lane ally">
       ${renderBattleFront(allyUnits, "ally")}
     </div>
-    ${skillRow}
+    ${utilRow}
     ${skillHint ? `<p class="skill-hint">${skillHint}</p>` : ""}
     <div class="battle-hud battle-hud--stage">
       ${navBackBtn({ id: "btn-back", label: t('ui.1a7f31cadb') })}
@@ -9151,6 +9289,219 @@ function renderBattle(manaPct: number): string {
     </div>
   </div>
   </div>`;
+}
+
+/** Snapshot unit art nodes (incl. spine hosts) before a soft battle DOM rebuild. */
+function captureBattleArtMap(root: ParentNode): Map<string, HTMLElement> {
+  const map = new Map<string, HTMLElement>();
+  root.querySelectorAll<HTMLElement>(".battle-unit[data-unit]").forEach((unit) => {
+    const id = unit.dataset.unit;
+    const art = unit.querySelector<HTMLElement>(".battle-unit-art");
+    if (id && art) map.set(id, art);
+  });
+  return map;
+}
+
+/** Reattach preserved art when src matches so images/spine do not remount. */
+function restoreBattleArt(
+  root: ParentNode,
+  arts: Map<string, HTMLElement>,
+): void {
+  root.querySelectorAll<HTMLElement>(".battle-unit[data-unit]").forEach((unit) => {
+    const id = unit.dataset.unit;
+    if (!id) return;
+    const prev = arts.get(id);
+    const next = unit.querySelector<HTMLElement>(".battle-unit-art");
+    if (!prev || !next || prev === next) return;
+    const prevSrc = prev.querySelector("img")?.getAttribute("src");
+    const nextSrc = next.querySelector("img")?.getAttribute("src");
+    if (prevSrc && prevSrc === nextSrc) next.replaceWith(prev);
+  });
+}
+
+/**
+ * Patch the live battle screen in place (no app.innerHTML wipe).
+ * Preserves sky BG + unit art/spine so combat does not "flash refresh".
+ */
+function refreshBattleView(): boolean {
+  if (view !== "battle" || !battle || !currentStage) return false;
+  const screen = app.querySelector<HTMLElement>(".battle-screen");
+  if (!screen) return false;
+
+  const allyMana = battle.allySummoner;
+  const manaPct = Math.round((allyMana.mana / allyMana.manaMax) * 100);
+  const arts = captureBattleArtMap(screen);
+  const sky = screen.querySelector<HTMLElement>(".battle-sky");
+
+  const wrap = document.createElement("div");
+  wrap.innerHTML = renderBattle(manaPct);
+  const next = wrap.firstElementChild as HTMLElement | null;
+  if (!next) return false;
+
+  // Drop enter animation on subsequent soft updates
+  next.classList.remove("battle-screen--enter");
+  screen.classList.remove("battle-screen--enter");
+
+  const nextSky = next.querySelector(".battle-sky");
+  if (sky && nextSky) nextSky.replaceWith(sky);
+
+  screen.replaceChildren(...Array.from(next.childNodes));
+  restoreBattleArt(screen, arts);
+  bindBattleInteractive();
+  mountUnitAnimHooks(screen);
+  return true;
+}
+
+/** Rebind combat controls after a soft battle DOM patch. */
+function bindBattleInteractive(): void {
+  app.querySelector("#btn-board-switch")?.addEventListener("click", () => {
+    if (!battle) return;
+    if (!battle.switchBoard(t("ui.a9034f7e3d"))) return;
+    refreshLegal();
+    render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-board-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!battle || battle.boards.length < 2) return;
+      const idx = Number(btn.dataset.boardTab);
+      if (!Number.isFinite(idx) || idx === battle.activeBoardIndex) return;
+      if (!battle.switchBoard(t("ui.a9034f7e3d"))) return;
+      refreshLegal();
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-shop]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!battle) return;
+      const choice = btn.dataset.shop as CaptureShopChoice;
+      if (!battle.chooseCaptureShop(choice)) return;
+      void resolveCombatUntilAllyInput();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>(".board .cell").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>(".suggest-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      onCellClick(Number(btn.dataset.sgx), Number(btn.dataset.sgy));
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-target]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedTargetId = btn.dataset.target ?? null;
+      if (
+        !battle ||
+        battle.phase !== "await_skill" ||
+        autoMode ||
+        battleFxBusy
+      ) {
+        render();
+        return;
+      }
+      const unit = battle.activeUnitId
+        ? battle.getUnit(battle.activeUnitId)
+        : null;
+      if (!unit || unit.team !== "ally") {
+        render();
+        return;
+      }
+      if (selectedSummonerSkill && summonerSkillNeedsEnemyTarget(selectedSummonerSkill)) {
+        castSkill(selectedSummonerSkill, selectedTargetId ?? undefined);
+        return;
+      }
+      if (selectedSkillIndex != null) {
+        castSkill(selectedSkillIndex, selectedTargetId ?? undefined);
+        return;
+      }
+      flash(t("ui.battlePickSkill"));
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-skill]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (!battle || battle.phase !== "await_skill" || autoMode || battleFxBusy)
+        return;
+      const idx = Number(btn.dataset.skill);
+      if (!Number.isFinite(idx)) return;
+      selectedSummonerSkill = null;
+      selectedSkillIndex = selectedSkillIndex === idx ? null : idx;
+      render();
+    });
+  });
+
+  app
+    .querySelectorAll<HTMLButtonElement>("[data-summoner-skill]")
+    .forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        if (
+          !battle ||
+          battle.phase !== "await_skill" ||
+          autoMode ||
+          battleFxBusy
+        )
+          return;
+        const id = btn.dataset.summonerSkill as BattleSummonerSkillId | undefined;
+        if (!id) return;
+        selectedSkillIndex = null;
+        if (summonerSkillNeedsEnemyTarget(id)) {
+          selectedSummonerSkill =
+            selectedSummonerSkill === id ? null : id;
+          render();
+          return;
+        }
+        // Buff / board skills: cast immediately (no enemy tap).
+        selectedSummonerSkill = id;
+        castSkill(id);
+      });
+    });
+
+  app.querySelector("#btn-speed")?.addEventListener("click", () => {
+    battleSpeed = battleSpeed === 1 ? 2 : battleSpeed === 2 ? 3 : 1;
+    render();
+    if (autoMode) scheduleAuto();
+  });
+
+  app.querySelector("#btn-auto-toggle")?.addEventListener("click", () => {
+    if (!battle || battle.finishReason) return;
+    autoMode = !autoMode;
+    if (autoMode) {
+      clearBattleSkillSelection();
+      scheduleAuto();
+    } else clearAutoTimer();
+    render();
+  });
+
+  app.querySelector("#btn-back")?.addEventListener("click", () => {
+    autoMode = false;
+    clearAutoTimer();
+    if (battle?.finishReason) grantRewardIfNeeded();
+    if (view === "result") {
+      battle = null;
+      dmgFloats = [];
+      view = "stages";
+      render();
+      return;
+    }
+    battle = null;
+    currentStage = null;
+    lastReward = null;
+    lastScrollGain = 0;
+    lastScrollPremiumGain = 0;
+    dmgFloats = [];
+    clearBattleSkillSelection();
+    view = "stages";
+    render();
+  });
 }
 
 function bindAuth(): void {
@@ -11096,43 +11447,77 @@ function bind(): void {
     btn.addEventListener("click", () => {
       selectedTargetId = btn.dataset.target ?? null;
       if (
-        battle &&
-        battle.phase === "await_skill" &&
-        !autoMode &&
-        !battleFxBusy
+        !battle ||
+        battle.phase !== "await_skill" ||
+        autoMode ||
+        battleFxBusy
       ) {
-        const unit = battle.activeUnitId
-          ? battle.getUnit(battle.activeUnitId)
-          : null;
-        if (unit?.team === "ally") {
-          // Manual: tapping an enemy fires the ready skill at that target.
-          castSkill("smart");
-          return;
-        }
+        render();
+        return;
       }
+      const unit = battle.activeUnitId
+        ? battle.getUnit(battle.activeUnitId)
+        : null;
+      if (!unit || unit.team !== "ally") {
+        render();
+        return;
+      }
+      if (
+        selectedSummonerSkill &&
+        summonerSkillNeedsEnemyTarget(selectedSummonerSkill)
+      ) {
+        castSkill(selectedSummonerSkill, selectedTargetId ?? undefined);
+        return;
+      }
+      if (selectedSkillIndex != null) {
+        castSkill(selectedSkillIndex, selectedTargetId ?? undefined);
+        return;
+      }
+      flash(t("ui.battlePickSkill"));
       render();
     });
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-skill]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      castSkill(Number(btn.dataset.skill));
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (!battle || battle.phase !== "await_skill" || autoMode || battleFxBusy)
+        return;
+      const idx = Number(btn.dataset.skill);
+      if (!Number.isFinite(idx)) return;
+      selectedSummonerSkill = null;
+      selectedSkillIndex = selectedSkillIndex === idx ? null : idx;
+      render();
     });
   });
-  app.querySelector("#sk-ult")?.addEventListener("click", () => castSkill("ult"));
-  app.querySelector("#sk-declare")?.addEventListener("click", () =>
-    castSkill("declare"),
-  );
-  app.querySelector("#sk-dual")?.addEventListener("click", () =>
-    castSkill("dual"),
-  );
-  app.querySelector("#sk-clean")?.addEventListener("click", () =>
-    castSkill("clean"),
-  );
-  app.querySelector("#sk-guard")?.addEventListener("click", () =>
-    castSkill("guard"),
-  );
-  app.querySelector("#sk-smart")?.addEventListener("click", () => castSkill("smart"));
+
+  app
+    .querySelectorAll<HTMLButtonElement>("[data-summoner-skill]")
+    .forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        if (
+          !battle ||
+          battle.phase !== "await_skill" ||
+          autoMode ||
+          battleFxBusy
+        )
+          return;
+        const id = btn.dataset.summonerSkill as
+          | BattleSummonerSkillId
+          | undefined;
+        if (!id) return;
+        selectedSkillIndex = null;
+        if (summonerSkillNeedsEnemyTarget(id)) {
+          selectedSummonerSkill =
+            selectedSummonerSkill === id ? null : id;
+          render();
+          return;
+        }
+        selectedSummonerSkill = id;
+        castSkill(id);
+      });
+    });
 
   app.querySelector("#btn-speed")?.addEventListener("click", () => {
     battleSpeed = battleSpeed === 1 ? 2 : battleSpeed === 2 ? 3 : 1;
@@ -11144,6 +11529,7 @@ function bind(): void {
     if (!battle || battle.finishReason) return;
     autoMode = !autoMode;
     if (autoMode) {
+      clearBattleSkillSelection();
       scheduleAuto();
     } else {
       clearAutoTimer();
@@ -11190,6 +11576,10 @@ function bind(): void {
     // Painted battle stills are already transparent — dematte punches dark cloth.
     dematteArtInTree(app, "img.battle-unit-img:not([data-still-front])");
     void mountBattleSpines(app);
+    // One-shot enter fade; soft patches strip this class.
+    queueMicrotask(() => {
+      app.querySelector(".battle-screen")?.classList.remove("battle-screen--enter");
+    });
   } else if (view === "enhance" || view === "summoner") {
     destroyAllSpine();
     bindMonPreviewTurntable(app);

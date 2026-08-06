@@ -12,16 +12,16 @@
 **Output:** `apps/web/public/art/monster/battle/{artKey}-front.webp` and `-back.webp`
 
 - Full body, consistent scale, **feet fully inside frame**, grounded stance
-- ~**12% transparent safe margin** on all sides (alpha must not touch edges)
-- front = camera-facing (enemy lane) · back = dedicated rear view for ally lane (never a flip)
-- Pure black / charcoal matte → dematte → WebP (+ PNG fallback)
-- Do not crop heads or feet; silhouette scale shared across families
+- Safe margin ~12% top/sides, ~5% bottom after pad (alpha must not touch edges)
+- front = camera-facing · back = dedicated rear (never a flip)
+- Pure black matte → dematte lim≈44 (low-chroma) contain → asymmetric pad → WebP
+- Ultra detailed costume; keep dark armor readable (do not blend into matte)
 
 ### Master portrait
 
 ```
 Premium Com2uS Summoners War style monster portrait bust,
-hand-painted 2D dark fantasy character, detailed costume,
+ultra detailed hand-painted 2D dark fantasy character, intricate costume,
 dark charcoal background, square composition, no text, no watermark
 ```
 
@@ -29,10 +29,13 @@ dark charcoal background, square composition, no text, no watermark
 
 ```
 Premium Com2uS Summoners War style battle character full body,
-hand-painted 2D dark fantasy, clear silhouette, grounded stance,
-feet fully visible with generous empty margin all around (~12%),
-pure black charcoal background, square composition,
+ultra detailed hand-painted 2D dark fantasy, intricate fabrics metals and armor,
+clear solid silhouette with no holes, grounded stance,
+feet fully visible with empty margin (~12% sides/top),
+pure black charcoal background ONLY, square composition,
 no text, no watermark, no UI, no cropped limbs
 ```
+
+Process: `node scripts/process-battle-stills.mjs`
 
 Roster identity: `docs/art/monster/roster-50.md`.

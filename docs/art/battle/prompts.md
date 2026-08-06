@@ -4,9 +4,9 @@
 
 ## Layout (portrait 9:16, e.g. 1080×1920)
 
-- **Bottom 45–55%:** continuous solid ground plane characters stand on (no cliff drop under feet)
-- **Mid:** arena walls / props matching the biome
-- **Top:** sky / canopy — never the only surface under units
+- **Bottom 50–60%:** continuous solid ground plane (near lane)
+- **Upper third:** still shows a **far arena floor / terrace** so enemy units can stand grounded (not sky-only)
+- Mid: walls / props; continuous depth — no cliff under far feet
 - No floating islands, no sky-only floors, no UI/text/watermark
 - Soft painterly dark-fantasy, Summoners War mobile arena feel
 
@@ -14,10 +14,11 @@
 
 ```
 Premium Com2uS Summoners War style vertical battle arena background,
-portrait 9:16 composition, continuous solid ground filling the lower half,
-characters would stand firmly on dirt/stone floor near bottom third,
-clear horizon mid-frame, atmospheric depth, no floating islands,
-no characters, no UI, no text, no watermark
+portrait 9:16 composition, continuous solid ground from bottom through mid-frame,
+near floor in lower third AND a clear far arena floor band in the upper third
+so distant fighters stand on solid ground, atmospheric depth, no floating islands,
+no cliff drop under feet, no characters, no UI, no text, no watermark,
+ultra detailed painted environment
 ```
 
 ## Map IDs

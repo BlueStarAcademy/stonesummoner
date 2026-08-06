@@ -4902,6 +4902,11 @@ main {
   border-radius: 18px;
   overflow: hidden;
   min-height: calc(100dvh - 160px);
+}
+
+/* Enter fade only once — soft battle patches must not replay this */
+.battle-screen.battle-screen--enter,
+.result-wrap.result-wrap--enter {
   animation: home-fade 0.55s ease-out both;
 }
 
@@ -4916,8 +4921,8 @@ main {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* Keep the grounded floor plane at the bottom of the viewport */
-  object-position: center bottom;
+  /* Bias so far floor band sits under the enemy lane (upper third) */
+  object-position: center 68%;
   opacity: 0.92;
   filter: brightness(1.06) contrast(1.04);
 }
@@ -5132,30 +5137,33 @@ main {
   pointer-events: auto;
 }
 
-/* Far rim — grounded on the far floor band of the arena BG */
+/* Far rim — sit on the far floor band of the arena BG */
 .battle-lane.enemy {
-  padding-top: calc(28px + env(safe-area-inset-top));
-  min-height: clamp(96px, 15dvh, 128px);
-  margin-bottom: -18px;
+  padding-top: calc(72px + env(safe-area-inset-top));
+  min-height: clamp(110px, 17dvh, 140px);
+  margin-bottom: -8px;
 }
 
 .battle-lane.enemy .battle-front {
-  transform: scale(0.94);
+  transform: scale(0.96) translateY(10px);
   transform-origin: center bottom;
-  filter: brightness(0.97);
+  filter: brightness(0.98);
 }
 
 /* Near rim — this side of the arena floor */
 .battle-lane.ally {
-  min-height: clamp(108px, 17dvh, 144px);
+  min-height: clamp(148px, 22dvh, 190px);
   margin-top: -22px;
-  padding-bottom: 4px;
+  padding-bottom: 8px;
   z-index: 4;
+  overflow: visible;
 }
 
 .battle-lane.ally .battle-front {
   transform: scale(1.0);
   transform-origin: center bottom;
+  overflow: visible;
+  padding-bottom: 62px;
 }
 
 .battle-formation {
@@ -5211,6 +5219,89 @@ main {
   max-width: 96px;
   min-width: 62px;
   z-index: 2;
+}
+
+.battle-unit-skills {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  transform: translate(-50%, 100%);
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 4px 2px 0;
+  z-index: 8;
+  pointer-events: auto;
+}
+
+.battle-unit-skills .skill-btn,
+.battle-unit-skills .summoner-sk {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px;
+  min-width: 48px;
+  min-height: 56px;
+  padding: 4px 2px 6px;
+  margin: 0;
+  border: 1px solid #c9a22766;
+  border-radius: 12px;
+  background: linear-gradient(165deg, #1e1830ee, #120e1cf5);
+  box-shadow: 0 4px 12px #0008, inset 0 1px 0 #ffffff14;
+  color: #f2e8c8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.battle-unit-skills .skill-btn.ready,
+.battle-unit-skills .summoner-sk.ready {
+  border-color: #c9a227aa;
+}
+
+.battle-unit-skills .skill-btn.is-selected,
+.battle-unit-skills .summoner-sk.is-selected {
+  border-color: #f0d878;
+  box-shadow: 0 0 0 2px #c9a22788, 0 4px 14px #000a;
+  transform: translateY(-4px);
+}
+
+.battle-unit-skills .skill-btn-ico,
+.battle-unit-skills .sk-ico {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.battle-unit-skills .skill-btn-label,
+.battle-unit-skills .sk-name {
+  font-size: 9px;
+  line-height: 1.1;
+  max-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.battle-unit-skills .skill-btn-cd {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000a;
+  border-radius: 11px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.battle-util-row {
+  display: flex;
+  justify-content: center;
+  padding: 2px 8px 0;
+  z-index: 5;
 }
 
 .battle-unit--summoner .battle-unit-art {
@@ -5318,7 +5409,12 @@ button.battle-unit {
 
 @keyframes battle-unit-idle {
   0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-3px) scale(1.015); }
+  50% { transform: translateY(-1.5px) scale(1.008); }
+}
+
+.battle-front.enemy .battle-unit-img {
+  /* Slightly less bob for far lane so feet stay planted */
+  animation-duration: 3.2s;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5422,7 +5518,8 @@ button.battle-unit {
 
 .battle-unit.active {
   transform: translateY(-4px) scale(1.06);
-  z-index: 3;
+  z-index: 6;
+  max-width: 112px;
 }
 
 .battle-unit.active .battle-unit-glow {
@@ -5723,6 +5820,78 @@ button.battle-unit {
 
 .battle-unit.fx-ult .battle-unit-art {
   animation: unit-ult-rise 0.52s ease-out both;
+}
+
+.battle-vfx {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 140%;
+  height: 140%;
+  max-width: none;
+  pointer-events: none;
+  z-index: 6;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+  animation: battle-vfx-pop 0.38s ease-out both;
+}
+
+.battle-vfx--strike,
+.battle-vfx--strike-ult {
+  top: 38%;
+  width: 150%;
+  height: 150%;
+  animation-name: battle-vfx-slash;
+}
+
+.battle-vfx--hit,
+.battle-vfx--hit-crit {
+  top: 48%;
+  animation-name: battle-vfx-impact;
+}
+
+.battle-vfx--hit-crit,
+.battle-vfx--strike-ult {
+  width: 170%;
+  height: 170%;
+  filter: brightness(1.15) saturate(1.1);
+}
+
+.battle-front.enemy .battle-vfx--strike,
+.battle-front.enemy .battle-vfx--strike-ult {
+  transform: translate(-50%, -50%) scaleX(-1);
+  animation-name: battle-vfx-slash-enemy;
+}
+
+@keyframes battle-vfx-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
+  35% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2); }
+}
+
+@keyframes battle-vfx-slash {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-18deg) scale(0.5); }
+  30% { opacity: 1; transform: translate(-50%, -50%) rotate(0deg) scale(1.05); }
+  100% { opacity: 0; transform: translate(-42%, -58%) rotate(12deg) scale(1.25); }
+}
+
+@keyframes battle-vfx-slash-enemy {
+  0% { opacity: 0; transform: translate(-50%, -50%) scaleX(-1) rotate(-18deg) scale(0.5); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scaleX(-1) rotate(0deg) scale(1.05); }
+  100% { opacity: 0; transform: translate(-58%, -58%) scaleX(-1) rotate(12deg) scale(1.25); }
+}
+
+@keyframes battle-vfx-impact {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  28% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .battle-vfx {
+    animation: none !important;
+    opacity: 0 !important;
+  }
 }
 
 .unit-anim-hook {
@@ -7049,6 +7218,10 @@ button.battle-unit {
   overflow: hidden;
   padding-top: calc(42px + env(safe-area-inset-top));
   padding-bottom: 4px;
+}
+
+#app.combat-mode .battle-layout--stage .battle-lane.ally {
+  overflow: visible;
 }
 
 #app.combat-mode .battle-layout {
