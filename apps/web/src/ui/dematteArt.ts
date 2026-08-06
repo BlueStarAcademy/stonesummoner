@@ -138,6 +138,13 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 export function dematteArtImg(img: HTMLImageElement): void {
   const src = img.getAttribute("src") || img.currentSrc || img.src;
   if (!src || src.startsWith("blob:") || src.startsWith("data:")) return;
+  // Battle stills ship with real alpha; dematte eats dark costume holes.
+  if (
+    img.hasAttribute("data-still-front") ||
+    /\/art\/(?:monster|summoner)\/battle\//.test(src)
+  ) {
+    return;
+  }
   if (img.dataset.dematteSrc === src) return;
   img.dataset.dematteSrc = src;
   void dematteBlackSrc(src).then((next) => {

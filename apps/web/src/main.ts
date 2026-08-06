@@ -18,8 +18,12 @@ import {
   waitFx,
 } from "./battle/fx";
 import { destroyAllSpine, mountBattleSpines, playSpineClip } from "./battle/spinePilot";
-import { getBattleStillSrc } from "./battle/spinePacks";
+import {
+  getBattleStillSrc,
+  getSummonerBattleStillSrc,
+} from "./battle/spinePacks";
 import { BATTLE_STILL_FAMILY_SET } from "./battle/battleStills";
+import { battleSkyHtml } from "./battle/battleBg";
 import { dematteArtInTree } from "./ui/dematteArt";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
 import {
@@ -85,7 +89,10 @@ import {
   emptyMagicProgress,
   unlockedMagicSkills,
   magicRank,
+  magicSkillPower,
   MAX_MAGIC_RANK,
+  type MagicSkillSlot,
+  type SummonerMagicSkillDef,
   MONSTERS,
   resolveMonsterId,
   getStage,
@@ -101,7 +108,6 @@ import {
   SYMBOL_SETS,
   stagesForMap,
   summarizeGearSets,
-  summarizeSymbolSets,
   gearLeaderAtkPct,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_IMPRINT_CRYSTAL_COST,
@@ -527,8 +533,12 @@ let lastScrollPremiumGain = 0;
 let lastScrollGain = 0;
 /** Most recently summoned monster uids (summon reveal card / multi). */
 let lastSummonUids: string[] = [];
-/** Empty slot awaiting symbol pick (monster uid + slot 1-6). */
+/** Empty/filled slot awaiting symbol pick (monster uid + slot 1-6). */
 let slotEquipPick: { uid: string; slot: number } | null = null;
+/** Symbol bag index open in detail modal (selected / candidate). */
+let symbolDetailIndex: number | null = null;
+/** Equipped symbol index shown beside candidate for compare. */
+let symbolCompareIndex: number | null = null;
 /** Grind/imprint before/after reveal card. */
 let forgeReveal: ForgeReveal | null = null;
 /** Fusion success reveal card. */
@@ -642,6 +652,8 @@ function applyMonSkillPickUi(): boolean {
 let monSkillPick = 0;
 /** Selected monster uid on the monsters book screen. */
 let selectedEnhanceUid: string | null = null;
+/** Skill-feed enhance is only available when entered via island power_circle. */
+let enhanceSkillFeedAllowed = false;
 /** Roster slot sort mode on enhance book. */
 type RosterSortMode = "default" | "level" | "stars" | "element" | "party";
 let rosterSortMode: RosterSortMode = "default";
@@ -731,6 +743,23 @@ let stagePrepSummonerOpen = false;
 let stagePrepInvTab: "summoner" | "monster" | "skill" = "monster";
 /** Prep roster sort (mirrors hub roster sorts). */
 let stagePrepSortMode: RosterSortMode = "stars";
+/** Long-press unit info overlay on battle prep. */
+type StagePrepInfoTarget =
+  | { kind: "summoner"; element: SummonerElement }
+  | { kind: "monster"; uid: string }
+  | { kind: "enemy"; monsterId: string };
+let stagePrepInfo: StagePrepInfoTarget | null = null;
+/** Selected magic slot in prep Skills tab. */
+let stagePrepSkillPick: MagicSkillSlot = "A";
+/** Prep long-press tracker (mirrors island 520ms hold). */
+let stagePrepLongPress: {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  timer: ReturnType<typeof setTimeout>;
+} | null = null;
+/** Suppress the click that follows a successful prep long-press. */
+let stagePrepSuppressClick = false;
 let islandPan = { x: 0, y: 0 };
 let islandPanCentered = false;
 /** Bump when cover metrics change so the next bind re-centers once. */
@@ -960,6 +989,8 @@ function enterIslandBuilding(id: string): void {
     view = "summon";
     renderPreservingIsland();
   } else if (id === "power_circle") {
+    enhanceSkillFeedAllowed = true;
+    monDetailTab = "skills";
     view = "enhance";
     render();
   } else if (id === "shop") {
@@ -1534,66 +1565,126 @@ function renderStagePrepDock(): string {
 
   let dockBody = "";
   if (stagePrepInvTab === "summoner") {
-    dockBody = `<div class="stage-prep-summoner-grid">${SUMMONER_ELEMENTS.map(
-      (el) => {
+    dockBody = `<div class="mon-book-inv mon-book-inv--rail stage-prep-roster-rail stage-prep-roster-rail--summoner" role="listbox" aria-label="${escapeHtml(t("ui.stagePrepTabSummoner"))}">
+      ${SUMMONER_ELEMENTS.map((el) => {
         const on = el === activeEl;
         const p = save.summoners?.[el] ?? { level: 1, exp: 0, awaken: 0 };
-        return `<button type="button" class="stage-prep-summoner-card el-${el}${on ? " is-on" : ""}" data-stage-prep-summoner="${el}">
-        <img src="${summonerArtSrc(el)}" width="56" height="56" alt="" draggable="false" decoding="async" />
-        <strong>${escapeHtml(elementLabel(el))}</strong>
-        <small>Lv.${p.level}</small>
-      </button>`;
-      },
-    ).join("")}</div>`;
+        return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${on ? " is-active" : ""}" data-stage-prep-info="summoner" data-stage-prep-summoner="${el}" role="option" aria-selected="${on}" title="${escapeHtml(elementLabel(el))}">
+          <span class="mon-slot-art" aria-hidden="true">
+            <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="56" height="56" alt="" draggable="false" decoding="async" />
+          </span>
+          <span class="mon-slot-lv-overlay">Lv.${p.level}</span>
+        </button>`;
+      }).join("")}
+    </div>`;
   } else if (stagePrepInvTab === "skill") {
     const el = activeEl;
     const kit = getSummonerKit(el);
     const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
     const unlocked = unlockedMagicSkills(el, prog);
     const unlockedIds = new Set(unlocked.map((s) => s.id));
-    const leader = kit.leader;
-    const skillTiles = (["A", "B", "A1", "A2", "B1", "B2"] as const)
+    const slots = ["A", "B", "A1", "A2", "B1", "B2"] as const;
+    if (!slots.includes(stagePrepSkillPick)) stagePrepSkillPick = "A";
+    const focus = kit.skills[stagePrepSkillPick];
+    const focusOpen = unlockedIds.has(focus.id);
+    const focusRank = magicRank(prog, focus.id);
+    const focusLines = magicSkillDescLines(focus, focusOpen ? focusRank : 0);
+    const icos = slots
       .map((slot) => {
         const sk = kit.skills[slot];
         const open = unlockedIds.has(sk.id);
         const rank = magicRank(prog, sk.id);
-        const lockedHint =
-          slot.startsWith("A") && slot !== "A" && prog.branch !== "A"
-            ? `A +${MAX_MAGIC_RANK}`
-            : slot.startsWith("B") && slot !== "B" && prog.branch !== "B"
-              ? `B +${MAX_MAGIC_RANK}`
-              : "";
-        return `<div class="stage-prep-skill-tile${open ? " is-on" : ""}">
-          <strong>${escapeHtml(sk.nameKo)}</strong>
-          <small>${open ? `+${rank}/${MAX_MAGIC_RANK} · ${escapeHtml(sk.kind)}` : escapeHtml(lockedHint || t("ui.stagePrepSkillLocked"))}</small>
-          ${
-            open && rank < MAX_MAGIC_RANK
-              ? `<button type="button" class="auth-btn-primary stage-prep-magic-enh" data-magic-enhance="${sk.id}">+1</button>`
-              : ""
-          }
-        </div>`;
-      })
-      .join("");
-    dockBody = `<p class="stage-prep-dock-hint">${escapeHtml(leader.nameKo)} · branch ${prog.branch ?? "-"}</p>
-      <div class="stage-prep-skill-grid">${skillTiles}</div>`;
-  } else {
-    const sorted = sortRosterForSlots(save.roster, stagePrepSortMode);
-    const invTiles = sorted
-      .map((m) => {
-        const on = selected.has(m.uid);
-        const def = getMonster(m.monsterId);
-        const starN = Math.max(1, def?.naturalStars ?? 1);
-        const stars = STAR.repeat(starN);
-        return `<button type="button" class="stage-prep-inv-tile el-${def?.element ?? "dark"}${on ? " is-on" : ""}" data-stage-party-toggle="${m.uid}" aria-pressed="${on}" title="${escapeHtml(describeOwned(m))}">
-          <span class="stage-prep-inv-art">${monsterArtImg(m.monsterId, "stage-prep-inv-img", 56) || "?"}</span>
-          <span class="stage-prep-inv-lv">Lv.${m.level}</span>
-          <span class="stage-prep-inv-stars" aria-hidden="true">${stars}</span>
-          ${on ? `<span class="stage-prep-inv-check" aria-hidden="true">${CHECK}</span>` : ""}
+        const on = stagePrepSkillPick === slot;
+        const maxed = open && rank >= MAX_MAGIC_RANK;
+        return `<button type="button" class="stage-prep-skill-pick${on ? " is-active" : ""}${open ? "" : " is-locked"}${maxed ? " is-max" : ""}" data-stage-prep-skill-pick="${slot}" role="tab" aria-selected="${on}" aria-pressed="${on}" title="${escapeHtml(sk.nameKo)}">
+          ${summonerSkillArtImg(sk.id, "stage-prep-skill-pick-img", 44)}
+          <span class="stage-prep-skill-pick-lv">${open ? (maxed ? "MAX" : `+${rank}`) : "—"}</span>
         </button>`;
       })
       .join("");
-    dockBody = `<div class="stage-prep-inv" role="listbox" aria-label="${escapeHtml(t("ui.079b50d844"))}">
-      ${invTiles || `<p class="muted stage-prep-inv-empty">${escapeHtml(t("ui.079b50d844"))}</p>`}
+    const lockedHint =
+      stagePrepSkillPick.startsWith("A") &&
+      stagePrepSkillPick !== "A" &&
+      prog.branch !== "A"
+        ? t("ui.skillLockedHint", { branch: "A", n: MAX_MAGIC_RANK })
+        : stagePrepSkillPick.startsWith("B") &&
+            stagePrepSkillPick !== "B" &&
+            prog.branch !== "B"
+          ? t("ui.skillLockedHint", { branch: "B", n: MAX_MAGIC_RANK })
+          : t("ui.stagePrepSkillLocked");
+    const detailBody = focusOpen
+      ? `<ul class="stage-prep-skill-detail-desc">${focusLines
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .join("")}</ul>
+        ${
+          focusRank < MAX_MAGIC_RANK
+            ? `<button type="button" class="auth-btn-primary stage-prep-magic-enh" data-magic-enhance="${focus.id}">${escapeHtml(t("ui.sumBookEnhance"))} +1</button>`
+            : `<span class="stage-prep-skill-max">MAX</span>`
+        }`
+      : `<p class="stage-prep-skill-locked muted">${escapeHtml(lockedHint)}</p>`;
+    dockBody = `<div class="stage-prep-skill-panel">
+      <p class="stage-prep-dock-hint">${escapeHtml(
+        prog.branch
+          ? t("ui.sumBookMagicBranch", { branch: prog.branch })
+          : t("ui.sumBookMagicBranchNone"),
+      )}</p>
+      <div class="stage-prep-skill-rail">
+        <div class="stage-prep-skill-picks" role="tablist" aria-label="${escapeHtml(t("ui.stagePrepTabSkill"))}">${icos}</div>
+      </div>
+      <div class="stage-prep-skill-detail" role="tabpanel">
+        <div class="stage-prep-skill-detail-head">
+          ${summonerSkillArtImg(focus.id, "stage-prep-skill-detail-ico", 40)}
+          <div class="stage-prep-skill-detail-copy">
+            <strong class="stage-prep-skill-detail-name">${escapeHtml(focus.nameKo)}</strong>
+            <small class="stage-prep-skill-detail-meta">${
+              focusOpen
+                ? escapeHtml(
+                    t("ui.magicRankLabel", {
+                      rank: focusRank,
+                      max: MAX_MAGIC_RANK,
+                    }),
+                  )
+                : escapeHtml(t("ui.stagePrepSkillLocked"))
+            }</small>
+          </div>
+        </div>
+        ${detailBody}
+      </div>
+    </div>`;
+  } else {
+    const sorted = sortRosterForSlots(save.roster, stagePrepSortMode);
+    const rosterSlots = Array.from(
+      { length: ROSTER_SLOT_CAP },
+      (_, i) => sorted[i] ?? null,
+    );
+    const invTiles = rosterSlots
+      .map((m) => {
+        if (!m) {
+          return `<div class="mon-slot mon-slot--portrait mon-slot--empty" role="presentation" aria-hidden="true">
+            <span class="mon-slot-art">
+              <img class="mon-slot-img mon-slot-img--empty" src="/art/ui/mon-slot-empty.svg" width="56" height="56" alt="" draggable="false" />
+            </span>
+          </div>`;
+        }
+        const on = selected.has(m.uid);
+        const def = getMonster(m.monsterId);
+        const el = def?.element ?? "dark";
+        const starN = Math.max(1, def?.naturalStars ?? 1);
+        const grade = invGradeFromStars(starN);
+        const starsHtml = monStarsHtml(starN);
+        const art =
+          monsterArtImg(m.monsterId, "mon-slot-img", 56) ||
+          (def?.element?.[0]?.toUpperCase() ?? "?");
+        return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${el}${on ? " is-active" : ""}" data-stage-prep-info="monster" data-stage-party-toggle="${m.uid}" role="option" aria-selected="${on}" title="${escapeHtml(describeOwned(m))}">
+          ${invGradePlateImg(grade, "mon-slot-grade-plate", 112)}
+          <span class="mon-slot-art" aria-hidden="true">${art}</span>
+          <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
+          <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
+        </button>`;
+      })
+      .join("");
+    dockBody = `<div class="mon-book-inv mon-book-inv--rail stage-prep-roster-rail" role="listbox" aria-label="${escapeHtml(t("ui.stagePrepTabMonster"))}">
+      ${invTiles}
     </div>`;
   }
 
@@ -1637,6 +1728,10 @@ function openStagePrep(stage: StageDef): void {
   stageEntryId = stage.id;
   stagePrepSummonerOpen = false;
   stagePrepInvTab = "monster";
+  stagePrepInfo = null;
+  stagePrepSkillPick = "A";
+  clearStagePrepLongPress();
+  stagePrepSuppressClick = false;
   const presets = normalizePartyPresets(save, save.partyPresets);
   const idx = clampPartyPresetIndex(save.activePartyPreset);
   const preset = presets[idx]!;
@@ -1656,6 +1751,9 @@ function openStagePrep(stage: StageDef): void {
 function closeStagePrep(): void {
   stageEntryId = null;
   stagePrepSummonerOpen = false;
+  stagePrepInfo = null;
+  clearStagePrepLongPress();
+  stagePrepSuppressClick = false;
   partyDraft = null;
   applyStagesRegionOpen();
 }
@@ -1711,41 +1809,6 @@ function stagePrepLeaderPassive(saveRef: PlayerSave): {
   return { title, detail, pct };
 }
 
-function stagePrepPartySymbolLine(uids: string[]): string {
-  const equipped: import("stonesummoner-data").SymbolInstance[] = [];
-  for (const uid of uids) {
-    const m = save.roster.find((x) => x.uid === uid);
-    if (!m) continue;
-    for (const sid of m.symbolSlots ?? []) {
-      if (!sid) continue;
-      const sym = save.symbols.find((s) => s.id === sid);
-      if (sym) equipped.push(sym);
-    }
-  }
-  const active = summarizeSymbolSets(equipped).filter((s) => s.active);
-  if (!active.length) return t("ui.stagePrepSymbolNone");
-  return active
-    .map(
-      (s) =>
-        `${s.nameKo} ${t("ui.setPiecesN", { n: s.pieces })} ${s.effectKo}`,
-    )
-    .join(` ${MIDDOT} `);
-}
-
-function stagePrepSynergyLine(uids: string[]): string {
-  const els = new Set<string>();
-  for (const uid of uids) {
-    const m = save.roster.find((x) => x.uid === uid);
-    const def = m ? getMonster(m.monsterId) : null;
-    if (def?.element) els.add(def.element);
-  }
-  if (!els.size) return t("ui.stagePrepSynergyEmpty");
-  const labels = [...els].map((el) =>
-    t(`element.${el}` as Parameters<typeof t>[0]),
-  );
-  return t("ui.stagePrepSynergyLine", { elems: labels.join(MIDDOT) });
-}
-
 function renderStageEntryModal(): string {
   const stage = stageEntryId ? getStage(stageEntryId) : null;
   if (!stage) return "";
@@ -1762,11 +1825,8 @@ function renderStageEntryModal(): string {
   const activeSum = getActiveSummoner(save);
   const enemyIds = (stage.enemyMonsterIds ?? []).slice(0, 4);
   const leader = stagePrepLeaderPassive(save);
-  const symbolLine = stagePrepPartySymbolLine(partyUids.filter(Boolean));
-  const synergyLine = stagePrepSynergyLine(partyUids.filter(Boolean));
   const presets = normalizePartyPresets(save, save.partyPresets);
   const presetIdx = clampPartyPresetIndex(save.activePartyPreset);
-  const dropSet = SYMBOL_SETS.find((x) => x.id === stage.dropSetId);
 
   const enemyMonSlots = [0, 1, 2, 3]
     .map((i) => {
@@ -1775,10 +1835,10 @@ function renderStageEntryModal(): string {
         return `<div class="stage-prep-slot empty" aria-hidden="true"></div>`;
       }
       const m = getMonster(id);
-      return `<div class="stage-prep-slot el-${m?.element ?? "dark"}" title="${escapeHtml(m?.nameKo ?? id)}">
+      return `<button type="button" class="stage-prep-slot el-${m?.element ?? "dark"}" data-stage-prep-info="enemy" data-stage-prep-enemy-id="${id}" title="${escapeHtml(m?.nameKo ?? id)}">
         <span class="stage-prep-slot-art">${monsterArtImg(id, "stage-prep-slot-img", 52) || "?"}</span>
         <small>${escapeHtml(m?.nameKo ?? id)}</small>
-      </div>`;
+      </button>`;
     })
     .join("");
 
@@ -1793,7 +1853,7 @@ function renderStageEntryModal(): string {
         return `<div class="stage-prep-slot empty is-open-slot" aria-label="${i + 1}"></div>`;
       }
       const def = getMonster(m.monsterId);
-      return `<button type="button" class="stage-prep-slot el-${def?.element ?? "dark"}" data-stage-party-toggle="${m.uid}" title="${escapeHtml(describeOwned(m))}">
+      return `<button type="button" class="stage-prep-slot el-${def?.element ?? "dark"}" data-stage-prep-info="monster" data-stage-party-toggle="${m.uid}" title="${escapeHtml(describeOwned(m))}">
         <span class="stage-prep-slot-art">${monsterArtImg(m.monsterId, "stage-prep-slot-img", 56) || "?"}</span>
         <span class="stage-prep-slot-lv">Lv.${m.level}</span>
       </button>`;
@@ -1856,14 +1916,6 @@ function renderStageEntryModal(): string {
         </div>
         <div class="stage-prep-effects">
           <p><span>${escapeHtml(t("ui.stagePrepEnemyLeader"))}</span> ${escapeHtml(t("ui.stagePrepEnemyLeaderLine"))}</p>
-          <p><span>${escapeHtml(t("ui.stagePrepSymbolEffect"))}</span> ${escapeHtml(
-            dropSet
-              ? t("ui.stageDropSetBonus", {
-                  n: dropSet.pieces,
-                  effect: dropSet.effectKo,
-                })
-              : t("ui.stagePrepSymbolNone"),
-          )}</p>
         </div>
       </section>
 
@@ -1875,7 +1927,7 @@ function renderStageEntryModal(): string {
           <button type="button" class="stage-prep-save-deck" id="btn-stage-prep-save-deck">${escapeHtml(t("ui.stagePrepSaveDeck"))}</button>
         </div>
         <div class="stage-prep-slots">
-          <button type="button" class="stage-prep-slot stage-prep-slot--summoner el-${activeEl}" data-stage-inv-tab="summoner" title="${escapeHtml(t("ui.stagePrepChangeSummoner"))}">
+          <button type="button" class="stage-prep-slot stage-prep-slot--summoner el-${activeEl}" data-stage-prep-info="summoner" data-stage-inv-tab="summoner" title="${escapeHtml(t("ui.stagePrepChangeSummoner"))}">
             <img class="stage-prep-slot-img" src="${summonerArtSrc(activeEl)}" width="64" height="64" alt="" draggable="false" decoding="async" />
             <span class="stage-prep-slot-tag">${escapeHtml(t("ui.stagePrepSummoner"))}</span>
             <span class="stage-prep-slot-lv">Lv.${activeSum.level}</span>
@@ -1885,8 +1937,6 @@ function renderStageEntryModal(): string {
         <div class="stage-prep-effects stage-prep-effects--ally">
           <div class="stage-prep-effects-main">
             <p><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span> ${escapeHtml(leader.title)} ${MIDDOT} ${escapeHtml(leader.detail)}</p>
-            <p><span>${escapeHtml(t("ui.stagePrepSymbolEffect"))}</span> ${escapeHtml(symbolLine)}</p>
-            <p><span>${escapeHtml(t("ui.stagePrepSynergy"))}</span> ${escapeHtml(synergyLine)}</p>
           </div>
           <div class="stage-prep-skill-icos" aria-hidden="true">${skillIcons}</div>
         </div>
@@ -1902,6 +1952,7 @@ function renderStageEntryModal(): string {
         <button type="button" class="stage-prep-cancel" id="btn-stage-entry-cancel">${escapeHtml(t("ui.stagePrepCancel"))}</button>
       </footer>
     </div>
+    ${renderStagePrepInfoModal()}
   </div>`;
 }
 
@@ -1911,11 +1962,294 @@ function renderStageEntryModal(): string {
 function suppressStageModalAnim(root: ParentNode): void {
   root
     .querySelectorAll<HTMLElement>(
-      ".stage-prep-layer, .stages-region-layer, .stages-region-sheet, .stage-prep, .stage-drop-info-layer, .stage-entry-modal",
+      ".stage-prep-layer, .stages-region-layer, .stages-region-sheet, .stage-prep, .stage-drop-info-layer, .stage-entry-modal, .stage-prep-info-layer",
     )
     .forEach((el) => {
       el.style.animation = "none";
     });
+}
+
+function clearStagePrepLongPress(): void {
+  if (stagePrepLongPress) {
+    clearTimeout(stagePrepLongPress.timer);
+    stagePrepLongPress = null;
+  }
+}
+
+function consumeStagePrepSuppressClick(): boolean {
+  if (!stagePrepSuppressClick) return false;
+  stagePrepSuppressClick = false;
+  return true;
+}
+
+function openStagePrepInfoFromEl(el: HTMLElement): void {
+  const infoKind = el.dataset.stagePrepInfo;
+  if (infoKind === "summoner") {
+    const raw =
+      el.dataset.stagePrepSummoner ?? save.activeSummoner ?? "light";
+    if (!(SUMMONER_ELEMENTS as readonly string[]).includes(raw)) return;
+    stagePrepInfo = { kind: "summoner", element: raw as SummonerElement };
+  } else if (infoKind === "enemy") {
+    const id = el.dataset.stagePrepEnemyId;
+    if (!id) return;
+    stagePrepInfo = { kind: "enemy", monsterId: id };
+  } else if (infoKind === "monster" || el.dataset.stagePartyToggle) {
+    const uid = el.dataset.stagePartyToggle;
+    if (!uid) return;
+    stagePrepInfo = { kind: "monster", uid };
+  } else if (el.dataset.stagePrepSummoner) {
+    const raw = el.dataset.stagePrepSummoner;
+    if (!(SUMMONER_ELEMENTS as readonly string[]).includes(raw)) return;
+    stagePrepInfo = { kind: "summoner", element: raw as SummonerElement };
+  } else {
+    return;
+  }
+  applyStagePrepInfo({ animate: true });
+}
+
+function renderStagePrepInfoModal(): string {
+  const info = stagePrepInfo;
+  if (!info) return "";
+
+  let body = "";
+  if (info.kind === "summoner") {
+    const el = info.element;
+    const p = save.summoners?.[el] ?? { level: 1, exp: 0, awaken: 0 };
+    const kit = getSummonerKit(el);
+    const leader = kit.leader;
+    const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
+    const unlocked = unlockedMagicSkills(el, prog);
+    const leaderBits = stagePrepLeaderPassive({
+      ...save,
+      activeSummoner: el,
+    });
+    const skillRow = unlocked
+      .map((sk) => {
+        const rank = magicRank(prog, sk.id);
+        return `<div class="stage-prep-info-skill">
+          ${summonerSkillArtImg(sk.id, "stage-prep-info-skill-img", 36)}
+          <span class="stage-prep-info-skill-copy">
+            <strong>${escapeHtml(sk.nameKo)}</strong>
+            <small>${escapeHtml(
+              t("ui.magicRankLabel", { rank, max: MAX_MAGIC_RANK }),
+            )}</small>
+          </span>
+        </div>`;
+      })
+      .join("");
+    body = `<div class="stage-prep-info-hero el-${el}">
+      <img class="stage-prep-info-art" src="${summonerArtSrc(el)}" width="88" height="88" alt="" draggable="false" decoding="async" />
+      <div class="stage-prep-info-hero-copy">
+        <strong>${escapeHtml(leader.nameKo)}</strong>
+        <small>${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${p.level}${p.awaken > 0 ? ` ${MIDDOT} +${p.awaken}` : ""}</small>
+        <p class="stage-prep-info-leader"><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span> ${escapeHtml(leaderBits.detail)}</p>
+      </div>
+    </div>
+    <div class="stage-prep-info-section">
+      <h3>${escapeHtml(t("ui.stagePrepInfoSkills"))}</h3>
+      <div class="stage-prep-info-skills">${skillRow || `<p class="muted">${escapeHtml(t("ui.stagePrepSkillLocked"))}</p>`}</div>
+    </div>`;
+  } else if (info.kind === "monster") {
+    const m = save.roster.find((x) => x.uid === info.uid);
+    if (!m) {
+      stagePrepInfo = null;
+      return "";
+    }
+    const def = getMonster(m.monsterId);
+    const el = def?.element ?? "dark";
+    const preview = previewOwnedCombatStats(save, m.uid);
+    const role = monsterRoleLabel(def?.role, def?.baseStats);
+    const levels = (m.skillLevels ?? [1, 1, 1]) as [number, number, number];
+    const skills = (def?.skills ?? [])
+      .map((sk, si) => {
+        const lv = levels[si] ?? 1;
+        const lines = monsterSkillDescLines(sk)
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .join("");
+        return `<div class="stage-prep-info-skill">
+          ${monsterSkillArtImg(m.monsterId, si, sk, "stage-prep-info-skill-img", 36)}
+          <span class="stage-prep-info-skill-copy">
+            <strong>${escapeHtml(sk.nameKo)}</strong>
+            <small>Lv.${lv}${lv >= MAX_SKILL_LEVEL ? " MAX" : ""}</small>
+            <ul>${lines}</ul>
+          </span>
+        </div>`;
+      })
+      .join("");
+    body = `<div class="stage-prep-info-hero el-${el}">
+      <span class="stage-prep-info-art-wrap">${monsterArtImg(m.monsterId, "stage-prep-info-art", 88) || "?"}</span>
+      <div class="stage-prep-info-hero-copy">
+        <strong>${escapeHtml(def?.nameKo ?? m.monsterId)}</strong>
+        <small>${escapeHtml(monsterElementLabel(el))} ${MIDDOT} ${escapeHtml(role)} ${MIDDOT} Lv.${m.level}</small>
+        <div class="stage-prep-info-stars">${monStarsHtml(Math.max(1, def?.naturalStars ?? 1))}${(m.evolve ?? 0) > 0 ? `<span class="mon-evo">+${m.evolve}</span>` : ""}</div>
+      </div>
+    </div>
+    ${preview ? renderInspectCombatStatsHtml(preview) : ""}
+    <div class="stage-prep-info-section">
+      <h3>${escapeHtml(t("ui.stagePrepInfoSkills"))}</h3>
+      <div class="stage-prep-info-skills">${skills}</div>
+    </div>`;
+  } else {
+    const def = getMonster(info.monsterId);
+    if (!def) {
+      stagePrepInfo = null;
+      return "";
+    }
+    const el = def.element;
+    const role = monsterRoleLabel(def.role, def.baseStats);
+    const base = def.baseStats;
+    const statsHtml = `<div class="mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list">
+      <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(t("ui.statHp"))}</span><span class="stat-cell-v">${base.hp}</span></div>
+      <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(t("ui.statAtk"))}</span><span class="stat-cell-v">${base.atk}</span></div>
+      <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(t("ui.statDef"))}</span><span class="stat-cell-v">${base.def}</span></div>
+      <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(t("ui.statSpd"))}</span><span class="stat-cell-v">${base.spd}</span></div>
+    </div>`;
+    const skills = (def.skills ?? [])
+      .map((sk, si) => {
+        const lines = monsterSkillDescLines(sk)
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .join("");
+        return `<div class="stage-prep-info-skill">
+          ${monsterSkillArtImg(def.id, si, sk, "stage-prep-info-skill-img", 36)}
+          <span class="stage-prep-info-skill-copy">
+            <strong>${escapeHtml(sk.nameKo)}</strong>
+            <ul>${lines}</ul>
+          </span>
+        </div>`;
+      })
+      .join("");
+    body = `<div class="stage-prep-info-hero el-${el}">
+      <span class="stage-prep-info-art-wrap">${monsterArtImg(def.id, "stage-prep-info-art", 88) || "?"}</span>
+      <div class="stage-prep-info-hero-copy">
+        <strong>${escapeHtml(def.nameKo)}</strong>
+        <small>${escapeHtml(t("ui.stagePrepInfoEnemy"))} ${MIDDOT} ${escapeHtml(monsterElementLabel(el))} ${MIDDOT} ${escapeHtml(role)}</small>
+        <div class="stage-prep-info-stars">${monStarsHtml(Math.max(1, def.naturalStars))}</div>
+      </div>
+    </div>
+    ${statsHtml}
+    <div class="stage-prep-info-section">
+      <h3>${escapeHtml(t("ui.stagePrepInfoSkills"))}</h3>
+      <div class="stage-prep-info-skills">${skills}</div>
+    </div>`;
+  }
+
+  return `<div class="stage-prep-info-layer" id="stage-prep-info-layer" role="presentation">
+    <button type="button" class="stage-prep-info-backdrop" id="btn-stage-prep-info-close" aria-label="${escapeHtml(t("ui.stagePrepInfoClose"))}"></button>
+    <div class="stage-prep-info-modal" role="dialog" aria-modal="true" aria-labelledby="stage-prep-info-title">
+      ${modalCloseX(t("ui.stagePrepInfoClose"), "btn-stage-prep-info-close")}
+      <h2 class="sr-only" id="stage-prep-info-title">${escapeHtml(t("ui.stagePrepInfoTitle"))}</h2>
+      <div class="stage-prep-info-body">${body}</div>
+    </div>
+  </div>`;
+}
+
+function applyStagePrepInfo(opts?: { animate?: boolean }): void {
+  const host = app.querySelector("#stages-region-host");
+  const layer = host?.querySelector(".stage-prep-layer");
+  if (!host || !layer) return;
+  const existing = host.querySelector("#stage-prep-info-layer");
+  if (!stagePrepInfo) {
+    existing?.remove();
+    return;
+  }
+  const html = renderStagePrepInfoModal();
+  if (!html) {
+    existing?.remove();
+    return;
+  }
+  if (existing) existing.outerHTML = html;
+  else layer.insertAdjacentHTML("beforeend", html);
+  bindStagePrepInfoControls(host);
+  if (opts?.animate !== false) {
+    const next = host.querySelector<HTMLElement>("#stage-prep-info-layer");
+    if (next) replayModalPop(next);
+  } else {
+    const next = host.querySelector<HTMLElement>("#stage-prep-info-layer");
+    if (next) next.style.animation = "none";
+  }
+}
+
+function bindStagePrepInfoControls(host: ParentNode): void {
+  ensureModalXDelegate();
+  const close = () => {
+    stagePrepInfo = null;
+    applyStagePrepInfo();
+  };
+  host.querySelector("#btn-stage-prep-info-close")?.addEventListener("click", close);
+  host
+    .querySelector(".stage-prep-info-backdrop")
+    ?.addEventListener("click", close);
+}
+
+function bindStagePrepLongPress(host: ParentNode): void {
+  const root = host.querySelector<HTMLElement>(".stage-prep");
+  if (!root || root.dataset.stagePrepLpBound === "1") return;
+  root.dataset.stagePrepLpBound = "1";
+
+  const targetFromEvent = (ev: Event): HTMLElement | null => {
+    const t = ev.target;
+    if (!(t instanceof Element)) return null;
+    return t.closest<HTMLElement>(
+      "[data-stage-prep-info], [data-stage-party-toggle], [data-stage-prep-summoner]",
+    );
+  };
+
+  root.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    const el = targetFromEvent(ev);
+    if (!el || !root.contains(el)) return;
+    clearStagePrepLongPress();
+    stagePrepLongPress = {
+      pointerId: ev.pointerId,
+      startX: ev.clientX,
+      startY: ev.clientY,
+      timer: setTimeout(() => {
+        if (!stagePrepLongPress) return;
+        stagePrepLongPress = null;
+        stagePrepSuppressClick = true;
+        try {
+          navigator.vibrate?.(18);
+        } catch {
+          /* ignore */
+        }
+        openStagePrepInfoFromEl(el);
+      }, 520),
+    };
+  });
+
+  root.addEventListener("pointermove", (ev) => {
+    if (!stagePrepLongPress || stagePrepLongPress.pointerId !== ev.pointerId) {
+      return;
+    }
+    if (
+      Math.hypot(
+        ev.clientX - stagePrepLongPress.startX,
+        ev.clientY - stagePrepLongPress.startY,
+      ) > 12
+    ) {
+      clearStagePrepLongPress();
+    }
+  });
+
+  const end = (ev: PointerEvent) => {
+    if (stagePrepLongPress && stagePrepLongPress.pointerId === ev.pointerId) {
+      clearStagePrepLongPress();
+    }
+  };
+  root.addEventListener("pointerup", end);
+  root.addEventListener("pointercancel", end);
+  root.addEventListener(
+    "click",
+    (ev) => {
+      if (!stagePrepSuppressClick) return;
+      const el = targetFromEvent(ev);
+      if (!el) return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      stagePrepSuppressClick = false;
+    },
+    true,
+  );
 }
 
 /** Refresh only the battle-prep inventory dock (no modal pop / team reflow). */
@@ -1929,6 +2263,8 @@ function refreshStagePrepDock(): void {
   }
   dock.outerHTML = renderStagePrepDock();
   bindStagePrepDockControls(host);
+  const nextDock = host.querySelector(".stage-prep-dock");
+  if (nextDock) dematteArtInTree(nextDock, "img.mon-slot-img");
 }
 
 function onStagePrepInvTabClick(btn: HTMLButtonElement): void {
@@ -1945,7 +2281,10 @@ function bindStagePrepDockControls(host: ParentNode): void {
   if (!dock) return;
 
   dock.querySelectorAll<HTMLButtonElement>("[data-stage-inv-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => onStagePrepInvTabClick(btn));
+    btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
+      onStagePrepInvTabClick(btn);
+    });
   });
 
   dock.querySelector("#stage-prep-sort")?.addEventListener("change", (ev) => {
@@ -1964,6 +2303,7 @@ function bindStagePrepDockControls(host: ParentNode): void {
 
   dock.querySelectorAll<HTMLButtonElement>("[data-stage-prep-summoner]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
       const el = btn.dataset.stagePrepSummoner as SummonerElement | undefined;
       if (!el) return;
       if (el !== (save.activeSummoner ?? "light")) {
@@ -1971,13 +2311,15 @@ function bindStagePrepDockControls(host: ParentNode): void {
         persist();
         flash(t("summonerPicker.switched", { element: elementLabel(el) }));
       }
-      stagePrepInvTab = "monster";
+      stagePrepInvTab = "summoner";
+      stagePrepSkillPick = "A";
       applyStagesRegionOpen({ animate: false });
     });
   });
 
   dock.querySelectorAll<HTMLButtonElement>("[data-stage-party-toggle]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
       const draft = ensurePartyDraft();
       const uid = btn.dataset.stagePartyToggle!;
       if (draft.has(uid)) draft.delete(uid);
@@ -1986,6 +2328,27 @@ function bindStagePrepDockControls(host: ParentNode): void {
         flash(t("ui.e44dd9cad3"));
         return;
       }
+      applyStagesRegionOpen({ animate: false });
+    });
+  });
+
+  dock.querySelectorAll<HTMLButtonElement>("[data-stage-prep-skill-pick]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slot = btn.dataset.stagePrepSkillPick as MagicSkillSlot | undefined;
+      if (!slot || slot === stagePrepSkillPick) return;
+      stagePrepSkillPick = slot;
+      refreshStagePrepDock();
+    });
+  });
+
+  dock.querySelectorAll<HTMLButtonElement>("[data-magic-enhance]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.magicEnhance ?? "";
+      if (!id) return;
+      const r = runEnhanceMagicSkill(save, id);
+      save = r.save;
+      persist();
+      flash(r.message);
       applyStagesRegionOpen({ animate: false });
     });
   });
@@ -2056,6 +2419,7 @@ function bindStageDropInfoControls(host: ParentNode): void {
 function bindStageEntryModal(): void {
   const host = app.querySelector("#stages-region-host");
   if (!host) return;
+  dematteArtInTree(host, "img.mon-slot-img");
 
   host.querySelector("#btn-stage-entry-start")?.addEventListener("click", () => {
     confirmStagePrepStart();
@@ -2100,6 +2464,7 @@ function bindStageEntryModal(): void {
 
   host.querySelectorAll<HTMLButtonElement>(".stage-prep-slots [data-stage-party-toggle]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
       const draft = ensurePartyDraft();
       const uid = btn.dataset.stagePartyToggle!;
       if (draft.has(uid)) draft.delete(uid);
@@ -2115,10 +2480,15 @@ function bindStageEntryModal(): void {
   host
     .querySelectorAll<HTMLButtonElement>(".stage-prep-slots [data-stage-inv-tab]")
     .forEach((btn) => {
-      btn.addEventListener("click", () => onStagePrepInvTabClick(btn));
+      btn.addEventListener("click", () => {
+        if (consumeStagePrepSuppressClick()) return;
+        onStagePrepInvTabClick(btn);
+      });
     });
 
   bindStagePrepDockControls(host);
+  bindStagePrepLongPress(host);
+  if (stagePrepInfo) bindStagePrepInfoControls(host);
 }
 
 function refreshLegal(): void {
@@ -2233,10 +2603,7 @@ function renderResult(): string {
   if (!stage || !reward) {
     return `<div class="result-wrap">
       ${navBackBtn({ nav: "stages", label: t("ui.1a7f31cadb") })}
-      <div class="battle-sky" aria-hidden="true">
-        <img class="battle-sky-img" src="/art/battle/battle-arena-bg.webp" alt="" decoding="async" />
-        <div class="battle-sky-veil"></div>
-      </div>
+      ${battleSkyHtml(currentStage)}
       <div class="result-screen is-lose">
         <div class="result-banner result-banner--compact">
           <h2 class="result-title">${t("ui.70088c999d")}</h2>
@@ -2418,10 +2785,7 @@ function renderResult(): string {
 
   return `<div class="result-wrap">
     ${navBackBtn({ nav: "stages", label: t("ui.1a7f31cadb") })}
-    <div class="battle-sky" aria-hidden="true">
-      <img class="battle-sky-img" src="/art/battle/battle-arena-bg.webp" alt="" decoding="async" />
-      <div class="battle-sky-veil"></div>
-    </div>
+    ${battleSkyHtml(stage)}
     <div class="result-screen ${win ? "is-win" : "is-lose"}">
       <div class="result-banner result-banner--compact">
         <h2 class="result-title">${title}</h2>
@@ -2996,13 +3360,13 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
     opts?.targetable && u.alive
       ? `type="button" data-target="${u.id}"`
       : "";
-  const artSize = isSummoner ? 112 : 160;
+  const artSize = isSummoner ? 128 : 168;
   const facing: "front" | "back" = u.team === "ally" ? "back" : "front";
   const art =
     u.kind === "monster"
       ? monsterBattleArtImg(u.monsterId, "battle-unit-img", artSize, facing) ||
         monsterArtImg(u.monsterId, "battle-unit-img", artSize)
-      : `<img class="battle-unit-img" src="${summonerArtSrc(u.element)}" width="${artSize}" height="${artSize}" alt="" draggable="false" decoding="async" />`;
+      : summonerBattleArtImg(u.element, "battle-unit-img", artSize, facing);
   const showName = isActive || isTargeted;
   const spineId =
     u.kind === "monster"
@@ -3477,6 +3841,67 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Green (+N) / (+N%) suffix for symbol-added combat stats. */
+function formatSymbolStatBonusHtml(delta: number, percent: boolean): string {
+  if (delta <= 0) return "";
+  const body = percent ? `(+${delta}%)` : `(+${delta})`;
+  return `<span class="stat-cell-bonus">${body}</span>`;
+}
+
+function formatInspectStatValueHtml(
+  base: number,
+  final: number,
+  opts?: { percent?: boolean },
+): string {
+  const percent = Boolean(opts?.percent);
+  const main = percent ? `${final}%` : String(final);
+  return `${main}${formatSymbolStatBonusHtml(final - base, percent)}`;
+}
+
+function renderInspectCombatStatsHtml(
+  preview: NonNullable<ReturnType<typeof previewOwnedCombatStats>>,
+): string {
+  const { base, final } = preview;
+  const cells: Array<{ k: string; v: string }> = [
+    { k: t("ui.statHp"), v: formatInspectStatValueHtml(base.hp, final.hp) },
+    { k: t("ui.statAtk"), v: formatInspectStatValueHtml(base.atk, final.atk) },
+    { k: t("ui.statDef"), v: formatInspectStatValueHtml(base.def, final.def) },
+    { k: t("ui.statSpd"), v: formatInspectStatValueHtml(base.spd, final.spd) },
+    {
+      k: t("ui.statCriRate"),
+      v: formatInspectStatValueHtml(base.critRate, final.critRate, {
+        percent: true,
+      }),
+    },
+    {
+      k: t("ui.statCriDmg"),
+      v: formatInspectStatValueHtml(base.critDmg, final.critDmg, {
+        percent: true,
+      }),
+    },
+    {
+      k: t("ui.statAcc"),
+      v: formatInspectStatValueHtml(base.accuracy, final.accuracy, {
+        percent: true,
+      }),
+    },
+    {
+      k: t("ui.statRes"),
+      v: formatInspectStatValueHtml(base.resistance, final.resistance, {
+        percent: true,
+      }),
+    },
+  ];
+  return `<div class="mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list">
+            ${cells
+              .map(
+                (c) =>
+                  `<div class="stat-cell" role="listitem"><span class="stat-cell-k">${c.k}</span><span class="stat-cell-v">${c.v}</span></div>`,
+              )
+              .join("")}
+          </div>`;
 }
 
 /** Seal-style X close control; triggers the matching backdrop close button. */
@@ -5126,12 +5551,12 @@ function summonerSkillArtImg(
 function monsterSkillDescLines(
   skill: {
     cooldown: number;
-    effects: (
-      | { kind: "damage"; target: string; coeff: number }
-      | { kind: "heal"; target: string; coeff: number }
-      | { kind: "shield"; target: string; coeff: number }
-      | { kind: "mana"; amount: number }
-    )[];
+    effects: {
+      kind: string;
+      target?: string;
+      coeff?: number;
+      amount?: number;
+    }[];
   } | null | undefined,
 ): string[] {
   if (!skill) return [];
@@ -5142,24 +5567,77 @@ function monsterSkillDescLines(
   ];
   for (const e of skill.effects) {
     if (e.kind === "damage") {
-      const pct = Math.round(e.coeff * 100);
+      const pct = Math.round((e.coeff ?? 0) * 100);
       lines.push(
         e.target === "all_enemies"
           ? t("ui.skillFxDamageAll", { pct })
           : t("ui.skillFxDamageSingle", { pct }),
       );
     } else if (e.kind === "heal") {
-      const pct = Math.round(e.coeff * 100);
+      const pct = Math.round((e.coeff ?? 0) * 100);
       lines.push(
         e.target === "self"
           ? t("ui.skillFxHealSelf", { pct })
           : t("ui.skillFxHealAlly", { pct }),
       );
     } else if (e.kind === "shield") {
-      lines.push(t("ui.skillFxShield", { pct: Math.round(e.coeff * 100) }));
+      lines.push(t("ui.skillFxShield", { pct: Math.round((e.coeff ?? 0) * 100) }));
     } else if (e.kind === "mana") {
-      lines.push(t("ui.skillFxMana", { n: e.amount }));
+      lines.push(t("ui.skillFxMana", { n: e.amount ?? 0 }));
     }
+  }
+  return lines;
+}
+
+/** Localized ability lines for summoner magic at the given enhance rank. */
+function magicSkillDescLines(
+  sk: SummonerMagicSkillDef,
+  rank: number,
+): string[] {
+  const power = magicSkillPower(sk, rank);
+  const pctInt = Math.round(power * 100);
+  const turns = sk.turns ?? 1;
+  const manaPct = Math.round(sk.manaCostFrac * 100);
+  const lines: string[] = [t("ui.magicManaCost", { pct: manaPct })];
+  switch (sk.kind) {
+    case "aoe_damage":
+      lines.push(t("ui.magicFxAoeDamage", { pct: pctInt }));
+      break;
+    case "single_damage":
+      lines.push(t("ui.magicFxSingleDamage", { pct: pctInt }));
+      break;
+    case "ally_buff_atk":
+      lines.push(t("ui.magicFxAllyBuffAtk", { pct: pctInt, turns }));
+      break;
+    case "ally_buff_spd":
+      lines.push(t("ui.magicFxAllyBuffSpd", { pct: pctInt, turns }));
+      break;
+    case "ally_buff_crit":
+      lines.push(t("ui.magicFxAllyBuffCrit", { pct: pctInt, turns }));
+      break;
+    case "ally_heal":
+      lines.push(t("ui.magicFxAllyHeal", { pct: pctInt }));
+      break;
+    case "ally_shield":
+      lines.push(t("ui.magicFxAllyShield", { pct: pctInt }));
+      break;
+    case "enemy_debuff":
+      lines.push(t("ui.magicFxEnemyDebuff", { pct: pctInt, turns }));
+      break;
+    case "amplify":
+      lines.push(t("ui.magicFxAmplify", { pct: pctInt }));
+      break;
+    case "dual_stone":
+      lines.push(t("ui.magicFxDualStone"));
+      break;
+    case "board_clean":
+      lines.push(t("ui.magicFxBoardClean"));
+      break;
+    case "damage_reduce":
+      lines.push(t("ui.magicFxDamageReduce", { pct: pctInt, turns }));
+      break;
+    default:
+      break;
   }
   return lines;
 }
@@ -5219,6 +5697,30 @@ function monsterArtSrc(monsterId: string | undefined | null): string | null {
   const artKey = getMonsterArtKey(monsterId);
   if (!artKey) return null;
   return `/art/monster/${artKey}.webp`;
+}
+
+function summonerBattleArtImg(
+  element: string | undefined | null,
+  className: string,
+  size = 128,
+  facing: "front" | "back" = "front",
+): string {
+  const src =
+    getSummonerBattleStillSrc(element, facing) ?? summonerArtSrc(element);
+  const fb = summonerArtSrc(element);
+  const front = getSummonerBattleStillSrc(element, "front") ?? fb;
+  const back = getSummonerBattleStillSrc(element, "back") ?? front;
+  const stillAttrs = front
+    ? ` data-still-front="${front}" data-still-back="${back || front}"`
+    : "";
+  const pngFb =
+    src.endsWith(".webp") ? src.replace(/\.webp$/i, ".png") : "";
+  const onerr = pngFb
+    ? ` onerror="this.onerror=null;this.src='${pngFb}';this.onerror=function(){this.onerror=null;this.src='${fb}'};"`
+    : src !== fb
+      ? ` onerror="this.onerror=null;this.src='${fb}'"`
+      : "";
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${stillAttrs}${onerr} />`;
 }
 
 function summonerArtSrc(element: string | undefined | null): string {
@@ -5681,6 +6183,173 @@ function renderSkillFeedModal(): string {
   </div>`;
 }
 
+function findSymbolIndexById(id: string): number {
+  return save.symbols.findIndex((x) => x.id === id);
+}
+
+function rematchSymbolModalIndices(
+  detailId: string | null,
+  compareId: string | null,
+): void {
+  symbolDetailIndex = detailId ? findSymbolIndexById(detailId) : null;
+  if (symbolDetailIndex != null && symbolDetailIndex < 0) symbolDetailIndex = null;
+  symbolCompareIndex = compareId ? findSymbolIndexById(compareId) : null;
+  if (symbolCompareIndex != null && symbolCompareIndex < 0) symbolCompareIndex = null;
+  if (
+    symbolDetailIndex != null &&
+    symbolCompareIndex != null &&
+    symbolDetailIndex === symbolCompareIndex
+  ) {
+    symbolCompareIndex = null;
+  }
+}
+
+function symbolStatLabel(stat: string): string {
+  switch (stat) {
+    case "ATK+":
+    case "ATK%":
+      return t("ui.statAtk");
+    case "HP+":
+    case "HP%":
+      return t("ui.statHp");
+    case "DEF+":
+    case "DEF%":
+      return t("ui.statDef");
+    case "SPD+":
+      return t("ui.statSpd");
+    case "CRI Rate%":
+      return t("ui.statCriRate");
+    case "CRI Dmg%":
+      return t("ui.statCriDmg");
+    case "ACC%":
+      return t("ui.statAcc");
+    case "RES%":
+      return t("ui.statRes");
+    default:
+      return stat;
+  }
+}
+
+function formatSymbolStatLine(stat: string, value: number): string {
+  const pct = stat.includes("%");
+  const n = Math.round(value);
+  return `${symbolStatLabel(stat)} +${n}${pct ? "%" : ""}`;
+}
+
+type SymDetailRole = "single" | "equipped" | "candidate";
+
+function renderSymbolDetailSheet(index: number, role: SymDetailRole): string {
+  const sym = save.symbols[index];
+  if (!sym) return "";
+  const set = SYMBOL_SETS.find((x) => x.id === sym.setId);
+  const rarity = symbolQualityMeta(sym.quality);
+  const wornUid =
+    save.roster.find((m) => (m.symbolSlots ?? []).includes(sym.id))?.uid ?? null;
+  const mainLine = formatSymbolStatLine(sym.mainStat, sym.mainValue);
+  /** Always reserve 4 substat rows (max innate rolls). */
+  const subs: string[] = (sym.substats ?? []).map((sub) =>
+    formatSymbolStatLine(sub.stat, sub.value),
+  );
+  while (subs.length < 4) subs.push("");
+  const subHtml = subs
+    .slice(0, 4)
+    .map((line) =>
+      line
+        ? `<p class="sym-detail-sub">${escapeHtml(line)}</p>`
+        : `<p class="sym-detail-sub is-empty">${EM_DASH}</p>`,
+    )
+    .join("");
+  const setLine = set
+    ? `<span class="sym-detail-set-ico"><img src="${symbolSetArtSrc(set.id)}" width="20" height="20" alt="" draggable="false" onerror="this.onerror=null;this.src='${symbolSetArtFallbackSrc(set.id)}'" /></span><span class="sym-detail-set-text">${escapeHtml(t("ui.setPiecesN", { n: set.pieces }))} ${escapeHtml(set.effectKo)}</span>`
+    : "";
+  const imprintable = canImprintSymbol(sym);
+  const maxed = sym.enhance >= MAX_SYMBOL_ENHANCE;
+  const title = `${set?.nameKo ?? sym.setId} (${t("ui.slotN", { n: sym.slot })}) - ${rarity.label}`;
+  const badge =
+    role === "equipped"
+      ? `<span class="sym-detail-badge">${escapeHtml(t("ui.symCompareEquipped"))}</span>`
+      : role === "candidate"
+        ? `<span class="sym-detail-badge sym-detail-badge--pick">${escapeHtml(t("ui.symCompareSelected"))}</span>`
+        : "";
+  const thirdBtn =
+    role === "equipped"
+      ? `<button type="button" class="sym-detail-act" data-sym-detail-unequip data-sym-idx="${index}">${t("ui.unequip")}</button>`
+      : role === "candidate"
+        ? `<button type="button" class="sym-detail-act" data-sym-detail-equip data-sym-idx="${index}">${t("ui.818a75cd98")}</button>`
+        : wornUid
+          ? `<button type="button" class="sym-detail-act" data-sym-detail-unequip data-sym-idx="${index}">${t("ui.unequip")}</button>`
+          : `<button type="button" class="sym-detail-act" data-sym-detail-equip data-sym-idx="${index}">${t("ui.818a75cd98")}</button>`;
+  const closeX =
+    role === "single" ? modalCloseX("close", "btn-sym-detail-close") : "";
+  return `<div class="sym-detail-sheet rarity--${rarity.id}" data-sym-sheet="${role}" role="${role === "single" ? "dialog" : "group"}"${role === "single" ? ' aria-modal="true" aria-labelledby="sym-detail-title"' : ""}>
+      ${closeX}
+      ${badge}
+      <h3 class="sym-detail-title"${role === "single" ? ' id="sym-detail-title"' : ""}>${escapeHtml(title)}</h3>
+      <div class="sym-detail-body">
+        <div class="sym-detail-left">
+          <div class="sym-detail-hero">
+            ${renderSymIco({
+              setId: sym.setId,
+              slot: sym.slot,
+              enhance: sym.enhance,
+              rarityId: rarity.id,
+              size: "lg",
+            })}
+            <div class="sym-detail-main-wrap">
+              <p class="sym-detail-main">${escapeHtml(mainLine)}</p>
+            </div>
+          </div>
+          <div class="sym-detail-subs" aria-label="substats">${subHtml}</div>
+        </div>
+        <div class="sym-detail-right">
+          <p class="sym-detail-set">${setLine}</p>
+          <button type="button" class="sym-detail-act" data-sym-detail-imprint data-sym-idx="${index}" ${imprintable ? "" : "disabled"}>${t("ui.8b41b055f7")}</button>
+          <button type="button" class="sym-detail-act" data-sym-detail-enhance data-sym-idx="${index}" ${maxed ? "disabled" : ""}>${t("ui.3e1a337d93")}</button>
+          ${thirdBtn}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderSymbolDetailModal(): string {
+  if (symbolDetailIndex == null) return "";
+  if (!save.symbols[symbolDetailIndex]) return "";
+  const comparing =
+    symbolCompareIndex != null &&
+    symbolCompareIndex !== symbolDetailIndex &&
+    !!save.symbols[symbolCompareIndex];
+
+  if (comparing) {
+    return `<div class="settings-layer sym-detail-layer sym-detail-layer--compare" id="sym-detail-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-sym-detail-close" aria-label="close"></button>
+    <div class="sym-detail-compare" role="dialog" aria-modal="true" aria-label="${escapeHtml(t("ui.60fbf51b13"))}">
+      ${modalCloseX("close", "btn-sym-detail-close")}
+      ${renderSymbolDetailSheet(symbolCompareIndex!, "equipped")}
+      ${renderSymbolDetailSheet(symbolDetailIndex, "candidate")}
+    </div>
+  </div>`;
+  }
+
+  return `<div class="settings-layer sym-detail-layer" id="sym-detail-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-sym-detail-close" aria-label="close"></button>
+    ${renderSymbolDetailSheet(symbolDetailIndex, "single")}
+  </div>`;
+}
+
+function openSymbolDetailFromSlot(uid: string, slot: number, symId: string): void {
+  const idx = findSymbolIndexById(symId);
+  if (idx < 0) return;
+  symbolDetailIndex = idx;
+  symbolCompareIndex = null;
+  slotEquipPick = { uid, slot };
+  if (SYMBOL_SLOT_NUMS.includes(slot as SymbolSlotNum)) {
+    applySymbolInvSlotFilter(slot as SymbolSlotNum);
+  }
+  symbolInvFilterSets = new Set(SYMBOL_SETS.map((s) => s.id));
+  monDetailTab = "symbols";
+  render();
+}
+
 function renderSymbolBagExpandModal(): string {
   if (!symbolBagExpandOpen) return "";
   const cur = symbolBagCapacity(save);
@@ -5783,23 +6452,23 @@ function renderMonsterRuneCircle(uid: string): string {
       const picking = pickingSlot === slotNum ? " is-picking" : "";
       if (sym) {
         const rarity = symbolQualityMeta(sym.quality);
-        return `<button type="button" class="rune-slot rune-slot--${slotNum} filled rarity--${rarity.id}${picking}" data-unequip-uid="${uid}" data-unequip-slot="${slotNum}" style="--sym-accent:${symbolSetAccent(sym.setId)}" title="${describeSymbol(sym)}">
+        const symIdx = findSymbolIndexById(sym.id);
+        return `<button type="button" class="rune-slot rune-slot--${slotNum} filled rarity--${rarity.id}${picking}" data-sym-detail="${symIdx}" data-sym-from="slot" data-sym-slot-uid="${uid}" data-sym-slot="${slotNum}" style="--sym-accent:${symbolSetAccent(sym.setId)}" title="${describeSymbol(sym)}">
           <span class="rune-slot-face">
-            ${symbolPlateImg(rarity.id, slotNum, "rune-slot-plate", 72)}
-            ${symbolArtImg(sym.setId, slotNum, "rune-slot-art", 72)}
+            ${symbolPlateImg(rarity.id, slotNum, "rune-slot-plate", 96)}
+            ${symbolArtImg(sym.setId, slotNum, "rune-slot-art", 96)}
             <span class="rune-slot-plus">+${sym.enhance}</span>
           </span>
         </button>`;
       }
       return `<button type="button" class="rune-slot rune-slot--${slotNum} empty${picking}" data-slot-pick-uid="${uid}" data-slot-pick="${slotNum}" title="${t("ui.3f1100d730")}">
           <span class="rune-slot-face">
-            ${symbolEmptySlotImg(slotNum, "rune-slot-art", 72)}
+            ${symbolEmptySlotImg(slotNum, "rune-slot-art", 96)}
           </span>
         </button>`;
     })
     .join("");
-  return `<div class="rune-circle" aria-label="${t("ui.7cf8acb154")}">
-    <img class="rune-circle-frame" src="${symbolCircleFrameSrc()}" width="240" height="240" alt="" aria-hidden="true" draggable="false" />
+  return `<div class="rune-circle rune-board" aria-label="${t("ui.7cf8acb154")}">
     ${cells}
   </div>`;
 }
@@ -5871,12 +6540,15 @@ function renderSymbolSetBonusHtml(uid: string): string {
   if (!preview?.sets.length) {
     return `<p class="muted loadout-sets-empty">${t("ui.setBonusNone")}</p>`;
   }
-  return `<div class="loadout-sets">${preview.sets
+  return `<div class="loadout-sets loadout-sets--lines">${preview.sets
     .map((set) => {
       const accent = symbolSetAccent(set.setId);
-      return `<span class="set-chip${set.active ? " active" : ""}" style="--sym-accent:${accent}">
-        <img class="set-chip-ico" src="${symbolSetArtSrc(set.setId)}" width="16" height="16" alt="" draggable="false" onerror="this.onerror=null;this.src='${symbolSetArtFallbackSrc(set.setId)}'" />
-        <span class="set-chip-label">${set.nameKo} ${set.count}/${set.pieces}${set.active ? ` / ${set.effectKo}` : ""}</span>
+      return `<span class="set-chip set-chip--line${set.active ? " active" : ""}" style="--sym-accent:${accent}" title="${escapeHtml(set.nameKo)} ${set.count}/${set.pieces}">
+        <span class="set-chip-ico-wrap">
+          <img class="set-chip-ico" src="${symbolSetArtSrc(set.setId)}" width="22" height="22" alt="" draggable="false" onerror="this.onerror=null;this.src='${symbolSetArtFallbackSrc(set.setId)}'" />
+          <span class="set-chip-count">${set.count}</span>
+        </span>
+        <span class="set-chip-fx">${set.effectKo}</span>
       </span>`;
     })
     .join("")}</div>`;
@@ -5908,16 +6580,9 @@ function refreshMonsterSymbolsPane(): boolean {
     if (next) circle.replaceWith(next);
   }
 
-  const effectBlock = pane.querySelector<HTMLElement>(".rune-effect-block");
-  if (effectBlock) {
-    [...effectBlock.children].forEach((child) => {
-      if (!(child as HTMLElement).classList.contains("rune-effect-head")) {
-        child.remove();
-      }
-    });
-    const wrap = document.createElement("div");
-    wrap.innerHTML = renderSymbolSetBonusHtml(uid);
-    while (wrap.firstChild) effectBlock.appendChild(wrap.firstChild);
+  const effectBody = pane.querySelector<HTMLElement>(".rune-effect-body");
+  if (effectBody) {
+    effectBody.innerHTML = renderSymbolSetBonusHtml(uid);
   }
 
   const invHost = pane.querySelector<HTMLElement>(".mon-sym-viewer-inv");
@@ -5932,19 +6597,10 @@ function refreshMonsterSymbolsPane(): boolean {
     '.mon-pane[data-mon-pane="info"] .mon-inspect-stats',
   );
   if (preview && statsRoot) {
-    const vals = [
-      String(preview.final.hp),
-      String(preview.final.atk),
-      String(preview.final.def),
-      String(preview.final.spd),
-      `${preview.final.critRate}%`,
-      `${preview.final.critDmg}%`,
-      `${preview.final.accuracy}%`,
-      `${preview.final.resistance}%`,
-    ];
-    statsRoot.querySelectorAll<HTMLElement>(".stat-cell-v").forEach((el, i) => {
-      if (vals[i] != null) el.textContent = vals[i]!;
-    });
+    const wrap = document.createElement("div");
+    wrap.innerHTML = renderInspectCombatStatsHtml(preview);
+    const next = wrap.firstElementChild;
+    if (next) statsRoot.replaceWith(next);
   }
 
   bindSymbolInventoryInteractions();
@@ -6044,33 +6700,81 @@ function bindSymbolInventoryInteractions(): void {
     );
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-equip-from-inv]").forEach((btn) => {
+  app.querySelectorAll<HTMLButtonElement>("[data-sym-detail]").forEach((btn) => {
     btn.addEventListener(
       "click",
       () => {
-        const idx = Number(btn.dataset.equipFromInv);
-        if (!Number.isFinite(idx) || !save.symbols[idx]) return;
-        const sym = save.symbols[idx]!;
-        if (slotEquipPick) {
-          if (sym.slot !== slotEquipPick.slot) return;
-          const r = runEquipSymbol(save, slotEquipPick.uid, String(idx));
-          save = r.save;
-          persist();
-          slotEquipPick = null;
-          applySymbolInvSlotFilter("all");
-          flash(r.message);
-          if (!refreshMonsterSymbolsPane()) render();
+        const idx = Number(btn.dataset.symDetail);
+        if (!Number.isFinite(idx) || idx < 0 || !save.symbols[idx]) return;
+        const from = btn.dataset.symFrom ?? "";
+        const clicked = save.symbols[idx]!;
+
+        if (from === "slot") {
+          const uid = btn.dataset.symSlotUid ?? selectedEnhanceUid;
+          const slot = Number(btn.dataset.symSlot);
+          if (!uid || !Number.isFinite(slot)) return;
+          openSymbolDetailFromSlot(uid, slot, clicked.id);
           return;
         }
-        const uid = selectedEnhanceUid;
-        if (!uid) return;
-        const r = runEquipSymbol(save, uid, String(idx));
-        save = r.save;
-        persist();
+
+        // Inventory: empty-slot pick equips immediately; otherwise open detail/compare.
+        if (from === "inv" && slotEquipPick) {
+          if (clicked.slot !== slotEquipPick.slot) return;
+          const mon = save.roster.find((m) => m.uid === slotEquipPick!.uid);
+          const equippedId = mon?.symbolSlots?.[slotEquipPick.slot - 1] ?? null;
+          if (equippedId && equippedId !== clicked.id) {
+            const eqIdx = findSymbolIndexById(equippedId);
+            if (eqIdx >= 0) {
+              symbolCompareIndex = eqIdx;
+              symbolDetailIndex = idx;
+              monDetailTab = "symbols";
+              render();
+              return;
+            }
+          }
+          if (!equippedId) {
+            const r = runEquipSymbol(save, slotEquipPick.uid, String(idx));
+            save = r.save;
+            persist();
+            slotEquipPick = null;
+            symbolDetailIndex = null;
+            symbolCompareIndex = null;
+            applySymbolInvSlotFilter("all");
+            flash(r.message);
+            if (!refreshMonsterSymbolsPane()) render();
+            return;
+          }
+        }
+
+        if (from === "inv" && selectedEnhanceUid) {
+          const mon = save.roster.find((m) => m.uid === selectedEnhanceUid);
+          const equippedId = mon?.symbolSlots?.[clicked.slot - 1] ?? null;
+          if (equippedId && equippedId !== clicked.id) {
+            const eqIdx = findSymbolIndexById(equippedId);
+            if (eqIdx >= 0) {
+              symbolCompareIndex = eqIdx;
+              symbolDetailIndex = idx;
+              slotEquipPick = { uid: selectedEnhanceUid, slot: clicked.slot };
+              if (SYMBOL_SLOT_NUMS.includes(clicked.slot as SymbolSlotNum)) {
+                applySymbolInvSlotFilter(clicked.slot as SymbolSlotNum);
+              }
+              monDetailTab = "symbols";
+              render();
+              return;
+            }
+          }
+        }
+
+        symbolCompareIndex = null;
+        symbolDetailIndex = idx;
+        if (from === "inv" && SYMBOL_SLOT_NUMS.includes(clicked.slot as SymbolSlotNum)) {
+          applySymbolInvSlotFilter(clicked.slot as SymbolSlotNum);
+          if (selectedEnhanceUid) {
+            slotEquipPick = { uid: selectedEnhanceUid, slot: clicked.slot };
+          }
+        }
         monDetailTab = "symbols";
-        applyMonDetailTabUi();
-        flash(r.message);
-        if (!refreshMonsterSymbolsPane()) render();
+        render();
       },
       opts,
     );
@@ -6097,24 +6801,147 @@ function bindSymbolInventoryInteractions(): void {
           monDetailTab = "symbols";
           applyMonDetailTabUi();
         }
+        symbolDetailIndex = null;
+        symbolCompareIndex = null;
         if (!refreshMonsterSymbolsPane()) render();
       },
       opts,
     );
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-unequip-uid]").forEach((btn) => {
+  const closeSymDetail = () => {
+    symbolDetailIndex = null;
+    symbolCompareIndex = null;
+    render();
+  };
+  app
+    .querySelector("#btn-sym-detail-close")
+    ?.addEventListener("click", closeSymDetail, opts);
+
+  app.querySelectorAll<HTMLButtonElement>("[data-sym-detail-enhance]").forEach((btn) => {
     btn.addEventListener(
       "click",
       () => {
-        const uid = btn.dataset.unequipUid!;
-        const slot = Number(btn.dataset.unequipSlot);
-        const r = runUnequipSymbol(save, uid, slot);
+        const idx = Number(btn.dataset.symIdx);
+        if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+        const detailId =
+          symbolDetailIndex != null
+            ? (save.symbols[symbolDetailIndex]?.id ?? null)
+            : null;
+        const compareId =
+          symbolCompareIndex != null
+            ? (save.symbols[symbolCompareIndex]?.id ?? null)
+            : null;
+        const id = save.symbols[idx]?.id;
+        const r = runEnhanceSymbol(save, String(idx));
         save = r.save;
         persist();
-        slotEquipPick = null;
+        rematchSymbolModalIndices(detailId, compareId);
+        if (symbolDetailIndex == null && id) {
+          const next = findSymbolIndexById(id);
+          symbolDetailIndex = next >= 0 ? next : null;
+        }
         flash(r.message);
-        if (!refreshMonsterSymbolsPane()) render();
+        render();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-sym-detail-imprint]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const idx = Number(btn.dataset.symIdx);
+        if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+        const detailId =
+          symbolDetailIndex != null
+            ? (save.symbols[symbolDetailIndex]?.id ?? null)
+            : null;
+        const compareId =
+          symbolCompareIndex != null
+            ? (save.symbols[symbolCompareIndex]?.id ?? null)
+            : null;
+        const prev = save.symbols[idx];
+        const before = prev ? describeSymbol(prev) : "";
+        const id = prev?.id;
+        const r = runImprintSymbol(save, String(idx));
+        save = r.save;
+        persist();
+        const next = id ? save.symbols.find((x) => x.id === id) : undefined;
+        if (next && before && r.message.startsWith(t("ui.d48858f588"))) {
+          forgeReveal = {
+            kind: "imprint",
+            before,
+            after: describeSymbol(next),
+            cost: `${MINUS}${t("ui.5d0bf3b101")} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
+          };
+        }
+        rematchSymbolModalIndices(detailId, compareId);
+        if (symbolDetailIndex == null && id) {
+          const ni = findSymbolIndexById(id);
+          symbolDetailIndex = ni >= 0 ? ni : null;
+        }
+        flash(r.message);
+        render();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-sym-detail-unequip]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const idx = Number(btn.dataset.symIdx);
+        if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+        const sym = save.symbols[idx]!;
+        const mon = save.roster.find((m) =>
+          (m.symbolSlots ?? []).includes(sym.id),
+        );
+        if (!mon) return;
+        const slot = (mon.symbolSlots ?? []).findIndex((id) => id === sym.id) + 1;
+        const detailId =
+          symbolDetailIndex != null
+            ? (save.symbols[symbolDetailIndex]?.id ?? null)
+            : null;
+        const compareId =
+          symbolCompareIndex != null
+            ? (save.symbols[symbolCompareIndex]?.id ?? null)
+            : null;
+        const r = runUnequipSymbol(save, mon.uid, slot);
+        save = r.save;
+        persist();
+        rematchSymbolModalIndices(detailId, compareId);
+        if (compareId && compareId === sym.id) symbolCompareIndex = null;
+        if (detailId && detailId === sym.id) {
+          symbolDetailIndex = null;
+          symbolCompareIndex = null;
+        }
+        flash(r.message);
+        render();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-sym-detail-equip]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const idx = Number(btn.dataset.symIdx);
+        if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+        const targetUid = slotEquipPick?.uid ?? selectedEnhanceUid;
+        if (!targetUid) return;
+        const r = runEquipSymbol(save, targetUid, String(idx));
+        save = r.save;
+        persist();
+        symbolDetailIndex = null;
+        symbolCompareIndex = null;
+        slotEquipPick = null;
+        applySymbolInvSlotFilter("all");
+        flash(r.message);
+        render();
       },
       opts,
     );
@@ -6253,7 +7080,7 @@ function renderSymbolInventoryGrid(): string {
     const rarity = symbolQualityMeta(sym.quality);
     const grade = invGradeFromRarityId(rarity.id);
     tiles.push(`<div class="mon-sym-inv-cell">
-        <button type="button" class="mon-sym-inv-tile inv-grade--${grade} rarity--${rarity.id}${worn ? " is-worn" : ""}" data-equip-from-inv="${i}" title="${describeSymbol(sym)}">
+        <button type="button" class="mon-sym-inv-tile inv-grade--${grade} rarity--${rarity.id}${worn ? " is-worn" : ""}" data-sym-detail="${i}" data-sym-from="inv" title="${describeSymbol(sym)}">
           ${invGradePlateImg(grade, "mon-sym-inv-grade-plate", 112)}
           <span class="mon-sym-inv-ico" aria-hidden="true">
             ${symbolPlateImg(rarity.id, sym.slot, "mon-sym-inv-plate", 72)}
@@ -7038,12 +7865,15 @@ function renderEnhance(): string {
 
         const skillsMaxed = levels.every((lv) => lv >= MAX_SKILL_LEVEL);
         const skillDescLines = monsterSkillDescLines(focusSk);
+        const skillEnhanceBtn = enhanceSkillFeedAllowed
+          ? `<button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--rail" data-skill-feed-open="${m.uid}" ${skillsMaxed ? "disabled" : ""}>
+            <span class="mon-enh-label">${skillsMaxed ? "MAX" : escapeHtml(t("ui.3e1a337d93"))}</span>
+          </button>`
+          : "";
         const skillsPanel = `<div class="mon-pane mon-pane--skills">
         <div class="mon-skill-rail">
           <div class="mon-skill-icos" role="tablist" aria-label="skills">${skillIcons}</div>
-          <button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--rail" data-skill-feed-open="${m.uid}" ${skillsMaxed ? "disabled" : ""}>
-            <span class="mon-enh-label">${skillsMaxed ? "MAX" : escapeHtml(t("ui.3e1a337d93"))}</span>
-          </button>
+          ${skillEnhanceBtn}
         </div>
         <div class="mon-skill-main">
           <div class="mon-skill-detail mon-skill-detail--tall">
@@ -7071,7 +7901,7 @@ function renderEnhance(): string {
               <div class="rune-effect-head">
                 <strong>${t("ui.effect")}</strong>
               </div>
-              ${renderSymbolSetBonusHtml(m.uid)}
+              <div class="rune-effect-body">${renderSymbolSetBonusHtml(m.uid)}</div>
             </div>
           </div>
           <div class="mon-sym-viewer-inv">${renderSymbolInventoryGrid()}</div>
@@ -7079,16 +7909,11 @@ function renderEnhance(): string {
       </div>`;
 
         const infoPanel = `<div class="mon-pane mon-pane--info">
-          <div class="mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list">
-            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statHp")}</span><span class="stat-cell-v">${selectedPreview?.final.hp ?? "-"}</span></div>
-            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statAtk")}</span><span class="stat-cell-v">${selectedPreview?.final.atk ?? "-"}</span></div>
-            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statDef")}</span><span class="stat-cell-v">${selectedPreview?.final.def ?? "-"}</span></div>
-            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statSpd")}</span><span class="stat-cell-v">${selectedPreview?.final.spd ?? "-"}</span></div>
-            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statCriRate")}</span><span class="stat-cell-v">${selectedPreview ? selectedPreview.final.critRate + "%" : "-"}</span></div>
-            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statCriDmg")}</span><span class="stat-cell-v">${selectedPreview ? selectedPreview.final.critDmg + "%" : "-"}</span></div>
-            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statAcc")}</span><span class="stat-cell-v">${selectedPreview ? selectedPreview.final.accuracy + "%" : "-"}</span></div>
-            <div class="stat-cell" role="listitem"><span class="stat-cell-k">${t("ui.statRes")}</span><span class="stat-cell-v">${selectedPreview ? selectedPreview.final.resistance + "%" : "-"}</span></div>
-          </div>
+          ${
+            selectedPreview
+              ? renderInspectCombatStatsHtml(selectedPreview)
+              : `<div class="mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list"><div class="stat-cell" role="listitem"><span class="stat-cell-k">-</span><span class="stat-cell-v">-</span></div></div>`
+          }
         </div>`;
 
         const infoPane = infoPanel.replace(
@@ -7262,6 +8087,7 @@ function renderEnhance(): string {
   const body = `<div class="hub-panel enhance-panel enhance-panel--desk">
     ${renderForgeReveal()}
     ${renderSymbolBagExpandModal()}
+    ${renderSymbolDetailModal()}
     ${renderSkillFeedModal()}
     ${monstersPanel}
   </div>`;
@@ -8292,20 +9118,7 @@ function renderBattle(manaPct: number): string {
   const stageTitle = escapeHtml(currentStage.nameKo);
 
   return `<div class="battle-screen">
-    <div class="battle-sky" aria-hidden="true">
-      <img
-        class="battle-sky-img"
-        src="/art/battle/battle-arena-bg.webp"
-        srcset="/art/battle/battle-arena-bg-720.webp 720w, /art/battle/battle-arena-bg.webp 1080w"
-        sizes="(max-width: 430px) 100vw, 430px"
-        width="1080"
-        height="1920"
-        alt=""
-        decoding="async"
-      />
-      <div class="battle-sky-veil"></div>
-      <div class="battle-arena-floor"></div>
-    </div>
+    ${battleSkyHtml(currentStage)}
     <header class="battle-chrome">
       ${renderBattleTicker()}
       <div class="battle-stage-pill" title="${stageTitle}">
@@ -9317,7 +10130,15 @@ function bind(): void {
         islandSpotDrag = null;
         clearIslandLongPress();
       }
-      if (nav === "enhance") enhanceTab = "monsters";
+      if (nav === "enhance") {
+        enhanceTab = "monsters";
+        enhanceSkillFeedAllowed = false;
+      }
+      if (nav === "home") {
+        enhanceSkillFeedAllowed = false;
+        skillFeedModalOpen = false;
+        skillFeedFodderUid = null;
+      }
       if (nav === "enhance" || nav === "home" || nav === "summoner") {
         codexOpen = false;
         codexDetailMonsterId = null;
@@ -9640,6 +10461,7 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-skill-feed-open]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (!enhanceSkillFeedAllowed) return;
       const uid = btn.dataset.skillFeedOpen;
       if (!uid) return;
       selectedEnhanceUid = uid;
@@ -10365,7 +11187,8 @@ function bind(): void {
   if (view === "battle") {
     destroyAllSpine();
     mountUnitAnimHooks(app);
-    dematteArtInTree(app, "img.battle-unit-img");
+    // Painted battle stills are already transparent — dematte punches dark cloth.
+    dematteArtInTree(app, "img.battle-unit-img:not([data-still-front])");
     void mountBattleSpines(app);
   } else if (view === "enhance" || view === "summoner") {
     destroyAllSpine();

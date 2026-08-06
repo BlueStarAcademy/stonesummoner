@@ -1924,12 +1924,12 @@
     "en": "No monsters deployed"
   },
   "ui.stagePrepTabSummoner": {
-    "ko": "서머너",
+    "ko": "소환사",
     "en": "Summoner"
   },
   "ui.stagePrepTabMonster": {
-    "ko": "전투몬",
-    "en": "Monsters"
+    "ko": "소환수",
+    "en": "Summons"
   },
   "ui.stagePrepTabSkill": {
     "ko": "기술",
@@ -1955,6 +1955,83 @@
     "ko": "성장은 스킬트리에서",
     "en": "Grow in skill tree"
   },
+  "ui.stagePrepInfoClose": {
+    "ko": "정보 닫기",
+    "en": "Close info"
+  },
+  "ui.stagePrepInfoTitle": {
+    "ko": "유닛 정보",
+    "en": "Unit info"
+  },
+  "ui.stagePrepInfoSkills": {
+    "ko": "기술",
+    "en": "Skills"
+  },
+  "ui.stagePrepInfoEnemy": {
+    "ko": "적 소환수",
+    "en": "Enemy summon"
+  },
+  "ui.magicManaCost": {
+    "ko": "마나 소모 {pct}%",
+    "en": "Mana cost {pct}%"
+  },
+  "ui.magicFxAoeDamage": {
+    "ko": "적 전체에게 공격력 {pct}% 피해",
+    "en": "Deal {pct}% ATK damage to all enemies"
+  },
+  "ui.magicFxSingleDamage": {
+    "ko": "적 1명에게 공격력 {pct}% 피해",
+    "en": "Deal {pct}% ATK damage to 1 enemy"
+  },
+  "ui.magicFxAllyBuffAtk": {
+    "ko": "아군 공격력 +{pct}% ({turns}턴)",
+    "en": "Ally ATK +{pct}% ({turns} turns)"
+  },
+  "ui.magicFxAllyBuffSpd": {
+    "ko": "아군 속도 +{pct}% ({turns}턴)",
+    "en": "Ally SPD +{pct}% ({turns} turns)"
+  },
+  "ui.magicFxAllyBuffCrit": {
+    "ko": "아군 치명타율 +{pct}% ({turns}턴)",
+    "en": "Ally crit rate +{pct}% ({turns} turns)"
+  },
+  "ui.magicFxAllyHeal": {
+    "ko": "아군 최대 체력 {pct}% 회복",
+    "en": "Heal allies for {pct}% max HP"
+  },
+  "ui.magicFxAllyShield": {
+    "ko": "아군에게 최대 체력 {pct}% 실드",
+    "en": "Grant allies a shield equal to {pct}% max HP"
+  },
+  "ui.magicFxEnemyDebuff": {
+    "ko": "적 약화 {pct}% ({turns}턴)",
+    "en": "Weaken enemies by {pct}% ({turns} turns)"
+  },
+  "ui.magicFxAmplify": {
+    "ko": "다음 피해 +{pct}%",
+    "en": "Next damage +{pct}%"
+  },
+  "ui.magicFxDualStone": {
+    "ko": "흑·백 돌 동시 배치",
+    "en": "Place black and white stones together"
+  },
+  "ui.magicFxBoardClean": {
+    "ko": "보드 정리",
+    "en": "Clear the board"
+  },
+  "ui.magicFxDamageReduce": {
+    "ko": "받는 피해 −{pct}% ({turns}턴)",
+    "en": "Damage taken −{pct}% ({turns} turns)"
+  },
+  "ui.magicRankLabel": {
+    "ko": "+{rank}/{max}",
+    "en": "+{rank}/{max}"
+  },
+  "ui.stagePrepSkillPickHint": {
+    "ko": "아이콘을 눌러 기술 효과를 확인",
+    "en": "Tap an icon to view skill effects"
+  },
+
   "ui.stageDropInfo": {
     "ko": "드롭 정보",
     "en": "Drop info"

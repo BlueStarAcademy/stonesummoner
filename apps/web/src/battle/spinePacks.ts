@@ -73,8 +73,6 @@ export function resolveSpinePackId(
   if (SPINE_PACKS[monsterOrSummonerKey]) return monsterOrSummonerKey;
   // Family variants share the family's pilot artKey until per-element Spine skins ship.
   if (monsterOrSummonerKey.startsWith("seokrang_")) return "fire_fang";
-  if (monsterOrSummonerKey.startsWith("wolf_fighter_")) return "fire_fang";
-  if (monsterOrSummonerKey === "wolf_fighter") return "fire_fang";
   if (monsterOrSummonerKey === "fire_fang") return "fire_fang";
   return null;
 }
@@ -88,6 +86,15 @@ export function getBattleStillSrc(
   monsterId: string | undefined | null,
   facing: "front" | "back" = "front",
 ): string | null {
+  const artKey = getMonsterArtKey(monsterId);
+  // Prefer painted family stills so Spine pilot packs don't steal other families
+  // (e.g. wolf_fighter must not show fire_fang stills).
+  if (artKey && BATTLE_STILL_FAMILY_SET.has(artKey)) {
+    if (facing === "back") {
+      return `/art/monster/battle/${artKey}-back.webp`;
+    }
+    return `/art/monster/battle/${artKey}-front.webp`;
+  }
   const packId = resolveSpinePackId(monsterId);
   if (packId) {
     const pack = getSpinePack(packId);
@@ -98,10 +105,15 @@ export function getBattleStillSrc(
       return pack.stillFrontUrl ?? null;
     }
   }
-  const artKey = getMonsterArtKey(monsterId);
-  if (!artKey || !BATTLE_STILL_FAMILY_SET.has(artKey)) return null;
-  if (facing === "back") {
-    return `/art/monster/battle/${artKey}-back.webp`;
-  }
-  return `/art/monster/battle/${artKey}-front.webp`;
+  return null;
+}
+
+/** Summoner full-body battle stills under /art/summoner/battle/{el}-front|back.webp */
+export function getSummonerBattleStillSrc(
+  element: string | undefined | null,
+  facing: "front" | "back" = "front",
+): string | null {
+  const el = (element ?? "").toLowerCase();
+  if (!["fire", "water", "wind", "light", "dark"].includes(el)) return null;
+  return `/art/summoner/battle/${el}-${facing}.webp`;
 }

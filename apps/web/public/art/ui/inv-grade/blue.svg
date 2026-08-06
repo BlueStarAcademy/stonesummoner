@@ -11,13 +11,15 @@
       <stop stop-color="#FFF8D6" stop-opacity=".65"/>
       <stop offset="1" stop-color="#4D97FF" stop-opacity="0"/>
     </linearGradient>
-    <radialGradient id="blue-well" cx="50%" cy="48%" r="62%">
-      <stop stop-color="#1A140C" stop-opacity=".12"/>
-      <stop offset="1" stop-color="#0A0806" stop-opacity=".22"/>
+    <radialGradient id="blue-well" cx="50%" cy="42%" r="68%">
+      <stop stop-color="#4D97FF" stop-opacity=".38"/>
+      <stop offset=".42" stop-color="#2868C0" stop-opacity=".55"/>
+      <stop offset=".78" stop-color="#0C1830" stop-opacity=".92"/>
+      <stop offset="1" stop-color="#0A0806" stop-opacity="1"/>
     </radialGradient>
     <radialGradient id="blue-aura" cx="50%" cy="42%" r="58%">
-      <stop stop-color="#4D97FF" stop-opacity=".16"/>
-      <stop offset=".65" stop-color="#4D97FF" stop-opacity=".04"/>
+      <stop stop-color="#4D97FF" stop-opacity=".22"/>
+      <stop offset=".65" stop-color="#4D97FF" stop-opacity=".06"/>
       <stop offset="1" stop-color="#4D97FF" stop-opacity="0"/>
     </radialGradient>
   </defs>

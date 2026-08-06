@@ -69,13 +69,15 @@ function plate(id, c) {
       <stop stop-color="#FFF8D6" stop-opacity=".65"/>
       <stop offset="1" stop-color="${c.glow}" stop-opacity="0"/>
     </linearGradient>
-    <radialGradient id="${id}-well" cx="50%" cy="48%" r="62%">
-      <stop stop-color="#1A140C" stop-opacity=".12"/>
-      <stop offset="1" stop-color="#0A0806" stop-opacity=".22"/>
+    <radialGradient id="${id}-well" cx="50%" cy="42%" r="68%">
+      <stop stop-color="${c.glow}" stop-opacity=".38"/>
+      <stop offset=".42" stop-color="${c.mid}" stop-opacity=".55"/>
+      <stop offset=".78" stop-color="${c.lo}" stop-opacity=".92"/>
+      <stop offset="1" stop-color="#0A0806" stop-opacity="1"/>
     </radialGradient>
     <radialGradient id="${id}-aura" cx="50%" cy="42%" r="58%">
-      <stop stop-color="${c.glow}" stop-opacity=".16"/>
-      <stop offset=".65" stop-color="${c.glow}" stop-opacity=".04"/>
+      <stop stop-color="${c.glow}" stop-opacity=".22"/>
+      <stop offset=".65" stop-color="${c.glow}" stop-opacity=".06"/>
       <stop offset="1" stop-color="${c.glow}" stop-opacity="0"/>
     </radialGradient>
   </defs>
