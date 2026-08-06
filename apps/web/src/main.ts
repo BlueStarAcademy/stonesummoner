@@ -26,6 +26,7 @@ import {
 import { BATTLE_STILL_FAMILY_SET } from "./battle/battleStills";
 import { battleSkyHtml } from "./battle/battleBg";
 import { dematteArtInTree } from "./ui/dematteArt";
+import { initUiScale } from "./ui/uiScale";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
 import {
   ARROW_DOWN,
@@ -266,6 +267,7 @@ type FusionReveal = {
 type SessionUser = { id: string; email: string | null; kind: string };
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
+initUiScale();
 const SAVE_KEY = "stonesummoner.save.v5";
 const DEMO_SAVE_KEY = "stonesummoner.save.demo.v5";
 

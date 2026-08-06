@@ -40,56 +40,74 @@
 html,
 body {
   margin: 0;
-  min-height: 100%;
-  min-height: 100dvh;
-  background:
-    radial-gradient(ellipse at 50% 0%, #2a1f45 0%, transparent 50%),
-    var(--bg);
   color: var(--text);
   overscroll-behavior: none;
   touch-action: manipulation;
 }
 
-#app {
-  /*
-   * Unitless scale from viewport height (length/length).
-   * Do NOT use calc(100dvh / 760) — that yields a length and breaks
-   * calc(Npx * var(--ui-scale)), collapsing slot sizes to intrinsic art.
-   */
+html {
+  /* Fallback before JS; JS overwrites with visualViewport-accurate scale. */
+  --design-w: 430px;
+  --design-h: 780px;
   --ui-scale: 1;
-  --ui-scale: clamp(0.72, 100dvh / 760px, 1);
-  --ui-gap: clamp(4px, calc(8px * var(--ui-scale)), 8px);
-  --sym-tile: clamp(44px, calc(58px * var(--ui-scale)), 58px);
-  --sym-tile-gap: clamp(4px, calc(6px * var(--ui-scale)), 6px);
-  --sym-rail-pad: clamp(4px, calc(6px * var(--ui-scale)), 6px);
-  --sym-board-max-h: clamp(110px, 26dvh, 200px);
-  --mon-slot-size: clamp(48px, calc(56px * var(--ui-scale)), 56px);
+  --ui-scale: clamp(0.7, min(100vw / 430px, 100svh / 780px), 1);
+  --app-scale-w: calc(var(--design-w) * var(--ui-scale));
+  --app-scale-h: calc(var(--design-h) * var(--ui-scale));
+  --ui-gap: 8px;
+  --sym-tile: 58px;
+  --sym-tile-gap: 6px;
+  --sym-rail-pad: 6px;
+  --sym-board-max-h: 200px;
+  --mon-slot-size: 56px;
+}
+
+html,
+body {
   width: 100%;
-  max-width: 430px;
+  height: 100%;
+  max-height: 100svh;
+  overflow: hidden;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  background: #07050c;
+}
+
+/* Uniform scale host — same design canvas on every device */
+#app-scale {
+  width: var(--app-scale-w);
+  height: var(--app-scale-h);
+  max-width: 100vw;
+  max-height: 100svh;
   margin: 0 auto;
-  min-height: 100dvh;
-  min-height: 100svh;
+  overflow: hidden;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+#app {
+  width: var(--design-w);
+  height: var(--design-h);
+  max-width: none;
+  min-height: 0;
+  margin: 0;
   display: flex;
   flex-direction: column;
+  transform: scale(var(--ui-scale));
+  transform-origin: top left;
   padding:
     calc(10px + env(safe-area-inset-top))
     12px
     calc(88px + env(safe-area-inset-bottom))
     12px;
-}
-
-/* Desktop: keep phone frame feel */
-@media (min-width: 600px) {
-  body {
-    display: flex;
-    justify-content: center;
-    background: #07050c;
-  }
-  #app {
-    border-left: 1px solid var(--line);
-    border-right: 1px solid var(--line);
-    box-shadow: 0 0 40px #0008;
-  }
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  box-shadow: 0 0 40px #0008;
+  background:
+    radial-gradient(ellipse at 50% 0%, #2a1f45 0%, transparent 50%),
+    var(--bg);
 }
 
 header.app-bar {
@@ -3491,9 +3509,8 @@ main {
 #app.home-mode {
   position: relative;
   padding: 0;
-  height: 100dvh;
-  height: 100svh;
-  max-height: 100dvh;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
 }
 
@@ -7083,9 +7100,8 @@ button.battle-unit {
 #app.expedition-mode {
   position: relative;
   padding: 0;
-  height: 100dvh;
-  height: 100svh;
-  max-height: 100dvh;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
 }
 
@@ -7189,9 +7205,8 @@ button.battle-unit {
 #app.combat-mode {
   position: relative;
   padding: 0;
-  height: 100dvh;
-  height: 100svh;
-  max-height: 100dvh;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
 }
 
@@ -10794,7 +10809,7 @@ span.stage-drop-info-tab {
   grid-template-columns: minmax(0, 1fr);
   gap: var(--ui-gap, 8px);
   align-items: stretch;
-  padding: clamp(6px, calc(8px * var(--ui-scale, 1)), 8px) 10px clamp(8px, calc(10px * var(--ui-scale, 1)), 10px);
+  padding: 8px 10px 10px;
   min-height: 0;
   flex: 1 1 auto;
   width: 100%;
@@ -10880,7 +10895,7 @@ span.stage-drop-info-tab {
   justify-content: space-between;
   gap: 8px;
   flex: 0 0 auto;
-  padding: clamp(5px, calc(8px * var(--ui-scale, 1)), 8px) 10px;
+  padding: 8px 10px;
   border-bottom: 1px solid #7a6a3a44;
   color: #e8d9a8;
   font-size: 0.72rem;
@@ -11060,7 +11075,7 @@ span.stage-drop-info-tab {
   align-items: center;
   justify-content: flex-end;
   flex: 0 0 auto;
-  padding: clamp(4px, calc(6px * var(--ui-scale, 1)), 6px) 10px clamp(5px, calc(8px * var(--ui-scale, 1)), 8px);
+  padding: 6px 10px 8px;
   border-top: 1px solid #7a6a3a44;
 }
 
@@ -11724,19 +11739,19 @@ span.stage-drop-info-tab {
 }
 
 .mon-sym-viewer--stack {
-  gap: clamp(6px, calc(10px * var(--ui-scale, 1)), 10px);
+  gap: 10px;
 }
 
-/* Equip row yields height so the inventory rail stays fully visible. */
+/* Equip row: keep a usable board+effects band; inv rail stays pinned below. */
 .mon-sym-viewer-equip {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  gap: clamp(6px, calc(10px * var(--ui-scale, 1)), 10px);
+  gap: 10px;
   align-items: stretch;
   justify-content: flex-start;
   min-width: 0;
-  min-height: 0;
+  min-height: 160px;
   flex: 1 1 auto;
   overflow: hidden;
   width: 100%;
@@ -11759,7 +11774,7 @@ span.stage-drop-info-tab {
   width: auto;
   max-width: min(58%, 280px);
   height: auto;
-  max-height: var(--sym-board-max-h, 28dvh);
+  max-height: min(100%, var(--sym-board-max-h, 200px));
   aspect-ratio: 3 / 2;
   margin: 0;
   min-height: 0;
@@ -13363,7 +13378,7 @@ span.stage-drop-info-tab {
   }
   .mon-inspect-shell .mon-pane--symbols .rune-circle {
     max-width: min(54%, 220px);
-    max-height: var(--sym-board-max-h, 24dvh);
+    max-height: min(100%, var(--sym-board-max-h, 200px));
   }
   .mon-sym-inv-grid:not(.mon-sym-inv-grid--rail) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -13850,9 +13865,9 @@ img.el-tint-dark {
 }
 
 .mon-book-inv.mon-book-inv--rail {
-  --mon-rail-gap: clamp(4px, calc(6px * var(--ui-scale, 1)), 6px);
-  --mon-rail-pad: clamp(6px, calc(8px * var(--ui-scale, 1)), 8px);
-  --mon-slot-size: clamp(48px, calc(56px * var(--ui-scale, 1)), 56px);
+  --mon-rail-gap: 6px;
+  --mon-rail-pad: 8px;
+  --mon-slot-size: 56px;
   position: relative;
   left: auto;
   bottom: auto;
@@ -16162,7 +16177,7 @@ button.slot-cell {
 /* Auth: true full-bleed title screen */
 #app.auth-mode {
   padding: 0;
-  max-width: 430px;
+  max-width: none;
   overflow: hidden;
   background: var(--bg);
 }
@@ -16172,8 +16187,8 @@ button.slot-cell {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
-  min-height: 100svh;
+  min-height: 100%;
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -16821,13 +16836,28 @@ button.linkish {
 }
 
 #app.monster-mode {
-  height: 100dvh;
-  max-height: 100dvh;
+  /* Fill the design canvas (scaled by #app-scale). */
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
+  padding-top: calc(6px + env(safe-area-inset-top));
   padding-bottom: env(safe-area-inset-bottom);
-  --ui-scale: 1;
-  --ui-scale: clamp(0.72, 100dvh / 740px, 1);
-  --sym-board-max-h: clamp(100px, 24dvh, 180px);
+  --sym-board-max-h: 200px;
+}
+
+/* Symbols tab: compact hero so board + effects get the vertical budget. */
+#app.monster-mode .mon-inspect:has(.mon-pane--symbols:not([hidden])) .mon-inspect-hero {
+  gap: 6px;
+  padding-bottom: 2px;
+}
+
+#app.monster-mode .mon-inspect:has(.mon-pane--symbols:not([hidden])) .mon-preview-turntable {
+  height: 72px;
+}
+
+#app.monster-mode .mon-inspect:has(.mon-pane--symbols:not([hidden])) .mon-inspect-hero-info {
+  padding: 6px 10px;
+  gap: 4px;
 }
 
 /* Monster book: one-line chat only at top — hide profile/resource HUD */
