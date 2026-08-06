@@ -10,7 +10,7 @@ Elements: `fire` · `water` · `wind` · `light` · `dark`
 - Ally uses **back**, enemy uses **front**
 - Feet fully inside frame; safe margin ~12% top/sides, ~5% bottom after pad
 - Dedicated rear pose for back (never a flip)
-- Pure black matte → **dematte (lim≈44, low-chroma)** → asymmetric pad → WebP
+- Pure black matte → **dematte (lim≈44 + flatness gate)** → asymmetric pad → WebP
 - High detail costume, hair, weapons; solid silhouette (no dark-cloth holes)
 
 ## Master prompt

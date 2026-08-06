@@ -2,14 +2,21 @@
 
 const cache = new Map<string, string>();
 
-function isMatte(r: number, g: number, b: number, a: number, lim = 28): boolean {
+function isMatteColor(
+  r: number,
+  g: number,
+  b: number,
+  a: number,
+  lim = 28,
+  chromaMax = 8,
+): boolean {
   if (a < 8) return true;
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const chroma = max - min;
   const lum = (r + g + b) / 3;
-  if (lum <= lim && chroma <= 18) return true;
-  if (r <= lim && g <= lim && b <= lim + 8 && chroma <= 22) return true;
+  if (chroma > chromaMax) return false;
+  if (lum <= lim) return true;
   return false;
 }
 
@@ -37,14 +44,44 @@ export async function dematteBlackSrc(src: string): Promise<string> {
     const image = ctx.getImageData(0, 0, w, h);
     const d = image.data;
 
+    const lim = 28;
+    const chromaMax = 8;
+    const flatRange = 6;
     const visited = new Uint8Array(w * h);
     const q: number[] = [];
+
+    const lumAt = (x: number, y: number) => {
+      const o = (y * w + x) * 4;
+      return (d[o]! + d[o + 1]! + d[o + 2]!) / 3;
+    };
+
+    const isFlat = (x: number, y: number) => {
+      let lo = 255;
+      let hi = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          const yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+          const L = lumAt(xx, yy);
+          if (L < lo) lo = L;
+          if (L > hi) hi = L;
+        }
+      }
+      return hi - lo <= flatRange;
+    };
+
     const push = (x: number, y: number) => {
       if (x < 0 || y < 0 || x >= w || y >= h) return;
       const i = y * w + x;
       if (visited[i]) return;
       const o = i * 4;
-      if (!isMatte(d[o]!, d[o + 1]!, d[o + 2]!, d[o + 3]!)) return;
+      const r = d[o]!;
+      const g = d[o + 1]!;
+      const b = d[o + 2]!;
+      const a = d[o + 3]!;
+      if (!isMatteColor(r, g, b, a, lim, chromaMax)) return;
+      if (a >= 8 && !isFlat(x, y)) return;
       visited[i] = 1;
       q.push(i);
     };
@@ -71,7 +108,7 @@ export async function dematteBlackSrc(src: string): Promise<string> {
       push(x, y + 1);
     }
 
-    // Soft fringe next to punched matte
+    // Soft fringe next to punched matte (flat near-black only)
     for (let y = 1; y < h - 1; y++) {
       for (let x = 1; x < w - 1; x++) {
         const i = y * w + x;
@@ -82,7 +119,10 @@ export async function dematteBlackSrc(src: string): Promise<string> {
         const b = d[o + 2]!;
         const a = d[o + 3]!;
         if (a < 8) continue;
-        if (!(r < 48 && g < 48 && b < 48)) continue;
+        const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+        if (chroma > 8) continue;
+        if (!(r < 40 && g < 40 && b < 40)) continue;
+        if (!isFlat(x, y)) continue;
         let near = false;
         for (const [dx, dy] of [
           [-1, 0],

@@ -1,36 +1,90 @@
 /**
  * Shared flood-fill dematte + WebP encode helpers.
+ *
+ * Battle stills: charcoal mats are flat near-black; dark costume often shares
+ * #000 with the matte but has local luminance texture — require flatness so
+ * flood cannot tunnel through the body.
  */
 import fs from "node:fs";
-import path from "node:path";
 import sharp from "sharp";
 
-/** Default lim=36 for icons; battle stills use lim=44 via BATTLE_STILL_DEMATTE. */
-export function isMatte(r, g, b, a, lim = 36) {
+/**
+ * @param {number} r
+ * @param {number} g
+ * @param {number} b
+ * @param {number} a
+ * @param {number} lim
+ * @param {number} chromaMax
+ */
+export function isMatteColor(r, g, b, a, lim = 36, chromaMax = 8) {
   if (a < 8) return true;
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const chroma = max - min;
   const lum = (r + g + b) / 3;
-  // Charcoal mats (#1a–#2c) with low chroma; rim-lit cloth usually has chroma > 20.
-  if (lum <= lim && chroma <= 18) return true;
-  if (r <= lim && g <= lim && b <= lim + 6 && chroma <= 20) return true;
-  if (lum >= 248 && chroma <= 10) return true;
+  if (chroma > chromaMax) return false;
+  if (lum <= lim) return true;
+  if (lum >= 248 && chroma <= 8) return true;
   return false;
 }
 
-export async function dematteBuffer(rgba, w, h, lim = 36) {
+/** @deprecated use isMatteColor — kept for callers expecting (r,g,b,a,lim) */
+export function isMatte(r, g, b, a, lim = 36) {
+  return isMatteColor(r, g, b, a, lim, 8);
+}
+
+/**
+ * @param {Uint8ClampedArray} rgba
+ * @param {number} w
+ * @param {number} h
+ * @param {number} lim
+ * @param {object} [opts]
+ * @param {number} [opts.chromaMax=8]
+ * @param {number} [opts.flatRange=6] max lum spread in 3×3 (flat matte plate)
+ */
+export async function dematteBuffer(rgba, w, h, lim = 36, opts = {}) {
+  const chromaMax = opts.chromaMax ?? 8;
+  const flatRange = opts.flatRange ?? 6;
   const visited = new Uint8Array(w * h);
   const q = [];
+
+  const lumAt = (x, y) => {
+    const o = (y * w + x) * 4;
+    return (rgba[o] + rgba[o + 1] + rgba[o + 2]) / 3;
+  };
+
+  const isFlat = (x, y) => {
+    let lo = 255;
+    let hi = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx;
+        const yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const L = lumAt(xx, yy);
+        if (L < lo) lo = L;
+        if (L > hi) hi = L;
+      }
+    }
+    return hi - lo <= flatRange;
+  };
+
   const push = (x, y) => {
     if (x < 0 || y < 0 || x >= w || y >= h) return;
     const i = y * w + x;
     if (visited[i]) return;
     const o = i * 4;
-    if (!isMatte(rgba[o], rgba[o + 1], rgba[o + 2], rgba[o + 3], lim)) return;
+    const r = rgba[o];
+    const g = rgba[o + 1];
+    const b = rgba[o + 2];
+    const a = rgba[o + 3];
+    if (!isMatteColor(r, g, b, a, lim, chromaMax)) return;
+    // Already-transparent: always continue. Opaque matte must look flat.
+    if (a >= 8 && !isFlat(x, y)) return;
     visited[i] = 1;
     q.push(i);
   };
+
   for (let x = 0; x < w; x++) {
     push(x, 0);
     push(x, h - 1);
@@ -81,6 +135,8 @@ export async function pngToDematteWebp(srcPng, dstWebp, opts = {}) {
   const lim = opts.lim ?? 36;
   const fit = opts.fit ?? "cover";
   const punchCenter = opts.punchCenter ?? false;
+  const chromaMax = opts.chromaMax;
+  const flatRange = opts.flatRange;
   const { data, info } = await sharp(srcPng)
     .resize(size, size, {
       fit,
@@ -92,7 +148,7 @@ export async function pngToDematteWebp(srcPng, dstWebp, opts = {}) {
   const w = info.width;
   const h = info.height;
   const rgba = new Uint8ClampedArray(data);
-  await dematteBuffer(rgba, w, h, lim);
+  await dematteBuffer(rgba, w, h, lim, { chromaMax, flatRange });
   if (punchCenter) punchRoundedRect(rgba, w, h, opts.inset ?? 0.14, opts.radius ?? 0.07);
   const buf = await sharp(Buffer.from(rgba), {
     raw: { width: w, height: h, channels: 4 },
@@ -111,10 +167,12 @@ export async function pngToDematteWebp(srcPng, dstWebp, opts = {}) {
   await fs.promises.unlink(tmp).catch(() => {});
 }
 
-/** Preset for full-body battle stills. */
+/** Preset for full-body battle stills (flat charcoal mats, protect textured cloth). */
 export const BATTLE_STILL_DEMATTE = {
   size: 768,
   lim: 44,
+  chromaMax: 8,
+  flatRange: 6,
   fit: "contain",
   quality: 90,
 };

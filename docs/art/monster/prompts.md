@@ -14,7 +14,7 @@
 - Full body, consistent scale, **feet fully inside frame**, grounded stance
 - Safe margin ~12% top/sides, ~5% bottom after pad (alpha must not touch edges)
 - front = camera-facing · back = dedicated rear (never a flip)
-- Pure black matte → dematte lim≈44 (low-chroma) contain → asymmetric pad → WebP
+- Pure black matte → dematte lim≈44 + flatness gate (protect textured cloth) → asymmetric pad → WebP
 - Ultra detailed costume; keep dark armor readable (do not blend into matte)
 
 ### Master portrait

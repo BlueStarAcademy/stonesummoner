@@ -51,8 +51,13 @@ body {
 }
 
 #app {
-  /* Phone-frame design scale: same proportions from short phones → 430px frame */
-  --ui-scale: min(1, calc(100dvh / 760));
+  /*
+   * Unitless scale from viewport height (length/length).
+   * Do NOT use calc(100dvh / 760) — that yields a length and breaks
+   * calc(Npx * var(--ui-scale)), collapsing slot sizes to intrinsic art.
+   */
+  --ui-scale: 1;
+  --ui-scale: clamp(0.72, 100dvh / 760px, 1);
   --ui-gap: clamp(4px, calc(8px * var(--ui-scale)), 8px);
   --sym-tile: clamp(44px, calc(58px * var(--ui-scale)), 58px);
   --sym-tile-gap: clamp(4px, calc(6px * var(--ui-scale)), 6px);
@@ -13845,6 +13850,8 @@ img.el-tint-dark {
 }
 
 .mon-book-inv.mon-book-inv--rail {
+  --mon-rail-gap: clamp(4px, calc(6px * var(--ui-scale, 1)), 6px);
+  --mon-rail-pad: clamp(6px, calc(8px * var(--ui-scale, 1)), 8px);
   --mon-slot-size: clamp(48px, calc(56px * var(--ui-scale, 1)), 56px);
   position: relative;
   left: auto;
@@ -13861,10 +13868,10 @@ img.el-tint-dark {
   grid-template-rows: repeat(2, var(--mon-slot-size));
   grid-auto-flow: row;
   grid-auto-columns: var(--mon-slot-size);
-  gap: clamp(4px, calc(6px * var(--ui-scale, 1)), 6px);
+  gap: var(--mon-rail-gap);
   align-content: start;
   justify-content: start;
-  padding: clamp(6px, calc(8px * var(--ui-scale, 1)), 8px);
+  padding: var(--mon-rail-pad);
   margin: 0;
   border-radius: 14px;
   border: 1px solid #7a6a3a55;
@@ -13872,7 +13879,7 @@ img.el-tint-dark {
     linear-gradient(180deg, #1c1812f8 0%, #0e0c0afc 100%);
   box-shadow: inset 0 1px 0 #fff8e810, 0 -6px 18px #0008;
   max-height: none;
-  height: calc((var(--mon-slot-size) * 2) + clamp(4px, calc(6px * var(--ui-scale, 1)), 6px) + (clamp(6px, calc(8px * var(--ui-scale, 1)), 8px) * 2));
+  height: calc((var(--mon-slot-size) * 2) + var(--mon-rail-gap) + (var(--mon-rail-pad) * 2));
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
@@ -16818,8 +16825,8 @@ button.linkish {
   max-height: 100dvh;
   overflow: hidden;
   padding-bottom: env(safe-area-inset-bottom);
-  /* Slightly more aggressive scale on the locked monster viewport */
-  --ui-scale: min(1, calc(100dvh / 740));
+  --ui-scale: 1;
+  --ui-scale: clamp(0.72, 100dvh / 740px, 1);
   --sym-board-max-h: clamp(100px, 24dvh, 180px);
 }
 
