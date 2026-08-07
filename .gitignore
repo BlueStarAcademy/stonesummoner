@@ -12,6 +12,7 @@ nul.css
 
 # Art generation scratch (keep finals + public exports in git)
 scripts/node_modules_sharp_tmp/
+apps/web/public/art/_staging/
 docs/art/auth/selects/
 docs/art/**/*-raw.png
 
@@ -33,3 +34,5 @@ apps/web/android/app/build/
 apps/web/android/build/
 apps/web/android/local.properties
 apps/web/android/captures/
+# Bulky battle BG PNG masters (WebP shipped)
+apps/web/public/art/battle/_src/

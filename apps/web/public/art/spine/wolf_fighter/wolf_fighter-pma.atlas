@@ -1,0 +1,8 @@
+wolf_fighter-pma.png
+	size: 694, 520
+	filter: Linear, Linear
+	pma: true
+body_front
+	bounds: 4, 4, 341, 512
+body_back
+	bounds: 349, 4, 341, 512

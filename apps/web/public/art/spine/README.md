@@ -4,7 +4,9 @@
 
 | id | Brief | Files |
 |----|-------|-------|
-| `fire_fang` | [`docs/art/spine/fire_fang-brief.md`](../../../../docs/art/spine/fire_fang-brief.md) | `fire_fang/fire_fang.json` + PMA atlas/png (**shipped**) |
+| `fire_fang` | [`docs/art/spine/fire_fang-brief.md`](../../../../docs/art/spine/fire_fang-brief.md) | `fire_fang/` (**shipped**) |
+| `wolf_fighter` | pilot clone of fire_fang rig | `wolf_fighter/` (family stills for book) |
+| `moss_turtle` | pilot clone of fire_fang rig | `moss_turtle/` (family stills for book) |
 
 Register in [`apps/web/src/battle/spinePacks.ts`](../../../src/battle/spinePacks.ts). Unregistered catalog ids use WebP.
 

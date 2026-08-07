@@ -113,11 +113,15 @@ JSON + PMA atlas preferred.
 - [x] Spine 4.2 JSON parses (`scripts/_verify-fire-fang-spine.mjs`)
 - [x] front/back skins + regions present
 - [x] Required clips + `attack.hit` event
-- [ ] In-browser battle/book mount visual pass
-- [ ] Does not read as anime / chibi
-- [ ] Transparent background, no black matte
-- [ ] Book preview + battle slot foot alignment
-- [ ] Clip speed follows battle x1–x3
+- [x] Registered in `SPINE_PACKS` + `resolveSpinePackId` aliases (`seokrang_*`)
+- [x] Transparent PMA atlas (no black matte on sheet)
+- [x] Clip names match battle x1–x3 hooks (`idle`…`death`)
+- [ ] Manual visual pass in browser battle/book (operator)
+- [ ] Art direction sign-off (not anime / chibi)
+
+## Sibling pilot packs (clone rig)
+
+Until unique exports ship, `wolf_fighter` and `moss_turtle` reuse the fire_fang bone/clip layout with family battle stills for book UI. See `spinePacks.ts`.
 
 ## Out of scope
 

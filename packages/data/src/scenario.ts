@@ -371,6 +371,44 @@ export const ARENA_STAGES: StageDef[] = [
     dropChance: 0.2,
     gloryReward: 45,
   },
+  {
+    id: "arena_challenger",
+    nameKo: "아레나 · 도전자",
+    map: 80,
+    stage: 3,
+    boardSize: 9,
+    energyCost: 0,
+    enemyMonsterIds: [
+      "abyss_priest_dark",
+      "lotus_dancer_wind",
+      "storm_spearmaster_light",
+      "seal_elder_light",
+    ],
+    dropSetId: "chimtu",
+    waves: 1,
+    mode: "arena",
+    dropChance: 0.22,
+    gloryReward: 60,
+  },
+  {
+    id: "arena_legend",
+    nameKo: "아레나 · 전설",
+    map: 80,
+    stage: 4,
+    boardSize: 9,
+    energyCost: 0,
+    enemyMonsterIds: [
+      "dragon_knight_fire",
+      "eternal_healer_water",
+      "sky_warden_wind",
+      "doom_oracle_dark",
+    ],
+    dropSetId: "yongmaeng",
+    waves: 1,
+    mode: "arena",
+    dropChance: 0.25,
+    gloryReward: 80,
+  },
 ];
 
 export const WEEKDAY_STAGES: StageDef[] = [
@@ -402,19 +440,55 @@ export const WEEKDAY_STAGES: StageDef[] = [
   },
 ];
 
+/** JS getDay(): 0=Sun … 6=Sat. Evolve Mon/Wed/Fri(+Sun); skill Tue/Thu/Sat(+Sun). */
+export function isWeekdayStageOpenToday(
+  stageId: string,
+  now = Date.now(),
+): boolean {
+  const d = new Date(now).getDay();
+  if (stageId === "weekday_evolve") {
+    return d === 0 || d === 1 || d === 3 || d === 5;
+  }
+  if (stageId === "weekday_skill") {
+    return d === 0 || d === 2 || d === 4 || d === 6;
+  }
+  return true;
+}
+
+export const WEEKDAY_EVOLVE_MAT_DROP = 5;
+export const WEEKDAY_SKILL_MAT_DROP = 5;
 export const TRIAL_STAGES: StageDef[] = [
   {
-    id: "trial_jinmun",
-    nameKo: "마법진 시련",
+    id: "trial_b1",
+    nameKo: "마법진 시련 · B1",
     map: 60,
     stage: 1,
+    boardSize: 7,
+    energyCost: 5,
+    enemyMonsterIds: [
+      "scout_sniper_wind",
+      "dew_healer_water",
+      "wolf_fighter_fire",
+    ],
+    dropSetId: "haengma",
+    waves: 2,
+    mode: "trial",
+    dropChance: 0.18,
+    jinmunReward: 2,
+    gloryReward: 6,
+  },
+  {
+    id: "trial_b2",
+    nameKo: "마법진 시련 · B2",
+    map: 60,
+    stage: 2,
     boardSize: 9,
     energyCost: 6,
     enemyMonsterIds: [
-      "abyss_priest_dark",
+      "steel_armor_water",
       "lotus_dancer_wind",
-      "storm_spearmaster_light",
-      "capture_hound_dark",
+      "magic_archer_fire",
+      "seal_elder_light",
     ],
     dropSetId: "haengma",
     waves: 2,
@@ -422,6 +496,26 @@ export const TRIAL_STAGES: StageDef[] = [
     dropChance: 0.2,
     jinmunReward: 3,
     gloryReward: 10,
+  },
+  {
+    id: "trial_b3",
+    nameKo: "마법진 시련 · B3",
+    map: 60,
+    stage: 3,
+    boardSize: 9,
+    energyCost: 8,
+    enemyMonsterIds: [
+      "abyss_priest_dark",
+      "lotus_dancer_wind",
+      "storm_spearmaster_light",
+      "capture_hound_dark",
+    ],
+    dropSetId: "chimtu",
+    waves: 3,
+    mode: "trial",
+    dropChance: 0.25,
+    jinmunReward: 5,
+    gloryReward: 15,
   },
 ];
 

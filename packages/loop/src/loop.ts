@@ -43,12 +43,14 @@ import {
   imprintSymbolMain,
   canImprintSymbol,
   canGrindSymbol,
+  grindEnhanceSubstat,
   grindSymbolPrefix,
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
   symbolEnhanceManaCost,
   SYMBOL_IMPRINT_CRYSTAL_COST,
   SYMBOL_GRIND_MANA_COST,
+  SYMBOL_GRIND_STONE_COST,
   summarizeSymbolSets,
   ALL_STAGES,
   emptyMagicProgress,
@@ -61,6 +63,12 @@ import {
   MAX_MAGIC_RANK,
   tryUnlockMagicBranch,
   unlockedMagicSkills,
+  isWeekdayStageOpenToday,
+  WEEKDAY_EVOLVE_MAT_DROP,
+  WEEKDAY_SKILL_MAT_DROP,
+  getFusionRecipe,
+  pickArenaRival,
+  getArenaRivalDeck,
   type Element,
   type GearPiece,
   type GearSetId,
@@ -84,6 +92,7 @@ import {
   tickProduction,
   upgradeBuilding,
   spendEnergy,
+  todayKey,
   SUMMONER_EXP_PER_LEVEL,
   type BuildingId,
   type IslandState,
@@ -97,6 +106,7 @@ import {
   evolveManaCost,
   evolveMinLevel,
   MAX_EVOLVE,
+  MAX_MONSTER_AWAKEN,
   MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
   nextUid,
@@ -108,6 +118,12 @@ import {
   skillUpMinMonsterLevel,
   skillUpgradableIndices,
   defaultSkillLevels,
+  displayedMonsterStars,
+  monsterAwakenCrystalCost,
+  monsterAwakenManaCost,
+  monsterAwakenMatCost,
+  monsterAwakenMinLevel,
+  SKILL_UP_MAT_COST,
   SCROLL_BUY_MANA_COST,
   SCROLL_PREMIUM_BUY_MANA_COST,
   SCROLL_MYSTIC_BUY_CRYSTAL_COST,
@@ -131,14 +147,21 @@ export {
   evolveManaCost,
   evolveMinLevel,
   MAX_EVOLVE,
+  MAX_MONSTER_AWAKEN,
   MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
   MONSTER_EXP_PER_LEVEL,
+  displayedMonsterStars,
+  monsterAwakenCrystalCost,
+  monsterAwakenManaCost,
+  monsterAwakenMatCost,
+  monsterAwakenMinLevel,
   normalizeSkillLevels,
   pickRandomSkillUpIndex,
   skillUpgradableIndices,
   skillUpManaCost,
   skillUpMinMonsterLevel,
+  SKILL_UP_MAT_COST,
   SCROLL_BUY_MANA_COST,
   SCROLL_PREMIUM_BUY_MANA_COST,
   SCROLL_MYSTIC_BUY_CRYSTAL_COST,
@@ -191,6 +214,198 @@ export function equipVaultRemaining(
     0,
     EQUIP_VAULT_WEEKLY_LIMIT - (synced.equipVaultWeekEntries ?? 0),
   );
+}
+
+/** Phase 3b: arena attacks per calendar day. */
+export const ARENA_ATTACKS_DAILY = 10;
+/** Phase 3g: weekly guild contribution goal. */
+export const GUILD_WEEK_CONTRIB_GOAL = 100;
+export const GUILD_CHECKIN_CONTRIB = 15;
+export const GUILD_CHECKIN_GLORY = 8;
+export const GUILD_CHEST_GLORY = 25;
+export const GUILD_CHEST_CRYSTAL = 10;
+/** Phase 3h: local raid boss. */
+export const RAID_BOSS_MAX_HP = 100_000;
+export const RAID_ATTEMPTS_DAILY = 3;
+export const RAID_DAMAGE_BASE = 5000;
+export const RAID_MILESTONE_PERCENTS = [75, 50, 25, 0] as const;
+export const RAID_MILESTONE_JINMUN = 5;
+export const RAID_MILESTONE_GLORY = 20;
+
+export const GUILD_NPC_MEMBERS: { name: string; roleKo: string }[] = [
+  { name: "심연수호·갑", roleKo: "마스터" },
+  { name: "진문연맹·을", roleKo: "부마스터" },
+  { name: "사석사냥·병", roleKo: "레이더" },
+  { name: "화점길드·정", roleKo: "지원" },
+  { name: "안개원정·무", roleKo: "신입" },
+];
+
+export function syncArenaAttackDay(
+  save: PlayerSave,
+  now = Date.now(),
+): PlayerSave {
+  const day = todayKey(now);
+  if (save.arenaAttackDay === day) return save;
+  return { ...save, arenaAttackDay: day, arenaAttacksToday: 0 };
+}
+
+export function arenaAttacksRemaining(
+  save: PlayerSave,
+  now = Date.now(),
+): number {
+  const synced = syncArenaAttackDay(save, now);
+  return Math.max(0, ARENA_ATTACKS_DAILY - (synced.arenaAttacksToday ?? 0));
+}
+
+export function syncGuildWeek(
+  save: PlayerSave,
+  now = Date.now(),
+): PlayerSave {
+  const key = isoWeekKey(now);
+  if (save.guildWeekKey === key) return save;
+  return { ...save, guildWeekKey: key, guildWeekContrib: 0 };
+}
+
+export function syncRaidWeek(save: PlayerSave, now = Date.now()): PlayerSave {
+  const key = isoWeekKey(now);
+  if (save.raidWeekKey === key) {
+    return {
+      ...save,
+      raidBossHp:
+        typeof save.raidBossHp === "number"
+          ? Math.max(0, Math.min(RAID_BOSS_MAX_HP, save.raidBossHp))
+          : RAID_BOSS_MAX_HP,
+      raidMilestonesClaimed: Array.isArray(save.raidMilestonesClaimed)
+        ? save.raidMilestonesClaimed
+        : [],
+    };
+  }
+  return {
+    ...save,
+    raidWeekKey: key,
+    raidBossHp: RAID_BOSS_MAX_HP,
+    raidMilestonesClaimed: [],
+  };
+}
+
+export function syncRaidAttemptDay(
+  save: PlayerSave,
+  now = Date.now(),
+): PlayerSave {
+  const day = todayKey(now);
+  if (save.raidAttemptDay === day) return save;
+  return { ...save, raidAttemptDay: day, raidAttemptsDay: 0 };
+}
+
+export function raidAttemptsRemaining(
+  save: PlayerSave,
+  now = Date.now(),
+): number {
+  const synced = syncRaidAttemptDay(syncRaidWeek(save, now), now);
+  return Math.max(0, RAID_ATTEMPTS_DAILY - (synced.raidAttemptsDay ?? 0));
+}
+
+function hashSeed(seed: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Deterministic RNG from a string seed (daily shop / rivals). */
+export function seededRng(seed: string): () => number {
+  let state = hashSeed(seed) || 1;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+export type ShopOfferKind =
+  | "scroll_normal"
+  | "scroll_premium"
+  | "energy"
+  | "symbol_roll"
+  | "grindstone";
+
+export interface ShopOffer {
+  id: string;
+  kind: ShopOfferKind;
+  qty: number;
+  costMana: number;
+  costCrystal: number;
+  labelKo: string;
+}
+
+/** 4–6 seeded daily shop offers. */
+export function getDailyShopOffers(dayKey: string): ShopOffer[] {
+  const rng = seededRng(`shop:${dayKey}`);
+  const count = 4 + Math.floor(rng() * 3);
+  const offers: ShopOffer[] = [];
+  const pools: Array<() => ShopOffer> = [
+    () => ({
+      id: "",
+      kind: "scroll_normal",
+      qty: 1 + Math.floor(rng() * 3),
+      costMana: 400 + Math.floor(rng() * 200),
+      costCrystal: 0,
+      labelKo: "일반 소환서",
+    }),
+    () => ({
+      id: "",
+      kind: "scroll_premium",
+      qty: 1,
+      costMana: 1200 + Math.floor(rng() * 400),
+      costCrystal: 0,
+      labelKo: "고급 소환서",
+    }),
+    () => ({
+      id: "",
+      kind: "energy",
+      qty: ENERGY_BUY_AMOUNT,
+      costMana: 0,
+      costCrystal: 6 + Math.floor(rng() * 5),
+      labelKo: "에너지",
+    }),
+    () => ({
+      id: "",
+      kind: "symbol_roll",
+      qty: 1,
+      costMana: 600 + Math.floor(rng() * 400),
+      costCrystal: 0,
+      labelKo: "상징 뽑기",
+    }),
+    () => ({
+      id: "",
+      kind: "grindstone",
+      qty: 1 + Math.floor(rng() * 2),
+      costMana: 250 + Math.floor(rng() * 150),
+      costCrystal: 0,
+      labelKo: "연마석",
+    }),
+  ];
+  let symbolRolls = 0;
+  for (let i = 0; i < count; i++) {
+    let pick = pools[Math.floor(rng() * pools.length)]!;
+    let offer = pick();
+    if (offer.kind === "symbol_roll") {
+      symbolRolls += 1;
+      if (symbolRolls > 2) {
+        offer = pools[Math.floor(rng() * 3)]!();
+      }
+    }
+    offer = { ...offer, id: `daily_${dayKey}_${i}_${offer.kind}` };
+    offers.push(offer);
+  }
+  return offers;
+}
+
+export function syncShopDay(save: PlayerSave, now = Date.now()): PlayerSave {
+  const day = todayKey(now);
+  if (save.shopDayKey === day) return save;
+  return { ...save, shopDayKey: day, shopSoldIds: [] };
 }
 
 export const SUMMONER_ELEMENTS: Element[] = [
@@ -353,6 +568,38 @@ export function runLoadPartyPreset(
   return {
     save: next,
     message: `덱 슬롯 ${i + 1} 불러옴`,
+  };
+}
+
+/** Save current party + active summoner as arena defense deck. */
+export function runSetArenaDefense(
+  save: PlayerSave,
+  partyUids?: string[],
+): LoopStepResult {
+  const summoner = isSummonerElement(save.activeSummoner)
+    ? save.activeSummoner
+    : "light";
+  const rosterIds = new Set(save.roster.map((m) => m.uid));
+  const src = partyUids ?? save.party ?? [];
+  const seen = new Set<string>();
+  const party: string[] = [];
+  for (const uid of src) {
+    if (typeof uid !== "string" || !rosterIds.has(uid) || seen.has(uid)) {
+      continue;
+    }
+    seen.add(uid);
+    party.push(uid);
+    if (party.length >= 4) break;
+  }
+  if (party.length === 0) {
+    return { save, message: "방어 덱에 소환수가 필요합니다" };
+  }
+  return {
+    save: {
+      ...save,
+      arenaDefense: { summoner, party },
+    },
+    message: `아레나 방어 덱 설정 (${party.length}마리 · ${SUMMONER_ELEMENT_LABEL[summoner]})`,
   };
 }
 
@@ -565,6 +812,48 @@ export interface PlayerSave {
   equipVaultWeekEntries: number;
   /** Symbol inventory capacity (base 100 … max 1000, +10 per expand). */
   symbolBagSlots: number;
+  /** Weekday evolve/awaken materials by element. */
+  awakenMats: Partial<Record<Element, number>>;
+  /** Weekday skill-up materials (shared pool). */
+  skillMats: number;
+  /** Phase 3b: arena defense lineup (local offline). */
+  arenaDefense: { summoner: SummonerElement; party: string[] } | null;
+  /** Phase 3b: arena attacks used today. */
+  arenaAttacksToday: number;
+  /** Phase 3b: YYYY-MM-DD of arena attack counter. */
+  arenaAttackDay: string | null;
+  /** Phase 3c: shop rotation day key. */
+  shopDayKey: string | null;
+  /** Phase 3c: offer ids bought today. */
+  shopSoldIds: string[];
+  /** Phase 3d: trial B3 clear tokens. */
+  trialTokens: number;
+  /** Phase 3d: dojo cosmetic unlock from trial. */
+  trialTitleUnlocked: boolean;
+  /** Phase 3g: ISO week key for guild weekly contrib. */
+  guildWeekKey: string | null;
+  /** Phase 3g: contribution gained this week. */
+  guildWeekContrib: number;
+  /** Phase 3g: consecutive check-in days. */
+  guildCheckInStreak: number;
+  /** Phase 3g: week key when weekly chest was claimed. */
+  guildChestClaimedWeek: string | null;
+  /** Phase 3h: local raid boss HP. */
+  raidBossHp: number;
+  /** Phase 3h: raid attempts used today. */
+  raidAttemptsDay: number;
+  /** Phase 3h: YYYY-MM-DD of raid attempt counter. */
+  raidAttemptDay: string | null;
+  /** Phase 3h: claimed HP milestone percents (75/50/25/0). */
+  raidMilestonesClaimed: number[];
+  /** Phase 3h: ISO week key for raid boss reset. */
+  raidWeekKey: string | null;
+  /** Symbol grindstone bag (consume 1 per grind / substat enhance). */
+  grindstones: number;
+  /** Claimed mailbox reward ids (persistent). */
+  claimedMailIds: string[];
+  /** Claimed daily mission keys (`missionId:YYYY-MM-DD`). */
+  claimedMissionKeys: string[];
 }
 
 export interface ExpTrackGain {
@@ -770,7 +1059,12 @@ function unitFromOwned(
 ): Unit {
   const m = getMonster(owned.monsterId);
   if (!m) throw new Error(`Unknown monster ${owned.monsterId}`);
-  const base = scaledMonsterStats(m, owned.level, owned.evolve ?? 0);
+  const base = scaledMonsterStats(
+    m,
+    owned.level,
+    owned.evolve ?? 0,
+    owned.awaken ?? 0,
+  );
   let stats = applySymbolsToStats(base, equippedSymbols(save, owned));
   if (team === "ally") {
     const g = gloryBuffFromLevels(save.gloryLevels ?? {});
@@ -783,11 +1077,12 @@ function unitFromOwned(
     };
   }
   const evoTag = (owned.evolve ?? 0) > 0 ? ` E${owned.evolve}` : "";
+  const awakenTag = (owned.awaken ?? 0) > 0 ? ` 각성` : "";
   const skillLevels = normalizeSkillLevels(owned.skillLevels);
   const mods = symbolCombatMods(equippedSymbols(save, owned));
   return makeUnit({
     id: owned.uid,
-    name: `${m.nameKo} Lv.${owned.level}${evoTag}`,
+    name: `${m.nameKo} Lv.${owned.level}${evoTag}${awakenTag}`,
     team,
     kind: "monster",
     monsterId: m.id,
@@ -889,6 +1184,27 @@ export function createNewSave(now = Date.now()): PlayerSave {
     equipVaultWeekKey: isoWeekKey(now),
     equipVaultWeekEntries: 0,
     symbolBagSlots: SYMBOL_BAG_BASE_SLOTS,
+    awakenMats: {},
+    skillMats: 0,
+    arenaDefense: null,
+    arenaAttacksToday: 0,
+    arenaAttackDay: null,
+    shopDayKey: null,
+    shopSoldIds: [],
+    trialTokens: 0,
+    trialTitleUnlocked: false,
+    guildWeekKey: isoWeekKey(now),
+    guildWeekContrib: 0,
+    guildCheckInStreak: 0,
+    guildChestClaimedWeek: null,
+    raidBossHp: RAID_BOSS_MAX_HP,
+    raidAttemptsDay: 0,
+    raidAttemptDay: null,
+    raidMilestonesClaimed: [],
+    raidWeekKey: isoWeekKey(now),
+    grindstones: 5,
+    claimedMailIds: [],
+    claimedMissionKeys: [],
   };
 }
 
@@ -902,6 +1218,7 @@ export function createDemoSave(now = Date.now()): PlayerSave {
     scrollsMystic: 3,
     gloryPoints: 120,
     jinmunStones: 5,
+    grindstones: Math.max(save.grindstones ?? 0, 12),
     summoners: createSummonerRoster({ level: 10, exp: 40 }),
     island: {
       ...save.island,
@@ -1179,6 +1496,163 @@ export function runFusion(
   };
 }
 
+/** Recipe fusion: consume fodder matching recipe → transform keeper into result. */
+export function runRecipeFusion(
+  save: PlayerSave,
+  recipeId: string,
+  keeperUid: string,
+  fodderUids: string[],
+): LoopStepResult {
+  const island = syncBuildingUnlocks(tickProduction(save.island));
+  if (
+    !island.buildings.some((b) => b.id === "fusion_star") &&
+    island.summonerLevel < 17
+  ) {
+    return {
+      save: { ...save, island },
+      message: "융합의 별 해금 필요 (소환사 Lv.17)",
+    };
+  }
+  const recipe = getFusionRecipe(recipeId);
+  if (!recipe) return { save, message: `융합 레시피 없음: ${recipeId}` };
+  const cost = recipe.manaCost ?? FUSION_MANA_COST;
+  if (island.mana < cost) {
+    return {
+      save: { ...save, island },
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(island.mana)})`,
+    };
+  }
+  const keeper = resolveOwned(save, keeperUid);
+  if (!keeper) return { save, message: "키퍼 소환수를 찾을 수 없음" };
+  const fodderSet = new Set(fodderUids);
+  if (fodderSet.has(keeper.uid)) {
+    return { save, message: "키퍼는 재료로 쓸 수 없음" };
+  }
+  if (fodderUids.length !== recipe.fodderMonsterIds.length) {
+    return {
+      save,
+      message: `재료 수 불일치 (필요 ${recipe.fodderMonsterIds.length})`,
+    };
+  }
+  const fodderOwned = fodderUids.map((uid) => resolveOwned(save, uid));
+  if (fodderOwned.some((m) => !m)) {
+    return { save, message: "융합 재료 소환수를 찾을 수 없음" };
+  }
+  const need = [...recipe.fodderMonsterIds].sort();
+  const have = fodderOwned
+    .map((m) => m!.monsterId)
+    .map((id) => resolveMonsterId(id))
+    .sort();
+  if (need.length !== have.length || need.some((id, i) => id !== have[i])) {
+    return { save, message: `레시피 재료 불일치 (${recipe.nameKo})` };
+  }
+  if (!getMonster(recipe.resultMonsterId)) {
+    return { save, message: `결과 몬스터 없음: ${recipe.resultMonsterId}` };
+  }
+
+  const dropUids = new Set(fodderUids);
+  const kept = {
+    ...keeper,
+    monsterId: recipe.resultMonsterId,
+  };
+  const roster = save.roster
+    .filter((m) => !dropUids.has(m.uid))
+    .map((m) => (m.uid === keeper.uid ? kept : m));
+  const party = save.party.filter((uid) => !dropUids.has(uid));
+  const resultName = getMonster(recipe.resultMonsterId)?.nameKo ?? recipe.resultMonsterId;
+  return {
+    save: {
+      ...save,
+      island: { ...island, mana: island.mana - cost },
+      roster,
+      party,
+    },
+    message: `레시피 융합: ${recipe.nameKo} → ${resultName} (−골드 ${cost})`,
+  };
+}
+
+/** Buy one daily shop offer (once per offer per day). */
+export function runBuyShopOffer(
+  save: PlayerSave,
+  offerId: string,
+  now = Date.now(),
+  rng: () => number = Math.random,
+): LoopStepResult {
+  let working = syncShopDay(save, now);
+  const day = working.shopDayKey ?? todayKey(now);
+  const offers = getDailyShopOffers(day);
+  const offer = offers.find((o) => o.id === offerId);
+  if (!offer) return { save: working, message: `상점 상품 없음: ${offerId}` };
+  const sold = new Set(working.shopSoldIds ?? []);
+  if (sold.has(offerId)) {
+    return { save: working, message: "오늘 이미 구매한 상품입니다" };
+  }
+  if (offer.costMana > 0 && working.island.mana < offer.costMana) {
+    return {
+      save: working,
+      message: `골드 부족 (필요 ${offer.costMana}, 보유 ${Math.floor(working.island.mana)})`,
+    };
+  }
+  if (offer.costCrystal > 0 && working.island.crystal < offer.costCrystal) {
+    return {
+      save: working,
+      message: `크리스탈 부족 (필요 ${offer.costCrystal}, 보유 ${working.island.crystal})`,
+    };
+  }
+
+  let next: PlayerSave = {
+    ...working,
+    island: {
+      ...working.island,
+      mana: working.island.mana - offer.costMana,
+      crystal: working.island.crystal - offer.costCrystal,
+    },
+    shopSoldIds: [...sold, offerId],
+  };
+
+  if (offer.kind === "scroll_normal") {
+    next = withScrollDelta(next, "normal", offer.qty);
+  } else if (offer.kind === "scroll_premium") {
+    next = withScrollDelta(next, "premium", offer.qty);
+  } else if (offer.kind === "energy") {
+    const max = next.island.energyMax ?? 100;
+    next = {
+      ...next,
+      island: {
+        ...next.island,
+        energy: Math.min(max, next.island.energy + offer.qty),
+      },
+    };
+  } else if (offer.kind === "symbol_roll") {
+    if (next.symbols.length >= symbolBagCapacity(next)) {
+      return {
+        save: working,
+        message: `상징 가방이 가득 참 (${symbolBagCapacity(next)})`,
+      };
+    }
+    const sym = rollSymbolDrop(rng, `shop_${offerId}`, {});
+    next = { ...next, symbols: [...next.symbols, sym] };
+    return {
+      save: next,
+      message: `일일상점: ${describeSymbol(sym)} (−골드 ${offer.costMana})`,
+    };
+  } else if (offer.kind === "grindstone") {
+    next = {
+      ...next,
+      grindstones: (next.grindstones ?? 0) + offer.qty,
+    };
+  }
+
+  const costNote =
+    offer.costCrystal > 0
+      ? `−크리스탈 ${offer.costCrystal}`
+      : `−골드 ${offer.costMana}`;
+  return {
+    save: next,
+    message: `일일상점: ${offer.labelKo} x${offer.qty} (${costNote})`,
+  };
+}
+
 /** Buy energy with crystal (shop / emergency refill). */
 export function runBuyEnergy(
   save: PlayerSave,
@@ -1367,7 +1841,7 @@ export function runJoinGuild(
   };
 }
 
-/** Daily guild check-in → glory + contribution. */
+/** Daily guild check-in → glory + contribution + weekly chest. */
 export function runGuildCheckIn(
   save: PlayerSave,
   now = Date.now(),
@@ -1388,24 +1862,55 @@ export function runGuildCheckIn(
       message: "먼저 길드에 가입하세요",
     };
   }
-  const day = new Date(now).toISOString().slice(0, 10);
+  const day = todayKey(now);
   if (save.guildCheckInDay === day) {
     return {
       save: { ...save, island },
       message: `오늘 이미 출석했습니다 (${save.guildName})`,
     };
   }
-  const gloryGain = 8;
-  const contribGain = 15;
+  let working = syncGuildWeek({ ...save, island }, now);
+  const prevDay = save.guildCheckInDay;
+  let streak = working.guildCheckInStreak ?? 0;
+  if (prevDay) {
+    const prev = new Date(`${prevDay}T00:00:00.000Z`).getTime();
+    const cur = new Date(`${day}T00:00:00.000Z`).getTime();
+    const diffDays = Math.round((cur - prev) / 86_400_000);
+    streak = diffDays === 1 ? streak + 1 : 1;
+  } else {
+    streak = 1;
+  }
+  const weekKey = working.guildWeekKey ?? isoWeekKey(now);
+  const weekContrib =
+    (working.guildWeekContrib ?? 0) + GUILD_CHECKIN_CONTRIB;
+  let gloryPoints = (working.gloryPoints ?? 0) + GUILD_CHECKIN_GLORY;
+  let guildContribution =
+    (working.guildContribution ?? 0) + GUILD_CHECKIN_CONTRIB;
+  let crystal = island.crystal;
+  let chestNote = "";
+  let guildChestClaimedWeek = working.guildChestClaimedWeek ?? null;
+  if (
+    weekContrib >= GUILD_WEEK_CONTRIB_GOAL &&
+    guildChestClaimedWeek !== weekKey
+  ) {
+    gloryPoints += GUILD_CHEST_GLORY;
+    crystal += GUILD_CHEST_CRYSTAL;
+    guildChestClaimedWeek = weekKey;
+    chestNote = ` · 주간상자 영광+${GUILD_CHEST_GLORY}/크+${GUILD_CHEST_CRYSTAL}`;
+  }
   return {
     save: {
-      ...save,
-      island,
+      ...working,
+      island: { ...island, crystal },
       guildCheckInDay: day,
-      gloryPoints: (save.gloryPoints ?? 0) + gloryGain,
-      guildContribution: (save.guildContribution ?? 0) + contribGain,
+      guildCheckInStreak: streak,
+      guildWeekKey: weekKey,
+      guildWeekContrib: weekContrib,
+      guildChestClaimedWeek,
+      gloryPoints,
+      guildContribution,
     },
-    message: `길드 출석 (${save.guildName}): 영광 +${gloryGain} · 기여 +${contribGain}`,
+    message: `길드 출석 (${working.guildName}): 영광 +${GUILD_CHECKIN_GLORY} · 기여 +${GUILD_CHECKIN_CONTRIB} · 연속 ${streak}일 · 주간 ${weekContrib}/${GUILD_WEEK_CONTRIB_GOAL}${chestNote}`,
   };
 }
 
@@ -1606,6 +2111,7 @@ export function runSummon(
       exp: 0,
       symbolSlots: emptySymbolSlots(),
       evolve: 0,
+      awaken: 0,
       skillLevels: defaultSkillLevels(),
     });
   }
@@ -1726,6 +2232,13 @@ export function runFeedSameMonster(
       message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
+  const haveMats = save.skillMats ?? 0;
+  if (haveMats < SKILL_UP_MAT_COST) {
+    return {
+      save,
+      message: `스킬재료 부족 (필요 ${SKILL_UP_MAT_COST}, 보유 ${haveMats})`,
+    };
+  }
 
   const nextLevels: [number, number, number] = [
     levels[0]!,
@@ -1746,8 +2259,14 @@ export function runFeedSameMonster(
   const island = { ...save.island, mana: save.island.mana - cost };
 
   return {
-    save: { ...save, island, roster, party },
-    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[skillIdx]} (−${describeOwned(fodder)}, −골드 ${cost})`,
+    save: {
+      ...save,
+      island,
+      roster,
+      party,
+      skillMats: haveMats - SKILL_UP_MAT_COST,
+    },
+    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[skillIdx]} (−${describeOwned(fodder)}, −골드 ${cost} · −스킬재료 ${SKILL_UP_MAT_COST})`,
   };
 }
 
@@ -1813,6 +2332,78 @@ export function runEvolve(
 }
 
 /**
+ * Monster awaken (각성) — one-shot 0→1. Costs gold + crystal + element awaken mats.
+ * Separate from evolve (0–2).
+ */
+export function runAwakenMonster(
+  save: PlayerSave,
+  uidOrIndex: string,
+): LoopStepResult {
+  const owned = resolveOwned(save, uidOrIndex);
+  if (!owned) {
+    return { save, message: `소환수를 찾을 수 없음: ${uidOrIndex}` };
+  }
+  const def = getMonster(owned.monsterId);
+  if (!def) {
+    return { save, message: `몬스터 데이터 없음: ${owned.monsterId}` };
+  }
+  const cur = owned.awaken ?? 0;
+  if (cur >= MAX_MONSTER_AWAKEN) {
+    return {
+      save,
+      message: `${describeOwned(owned)} 이미 각성 완료`,
+    };
+  }
+  const needLv = monsterAwakenMinLevel(def.naturalStars);
+  if (owned.level < needLv) {
+    return {
+      save,
+      message: `각성 조건 미달 — Lv.${needLv} 필요 (현재 ${owned.level})`,
+    };
+  }
+  const manaCost = monsterAwakenManaCost(cur);
+  const crystalCost = monsterAwakenCrystalCost(cur);
+  const matCost = monsterAwakenMatCost(cur);
+  const mats = save.awakenMats ?? {};
+  const haveMat = mats[def.element] ?? 0;
+  if (save.island.mana < manaCost) {
+    return {
+      save,
+      message: `골드 부족 (필요 ${manaCost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  if (save.island.crystal < crystalCost) {
+    return {
+      save,
+      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${save.island.crystal})`,
+    };
+  }
+  if (haveMat < matCost) {
+    return {
+      save,
+      message: `진화재료(${def.element}) 부족 (필요 ${matCost}, 보유 ${haveMat})`,
+    };
+  }
+  const nextAwaken = cur + 1;
+  const roster = save.roster.map((m) =>
+    m.uid === owned.uid ? { ...m, awaken: nextAwaken } : m,
+  );
+  const island = {
+    ...save.island,
+    mana: save.island.mana - manaCost,
+    crystal: save.island.crystal - crystalCost,
+  };
+  const awakenMats = {
+    ...mats,
+    [def.element]: haveMat - matCost,
+  };
+  return {
+    save: { ...save, island, roster, awakenMats },
+    message: `각성: ${describeOwned({ ...owned, awaken: nextAwaken })} (−골드 ${manaCost} · −크리스탈 ${crystalCost} · −재료 ${matCost})`,
+  };
+}
+
+/**
  * Skill-up at 강화진 — raise one of S1/S2/S3 (cap MAX_SKILL_LEVEL).
  */
 export function runSkillUp(
@@ -1850,6 +2441,13 @@ export function runSkillUp(
       message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
+  const haveMats = save.skillMats ?? 0;
+  if (haveMats < SKILL_UP_MAT_COST) {
+    return {
+      save,
+      message: `스킬재료 부족 (필요 ${SKILL_UP_MAT_COST}, 보유 ${haveMats})`,
+    };
+  }
 
   const nextLevels: [number, number, number] = [...levels];
   nextLevels[idx] = cur + 1;
@@ -1864,8 +2462,13 @@ export function runSkillUp(
   const updated = { ...owned, skillLevels: nextLevels };
 
   return {
-    save: { ...save, island, roster },
-    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[idx]} (−골드 ${cost})`,
+    save: {
+      ...save,
+      island,
+      roster,
+      skillMats: haveMats - SKILL_UP_MAT_COST,
+    },
+    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[idx]} (−골드 ${cost} · −스킬재료 ${SKILL_UP_MAT_COST})`,
   };
 }
 
@@ -2255,7 +2858,7 @@ export function runBuyScroll(
 }
 
 /**
- * Imprint (각인 스텁): re-roll main option on slots 4–6 for crystal.
+ * Imprint (각인 스텁): re-roll main option on slots 2/4/6 for crystal.
  */
 export function runImprintSymbol(
   save: PlayerSave,
@@ -2269,7 +2872,7 @@ export function runImprintSymbol(
   if (!canImprintSymbol(sym)) {
     return {
       save,
-      message: `${describeSymbol(sym)} 슬롯${sym.slot}은 각인 불가 (4–6만)`,
+      message: `${describeSymbol(sym)} 슬롯${sym.slot}은 각인 불가 (2/4/6만)`,
     };
   }
   if (save.island.crystal < SYMBOL_IMPRINT_CRYSTAL_COST) {
@@ -2294,7 +2897,8 @@ export function runImprintSymbol(
 }
 
 /**
- * Grind (연마 스텁): apply / re-roll flat prefix that does not scale with enhance.
+ * Grind (연마): consume 1 grindstone + mana.
+ * Prefers substat enhance when substats exist; otherwise rolls flat prefix.
  */
 export function runGrindSymbol(
   save: PlayerSave,
@@ -2308,13 +2912,23 @@ export function runGrindSymbol(
   if (!canGrindSymbol(sym)) {
     return { save, message: `${describeSymbol(sym)} 연마 불가` };
   }
+  const stones = save.grindstones ?? 0;
+  if (stones < SYMBOL_GRIND_STONE_COST) {
+    return {
+      save,
+      message: `연마석 부족 (필요 ${SYMBOL_GRIND_STONE_COST}, 보유 ${stones})`,
+    };
+  }
   if (save.island.mana < SYMBOL_GRIND_MANA_COST) {
     return {
       save,
       message: `골드 부족 (필요 ${SYMBOL_GRIND_MANA_COST}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
-  const next = grindSymbolPrefix(sym, rng);
+  const hasSubs = (sym.substats ?? []).length > 0;
+  const next = hasSubs
+    ? grindEnhanceSubstat(sym, rng)
+    : grindSymbolPrefix(sym, rng);
   if (!next) {
     return { save, message: "연마 실패" };
   }
@@ -2323,9 +2937,212 @@ export function runGrindSymbol(
     ...save.island,
     mana: save.island.mana - SYMBOL_GRIND_MANA_COST,
   };
+  const mode = hasSubs ? "부옵션" : "접두어";
   return {
-    save: { ...save, island, symbols },
-    message: `연마: ${describeSymbol(sym)} → ${describeSymbol(next)} (−골드 ${SYMBOL_GRIND_MANA_COST})`,
+    save: {
+      ...save,
+      island,
+      symbols,
+      grindstones: stones - SYMBOL_GRIND_STONE_COST,
+    },
+    message: `연마(${mode}): ${describeSymbol(sym)} → ${describeSymbol(next)} (−연마석 ${SYMBOL_GRIND_STONE_COST} · −골드 ${SYMBOL_GRIND_MANA_COST})`,
+  };
+}
+
+export function grindstoneCount(save: PlayerSave): number {
+  return Math.max(0, Math.floor(save.grindstones ?? 0));
+}
+
+/** Starter mailbox catalog (claim once). */
+export const MAIL_DEFS = [
+  { id: "welcome_gift", mana: 500, energy: 0 },
+  { id: "login_gift", mana: 0, energy: 20 },
+] as const;
+
+export type MailDefId = (typeof MAIL_DEFS)[number]["id"];
+
+export function unclaimedMailIds(save: PlayerSave): string[] {
+  const claimed = new Set(save.claimedMailIds ?? []);
+  return MAIL_DEFS.filter((m) => !claimed.has(m.id)).map((m) => m.id);
+}
+
+export function unclaimedMailCount(save: PlayerSave): number {
+  return unclaimedMailIds(save).length;
+}
+
+export function runClaimMail(
+  save: PlayerSave,
+  mailId: string,
+): LoopStepResult {
+  const def = MAIL_DEFS.find((m) => m.id === mailId);
+  if (!def) {
+    return { save, message: `알 수 없는 우편: ${mailId}` };
+  }
+  const claimed = save.claimedMailIds ?? [];
+  if (claimed.includes(mailId)) {
+    return { save, message: "이미 수령한 우편입니다" };
+  }
+  const max = save.island.energyMax ?? 100;
+  const island = {
+    ...save.island,
+    mana: save.island.mana + def.mana,
+    energy: Math.min(max, save.island.energy + def.energy),
+  };
+  const bits: string[] = [];
+  if (def.mana > 0) bits.push(`골드 +${def.mana}`);
+  if (def.energy > 0) bits.push(`행동력 +${def.energy}`);
+  return {
+    save: {
+      ...save,
+      island,
+      claimedMailIds: [...claimed, mailId],
+    },
+    message: `우편 수령: ${bits.join(" · ") || "보상 없음"}`,
+  };
+}
+
+export const DAILY_MISSION_WISH = "wish";
+export const DAILY_MISSION_DOJO = "dojo";
+export const DAILY_MISSION_COLLECT = "collect";
+export const DAILY_MISSION_SORTIE = "sortie";
+export const DAILY_MISSION_WISH_MANA = 200;
+export const DAILY_MISSION_WISH_ENERGY = 10;
+export const DAILY_MISSION_DOJO_MANA = 150;
+export const DAILY_MISSION_DOJO_ENERGY = 5;
+export const DAILY_MISSION_COLLECT_MANA = 100;
+export const DAILY_MISSION_COLLECT_ENERGY = 5;
+export const DAILY_MISSION_SORTIE_MANA = 120;
+export const DAILY_MISSION_SORTIE_ENERGY = 10;
+
+export type DailyMissionId =
+  | typeof DAILY_MISSION_WISH
+  | typeof DAILY_MISSION_DOJO
+  | typeof DAILY_MISSION_COLLECT
+  | typeof DAILY_MISSION_SORTIE;
+
+const DAILY_MISSION_REWARDS: Record<
+  DailyMissionId,
+  { mana: number; energy: number }
+> = {
+  wish: {
+    mana: DAILY_MISSION_WISH_MANA,
+    energy: DAILY_MISSION_WISH_ENERGY,
+  },
+  dojo: {
+    mana: DAILY_MISSION_DOJO_MANA,
+    energy: DAILY_MISSION_DOJO_ENERGY,
+  },
+  collect: {
+    mana: DAILY_MISSION_COLLECT_MANA,
+    energy: DAILY_MISSION_COLLECT_ENERGY,
+  },
+  sortie: {
+    mana: DAILY_MISSION_SORTIE_MANA,
+    energy: DAILY_MISSION_SORTIE_ENERGY,
+  },
+};
+
+export function dailyMissionClaimKey(
+  missionId: string,
+  dayKey: string,
+): string {
+  return `${missionId}:${dayKey}`;
+}
+
+export function isDailyMissionClaimed(
+  save: PlayerSave,
+  missionId: string,
+  day = todayKey(),
+): boolean {
+  const key = dailyMissionClaimKey(missionId, day);
+  return (save.claimedMissionKeys ?? []).includes(key);
+}
+
+export function isDailyMissionComplete(
+  save: PlayerSave,
+  missionId: string,
+  now = Date.now(),
+): boolean {
+  const day = todayKey(now);
+  if (missionId === DAILY_MISSION_WISH) {
+    return (save.island.lastWishDay ?? null) === day;
+  }
+  if (missionId === DAILY_MISSION_DOJO) {
+    const drills = save.dojoDrills ?? 0;
+    return drills > 0 && drills % 3 === 0;
+  }
+  if (missionId === DAILY_MISSION_COLLECT) {
+    const pond = save.island.buildings.find((b) => b.id === "mana_pond");
+    const mine = save.island.buildings.find((b) => b.id === "crystal_mine");
+    const stored =
+      Math.floor(pond?.storedMana ?? 0) + Math.floor(mine?.storedCrystal ?? 0);
+    return stored <= 0;
+  }
+  if (missionId === DAILY_MISSION_SORTIE) {
+    return (
+      (save.clearedStages?.length ?? 0) > 0 &&
+      Math.floor(save.island.energy) < (save.island.energyMax ?? 100)
+    );
+  }
+  return false;
+}
+
+export function claimableDailyMissionIds(
+  save: PlayerSave,
+  now = Date.now(),
+): DailyMissionId[] {
+  const day = todayKey(now);
+  const ids: DailyMissionId[] = [
+    DAILY_MISSION_WISH,
+    DAILY_MISSION_DOJO,
+    DAILY_MISSION_COLLECT,
+    DAILY_MISSION_SORTIE,
+  ];
+  return ids.filter(
+    (id) =>
+      isDailyMissionComplete(save, id, now) &&
+      !isDailyMissionClaimed(save, id, day),
+  );
+}
+
+export function claimableDailyMissionCount(
+  save: PlayerSave,
+  now = Date.now(),
+): number {
+  return claimableDailyMissionIds(save, now).length;
+}
+
+/** Claim a completed daily mission reward. */
+export function runClaimDailyMission(
+  save: PlayerSave,
+  missionId: string,
+  now = Date.now(),
+): LoopStepResult {
+  const day = todayKey(now);
+  const reward = DAILY_MISSION_REWARDS[missionId as DailyMissionId];
+  if (!reward) {
+    return { save, message: `미지원 미션: ${missionId}` };
+  }
+  if (!isDailyMissionComplete(save, missionId, now)) {
+    return { save, message: "일일 미션이 아직 완료되지 않았습니다" };
+  }
+  if (isDailyMissionClaimed(save, missionId, day)) {
+    return { save, message: "오늘 이미 수령한 미션 보상입니다" };
+  }
+  const max = save.island.energyMax ?? 100;
+  const island = {
+    ...save.island,
+    mana: save.island.mana + reward.mana,
+    energy: Math.min(max, save.island.energy + reward.energy),
+  };
+  const key = dailyMissionClaimKey(missionId, day);
+  return {
+    save: {
+      ...save,
+      island,
+      claimedMissionKeys: [...(save.claimedMissionKeys ?? []), key],
+    },
+    message: `일일 미션 보상: 골드 +${reward.mana} · 행동력 +${reward.energy}`,
   };
 }
 
@@ -2408,7 +3225,12 @@ export function previewOwnedCombatStats(
   if (!owned) return null;
   const m = getMonster(owned.monsterId);
   if (!m) return null;
-  const base = scaledMonsterStats(m, owned.level, owned.evolve ?? 0);
+  const base = scaledMonsterStats(
+    m,
+    owned.level,
+    owned.evolve ?? 0,
+    owned.awaken ?? 0,
+  );
   const equipped = equippedSymbols(save, owned);
   const final = applySymbolsToStats(base, equipped);
   const sets = summarizeSymbolSets(equipped);
@@ -2423,6 +3245,8 @@ export function createStageBattle(
     rng?: () => number;
     /** Scenario difficulty — scales enemy levels. */
     difficulty?: "normal" | "hard" | "hell";
+    /** Override stage enemy roster (arena rivals, etc.). */
+    enemyMonsterIds?: string[];
   },
 ): Battle {
   const activeEl = save?.activeSummoner ?? "light";
@@ -2522,7 +3346,10 @@ export function createStageBattle(
       .filter(Boolean)
       .map((id) => resolveMonsterId(id)),
   );
-  let enemyIds = stage.enemyMonsterIds;
+  let enemyIds =
+    opts?.enemyMonsterIds && opts.enemyMonsterIds.length > 0
+      ? opts.enemyMonsterIds
+      : stage.enemyMonsterIds;
   if (stage.mode === "world_arena" && banSet.size > 0) {
     const filtered = enemyIds.filter(
       (id) => !banSet.has(id) && !banSet.has(resolveMonsterId(id)),
@@ -2843,22 +3670,14 @@ export function applyRewards(
     ? save.clearedStages
     : [...save.clearedStages, stage.id];
 
-  const gloryPoints = (save.gloryPoints ?? 0) + gloryGain;
-  const jinmunStones = (save.jinmunStones ?? 0) + jinmunGain;
+  let gloryPoints = (save.gloryPoints ?? 0) + gloryGain;
+  let jinmunStones = (save.jinmunStones ?? 0) + jinmunGain;
 
   let contributionGain = 0;
   let guildContribution = save.guildContribution ?? 0;
   let guildRaidBest = save.guildRaidBest ?? 0;
-  if (stage.mode === "guild_raid") {
-    contributionGain = 40 + jinmunGain * 5 + gloryGain * 2;
-    guildContribution += contributionGain;
-    guildRaidBest = Math.max(guildRaidBest, contributionGain);
-  }
-
-  let arenaSeasonWins = save.arenaSeasonWins ?? 0;
-  if (stage.mode === "world_arena") {
-    arenaSeasonWins += 1;
-  }
+  let raidBossHp = save.raidBossHp ?? RAID_BOSS_MAX_HP;
+  let raidMilestonesClaimed = [...(save.raidMilestonesClaimed ?? [])];
 
   const extras: string[] = [
     `EXP +${expGain}`,
@@ -2866,12 +3685,68 @@ export function applyRewards(
   ];
   if (gloryGain > 0) extras.push(`영광 +${gloryGain}`);
   if (jinmunGain > 0) extras.push(`진문석 +${jinmunGain}`);
+
+  if (stage.mode === "guild_raid") {
+    contributionGain = 40 + jinmunGain * 5 + gloryGain * 2;
+    guildContribution += contributionGain;
+    guildRaidBest = Math.max(guildRaidBest, contributionGain);
+    const dmg = RAID_DAMAGE_BASE + contributionGain;
+    const beforeHp = raidBossHp;
+    raidBossHp = Math.max(0, raidBossHp - dmg);
+    const claimed = new Set(raidMilestonesClaimed);
+    for (const pct of RAID_MILESTONE_PERCENTS) {
+      if (claimed.has(pct)) continue;
+      const threshold = Math.floor((RAID_BOSS_MAX_HP * pct) / 100);
+      const crossed =
+        pct === 0
+          ? beforeHp > 0 && raidBossHp <= 0
+          : beforeHp > threshold && raidBossHp <= threshold;
+      if (!crossed) continue;
+      claimed.add(pct);
+      jinmunStones += RAID_MILESTONE_JINMUN;
+      gloryPoints += RAID_MILESTONE_GLORY;
+      extras.push(
+        `레이드${pct}% 마일스톤 진문+${RAID_MILESTONE_JINMUN}/영광+${RAID_MILESTONE_GLORY}`,
+      );
+    }
+    raidMilestonesClaimed = [...claimed].sort((a, b) => b - a);
+    extras.push(`보스 HP ${raidBossHp}/${RAID_BOSS_MAX_HP} (−${dmg})`);
+  }
+
+  let arenaSeasonWins = save.arenaSeasonWins ?? 0;
+  if (stage.mode === "world_arena") {
+    arenaSeasonWins += 1;
+  }
+
+  let trialTokens = save.trialTokens ?? 0;
+  let trialTitleUnlocked = save.trialTitleUnlocked ?? false;
+  if (stage.id === "trial_b3" && !save.clearedStages.includes("trial_b3")) {
+    trialTokens += 1;
+    trialTitleUnlocked = true;
+    extras.push("시련 토큰 +1");
+  }
+
   if (contributionGain > 0) extras.push(`기여도 +${contributionGain}`);
   if (stage.mode === "world_arena") extras.push(`시즌승 ${arenaSeasonWins}`);
   if (gearDrop) extras.push(`장비 ${describeGear(gearDrop)} → 가방`);
   if (scrollsPremium > (save.scrollsPremium ?? 0))
     extras.push(`${SCROLL_KIND_LABEL.premium} +1`);
   else if (scrolls > save.scrolls) extras.push(`${SCROLL_KIND_LABEL.normal} +1`);
+
+  let awakenMats = { ...(working.awakenMats ?? {}) };
+  let skillMats = working.skillMats ?? 0;
+  if (stage.id === "weekday_evolve") {
+    const el = (working.activeSummoner ?? "light") as Element;
+    awakenMats = {
+      ...awakenMats,
+      [el]: (awakenMats[el] ?? 0) + WEEKDAY_EVOLVE_MAT_DROP,
+    };
+    extras.push(`진화재료(${el}) +${WEEKDAY_EVOLVE_MAT_DROP}`);
+  } else if (stage.id === "weekday_skill") {
+    skillMats += WEEKDAY_SKILL_MAT_DROP;
+    extras.push(`스킬재료 +${WEEKDAY_SKILL_MAT_DROP}`);
+  }
+
   const activeAfter = getActiveSummoner({ ...working, island });
   const levelNote =
     leveled.levelsGained > 0
@@ -2902,6 +3777,15 @@ export function applyRewards(
       skillTree: working.skillTree ?? [],
       equipVaultWeekKey: working.equipVaultWeekKey ?? null,
       equipVaultWeekEntries: working.equipVaultWeekEntries ?? 0,
+      awakenMats,
+      skillMats,
+      trialTokens,
+      trialTitleUnlocked,
+      raidBossHp,
+      raidMilestonesClaimed,
+      raidWeekKey: working.raidWeekKey ?? null,
+      raidAttemptsDay: working.raidAttemptsDay ?? 0,
+      raidAttemptDay: working.raidAttemptDay ?? null,
     }),
     reward: {
       mana: manaGain,
@@ -2926,19 +3810,45 @@ export function applyRewards(
 export function runSortie(
   save: PlayerSave,
   stageId: string,
-  opts?: { maxTurns?: number; rng?: () => number; banEnemyIds?: string[] },
+  opts?: {
+    maxTurns?: number;
+    rng?: () => number;
+    banEnemyIds?: string[];
+    enemyMonsterIds?: string[];
+    rivalId?: string;
+    now?: number;
+  },
 ): LoopStepResult {
   const stage = getStage(stageId);
   if (!stage) {
     return { save, message: `알 수 없는 스테이지: ${stageId}` };
   }
+  const now = opts?.now ?? Date.now();
   let working = save;
   if (stage.mode === "equip") {
-    working = syncEquipVaultWeek(working);
+    working = syncEquipVaultWeek(working, now);
     if ((working.equipVaultWeekEntries ?? 0) >= EQUIP_VAULT_WEEKLY_LIMIT) {
       return {
         save: working,
         message: `장비 금고 주간 입장 한도 소진 (${EQUIP_VAULT_WEEKLY_LIMIT}회)`,
+      };
+    }
+  }
+  if (stage.mode === "arena") {
+    working = syncArenaAttackDay(working, now);
+    if ((working.arenaAttacksToday ?? 0) >= ARENA_ATTACKS_DAILY) {
+      return {
+        save: working,
+        message: `오늘 아레나 공격 한도 소진 (${ARENA_ATTACKS_DAILY}회)`,
+      };
+    }
+  }
+  if (stage.mode === "guild_raid") {
+    working = syncRaidAttemptDay(syncRaidWeek(working, now), now);
+    if ((working.raidAttemptsDay ?? 0) >= RAID_ATTEMPTS_DAILY) {
+      return {
+        save: working,
+        message: `오늘 레이드 시도 한도 소진 (${RAID_ATTEMPTS_DAILY}회)`,
       };
     }
   }
@@ -2950,6 +3860,16 @@ export function runSortie(
     };
   }
   if (!isStageUnlocked(working, stageId)) {
+    if (
+      stage.mode === "weekday" &&
+      working.clearedStages.includes("garen_1_3") &&
+      !isWeekdayStageOpenToday(stageId, now)
+    ) {
+      return {
+        save: working,
+        message: `오늘은 닫힌 요일 던전입니다 (${stage.nameKo})`,
+      };
+    }
     return {
       save: working,
       message: `콘텐츠 잠김 — 해금 조건을 확인하세요 (${stageId})`,
@@ -2977,15 +3897,45 @@ export function runSortie(
     summonerAwaken: working.summonerAwaken ?? 0,
     gearBag: working.gearBag ?? [],
     skillTree: working.skillTree ?? [],
-    equipVaultWeekKey: working.equipVaultWeekKey ?? isoWeekKey(),
+    equipVaultWeekKey: working.equipVaultWeekKey ?? isoWeekKey(now),
     equipVaultWeekEntries:
       stage.mode === "equip"
         ? (working.equipVaultWeekEntries ?? 0) + 1
         : (working.equipVaultWeekEntries ?? 0),
+    arenaAttacksToday:
+      stage.mode === "arena"
+        ? (working.arenaAttacksToday ?? 0) + 1
+        : (working.arenaAttacksToday ?? 0),
+    arenaAttackDay:
+      stage.mode === "arena"
+        ? (working.arenaAttackDay ?? todayKey(now))
+        : (working.arenaAttackDay ?? null),
+    raidAttemptsDay:
+      stage.mode === "guild_raid"
+        ? (working.raidAttemptsDay ?? 0) + 1
+        : (working.raidAttemptsDay ?? 0),
+    raidAttemptDay:
+      stage.mode === "guild_raid"
+        ? (working.raidAttemptDay ?? todayKey(now))
+        : (working.raidAttemptDay ?? null),
+    raidBossHp: working.raidBossHp ?? RAID_BOSS_MAX_HP,
+    raidMilestonesClaimed: working.raidMilestonesClaimed ?? [],
+    raidWeekKey: working.raidWeekKey ?? isoWeekKey(now),
   };
+
+  let enemyMonsterIds = opts?.enemyMonsterIds;
+  if (!enemyMonsterIds && stage.mode === "arena") {
+    const rival = opts?.rivalId
+      ? getArenaRivalDeck(opts.rivalId) ??
+        pickArenaRival(`${todayKey(now)}:${stageId}`, opts?.rng)
+      : pickArenaRival(`${todayKey(now)}:${stageId}`, opts?.rng);
+    enemyMonsterIds = rival.enemyMonsterIds;
+  }
+
   const battle = createStageBattle(stage, mid, {
     banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,
     rng: opts?.rng,
+    enemyMonsterIds,
   });
   const { victory, turns } = resolveBattleAuto(battle, opts?.maxTurns ?? 80);
   const { save: next, reward } = applyRewards(mid, stage, victory, opts?.rng);

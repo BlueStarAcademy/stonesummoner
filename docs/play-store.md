@@ -104,15 +104,41 @@ StoneSummoner mixes Summoners War–style progression with magic-circle stone-su
 
 Demo / local play works offline; online features need a network connection.
 
+## Manual Play Console checklist (Phase E)
+
+Complete these in Play Console / on device — code assets are prepared in-repo.
+
+| Step | Status / action |
+|------|-----------------|
+| Phone screenshots ≥2 | Seed PNGs via `npm run store:graphics` → `apps/web/public/store/screenshots/`. **Replace** with emulator/device captures before publish. |
+| IARC content rating | Play Console → Policy → App content → complete IARC questionnaire |
+| Privacy policy URL | Deploy client → register `https://{ORIGIN}/privacy.html` (file already in `apps/web/public/privacy.html`) |
+| Signed AAB | Set `VITE_API_BASE=https://…`, fill `apps/web/android/key.properties`, run `npm run android:sync` then `gradlew.bat bundleRelease` |
+
 ### Graphics checklist
 
-| Asset | Spec (Play) |
-|-------|-------------|
-| App icon | 512×512 PNG (`public/icons/icon-512.png` as base) |
-| Feature graphic | 1024×500 |
-| Phone screenshots | ≥2, 16:9 or 9:16 |
-| Content rating | Complete IARC questionnaire |
-| Privacy policy URL | Required if account/cloud save (host a short policy page) |
+| Asset | Spec (Play) | Repo path |
+|-------|-------------|-----------|
+| App icon | 512×512 PNG | `apps/web/public/icons/icon-512.png` (from SVG via `npm run store:graphics`) |
+| Feature graphic | 1024×500 | `apps/web/public/store/feature-graphic-1024x500.png` |
+| Phone screenshots | ≥2, 16:9 or 9:16 | `apps/web/public/store/screenshots/` (`01-…`, `02-…` from `store:graphics`; prefer real captures) |
+| Content rating | IARC questionnaire | Complete in Play Console |
+| Privacy policy URL | Required | Hosted page: `{ORIGIN}/privacy.html` (also in-app `#privacy`) |
+
+Generate listing art:
+
+```bash
+npm run store:graphics
+```
+
+### Privacy / Terms URLs
+
+| Doc | Path |
+|-----|------|
+| Privacy | `/privacy.html` (KO+EN) · in-app auth footer `#privacy` |
+| Terms | `/terms.html` (KO+EN) · in-app auth footer `#terms` |
+
+Play Console → Store presence → Privacy policy: paste the **HTTPS** origin + `/privacy.html` after the web client is deployed (same host as the PWA, or a static mirror).
 
 ### Content / data safety notes
 
@@ -121,9 +147,9 @@ Demo / local play works offline; online features need a network connection.
 - No ads in current build (update if you add AdMob)
 - Target audience: declare appropriately (fantasy combat)
 
-## Privacy policy (minimal outline)
+## Privacy policy (shipped)
 
-Publish a page that states: what data (email, nickname, save JSON), why (auth + sync), retention, contact email, and that the Android app talks to your API host. Link it in Play Console.
+Minimal bilingual policy is in [`apps/web/public/privacy.html`](../apps/web/public/privacy.html). In-app summary opens from the auth footer. Keep the contact email (`stonesummoners@gmail.com`) in sync with Play Console.
 
 ## Troubleshooting
 
@@ -133,3 +159,4 @@ Publish a page that states: what data (email, nickname, save JSON), why (auth + 
 | 401 after login in APK | CORS origin not allowed, or cookie blocked (need `SameSite=None; Secure` + CapacitorHttp) |
 | Blank WebView | Stale sync — rerun `npm run android:sync` |
 | `cap` / Gradle errors | Open project in Android Studio and install SDK / JDK 21 |
+| Play rejects privacy URL | URL must be publicly reachable HTTPS (not `localhost`) |

@@ -36,6 +36,6 @@ pure black charcoal background ONLY, square composition,
 no text, no watermark, no UI, no cropped limbs
 ```
 
-Process: `node scripts/process-battle-stills.mjs`
+Process: `node scripts/process-battle-stills.mjs` (intermediates under `apps/web/public/art/_staging/` — gitignored).
 
 Roster identity: `docs/art/monster/roster-50.md`.

@@ -10,6 +10,8 @@ export interface OwnedMonster {
   symbolSlots: (string | null)[];
   /** Evolution stage 0–2 (강화진 진화 스텁). */
   evolve: number;
+  /** Awaken stage 0–1 (각성; separate from evolve). */
+  awaken?: number;
   /** S1/S2/S3 skill levels (1..MAX_SKILL_LEVEL). */
   skillLevels: [number, number, number];
 }
@@ -17,7 +19,10 @@ export interface OwnedMonster {
 export const MAX_MONSTER_LEVEL = 15;
 export const MONSTER_EXP_PER_LEVEL = 100;
 export const MAX_EVOLVE = 2;
+export const MAX_MONSTER_AWAKEN = 1;
 export const MAX_SKILL_LEVEL = 3;
+/** ATK/HP multiplier when awaken >= 1. */
+export const MONSTER_AWAKEN_STAT_PCT = 0.08;
 
 export function addOwnedMonsterExp(
   owned: OwnedMonster,
@@ -96,6 +101,31 @@ export function evolveCrystalCost(evolve: number): number {
   return evolve === 0 ? 0 : 5 + evolve * 5;
 }
 
+/** Minimum level to awaken (0 → 1). */
+export function monsterAwakenMinLevel(naturalStars: number): number {
+  return 10 + Math.max(1, naturalStars) * 2;
+}
+
+export function monsterAwakenManaCost(_awaken = 0): number {
+  return 600;
+}
+
+export function monsterAwakenCrystalCost(_awaken = 0): number {
+  return 5;
+}
+
+/** Evolve-material count required by element for awaken. */
+export function monsterAwakenMatCost(_awaken = 0): number {
+  return 10;
+}
+
+export function displayedMonsterStars(
+  naturalStars: number,
+  awaken = 0,
+): number {
+  return Math.max(1, naturalStars) + Math.max(0, Math.min(MAX_MONSTER_AWAKEN, awaken));
+}
+
 export function defaultSkillLevels(): [number, number, number] {
   return [1, 1, 1];
 }
@@ -144,6 +174,9 @@ export function skillUpManaCost(skillIndex: number, skillLevel: number): number 
   return 150 + skillLevel * 120 + skillIndex * 40;
 }
 
+/** Shared skill-up material cost (weekday dungeon drop). */
+export const SKILL_UP_MAT_COST = 3;
+
 export function levelStatMult(level: number): number {
   return 1 + (level - 1) * 0.04;
 }
@@ -152,15 +185,21 @@ export function evolveStatMult(evolve: number): number {
   return 1 + Math.max(0, evolve) * 0.12;
 }
 
+export function awakenStatMult(awaken: number): number {
+  return 1 + (Math.max(0, awaken) > 0 ? MONSTER_AWAKEN_STAT_PCT : 0);
+}
+
 export function scaledMonsterStats(
   def: MonsterDef,
   level: number,
   evolve = 0,
+  awaken = 0,
 ): MonsterDef["baseStats"] {
   const m = levelStatMult(level) * evolveStatMult(evolve);
+  const a = awakenStatMult(awaken);
   return {
-    hp: Math.round(def.baseStats.hp * m),
-    atk: Math.round(def.baseStats.atk * m),
+    hp: Math.round(def.baseStats.hp * m * a),
+    atk: Math.round(def.baseStats.atk * m * a),
     def: Math.round(def.baseStats.def * m),
     spd: def.baseStats.spd + Math.floor((level - 1) / 5) + evolve,
     critRate: def.baseStats.critRate + evolve * 2,
@@ -246,6 +285,7 @@ export function createStarterRoster(): {
     exp: 0,
     symbolSlots: emptySymbolSlots(),
     evolve: 0,
+    awaken: 0,
     skillLevels: defaultSkillLevels(),
   }));
   return {
@@ -278,7 +318,10 @@ export function describeOwned(m: OwnedMonster): string {
   const name = def?.nameKo ?? m.monsterId;
   const baseStars = def?.naturalStars ?? 0;
   const evo = m.evolve ?? 0;
-  const stars = "★".repeat(baseStars) + (evo > 0 ? `+${evo}` : "");
+  const awaken = m.awaken ?? 0;
+  const displayStars = displayedMonsterStars(baseStars, awaken);
+  const stars =
+    "★".repeat(displayStars) + (evo > 0 ? `+${evo}` : "");
   const slots = m.symbolSlots ?? emptySymbolSlots();
   const eqs = slots.filter(Boolean).length;
   const sk = normalizeSkillLevels(m.skillLevels);

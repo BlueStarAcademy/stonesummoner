@@ -37,6 +37,7 @@ import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
 import {
   ARROW_DOWN,
   ARROW_RIGHT,
+  ARROW_LEFT,
   ARROW_UP,
   CHECK,
   EM_DASH,
@@ -59,6 +60,8 @@ import {
   type SkillResult,
   type StoneSuggestion,
   type Unit,
+  detectShapeBonuses,
+  type ShapeBonusId,
 } from "stonesummoner-combat";
 import {
   ARENA_STAGES,
@@ -67,6 +70,7 @@ import {
   CAIROS_DRAGON_STAGES,
   CAIROS_NECRO_STAGES,
   EQUIP_STAGES,
+  FUSION_RECIPES,
   GLORY_BUILDINGS,
   GUILD_RAID_STAGES,
   MAIN_QUEST_PIN_LAYOUT,
@@ -76,6 +80,9 @@ import {
   TRIAL_STAGES,
   WEEKDAY_STAGES,
   WORLD_ARENA_STAGES,
+  gloryBuffFromLevels,
+  isWeekdayStageOpenToday,
+  pickArenaRival,
   canGrindSymbol,
   canImprintSymbol,
   canEquipGearOnElement,
@@ -111,13 +118,13 @@ import {
   normalizeSummonerGear,
   normalizeSymbolQuality,
   qualityToPlateId,
-  SKILL_TREE_NODES,
   skillTreeBonuses,
   SYMBOL_SETS,
   stagesForMap,
   summarizeGearSets,
   gearLeaderAtkPct,
   SYMBOL_GRIND_MANA_COST,
+  SYMBOL_GRIND_STONE_COST,
   SYMBOL_IMPRINT_CRYSTAL_COST,
   type GearPiece,
   type GearQuality,
@@ -153,14 +160,24 @@ import {
   createStageBattle,
   createSummonerRoster,
   describeOwned,
+  displayedMonsterStars,
   enhanceManaCost,
+  evolveCrystalCost,
+  evolveManaCost,
+  evolveMinLevel,
   isStageUnlocked,
   MAX_EVOLVE,
+  MAX_MONSTER_AWAKEN,
   MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
   MAX_SUMMONER_AWAKEN,
+  monsterAwakenCrystalCost,
+  monsterAwakenManaCost,
+  monsterAwakenMatCost,
+  monsterAwakenMinLevel,
+  migrateSave,
+  runAwakenMonster,
   runAwakenSummoner,
-  runUnlockSkillNode,
   runEnhanceMagicSkill,
   runAffixGearSet,
   runEquipGearBag,
@@ -174,6 +191,9 @@ import {
   SYMBOL_BAG_MAX_SLOTS,
   runBuyGlory,
   runBuyScroll,
+  runBuyShopOffer,
+  getDailyShopOffers,
+  syncShopDay,
   runCraftEssence,
   runCraftScroll,
   runDailyWish,
@@ -191,8 +211,23 @@ import {
   previewOwnedCombatStats,
   runEvolve,
   runFeedSameMonster,
+  runSkillUp,
+  skillUpManaCost,
+  skillUpMinMonsterLevel,
+  SKILL_UP_MAT_COST,
   runFusion,
+  runRecipeFusion,
   runGrindSymbol,
+  grindstoneCount,
+  unclaimedMailIds,
+  runClaimMail,
+  DAILY_MISSION_WISH,
+  DAILY_MISSION_DOJO,
+  DAILY_MISSION_COLLECT,
+  DAILY_MISSION_SORTIE,
+  claimableDailyMissionCount,
+  isDailyMissionClaimed,
+  runClaimDailyMission,
   homeCollectCrystal,
   homeCollect,
   FUSION_MANA_COST,
@@ -202,11 +237,23 @@ import {
   getActiveGear,
   getActiveSummoner,
   guildLeaderboard,
+  GUILD_NPC_MEMBERS,
+  GUILD_WEEK_CONTRIB_GOAL,
+  syncGuildWeek,
   runClaimSeasonReward,
   SEASON_REWARD_WINS,
   runPracticeDojo,
   runSellSymbol,
   runSetArenaBans,
+  runSetArenaDefense,
+  ARENA_ATTACKS_DAILY,
+  arenaAttacksRemaining,
+  syncArenaAttackDay,
+  RAID_BOSS_MAX_HP,
+  RAID_ATTEMPTS_DAILY,
+  raidAttemptsRemaining,
+  syncRaidWeek,
+  syncRaidAttemptDay,
   runSetParty,
   runSavePartyPreset,
   runLoadPartyPreset,
@@ -422,7 +469,9 @@ function applyIslandSpotPosDom(id: string, x: number, y: number): void {
 
 let sessionUser: SessionUser | null = null;
 /** gate = brand + CTA; login/register = form panel. */
-const authUi = { pane: "gate" as "gate" | "login" | "register" };
+const authUi = {
+  pane: "gate" as "gate" | "login" | "register" | "privacy" | "terms",
+};
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -705,6 +754,9 @@ let floatSeq = 0;
 let lastSeenBoardPhase = 0;
 /** One-shot collapse/rekindle class on the board frame. */
 let boardRekindleFx = false;
+/** Recent Module B shape ids for amplify / board flash. */
+let shapeFlashIds: ShapeBonusId[] = [];
+let shapeFlashUntil = 0;
 
 /** Extra currencies drawer under app-bar resources. */
 let resMoreOpen = false;
@@ -838,13 +890,23 @@ function clampIslandLayoutPos(x: number, y: number): { x: number; y: number } {
   };
 }
 function islandSpotTitle(id: string, fallback = ""): string {
-  const extra: Record<string, string> = {
-    shop: t('ui.0f6f02427f'),
-    party: t('ui.108f04ca6e'),
-    glory: t('ui.6a1629b11c'),
-    mana_pond: t('ui.7c70400fef'),
+  const titles: Record<string, string> = {
+    shop: t("nav.shop"),
+    party: t("ui.108f04ca6e"),
+    glory: t("ui.hubGlory"),
+    mana_pond: t("ui.hubPond"),
+    crystal_mine: t("ui.hubMine"),
+    mine: t("ui.hubMine"),
+    wish: t("ui.hubWish"),
+    wish_temple: t("ui.hubWish"),
+    dojo: t("ui.hubDojo"),
+    practice_dojo: t("ui.hubDojo"),
+    guild: t("ui.hubGuild"),
+    guild_hall: t("ui.hubGuild"),
+    fusion: t("ui.hubFusion"),
+    fusion_star: t("ui.hubFusion"),
   };
-  if (extra[id]) return extra[id];
+  if (titles[id]) return titles[id];
   const remap: Record<string, string> = {
     wish: "wish_temple",
     dojo: "practice_dojo",
@@ -1180,115 +1242,6 @@ function resetCloudSync(): void {
   cloudAuthWarned = false;
 }
 
-function migrateSave(raw: unknown): PlayerSave | null {
-  if (!raw || typeof raw !== "object") return null;
-  const p = raw as Partial<PlayerSave>;
-  if (!p.island) return null;
-  const base = createNewSave();
-  const roster = (p.roster?.length ? p.roster : base.roster).map((m) => ({
-    ...m,
-    monsterId: resolveMonsterId(m.monsterId),
-    evolve: m.evolve ?? 0,
-    exp: typeof m.exp === "number" ? m.exp : 0,
-    skillLevels: (m.skillLevels ?? [1, 1, 1]) as [number, number, number],
-    symbolSlots: m.symbolSlots ?? [null, null, null, null, null, null],
-  }));
-  const island = tickProduction({
-    ...base.island,
-    ...p.island,
-    summonerExp: p.island.summonerExp ?? 0,
-    energyMax: p.island.energyMax ?? 100,
-    energyUpdatedAt: p.island.energyUpdatedAt ?? Date.now(),
-  });
-  return {
-    ...base,
-    island,
-    symbols: p.symbols?.length ? p.symbols : base.symbols,
-    clearedStages: p.clearedStages ?? [],
-    roster,
-    party: p.party?.length ? p.party : base.party,
-    scrolls: typeof p.scrolls === "number" ? p.scrolls : base.scrolls,
-    gear: normalizeSummonerGear(p.gear ?? base.gear),
-    gearBag: Array.isArray(p.gearBag)
-      ? p.gearBag.map((g) => normalizeGearPiece(g, g.slot)).slice(0, 40)
-      : [],
-    gloryPoints: typeof p.gloryPoints === "number" ? p.gloryPoints : 0,
-    jinmunStones: typeof p.jinmunStones === "number" ? p.jinmunStones : 0,
-    gloryLevels: p.gloryLevels ?? {},
-    arenaBanIds: Array.isArray(p.arenaBanIds)
-      ? p.arenaBanIds
-          .map((id) => (typeof id === "string" ? resolveMonsterId(id) : ""))
-          .filter(Boolean)
-          .slice(0, 2)
-      : [],
-    arenaSeasonWins:
-      typeof p.arenaSeasonWins === "number" ? p.arenaSeasonWins : 0,
-    guildContribution:
-      typeof p.guildContribution === "number" ? p.guildContribution : 0,
-    dojoDrills: typeof p.dojoDrills === "number" ? p.dojoDrills : 0,
-    guildName: typeof p.guildName === "string" ? p.guildName : null,
-    guildCheckInDay:
-      typeof p.guildCheckInDay === "string" ? p.guildCheckInDay : null,
-    guildRaidBest: typeof p.guildRaidBest === "number" ? p.guildRaidBest : 0,
-    seasonRewardsClaimed:
-      typeof p.seasonRewardsClaimed === "number" ? p.seasonRewardsClaimed : 0,
-    summonerAwaken: Math.min(
-      MAX_SUMMONER_AWAKEN,
-      Math.max(
-        0,
-        Math.floor(
-          typeof p.summonerAwaken === "number" ? p.summonerAwaken : 0,
-        ),
-      ),
-    ),
-    skillTree: Array.isArray(p.skillTree)
-      ? p.skillTree.filter((id): id is string => typeof id === "string")
-      : [],
-    summonerMagic: (() => {
-      const raw = p.summonerMagic;
-      const base = {
-        fire: emptyMagicProgress(),
-        water: emptyMagicProgress(),
-        wind: emptyMagicProgress(),
-        light: emptyMagicProgress(),
-        dark: emptyMagicProgress(),
-      };
-      if (!raw || typeof raw !== "object") return base;
-      for (const el of ["fire", "water", "wind", "light", "dark"] as const) {
-        const slot = (raw as Record<string, unknown>)[el];
-        if (!slot || typeof slot !== "object") continue;
-        const ranks =
-          (slot as { ranks?: Record<string, number> }).ranks &&
-          typeof (slot as { ranks: unknown }).ranks === "object"
-            ? (slot as { ranks: Record<string, number> }).ranks
-            : {};
-        const branch = (slot as { branch?: string }).branch;
-        base[el] = {
-          ranks: { ...ranks },
-          branch: branch === "A" || branch === "B" ? branch : null,
-        };
-      }
-      return base;
-    })(),
-    equipVaultWeekKey:
-      typeof p.equipVaultWeekKey === "string" ? p.equipVaultWeekKey : null,
-    equipVaultWeekEntries:
-      typeof p.equipVaultWeekEntries === "number"
-        ? Math.max(0, Math.floor(p.equipVaultWeekEntries))
-        : 0,
-    symbolBagSlots: (() => {
-      const raw =
-        typeof p.symbolBagSlots === "number"
-          ? p.symbolBagSlots
-          : SYMBOL_BAG_BASE_SLOTS;
-      return Math.min(
-        SYMBOL_BAG_MAX_SLOTS,
-        Math.max(SYMBOL_BAG_BASE_SLOTS, Math.floor(raw)),
-      );
-    })(),
-  };
-}
-
 function loadLocalSave(key = localSaveKey()): PlayerSave | null {
   try {
     const raw =
@@ -1536,6 +1489,22 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
     render();
     return;
   }
+  if (stage.mode === "arena") {
+    save = syncArenaAttackDay(save);
+    if ((save.arenaAttacksToday ?? 0) >= ARENA_ATTACKS_DAILY) {
+      flash(`${t("ui.arena.attacksLeft")} 0/${ARENA_ATTACKS_DAILY}`);
+      render();
+      return;
+    }
+  }
+  if (stage.mode === "guild_raid") {
+    save = syncRaidAttemptDay(syncRaidWeek(save));
+    if ((save.raidAttemptsDay ?? 0) >= RAID_ATTEMPTS_DAILY) {
+      flash(`${t("ui.guild.raidAttempts")} 0/${RAID_ATTEMPTS_DAILY}`);
+      render();
+      return;
+    }
+  }
   const cost = stageEnergyCost(stage, diff);
   if (Math.floor(save.island.energy) < cost) {
     flash(t('ui.711b4aaddc'));
@@ -1545,6 +1514,18 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   save = {
     ...save,
     island: spendEnergy(save.island, cost),
+    arenaAttacksToday:
+      stage.mode === "arena"
+        ? (save.arenaAttacksToday ?? 0) + 1
+        : (save.arenaAttacksToday ?? 0),
+    arenaAttackDay:
+      stage.mode === "arena" ? todayKey() : (save.arenaAttackDay ?? null),
+    raidAttemptsDay:
+      stage.mode === "guild_raid"
+        ? (save.raidAttemptsDay ?? 0) + 1
+        : (save.raidAttemptsDay ?? 0),
+    raidAttemptDay:
+      stage.mode === "guild_raid" ? todayKey() : (save.raidAttemptDay ?? null),
   };
   persist();
   currentStage = stage;
@@ -1558,11 +1539,18 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   clearBattleSkillSelection();
   lastSeenBoardPhase = 0;
   boardRekindleFx = false;
+  shapeFlashIds = [];
+  shapeFlashUntil = 0;
   stageEntryId = null;
+  const rivalEnemies =
+    stage.mode === "arena"
+      ? pickArenaRival(`${todayKey()}:${stage.id}`).enemyMonsterIds
+      : undefined;
   battle = createStageBattle(stage, save, {
     banEnemyIds:
       stage.mode === "world_arena" ? save.arenaBanIds ?? [] : undefined,
     difficulty: diff,
+    enemyMonsterIds: rivalEnemies,
   });
   battle.tickUntilReady();
   prefetchBattleBoardArt(stage);
@@ -1598,7 +1586,6 @@ function prefetchBattleBoardArt(stage: StageDef): void {
 function renderStagePrepDock(): string {
   const selected = ensurePartyDraft();
   const activeEl = save.activeSummoner ?? "light";
-  const unlockedSkills = new Set(save.skillTree ?? []);
 
   let dockBody = "";
   if (stagePrepInvTab === "summoner") {
@@ -1903,11 +1890,10 @@ function renderStageEntryModal(): string {
     return `<button type="button" class="stage-prep-preset${on ? " is-on" : ""}${filled ? " is-filled" : ""}" data-stage-preset="${i}" aria-pressed="${on}">${i + 1}</button>`;
   }).join("");
 
-  const unlockedSkills = new Set(save.skillTree ?? []);
   const magicProg =
     save.summonerMagic?.[save.activeSummoner ?? "light"] ??
     emptyMagicProgress();
-  const magicIcons = unlockedMagicSkills(
+  const skillIcons = unlockedMagicSkills(
     save.activeSummoner ?? "light",
     magicProg,
   )
@@ -1916,18 +1902,6 @@ function renderStageEntryModal(): string {
       return `<span class="stage-prep-skill-ico is-on" title="${escapeHtml(n.nameKo)}">${summonerSkillArtImg(n.id, "stage-prep-skill-ico-img", 28)}</span>`;
     })
     .join("");
-  const skillIcons =
-    magicIcons ||
-    SKILL_TREE_NODES.filter(
-      (n) =>
-        n.branch === "leader" || n.branch === "mastery" || n.branch === "power",
-    )
-      .slice(0, 2)
-      .map((n) => {
-        const on = unlockedSkills.has(n.id);
-        return `<span class="stage-prep-skill-ico${on ? " is-on" : ""}" title="${escapeHtml(n.nameKo)}">${summonerSkillArtImg("open", "stage-prep-skill-ico-img", 28)}</span>`;
-      })
-      .join("");
 
   const titleText = `${stage.nameKo}(${diff.labelKo})`;
   const canStart = selected.size > 0 && energyNow >= cost;
@@ -2879,6 +2853,57 @@ function onCellClick(x: number, y: number): void {
   void onCellClickAsync(x, y);
 }
 
+/** Module B board/amp feedback after a stone lands at (x,y). */
+function pulseShapeBonusesAfterStone(
+  x: number,
+  y: number,
+  color: "black" | "white",
+): number {
+  if (!battle?.modules.moduleB) return 0;
+  const shapes = detectShapeBonuses(battle.board, color, { x, y });
+  if (!shapes.length) return 0;
+  const shapeMs = fxDurationMs(720, battleSpeed);
+  shapeFlashIds = shapes.map((s) => s.id);
+  shapeFlashUntil = Date.now() + fxDurationMs(900, battleSpeed);
+  for (const sh of shapes) {
+    pulseBoardCell(app, x, y, `fx-shape fx-shape--${sh.id}`, shapeMs);
+  }
+  if (shapes.some((s) => s.id === "star" || s.id === "star_control")) {
+    for (const sp of starPoints(battle.board.size)) {
+      if (battle.board.at(sp) === color) {
+        pulseBoardCell(app, sp.x, sp.y, "fx-shape fx-shape--star", shapeMs);
+      }
+    }
+  }
+  if (shapes.some((s) => s.id === "corner")) {
+    const last = battle.board.size - 1;
+    for (const c of [
+      { x: 0, y: 0 },
+      { x: 0, y: last },
+      { x: last, y: 0 },
+      { x: last, y: last },
+    ]) {
+      if (battle.board.at(c) === color) {
+        pulseBoardCell(app, c.x, c.y, "fx-shape fx-shape--corner", shapeMs);
+      }
+    }
+  }
+  app.querySelector(".battle-amp-chip")?.classList.add("is-hot");
+  window.setTimeout(
+    () => app.querySelector(".battle-amp-chip")?.classList.remove("is-hot"),
+    shapeMs,
+  );
+  return shapeMs;
+}
+
+function isGrindSuccessMessage(message: string): boolean {
+  // Loop messages are Hangul; forgeOkGrind EN is "Grind" and would miss.
+  return (
+    message.includes("\uC5F0\uB9C8") ||
+    message.startsWith(t("ui.forgeOkGrind"))
+  );
+}
+
 async function onCellClickAsync(x: number, y: number): Promise<void> {
   if (!battle || battle.phase !== "await_stone") return;
   if (autoMode || battleFxBusy) return;
@@ -2916,8 +2941,13 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
         fxDurationMs(380, battleSpeed),
       );
     }
+    const shapeMs = pulseShapeBonusesAfterStone(x, y, "black");
     await waitFx(
-      Math.max(dropMs, capBonus > 0 ? fxDurationMs(380, battleSpeed) : 0),
+      Math.max(
+        dropMs,
+        capBonus > 0 ? fxDurationMs(380, battleSpeed) : 0,
+        shapeMs,
+      ),
     );
     await resolveCombatUntilAllyInput({ holdBusy: true });
   } finally {
@@ -3101,10 +3131,14 @@ async function resolveCombatUntilAllyInput(opts?: {
           refreshLegal();
           render();
           // Pulse first changed empty→stone cell if we can find it.
+          let placed: { x: number; y: number; color: "black" | "white" } | null =
+            null;
           const after = battle.board.getBoard();
           outer: for (let y = 0; y < after.length; y++) {
             for (let x = 0; x < (after[y]?.length ?? 0); x++) {
               if (before[y]?.[x] == null && after[y]?.[x] != null) {
+                const color = after[y]![x] as "black" | "white";
+                placed = { x, y, color };
                 pulseBoardCell(
                   app,
                   x,
@@ -3116,7 +3150,10 @@ async function resolveCombatUntilAllyInput(opts?: {
               }
             }
           }
-          await waitFx(fxDurationMs(240, battleSpeed));
+          const shapeMs = placed
+            ? pulseShapeBonusesAfterStone(placed.x, placed.y, placed.color)
+            : 0;
+          await waitFx(Math.max(fxDurationMs(240, battleSpeed), shapeMs));
         }
       }
 
@@ -3787,9 +3824,9 @@ function authFooter(): string {
   const sep = `<span class="auth-footer-sep" aria-hidden="true">|</span>`;
   return `<footer class="auth-footer">
     <nav class="auth-footer-nav" aria-label="${escapeHtml(t("auth.footer.navAria"))}">
-      <a class="auth-footer-link" href="#terms">${escapeHtml(t("auth.footer.terms"))}</a>
+      <a class="auth-footer-link" href="#terms" data-auth-legal="terms">${escapeHtml(t("auth.footer.terms"))}</a>
       ${sep}
-      <a class="auth-footer-link" href="#privacy">${escapeHtml(t("auth.footer.privacy"))}</a>
+      <a class="auth-footer-link" href="#privacy" data-auth-legal="privacy">${escapeHtml(t("auth.footer.privacy"))}</a>
       ${sep}
       <a class="auth-footer-link" href="mailto:stonesummoners@gmail.com">${escapeHtml(t("auth.footer.support"))}</a>
     </nav>
@@ -3811,10 +3848,51 @@ function authFooter(): string {
   </footer>`;
 }
 
+function renderAuthLegal(kind: "privacy" | "terms"): string {
+  const title =
+    kind === "privacy" ? t("auth.footer.privacy") : t("auth.footer.terms");
+  const body =
+    kind === "privacy"
+      ? `<p>${escapeHtml(t("auth.legal.privacyIntro"))}</p>
+        <h3>${escapeHtml(t("auth.legal.privacyCollectTitle"))}</h3>
+        <ul>
+          <li>${escapeHtml(t("auth.legal.privacyCollect1"))}</li>
+          <li>${escapeHtml(t("auth.legal.privacyCollect2"))}</li>
+          <li>${escapeHtml(t("auth.legal.privacyCollect3"))}</li>
+        </ul>
+        <h3>${escapeHtml(t("auth.legal.privacyPurposeTitle"))}</h3>
+        <ul>
+          <li>${escapeHtml(t("auth.legal.privacyPurpose1"))}</li>
+          <li>${escapeHtml(t("auth.legal.privacyPurpose2"))}</li>
+        </ul>
+        <h3>${escapeHtml(t("auth.legal.privacyContactTitle"))}</h3>
+        <p>${escapeHtml(t("auth.legal.privacyContactBody"))}</p>
+        <p class="auth-legal-ext"><a class="auth-footer-link" href="/privacy.html" target="_blank" rel="noopener">${escapeHtml(t("auth.legal.openFull"))}</a></p>`
+      : `<p>${escapeHtml(t("auth.legal.termsIntro"))}</p>
+        <h3>${escapeHtml(t("auth.legal.termsServiceTitle"))}</h3>
+        <p>${escapeHtml(t("auth.legal.termsServiceBody"))}</p>
+        <h3>${escapeHtml(t("auth.legal.termsAccountTitle"))}</h3>
+        <p>${escapeHtml(t("auth.legal.termsAccountBody"))}</p>
+        <p class="auth-legal-ext"><a class="auth-footer-link" href="/terms.html" target="_blank" rel="noopener">${escapeHtml(t("auth.legal.openFull"))}</a></p>`;
+  return `<div class="auth-screen auth-screen--legal">
+    <button type="button" class="nav-back" id="auth-back" aria-label="${escapeHtml(t("ui.1a7f31cadb"))}">${ARROW_LEFT}</button>
+    ${authBrand()}
+    <article class="auth-legal-card" aria-labelledby="auth-legal-title">
+      <h2 id="auth-legal-title">${escapeHtml(title)}</h2>
+      <div class="auth-legal-body">${body}</div>
+    </article>
+    ${authFooter()}
+  </div>`;
+}
+
 function renderAuth(): string {
   const prefs = readAuthPrefs();
   const pane = authUi.pane;
   const loggedIn = !!sessionUser;
+
+  if (pane === "privacy" || pane === "terms") {
+    return `${authHeroLayer()}${renderAuthLegal(pane)}`;
+  }
 
   if (pane === "gate") {
     const sessionHint = loggedIn
@@ -4695,32 +4773,50 @@ function renderChatModal(): string {
 
 
 
+function grindCostLabel(): string {
+  return `${MINUS}${t("ui.grindstone")} ${SYMBOL_GRIND_STONE_COST} ${MIDDOT} ${MINUS}${t("ui.dc78e6a251")} ${SYMBOL_GRIND_MANA_COST}`;
+}
+
+function canAffordGrind(): boolean {
+  return (
+    grindstoneCount(save) >= SYMBOL_GRIND_STONE_COST &&
+    Math.floor(save.island.mana) >= SYMBOL_GRIND_MANA_COST
+  );
+}
+
 function missionItemHtml(opts: {
   title: string;
   desc: string;
   cur: number;
   max: number;
   goNav?: string;
+  claimId?: string;
+  claimed?: boolean;
 }): string {
   const done = opts.cur >= opts.max;
   const pct = opts.max > 0 ? Math.min(100, Math.round((opts.cur / opts.max) * 100)) : 0;
-  const go = opts.goNav
-    ? `<button type="button" class="mission-item-go" data-mission-go="${opts.goNav}">${t("mission.go")}</button>`
-    : "";
-  return `<article class="mission-item${done ? " is-done" : ""}">
+  let action = "";
+  if (opts.claimId && done && !opts.claimed) {
+    action = `<button type="button" class="mission-item-go mission-item-claim" data-mission-claim="${opts.claimId}">${t("mission.claim")}</button>`;
+  } else if (opts.claimId && opts.claimed) {
+    action = `<span class="mission-item-claimed">${t("mission.claimed")}</span>`;
+  } else if (opts.goNav) {
+    action = `<button type="button" class="mission-item-go" data-mission-go="${opts.goNav}">${t("mission.go")}</button>`;
+  }
+  return `<article class="mission-item${done ? " is-done" : ""}${opts.claimed ? " is-claimed" : ""}">
     <div class="mission-item-top">
       <div class="mission-item-copy">
         <strong class="mission-item-title">${opts.title}</strong>
         <p class="mission-item-desc">${opts.desc}</p>
       </div>
-      <span class="mission-item-status">${done ? t("mission.done") : t("mission.inProgress")}</span>
+      <span class="mission-item-status">${opts.claimed ? t("mission.claimed") : done ? t("mission.done") : t("mission.inProgress")}</span>
     </div>
     <div class="mission-item-bar" role="progressbar" aria-valuenow="${opts.cur}" aria-valuemin="0" aria-valuemax="${opts.max}">
       <i style="width:${pct}%"></i>
     </div>
     <div class="mission-item-foot">
       <span class="mission-item-prog">${t("mission.progress", { cur: Math.min(opts.cur, opts.max), max: opts.max })}</span>
-      ${go}
+      ${action}
     </div>
   </article>`;
 }
@@ -4728,42 +4824,57 @@ function missionItemHtml(opts: {
 function renderMissionDailyList(): string {
   const day = todayKey();
   const wishDone = (save.island.lastWishDay ?? null) === day;
+  const wishClaimed = isDailyMissionClaimed(save, DAILY_MISSION_WISH, day);
   const drills = save.dojoDrills ?? 0;
   const dojoCur = drills % 3;
+  const dojoProg = dojoCur === 0 && drills > 0 ? 3 : dojoCur;
+  const dojoClaimed = isDailyMissionClaimed(save, DAILY_MISSION_DOJO, day);
   const pond = save.island.buildings.find((b) => b.id === "mana_pond");
   const mine = save.island.buildings.find((b) => b.id === "crystal_mine");
   const stored =
     Math.floor(pond?.storedMana ?? 0) + Math.floor(mine?.storedCrystal ?? 0);
   const collectDone = stored <= 0;
-  const sortieDone = (save.clearedStages?.length ?? 0) > 0 && Math.floor(save.island.energy) < (save.island.energyMax ?? 100);
+  const collectClaimed = isDailyMissionClaimed(save, DAILY_MISSION_COLLECT, day);
+  const sortieDone =
+    (save.clearedStages?.length ?? 0) > 0 &&
+    Math.floor(save.island.energy) < (save.island.energyMax ?? 100);
+  const sortieClaimed = isDailyMissionClaimed(save, DAILY_MISSION_SORTIE, day);
   return [
     missionItemHtml({
       title: t("mission.daily.wish.title"),
       desc: t("mission.daily.wish.desc"),
       cur: wishDone ? 1 : 0,
       max: 1,
-      goNav: "wish",
+      goNav: wishDone ? undefined : "wish",
+      claimId: DAILY_MISSION_WISH,
+      claimed: wishClaimed,
     }),
     missionItemHtml({
       title: t("mission.daily.dojo.title"),
       desc: t("mission.daily.dojo.desc"),
-      cur: dojoCur === 0 && drills > 0 ? 3 : dojoCur,
+      cur: dojoProg,
       max: 3,
-      goNav: "dojo",
+      goNav: dojoProg >= 3 ? undefined : "dojo",
+      claimId: DAILY_MISSION_DOJO,
+      claimed: dojoClaimed,
     }),
     missionItemHtml({
       title: t("mission.daily.collect.title"),
       desc: t("mission.daily.collect.desc"),
       cur: collectDone ? 1 : 0,
       max: 1,
-      goNav: "home",
+      goNav: collectDone ? undefined : "home",
+      claimId: DAILY_MISSION_COLLECT,
+      claimed: collectClaimed,
     }),
     missionItemHtml({
       title: t("mission.daily.sortie.title"),
       desc: t("mission.daily.sortie.desc"),
       cur: sortieDone ? 1 : 0,
       max: 1,
-      goNav: "stages",
+      goNav: sortieDone ? undefined : "stages",
+      claimId: DAILY_MISSION_SORTIE,
+      claimed: sortieClaimed,
     }),
   ].join("");
 }
@@ -4903,18 +5014,27 @@ function renderScreen(): void {
   const tabCommunity = communityOpen;
   const tabShop = shopOpen;
   const demoTag = sessionUser?.kind === "demo" ? `<span class="demo-tag">DEMO</span>` : "";
-  const mailItems = [
-    {
-      title: t("mail.welcomeTitle"),
-      body: t("mail.welcomeBody"),
-      tag: t("mail.tagEvent"),
-    },
-    {
+  const mailPending = unclaimedMailIds(save);
+  const mailUnread = mailPending.length;
+  const missionClaimable = claimableDailyMissionCount(save);
+  const mailItems = mailPending.map((id) => {
+    if (id === "welcome_gift") {
+      return {
+        id,
+        title: t("mail.welcomeTitle"),
+        body: t("mail.welcomeBody"),
+        tag: t("mail.tagEvent"),
+        reward: t("mail.rewardGold", { n: 500 }),
+      };
+    }
+    return {
+      id,
       title: t("mail.dailyTitle"),
       body: t("mail.dailyBody"),
       tag: t("mail.tagReward"),
-    },
-  ];
+      reward: t("mail.rewardEnergy", { n: 20 }),
+    };
+  });
   const notifItems = tickerMessages().slice(0, 5);
 
   if (view === "auth") {
@@ -5061,6 +5181,23 @@ function renderScreen(): void {
               <img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" />
               <strong class="res-val">${fmtRes(save.jinmunStones ?? 0)}</strong>
             </div>
+            <div class="res-item res-item--mats" title="${escapeHtml(t("res.skillMats"))}">
+              <img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(save.skillMats ?? 0)}</strong>
+            </div>
+            <div class="res-item res-item--mats" title="${escapeHtml(t("res.awakenMats"))}">
+              <img class="res-ico" src="/art/ui/res/crystal.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(
+                Object.values(save.awakenMats ?? {}).reduce(
+                  (a, n) => a + (typeof n === "number" ? n : 0),
+                  0,
+                ),
+              )}</strong>
+            </div>
+            <div class="res-item res-item--mats" title="${escapeHtml(t("ui.grindstone"))}">
+              <img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(grindstoneCount(save))}</strong>
+            </div>
             <div class="res-item res-item--guild" title="${escapeHtml(t("res.guild"))}">
               <img class="res-ico" src="/art/ui/res/guild.svg" width="16" height="16" alt="" draggable="false" />
               <strong class="res-val">${fmtRes(save.guildContribution ?? 0)}</strong>
@@ -5124,7 +5261,11 @@ function renderScreen(): void {
           </span>
           <span class="side-quick-caption">${escapeHtml(t("side.mailbox"))}</span>
         </span>
-        <span class="side-quick-badge" aria-label="${escapeHtml(t("mailbox.badge"))}">2</span>
+        ${
+          mailUnread > 0
+            ? `<span class="side-quick-badge" aria-label="${escapeHtml(t("mailbox.badge", { n: mailUnread }))}">${mailUnread}</span>`
+            : ""
+        }
       </button>
       <button type="button" class="side-quick-btn${notifOpen ? " is-open" : ""}" id="btn-notif" aria-expanded="${notifOpen ? "true" : "false"}" aria-controls="notif-layer" title="${escapeHtml(t("notif.title"))}">
         <span class="side-quick-glow" aria-hidden="true"></span>
@@ -5155,16 +5296,21 @@ function renderScreen(): void {
         <div class="settings-sheet-handle" aria-hidden="true"></div>
         ${modalCloseX(t("mailbox.close"), "btn-mailbox-close")}
         <h2 class="settings-title" id="mailbox-title">${escapeHtml(t("mailbox.title"))}</h2>
-        <p class="settings-account">${escapeHtml(t("mailbox.empty"))}</p>
-        <div class="quick-sheet-list">${mailItems
-        .map(
-          (m) => `<article class="quick-sheet-item">
+        ${
+          mailItems.length === 0
+            ? `<p class="settings-account">${escapeHtml(t("mailbox.empty"))}</p>`
+            : `<div class="quick-sheet-list">${mailItems
+                .map(
+                  (m) => `<article class="quick-sheet-item">
           <span class="quick-sheet-tag">${escapeHtml(m.tag)}</span>
           <strong class="quick-sheet-title">${escapeHtml(m.title)}</strong>
           <p class="quick-sheet-body">${escapeHtml(m.body)}</p>
+          <p class="quick-sheet-reward">${escapeHtml(m.reward)}</p>
+          <button type="button" class="mission-item-go" data-mail-claim="${escapeHtml(m.id)}">${escapeHtml(t("mail.claim"))}</button>
         </article>`,
-        )
-        .join("")}</div>
+                )
+                .join("")}</div>`
+        }
       </div>
     </div>
     <div class="settings-layer" id="notif-layer" ${notifOpen ? "" : "hidden"} aria-hidden="${notifOpen ? "false" : "true"}">
@@ -5196,7 +5342,11 @@ function renderScreen(): void {
         </span>
       </button>
       <button type="button" data-nav="enhance" class="${tabMonster ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--monster" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/monster.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.monster"))}</span></span></button>
-      <button type="button" id="btn-mission" class="${missionOpen ? "active" : ""}" aria-expanded="${missionOpen ? "true" : "false"}" aria-controls="mission-layer" title="${escapeHtml(t("nav.mission"))}"><span class="seal-badge"><span class="tab-ico tab-ico--mission" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/mission.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.mission"))}</span></span></button>
+      <button type="button" id="btn-mission" class="${missionOpen ? "active" : ""}" aria-expanded="${missionOpen ? "true" : "false"}" aria-controls="mission-layer" title="${escapeHtml(t("nav.mission"))}"><span class="seal-badge"><span class="tab-ico tab-ico--mission" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/mission.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.mission"))}</span>${
+        missionClaimable > 0
+          ? `<span class="tab-badge" aria-label="${escapeHtml(t("mission.badge", { n: missionClaimable }))}">${missionClaimable}</span>`
+          : ""
+      }</span></button>
       <button type="button" id="btn-community" class="${tabCommunity ? "active" : ""}" aria-expanded="${communityOpen ? "true" : "false"}" aria-controls="community-layer" title="${escapeHtml(t("nav.community"))}"><span class="seal-badge"><span class="tab-ico tab-ico--community" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/community.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.community"))}</span></span></button>
       <button type="button" id="btn-shop" class="${tabShop ? "active" : ""}" aria-expanded="${shopOpen ? "true" : "false"}" aria-controls="shop-layer" title="${escapeHtml(t("nav.shop"))}"><span class="seal-badge"><span class="tab-ico tab-ico--shop" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/shop.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.shop"))}</span></span></button>
     </nav>
@@ -5472,7 +5622,7 @@ function renderDojo(): string {
     : `${t('ui.210ca7ad33')} ${untilMission}${t('ui.2fc05c02be')}`;
   const manaGain = 120 + save.island.summonerLevel * 8;
   return hubShell(
-    t('ui.81e2301960'),
+    t("ui.hubDojo"),
     `${t('ui.ca119dd0f6')} ${drills}${t('ui.5d8e2b5c4a')} Lv.${save.island.summonerLevel}`,
     `<div class="hub-panel">
       <div class="dojo-panel">
@@ -5483,7 +5633,7 @@ function renderDojo(): string {
             <strong>${drills}</strong>
           </div>
           <div class="dojo-stat">
-            <span class="dojo-stat-label">${t('ui.c7b8d42347')}</span>
+            <span class="dojo-stat-label">${t("ui.dojoNextLabel")}</span>
             <strong>${nextNote}</strong>
           </div>
         </div>
@@ -5505,11 +5655,11 @@ function renderPond(): string {
   const stored = Math.floor(pond?.storedMana ?? 0);
   const fillPct = cap > 0 ? Math.min(100, Math.round((stored / cap) * 100)) : 0;
   return hubShell(
-    t('ui.81e2301960'),
+    t("ui.hubPond"),
     `Lv.${lv} ${MIDDOT} ${rate}/hr ${MIDDOT} ${t('ui.1f1712acff')} ${stored}/${cap}`,
     `<div class="hub-panel">
       <div class="pond-panel">
-        <p class="pond-panel-title">${t('ui.7c70400fef')}</p>
+        <p class="pond-panel-title">${t("ui.hubPond")}</p>
         <div class="pond-bar" role="progressbar" aria-valuenow="${stored}" aria-valuemin="0" aria-valuemax="${cap}">
           <div class="pond-bar-fill" style="width:${fillPct}%"></div>
         </div>
@@ -5549,11 +5699,11 @@ function renderMine(): string {
   const stored = Math.floor(mine?.storedCrystal ?? 0);
   const fillPct = cap > 0 ? Math.min(100, Math.round((stored / cap) * 100)) : 0;
   return hubShell(
-    t('ui.81e2301960'),
+    t("ui.hubMine"),
     `Lv.${lv} ${MIDDOT} ${rate}/hr ${MIDDOT} ${t('ui.1f1712acff')} ${stored}/${cap}`,
     `<div class="hub-panel">
       <div class="pond-panel mine-panel">
-        <p class="pond-panel-title">${t('ui.7c70400fef')}</p>
+        <p class="pond-panel-title">${t("ui.hubMine")}</p>
         <div class="pond-bar mine-bar" role="progressbar" aria-valuenow="${stored}" aria-valuemin="0" aria-valuemax="${cap}">
           <div class="pond-bar-fill mine-bar-fill" style="width:${fillPct}%"></div>
         </div>
@@ -5594,7 +5744,7 @@ function renderWish(): string {
       </div>`
     : "";
   return hubShell(
-    t('ui.81e2301960'),
+    t("ui.hubWish"),
     used ? `${t('ui.ecc82466ef')} ${MIDDOT} ${last}` : t('ui.b65d90440e'),
     `<div class="hub-panel">
       ${reveal}
@@ -5637,7 +5787,7 @@ function renderParty(): string {
     })
     .join("");
   return hubShell(
-    t('ui.759f762a02'),
+    t("ui.108f04ca6e"),
     `${t('ui.d5e7024eb8')} ${selected.size}/4 ${MIDDOT} ${t('ui.269ecd9013')}`,
     `<div class="hub-panel">
       <div class="party-lineup" aria-label="${t('ui.a5d54ca91e')}">
@@ -6082,10 +6232,10 @@ function renderSummon(): string {
             </span>
             <span class="summon-cast-actions">
               <button type="button" class="summon-cast-cta" data-summon-kind="${kind}" data-summon-count="1" ${ready1 ? "" : "disabled"} aria-label="${SCROLL_KIND_LABEL[kind]} ${t('ui.6b0ff13ffd')}">
-                ${ready1 ? t('ui.ac9d7edf0f') : t('ui.759f762a02')}
+                ${ready1 ? t("ui.6b0ff13ffd") : t("ui.summonNeedScroll")}
               </button>
               <button type="button" class="summon-cast-cta summon-cast-cta--multi" data-summon-kind="${kind}" data-summon-count="${SUMMON_MULTI_COUNT}" ${ready10 ? "" : "disabled"} aria-label="${SCROLL_KIND_LABEL[kind]} ${SUMMON_MULTI_COUNT}${t('ui.be988ce3e3')}">
-                ${ready10 ? `${SUMMON_MULTI_COUNT}?` : t('ui.759f762a02')}
+                ${ready10 ? `${SUMMON_MULTI_COUNT}${TIMES}` : t("ui.summonNeedScroll")}
               </button>
             </span>
           </div>`;
@@ -6309,11 +6459,13 @@ function skillFeedConfirmBtnHtml(targetUid: string | null): string {
   const selected =
     !!skillFeedFodderUid &&
     skillFeedFodderList(targetUid).some((m) => m.uid === skillFeedFodderUid);
-  const canPay = Math.floor(save.island.mana) >= cost;
+  const haveMats = save.skillMats ?? 0;
+  const canPay =
+    Math.floor(save.island.mana) >= cost && haveMats >= SKILL_UP_MAT_COST;
   const disabled = !selected || !canPay || cost <= 0;
   return `<button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--cost skill-feed-confirm" id="btn-skill-feed-confirm" ${disabled ? "disabled" : ""}>
     <span class="mon-enh-label">${escapeHtml(t("ui.3e1a337d93"))}</span>
-    <span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(cost)}</strong></span>
+    <span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(cost)}</strong><span class="muted"> · ${escapeHtml(t("res.skillMats"))} ${haveMats}/${SKILL_UP_MAT_COST}</span></span>
   </button>`;
 }
 
@@ -6470,6 +6622,7 @@ function renderSymbolDetailSheet(index: number, role: SymDetailRole): string {
     ? `<span class="sym-detail-set-ico"><img src="${symbolSetArtSrc(set.id)}" width="20" height="20" alt="" draggable="false" onerror="this.onerror=null;this.src='${symbolSetArtFallbackSrc(set.id)}'" /></span><span class="sym-detail-set-text">${escapeHtml(t("ui.setPiecesN", { n: set.pieces }))} ${escapeHtml(set.effectKo)}</span>`
     : "";
   const imprintable = canImprintSymbol(sym);
+  const grindable = canGrindSymbol(sym) && canAffordGrind();
   const maxed = sym.enhance >= MAX_SYMBOL_ENHANCE;
   const title = `${set?.nameKo ?? sym.setId} (${t("ui.slotN", { n: sym.slot })}) - ${rarity.label}`;
   const badge =
@@ -6488,6 +6641,14 @@ function renderSymbolDetailSheet(index: number, role: SymDetailRole): string {
           : `<button type="button" class="sym-detail-act" data-sym-detail-equip data-sym-idx="${index}">${t("ui.818a75cd98")}</button>`;
   const closeX =
     role === "single" ? modalCloseX("close", "btn-sym-detail-close") : "";
+  const prefixHtml =
+    sym.prefixStat && sym.prefixValue
+      ? `<p class="sym-detail-prefix">${escapeHtml(
+          t("ui.symPrefixLabel", {
+            line: formatSymbolStatLine(sym.prefixStat, sym.prefixValue),
+          }),
+        )}</p>`
+      : "";
   return `<div class="sym-detail-sheet rarity--${rarity.id}" data-sym-sheet="${role}" role="${role === "single" ? "dialog" : "group"}"${role === "single" ? ' aria-modal="true" aria-labelledby="sym-detail-title"' : ""}>
       ${closeX}
       ${badge}
@@ -6504,12 +6665,14 @@ function renderSymbolDetailSheet(index: number, role: SymDetailRole): string {
             })}
             <div class="sym-detail-main-wrap">
               <p class="sym-detail-main">${escapeHtml(mainLine)}</p>
+              ${prefixHtml}
             </div>
           </div>
           <div class="sym-detail-subs" aria-label="substats">${subHtml}</div>
         </div>
         <div class="sym-detail-right">
           <p class="sym-detail-set">${setLine}</p>
+          <button type="button" class="sym-detail-act" data-sym-detail-grind data-sym-idx="${index}" ${grindable ? "" : "disabled"}>${t("ui.c14c1b1bc6")}</button>
           <button type="button" class="sym-detail-act" data-sym-detail-imprint data-sym-idx="${index}" ${imprintable ? "" : "disabled"}>${t("ui.8b41b055f7")}</button>
           <button type="button" class="sym-detail-act" data-sym-detail-enhance data-sym-idx="${index}" ${maxed ? "disabled" : ""}>${t("ui.3e1a337d93")}</button>
           ${thirdBtn}
@@ -7076,12 +7239,53 @@ function bindSymbolInventoryInteractions(): void {
         save = r.save;
         persist();
         const next = id ? save.symbols.find((x) => x.id === id) : undefined;
-        if (next && before && r.message.startsWith(t("ui.d48858f588"))) {
+        if (next && before && r.message.startsWith(t("ui.forgeOkImprint"))) {
           forgeReveal = {
             kind: "imprint",
             before,
             after: describeSymbol(next),
             cost: `${MINUS}${t("ui.5d0bf3b101")} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
+          };
+        }
+        rematchSymbolModalIndices(detailId, compareId);
+        if (symbolDetailIndex == null && id) {
+          const ni = findSymbolIndexById(id);
+          symbolDetailIndex = ni >= 0 ? ni : null;
+        }
+        flash(r.message);
+        render();
+      },
+      opts,
+    );
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-sym-detail-grind]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const idx = Number(btn.dataset.symIdx);
+        if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+        const detailId =
+          symbolDetailIndex != null
+            ? (save.symbols[symbolDetailIndex]?.id ?? null)
+            : null;
+        const compareId =
+          symbolCompareIndex != null
+            ? (save.symbols[symbolCompareIndex]?.id ?? null)
+            : null;
+        const prev = save.symbols[idx];
+        const before = prev ? describeSymbol(prev) : "";
+        const id = prev?.id;
+        const r = runGrindSymbol(save, String(idx));
+        save = r.save;
+        persist();
+        const next = id ? save.symbols.find((x) => x.id === id) : undefined;
+        if (next && before && isGrindSuccessMessage(r.message)) {
+          forgeReveal = {
+            kind: "grind",
+            before,
+            after: describeSymbol(next),
+            cost: grindCostLabel(),
           };
         }
         rematchSymbolModalIndices(detailId, compareId);
@@ -7354,36 +7558,6 @@ function renderSymbolInventoryGrid(): string {
       <span class="mon-sym-inv-count">${visible.length}/${cap}</span>
     </div>
   </div>`;
-}
-
-function drawSkillTreeLines(): void {
-  const viz = app.querySelector<HTMLElement>("#skill-tree-viz");
-  const svg = app.querySelector<SVGSVGElement>("#skill-tree-lines");
-  if (!viz || !svg) return;
-  const vr = viz.getBoundingClientRect();
-  if (vr.width < 8 || vr.height < 8) return;
-  svg.setAttribute("viewBox", `0 0 ${vr.width} ${vr.height}`);
-  svg.setAttribute("width", String(vr.width));
-  svg.setAttribute("height", String(vr.height));
-  svg.querySelectorAll<SVGPathElement>("path.skill-tree-edge").forEach((path) => {
-    const fromId = path.dataset.from;
-    const toId = path.dataset.to;
-    if (!fromId || !toId) return;
-    const a = viz.querySelector<HTMLElement>(`[data-tree-id="${fromId}"] .skill-tree-node-seal`);
-    const b = viz.querySelector<HTMLElement>(`[data-tree-id="${toId}"] .skill-tree-node-seal`);
-    if (!a || !b) return;
-    const ar = a.getBoundingClientRect();
-    const br = b.getBoundingClientRect();
-    const x1 = ar.left + ar.width / 2 - vr.left;
-    const y1 = ar.top + ar.height / 2 - vr.top;
-    const x2 = br.left + br.width / 2 - vr.left;
-    const y2 = br.top + br.height / 2 - vr.top;
-    const midY = (y1 + y2) / 2;
-    path.setAttribute(
-      "d",
-      `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${x1.toFixed(1)} ${midY.toFixed(1)}, ${x2.toFixed(1)} ${midY.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`,
-    );
-  });
 }
 
 function sortRosterForSlots(
@@ -8050,7 +8224,12 @@ function renderEnhance(): string {
         const levels = (m.skillLevels ?? [1, 1, 1]) as [number, number, number];
         const def = selectedDef;
         const elLabel = monsterElementLabel(selectedEl);
-        const starsHtml = monStarsHtml(Math.max(1, def?.naturalStars ?? 1));
+        const starsHtml = monStarsHtml(
+          displayedMonsterStars(
+            def?.naturalStars ?? 1,
+            m.awaken ?? 0,
+          ),
+        );
 
         const roleLabel = monsterRoleLabel(def?.role, def?.baseStats);
         if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
@@ -8072,15 +8251,33 @@ function renderEnhance(): string {
 
         const skillsMaxed = levels.every((lv) => lv >= MAX_SKILL_LEVEL);
         const skillDescLines = monsterSkillDescLines(focusSk);
-        const skillEnhanceBtn = enhanceSkillFeedAllowed
-          ? `<button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--rail" data-skill-feed-open="${m.uid}" ${skillsMaxed ? "disabled" : ""}>
-            <span class="mon-enh-label">${skillsMaxed ? "MAX" : escapeHtml(t("ui.3e1a337d93"))}</span>
+        const skillUpNeedLv = skillUpMinMonsterLevel(focusLv);
+        const skillUpLocked = m.level < skillUpNeedLv;
+        const skillUpMana = skillUpManaCost(monSkillPick, focusLv);
+        const skillMatHave = save.skillMats ?? 0;
+        const skillUpLabel = skillsMaxed
+          ? "MAX"
+          : skillUpLocked
+            ? escapeHtml(t("ui.monBookSkillUpNeedLv", { n: skillUpNeedLv }))
+            : escapeHtml(t("ui.3e1a337d93"));
+        const skillEnhanceBtn = `<button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--rail mon-book-enh--cost" data-skill-up="${m.uid}" data-skill-idx="${monSkillPick}" ${skillsMaxed || skillUpLocked ? "disabled" : ""}>
+            <span class="mon-enh-label">${skillUpLabel}</span>
+            ${
+              skillsMaxed || skillUpLocked
+                ? ""
+                : `<span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(skillUpMana)}</strong><span class="muted"> · ${escapeHtml(t("res.skillMats"))} ${skillMatHave}/${SKILL_UP_MAT_COST}</span></span>`
+            }
+          </button>`;
+        const skillFeedBtn = enhanceSkillFeedAllowed
+          ? `<button type="button" class="auth-btn-ghost mon-book-enh mon-book-enh--rail" data-skill-feed-open="${m.uid}" ${skillsMaxed ? "disabled" : ""}>
+            <span class="mon-enh-label">${escapeHtml(t("ui.monBookSkillFeedBtn"))}</span>
           </button>`
           : "";
         const skillsPanel = `<div class="mon-pane mon-pane--skills">
         <div class="mon-skill-rail">
           <div class="mon-skill-icos" role="tablist" aria-label="skills">${skillIcons}</div>
           ${skillEnhanceBtn}
+          ${skillFeedBtn}
         </div>
         <div class="mon-skill-main">
           <div class="mon-skill-detail mon-skill-detail--tall">
@@ -8088,6 +8285,22 @@ function renderEnhance(): string {
               <strong class="mon-skill-detail-name">${focusSk?.nameKo ?? `S${monSkillPick + 1}`}</strong>
               <span class="mon-skill-detail-lv">Lv.${focusLv}${focusLv >= MAX_SKILL_LEVEL ? " MAX" : ""}</span>
             </div>
+            <p class="muted">${escapeHtml(
+              t("ui.monBookSkillMats", {
+                have: skillMatHave,
+                need: SKILL_UP_MAT_COST,
+              }),
+            )}</p>
+            ${
+              skillsMaxed || skillUpLocked
+                ? ""
+                : `<p class="muted">${escapeHtml(
+                    t("ui.monBookSkillUpCost", {
+                      mana: skillUpMana,
+                      mat: SKILL_UP_MAT_COST,
+                    }),
+                  )}</p>`
+            }
             <ul class="mon-skill-detail-desc">
               ${skillDescLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}
             </ul>
@@ -8096,8 +8309,76 @@ function renderEnhance(): string {
         </div>
       </div>`;
 
+        const monAwaken = m.awaken ?? 0;
+        const awakenMax = monAwaken >= MAX_MONSTER_AWAKEN;
+        const awakenNeedLv = monsterAwakenMinLevel(def?.naturalStars ?? 1);
+        const awakenLocked = m.level < awakenNeedLv;
+        const awakenMana = monsterAwakenManaCost(monAwaken);
+        const awakenCrystal = monsterAwakenCrystalCost(monAwaken);
+        const awakenMatNeed = monsterAwakenMatCost(monAwaken);
+        const awakenMatHave = (save.awakenMats ?? {})[selectedEl] ?? 0;
+        const awakenLabel = awakenMax
+          ? t("ui.monBookAwakenMax")
+          : awakenLocked
+            ? t("ui.monBookAwakenNeedLv", { n: awakenNeedLv })
+            : t("ui.monBookAwakenBtn");
+        const evo = selectedEvo;
+        const evoMax = evo >= MAX_EVOLVE;
+        const evoNeedLv = evolveMinLevel(evo);
+        const evoLocked = m.level < evoNeedLv;
+        const evoMana = evolveManaCost(evo);
+        const evoCrystal = evolveCrystalCost(evo);
+        const evoLabel = evoMax
+          ? t("ui.monBookEvolveMax")
+          : evoLocked
+            ? t("ui.monBookEvolveNeedLv", { n: evoNeedLv })
+            : t("ui.monBookEvolveBtn", { n: evo + 1 });
+        const evoCrystalNote =
+          evoCrystal > 0
+            ? ` · ${t("ui.5d0bf3b101")} ${evoCrystal}`
+            : "";
         const awakenPanel = `<div class="mon-pane mon-pane--awaken">
-        <p class="mon-pane-copy muted">${t("ui.awakenComingSoon")}</p>
+        <div class="sum-awaken-card">
+          <strong>+${monAwaken} / ${MAX_MONSTER_AWAKEN}</strong>
+          <p class="muted">${escapeHtml(t("ui.monBookAwakenBonus"))}</p>
+          <p class="muted">${escapeHtml(
+            t("ui.monBookAwakenMats", {
+              el: elLabel,
+              have: awakenMatHave,
+              need: awakenMatNeed,
+            }),
+          )}</p>
+          ${
+            awakenMax
+              ? ""
+              : `<p class="muted">${escapeHtml(
+                  t("ui.monBookAwakenCost", {
+                    mana: awakenMana,
+                    crystal: awakenCrystal,
+                    mat: awakenMatNeed,
+                  }),
+                )}</p>`
+          }
+          <button type="button" class="auth-btn-primary" data-mon-awaken="${m.uid}" ${
+            awakenMax || awakenLocked ? "disabled" : ""
+          }>${escapeHtml(awakenLabel)}</button>
+        </div>
+        <div class="sum-awaken-card" style="margin-top:0.75rem">
+          <strong>E${evo} / ${MAX_EVOLVE}</strong>
+          ${
+            evoMax
+              ? ""
+              : `<p class="muted">${escapeHtml(
+                  t("ui.monBookEvolveCost", {
+                    mana: evoMana,
+                    crystal: evoCrystalNote,
+                  }),
+                )}</p>`
+          }
+          <button type="button" class="auth-btn-primary" data-evo="${m.uid}" ${
+            evoMax || evoLocked ? "disabled" : ""
+          }>${escapeHtml(evoLabel)}</button>
+        </div>
       </div>`;
 
         const symbolsPanel = `<div class="mon-pane mon-pane--symbols">
@@ -8199,7 +8480,7 @@ function renderEnhance(): string {
             .sort((a, b) => compareSymbolsByGradeDesc(a.sym, b.sym))
             .map(({ sym, i }) => {
               const imprintable = canImprintSymbol(sym);
-              const grindable = canGrindSymbol(sym);
+              const grindable = canGrindSymbol(sym) && canAffordGrind();
               const worn = symbolWearer(sym.id);
               const rarity = symbolQualityMeta(sym.quality);
               const setDef = SYMBOL_SETS.find((x) => x.id === sym.setId);
@@ -8335,15 +8616,37 @@ function renderEnhance(): string {
 }
 
 function renderShopBody(): string {
+  const shopSave = syncShopDay(save);
+  const day = shopSave.shopDayKey ?? todayKey();
+  const sold = new Set(shopSave.shopSoldIds ?? []);
+  const dailyOffers = getDailyShopOffers(day);
+  const dailyRows =
+    dailyOffers
+      .map((o) => {
+        const gone = sold.has(o.id);
+        const cost =
+          o.costCrystal > 0
+            ? `${MINUS}${t("ui.5d0bf3b101")} ${o.costCrystal}`
+            : `${MINUS}${t("ui.dc78e6a251")} ${o.costMana}`;
+        return `<button type="button" class="stage-card shop-offer${gone ? " is-maxed" : ""}" data-shop-offer="${o.id}" ${gone ? "disabled" : ""}>
+          <span class="stage-card-mark" aria-hidden="true">${gone ? Mark.checkIn : Mark.summon}</span>
+          <span class="stage-card-body">
+            <strong>${o.labelKo} x${o.qty}</strong>
+            <small>${gone ? t("ui.shop.soldOut") : cost}</small>
+          </span>
+        </button>`;
+      })
+      .join("") || `<p class="muted">${t("ui.shop.dailyOffers")}</p>`;
   const grindRows =
     save.symbols
       .map((s, i) => {
         if (!canGrindSymbol(s)) return "";
-        return `<button type="button" class="stage-card" data-grind="${i}">
+        const afford = canAffordGrind();
+        return `<button type="button" class="stage-card" data-grind="${i}" ${afford ? "" : "disabled"}>
           <span class="stage-card-mark" aria-hidden="true">${Mark.grind}</span>
           <span class="stage-card-body">
             <strong>${describeSymbol(s)}</strong>
-            <small>${t('ui.956df04e9a')} ${MIDDOT} ${MINUS}${t('ui.dc78e6a251')} ${SYMBOL_GRIND_MANA_COST}</small>
+            <small>${t("ui.956df04e9a")} ${MIDDOT} ${grindCostLabel()} ${MIDDOT} ${t("ui.grindstoneHeld", { n: grindstoneCount(save) })}</small>
           </span>
         </button>`;
       })
@@ -8361,23 +8664,25 @@ function renderShopBody(): string {
         </button>`;
       })
       .join("") ||
-    `<p class="muted">${t('ui.b9c0de06ae')} (${t('ui.81d226110c')} 4${RANGE}6 ${t('ui.a05d718889')})</p>`;
+    `<p class="muted">${t('ui.b9c0de06ae')} (${t('ui.imprintSlotsHint')} ${t('ui.a05d718889')})</p>`;
   return `<div class="hub-panel shop-body">
     ${renderForgeReveal()}
+    <p class="section-label">${t("ui.shop.dailyOffers")}</p>
+    <div class="stage-list">${dailyRows}</div>
       <p class="section-label">${t('ui.079b50d844')}</p>
     <div class="stage-list">
       <button type="button" class="stage-card shop-offer shop-scroll" id="btn-buy-scroll-1">
         <span class="stage-card-mark" aria-hidden="true">1</span>
         <span class="stage-card-body">
           <strong>${t('ui.58c8d4982d')}</strong>
-          <small>?${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST} ${MIDDOT} ${t('ui.e41479e637')} ${save.scrolls}</small>
+          <small>${MINUS}${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST} ${MIDDOT} ${t('ui.e41479e637')} ${save.scrolls}</small>
         </span>
       </button>
       <button type="button" class="stage-card shop-offer shop-scroll" id="btn-buy-scroll-5">
         <span class="stage-card-mark" aria-hidden="true">5</span>
         <span class="stage-card-body">
           <strong>${t('ui.544ebe1d37')}</strong>
-          <small>?${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST * 5}</small>
+          <small>${MINUS}${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST * 5}</small>
         </span>
       </button>
     </div>
@@ -8387,7 +8692,7 @@ function renderShopBody(): string {
         <span class="stage-card-mark" aria-hidden="true">${Mark.energy}</span>
         <span class="stage-card-body">
           <strong>${t('ui.7154da110a')} +${ENERGY_BUY_AMOUNT}</strong>
-          <small>?${t('ui.5d0bf3b101')} ${ENERGY_CRYSTAL_COST}</small>
+          <small>${MINUS}${t('ui.5d0bf3b101')} ${ENERGY_CRYSTAL_COST}</small>
         </span>
       </button>
       <button type="button" class="stage-card shop-offer" id="btn-craft-essence">
@@ -8405,16 +8710,16 @@ function renderShopBody(): string {
         </span>
       </button>
     </div>
-    <p class="section-label">${t('ui.d3a3c215c8')} (${t('ui.49758b94ae')})</p>
+    <p class="section-label">${t('ui.d3a3c215c8')} (${t('ui.49758b94ae')}) · ${escapeHtml(t("ui.shop.grindstoneStock", { n: grindstoneCount(save) }))}</p>
     <div class="stage-list">${grindRows}</div>
-    <p class="section-label">${t('ui.515ca5f235')} (${t('ui.81d226110c')} 4${RANGE}6)</p>
+    <p class="section-label">${t('ui.515ca5f235')} (${t('ui.imprintSlotsHint')})</p>
     <div class="stage-list">${imprintRows}</div>
   </div>`;
 }
 
 function renderShop(): string {
   return hubShell(
-    t('ui.759f762a02'),
+    t("nav.shop"),
     `${t('ui.fa73f3a42f')} ${save.scrolls} ${MIDDOT} ${t('ui.dc78e6a251')} ${Math.floor(save.island.mana)} ${MIDDOT} ${t('ui.5d0bf3b101')} ${save.island.crystal}`,
     renderShopBody(),
   );
@@ -8440,17 +8745,20 @@ function renderGlory(): string {
     0,
   );
   const maxTotal = GLORY_BUILDINGS.reduce((n, g) => n + g.maxLevel, 0);
+  const buff = gloryBuffFromLevels(save.gloryLevels ?? {});
+  const buffLine = `${t("ui.glory.buffSummary")}: ATK +${Math.round(buff.atkPct * 100)}% · DEF +${Math.round(buff.defPct * 100)}% · HP +${Math.round(buff.hpPct * 100)}% · SPD +${buff.spdFlat} · ${t("ui.dc78e6a251")} +${Math.round(buff.manaProdPct * 100)}%`;
   return hubShell(
-    t('ui.81e2301960'),
+    t("ui.hubGlory"),
     `${t('ui.14b961e9d3')} ${glory}`,
     `<div class="hub-panel">
     <div class="guild-panel glory-panel">
-        <p class="guild-panel-title">${t('ui.6667aae26a')}</p>
+        <p class="guild-panel-title">${t("ui.hubGlory")}</p>
       <div class="guild-stats">
         <div class="guild-stat"><span>${t('ui.e41479e637')}</span><strong>${glory}</strong></div>
         <div class="guild-stat"><span>${t('ui.ad11613bb4')}</span><strong>${levels}/${maxTotal}</strong></div>
         <div class="guild-stat"><span>${t('ui.29efb69b57')}</span><strong>${GLORY_BUILDINGS.length}</strong></div>
       </div>
+      <p class="muted stages-note">${buffLine}</p>
     </div>
     <div class="stage-list">
       ${GLORY_BUILDINGS.map((g) => {
@@ -8502,7 +8810,12 @@ function renderCaptureShop(): string {
 
 function renderGuildBody(): string {
   const name = save.guildName;
-  const board = guildLeaderboard(save)
+  const guildSave = syncGuildWeek(syncRaidWeek(save));
+  const weekContrib = guildSave.guildWeekContrib ?? 0;
+  const streak = guildSave.guildCheckInStreak ?? 0;
+  const raidHp = guildSave.raidBossHp ?? RAID_BOSS_MAX_HP;
+  const raidLeft = raidAttemptsRemaining(guildSave);
+  const board = guildLeaderboard(guildSave)
     .map(
       (r, i) =>
         `<div class="guild-rank-row${r.self ? " self-rank" : ""}">
@@ -8512,13 +8825,25 @@ function renderGuildBody(): string {
         </div>`,
     )
     .join("");
+  const npcRows = GUILD_NPC_MEMBERS.map(
+    (m) =>
+      `<div class="guild-rank-row">
+        <span class="guild-rank-n">${Mark.me}</span>
+        <span class="guild-rank-name">${m.name}</span>
+        <strong class="guild-rank-score">${m.roleKo}</strong>
+      </div>`,
+  ).join("");
   return `<div class="hub-panel community-body">
     <div class="guild-panel">
       <p class="guild-panel-title">${name ? name : t('ui.2a1d74bcdd')}</p>
       <div class="guild-stats">
-        <div class="guild-stat"><span>${t('ui.fe2c5c3e7d')}</span><strong>${save.guildContribution ?? 0}</strong></div>
-        <div class="guild-stat"><span>${t('ui.332e9eedf2')}</span><strong>+${save.guildRaidBest ?? 0}</strong></div>
-        <div class="guild-stat"><span>${t('ui.937c424f40')}</span><strong>${save.guildCheckInDay ?? EM_DASH}</strong></div>
+        <div class="guild-stat"><span>${t('ui.fe2c5c3e7d')}</span><strong>${guildSave.guildContribution ?? 0}</strong></div>
+        <div class="guild-stat"><span>${t('ui.332e9eedf2')}</span><strong>+${guildSave.guildRaidBest ?? 0}</strong></div>
+        <div class="guild-stat"><span>${t('ui.937c424f40')}</span><strong>${guildSave.guildCheckInDay ?? EM_DASH}</strong></div>
+        <div class="guild-stat"><span>${t("ui.guild.weeklyGoal")}</span><strong>${weekContrib}/${GUILD_WEEK_CONTRIB_GOAL}</strong></div>
+        <div class="guild-stat"><span>${t("ui.guild.streak")}</span><strong>${streak}</strong></div>
+        <div class="guild-stat"><span>${t("ui.guild.raidHp")}</span><strong>${raidHp}/${RAID_BOSS_MAX_HP}</strong></div>
+        <div class="guild-stat"><span>${t("ui.guild.raidAttempts")}</span><strong>${raidLeft}/${RAID_ATTEMPTS_DAILY}</strong></div>
       </div>
     </div>
     ${
@@ -8546,6 +8871,8 @@ function renderGuildBody(): string {
              <button type="button" class="auth-btn-primary full" id="btn-guild-join">${t('ui.8b92576f2b')}</button>
            </div>`
     }
+    <p class="section-label">${t("ui.guild.members")}</p>
+    <div class="guild-board">${npcRows}</div>
     <p class="section-label">${t('ui.5515ca646d')}</p>
     <div class="guild-board">${board}</div>
   </div>`;
@@ -8554,7 +8881,7 @@ function renderGuildBody(): string {
 function renderGuild(): string {
   const name = save.guildName;
   return hubShell(
-    t('ui.81e2301960'),
+    t("ui.hubGuild"),
     name ?? t('ui.928873f927'),
     renderGuildBody(),
   );
@@ -8583,15 +8910,54 @@ function renderFusion(): string {
       }
     }
   }
+  const recipeRows = FUSION_RECIPES.map((recipe) => {
+    const needCounts = new Map<string, number>();
+    for (const id of recipe.fodderMonsterIds) {
+      needCounts.set(id, (needCounts.get(id) ?? 0) + 1);
+    }
+    const available = new Map<string, string[]>();
+    for (const m of save.roster) {
+      const list = available.get(m.monsterId) ?? [];
+      list.push(m.uid);
+      available.set(m.monsterId, list);
+    }
+    const fodderUids: string[] = [];
+    let ok = true;
+    for (const [id, need] of needCounts) {
+      const pool = [...(available.get(id) ?? [])];
+      if (pool.length < need) {
+        ok = false;
+        break;
+      }
+      for (let n = 0; n < need; n++) fodderUids.push(pool.shift()!);
+    }
+    const keeper =
+      save.roster.find((m) => !fodderUids.includes(m.uid)) ?? save.roster[0];
+    const result = getMonster(recipe.resultMonsterId);
+    const needLabel = recipe.fodderMonsterIds
+      .map((id) => getMonster(id)?.nameKo ?? id)
+      .join(" + ");
+    const cost = recipe.manaCost ?? FUSION_MANA_COST;
+    const disabled = !ok || !keeper;
+    return `<button type="button" class="stage-card${disabled ? " is-maxed" : ""}" data-recipe-id="${recipe.id}" data-recipe-keeper="${keeper?.uid ?? ""}" data-recipe-fodder="${fodderUids.join(",")}" ${disabled ? "disabled" : ""}>
+      <span class="stage-card-mark" aria-hidden="true">${Mark.fusion}</span>
+      <span class="stage-card-body">
+        <strong>${recipe.nameKo} → ${result?.nameKo ?? recipe.resultMonsterId}</strong>
+        <small>${disabled ? t("ui.fusion.recipeNeed") : needLabel} ${MIDDOT} ${MINUS}${t("ui.dc78e6a251")} ${cost}</small>
+      </span>
+    </button>`;
+  }).join("");
   return hubShell(
-    t('ui.81e2301960'),
+    t("ui.hubFusion"),
     `${t('ui.df9d336285')} ${MIDDOT} ${t('ui.d02987ca08')} +1 ${MIDDOT} ${MINUS}${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
     `<div class="hub-panel">
     ${renderFusionReveal()}
     <div class="guild-panel fusion-panel">
-        <p class="guild-panel-title">${t('ui.6667aae26a')}</p>
+        <p class="guild-panel-title">${t("ui.hubFusion")}</p>
       <p class="muted dojo-hint">${t('ui.7882865401')}.</p>
     </div>
+    <p class="section-label">${t("ui.fusion.recipes")}</p>
+    <div class="stage-list">${recipeRows || `<p class="muted">${t("ui.fusion.recipeNeed")}</p>`}</div>
     <div class="stage-list">
       ${pairs.length
         ? pairs
@@ -8721,17 +9087,18 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
       const battleAria = !diffOpen
         ? t("ui.4292516afd")
         : `${marker} ${s.nameKo} ${MIDDOT} ${t("ui.stageBattle")} ${MIDDOT} ${t("ui.7dcdb553c8")} ${costLabel}`;
+      const status = stageUnlockLabel(save, s);
       const rowTitle =
         vaultLeft !== null
           ? `${s.nameKo} · ${t("ui.9cbaf58b88")} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}`
-          : s.nameKo;
+          : `${s.nameKo} · ${status}`;
       return `<div class="stage-sortie${done ? " is-cleared" : ""}${locked ? " is-locked" : ""}${!canFight ? " is-disabled" : ""}" title="${escapeHtml(rowTitle)}">
         <span class="stage-sortie-mark${done ? " is-done" : ""}" aria-hidden="true">
           ${done ? `<span class="stage-sortie-check">${CHECK}</span>` : ""}
           <strong>${escapeHtml(marker)}</strong>
         </span>
         ${stageAppearingMons(s)}
-        <button type="button" class="stage-sortie-battle${short ? " is-short" : ""}" data-stage="${s.id}" aria-label="${escapeHtml(battleAria)}" title="${!diffOpen ? t("ui.4292516afd") : ""}" ${canFight ? "" : "disabled"}>
+        <button type="button" class="stage-sortie-battle${short ? " is-short" : ""}" data-stage="${s.id}" aria-label="${escapeHtml(battleAria)}" title="${!diffOpen ? t("ui.4292516afd") : escapeHtml(status)}" ${canFight ? "" : "disabled"}>
           <span class="stage-sortie-cost" aria-hidden="true"><strong>${costLabel}</strong></span>
           <span class="stage-sortie-battle-label">${t("ui.stageBattle")}</span>
         </button>
@@ -8750,6 +9117,7 @@ type StagesRegion = {
   equipWeekly?: boolean;
   warena?: boolean;
   guild?: boolean;
+  arena?: boolean;
 };
 
 function isMainQuestRegion(id: StagesRegionId): boolean {
@@ -8775,10 +9143,16 @@ function stagesRegions(): StagesRegion[] {
       equipWeekly?: boolean;
       warena?: boolean;
       guild?: boolean;
+      arena?: boolean;
     }
   > = {
     depth: { name: t('ui.cd2bb578b4'), blurb: t('ui.7316fbbfa6'), stages: DEPTH_STAGES },
-    arena: { name: t('ui.262553905b'), blurb: t('ui.be1af5568b'), stages: ARENA_STAGES },
+    arena: {
+      name: t('ui.262553905b'),
+      blurb: t('ui.be1af5568b'),
+      stages: ARENA_STAGES,
+      arena: true,
+    },
     cadence: {
       name: t('ui.e0536c253c'),
       blurb: t('ui.4d59148e17'),
@@ -8816,6 +9190,7 @@ function stagesRegions(): StagesRegion[] {
       equipWeekly: meta.equipWeekly,
       warena: meta.warena,
       guild: meta.guild,
+      arena: meta.arena,
     };
   });
   return [...mqRegions, ...sideRegions];
@@ -9090,7 +9465,35 @@ function renderStagesRegionSheet(region: StagesRegion): string {
     extras = `<p class="stages-note">${t('ui.e35b325054')} ${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT} ${MIDDOT} ${t('ui.6a432402bd')}</p>`;
   }
   if (region.guild) {
-    extras = `<p class="stages-note">${t('ui.fe2c5c3e7d')} ${save.guildContribution ?? 0} ${MIDDOT} ${t('ui.3ea974d72f')} +${save.guildRaidBest ?? 0}</p>`;
+    const raidSave = syncRaidWeek(save);
+    extras = `<p class="stages-note">${t('ui.fe2c5c3e7d')} ${save.guildContribution ?? 0} ${MIDDOT} ${t('ui.3ea974d72f')} +${save.guildRaidBest ?? 0} ${MIDDOT} ${t("ui.guild.raidHp")} ${raidSave.raidBossHp ?? RAID_BOSS_MAX_HP}/${RAID_BOSS_MAX_HP} ${MIDDOT} ${t("ui.guild.raidAttempts")} ${raidAttemptsRemaining(raidSave)}/${RAID_ATTEMPTS_DAILY}</p>`;
+  }
+  if (region.arena) {
+    const attacksLeft = arenaAttacksRemaining(save);
+    const def = save.arenaDefense;
+    const defLabel = def
+      ? `${def.party.length}${t("ui.arena.defenseSet")}`
+      : t("ui.arena.defenseEmpty");
+    extras = `<div class="season-panel">
+        <p class="season-panel-title">${t("ui.arena.attacksLeft")} ${attacksLeft}/${ARENA_ATTACKS_DAILY}</p>
+        <p class="muted stages-note">${t("ui.arena.setDefense")}: ${defLabel}</p>
+        <button type="button" class="auth-btn-primary full" id="btn-arena-defense">${t("ui.arena.setDefense")}</button>
+      </div>`;
+  }
+  if (region.id === "cadence") {
+    const openNames = WEEKDAY_STAGES.filter((s) =>
+      isWeekdayStageOpenToday(s.id),
+    )
+      .map((s) => s.nameKo)
+      .join(` ${MIDDOT} `);
+    const openLine = openNames
+      ? `${t("ui.weekdayOpenToday")}: ${openNames}`
+      : t("ui.weekdayClosedToday");
+    extras = `<p class="stages-note">${escapeHtml(openLine)}</p><p class="muted stages-note">${escapeHtml(t("ui.weekdaySchedule"))}</p>${
+      (save.trialTokens ?? 0) > 0
+        ? `<p class="muted stages-note">${t("ui.trial.tokens")}: ${save.trialTokens}${save.trialTitleUnlocked ? ` ${MIDDOT} ${t("ui.trial.titleOn")}` : ""}</p>`
+        : ""
+    }`;
   }
   if (region.warena) {
     const banPool = [
@@ -9272,11 +9675,35 @@ function renderBattle(manaPct: number): string {
       : "";
   const boardTag =
     battle.boards.length > 1 ? ` ${MIDDOT} ${battle.boardLabel}` : "";
+  const ampHot =
+    shapeFlashIds.length > 0 && Date.now() < shapeFlashUntil
+      ? " is-hot"
+      : "";
+  const shapeChip =
+    ampHot && shapeFlashIds.length
+      ? ` ${MIDDOT} <span class="battle-shape-chip">${shapeFlashIds
+          .map((id) => {
+            const key =
+              id === "corner"
+                ? "ui.shape.corner"
+                : id === "star"
+                  ? "ui.shape.star"
+                  : id === "star_control"
+                    ? "ui.shape.star_control"
+                    : id === "tiger"
+                      ? "ui.shape.tiger"
+                      : id === "kosumi"
+                        ? "ui.shape.kosumi"
+                        : "ui.shape.axis";
+            return escapeHtml(t(key));
+          })
+          .join(` ${MIDDOT} `)}</span>`
+      : "";
   const status = battle.finishReason
     ? battle.finishReason === "ally_win"
       ? t('ui.ba130f3539')
       : t('ui.8d9e9106fa')
-    : `${battle.phase} ${MIDDOT} amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)} ${MIDDOT} ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}${boardTag}`;
+    : `${battle.phase} ${MIDDOT} <span class="battle-amp-chip${ampHot}">amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)}</span>${shapeChip} ${MIDDOT} ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}${boardTag}`;
 
   const hasSkillPick =
     awaitSkill &&
@@ -9560,6 +9987,18 @@ function bindBattleInteractive(): void {
 function bindAuth(): void {
   bindAuthPwaInstall();
 
+  app.querySelectorAll<HTMLAnchorElement>("[data-auth-legal]").forEach((a) => {
+    a.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      const kind = a.dataset.authLegal;
+      if (kind === "privacy" || kind === "terms") {
+        authUi.pane = kind;
+        history.replaceState(null, "", `#${kind}`);
+        render();
+      }
+    });
+  });
+
   app.querySelector("#auth-open-login")?.addEventListener("click", () => {
     authUi.pane = "login";
     render();
@@ -9597,6 +10036,9 @@ function bindAuth(): void {
   });
   app.querySelector("#auth-back")?.addEventListener("click", () => {
     authUi.pane = "gate";
+    if (location.hash === "#privacy" || location.hash === "#terms") {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
     render();
   });
 
@@ -10293,6 +10735,32 @@ function bind(): void {
       render();
     });
   });
+  app.querySelectorAll<HTMLButtonElement>("[data-mission-claim]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.missionClaim;
+      if (!id) return;
+      const r = runClaimDailyMission(save, id);
+      save = r.save;
+      persist();
+      flash(r.message);
+      renderPreservingIsland();
+      missionOpen = true;
+      applyMissionOpen();
+    });
+  });
+  app.querySelectorAll<HTMLButtonElement>("[data-mail-claim]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.mailClaim;
+      if (!id) return;
+      const r = runClaimMail(save, id);
+      save = r.save;
+      persist();
+      flash(r.message);
+      renderPreservingIsland();
+      mailboxOpen = true;
+      applyMailboxOpen();
+    });
+  });
   app.querySelectorAll<HTMLButtonElement>("[data-mission-go]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const nav = btn.dataset.missionGo;
@@ -10863,6 +11331,21 @@ function bind(): void {
     });
   });
 
+  app.querySelectorAll<HTMLButtonElement>("[data-skill-up]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.skillUp;
+      const idxRaw = btn.dataset.skillIdx;
+      if (!uid || idxRaw == null) return;
+      const skillIndex = Number(idxRaw);
+      if (!Number.isFinite(skillIndex)) return;
+      const r = runSkillUp(save, uid, skillIndex);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
   app.querySelectorAll<HTMLButtonElement>("[data-skill-feed-open]").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (!enhanceSkillFeedAllowed) return;
@@ -10931,6 +11414,17 @@ function bind(): void {
     btn.addEventListener("click", () => {
       const uid = btn.dataset.evo!;
       const r = runEvolve(save, uid);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-mon-awaken]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.monAwaken!;
+      const r = runAwakenMonster(save, uid);
       save = r.save;
       persist();
       flash(r.message);
@@ -11027,20 +11521,6 @@ function bind(): void {
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-skill-node]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.skillNode ?? "";
-      const r = runUnlockSkillNode(save, id);
-      save = r.save;
-      if (id && r.message.includes(t('ui.d1496ce82d'))) {
-        enhanceFx = { kind: "node", id };
-      }
-      persist();
-      flash(r.message);
-      render();
-    });
-  });
-
   app.querySelectorAll<HTMLButtonElement>("[data-magic-enhance]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.magicEnhance ?? "";
@@ -11066,12 +11546,12 @@ function bind(): void {
       save = r.save;
       persist();
       const next = id ? save.symbols.find((s) => s.id === id) : undefined;
-      if (next && before && r.message.startsWith(t('ui.d48858f588'))) {
+      if (next && before && isGrindSuccessMessage(r.message)) {
         forgeReveal = {
           kind: "grind",
           before,
           after: describeSymbol(next),
-          cost: `${MINUS}${t('ui.dc78e6a251')} ${SYMBOL_GRIND_MANA_COST}`,
+          cost: grindCostLabel(),
         };
       }
       flash(r.message);
@@ -11110,7 +11590,7 @@ function bind(): void {
       save = r.save;
       persist();
       const next = id ? save.symbols.find((s) => s.id === id) : undefined;
-      if (next && before && r.message.startsWith(t('ui.d48858f588'))) {
+      if (next && before && r.message.startsWith(t('ui.forgeOkImprint'))) {
         forgeReveal = {
           kind: "imprint",
           before,
@@ -11152,6 +11632,22 @@ function bind(): void {
   });
   app.querySelector("#btn-buy-energy")?.addEventListener("click", () => {
     const r = runBuyEnergy(save, 1);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+  app.querySelectorAll<HTMLButtonElement>("[data-shop-offer]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const r = runBuyShopOffer(save, btn.dataset.shopOffer!);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+  app.querySelector("#btn-arena-defense")?.addEventListener("click", () => {
+    const r = runSetArenaDefense(save);
     save = r.save;
     persist();
     flash(r.message);
@@ -11212,6 +11708,21 @@ function bind(): void {
     });
   });
 
+  app.querySelectorAll<HTMLButtonElement>("[data-recipe-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const recipeId = btn.dataset.recipeId!;
+      const keeper = btn.dataset.recipeKeeper!;
+      const fodder = (btn.dataset.recipeFodder ?? "")
+        .split(",")
+        .filter(Boolean);
+      const r = runRecipeFusion(save, recipeId, keeper, fodder);
+      save = r.save;
+      persist();
+      flash(r.message);
+      render();
+    });
+  });
+
   app.querySelector("#btn-fusion-dismiss")?.addEventListener("click", () => {
     fusionReveal = null;
     render();
@@ -11224,7 +11735,11 @@ function bind(): void {
         | "ancient_sword"
         | "guardstone"
         | "crystal_altar"
-        | "sky_totem";
+        | "sky_totem"
+        | "fire_sanctuary"
+        | "water_sanctuary"
+        | "wind_sanctuary"
+        | "fairy_tree";
       const r = runBuyGlory(save, id);
       save = r.save;
       persist();
@@ -11641,7 +12156,7 @@ function bind(): void {
     destroyAllSpine();
   }
   // Portraits elsewhere (party / fusion / stage prep / summon reveal).
-  if (view !== "battle" && view !== "auth") {
+  if (view !== "battle") {
     dematteArtInTree(
       app,
       "img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.mon-slot-img, img.codex-cell-img",
@@ -11669,7 +12184,9 @@ async function boot(): Promise<void> {
     return;
   }
   view = "auth";
-  authUi.pane = "gate";
+  const hash = location.hash.replace(/^#/, "");
+  authUi.pane =
+    hash === "privacy" || hash === "terms" ? hash : "gate";
   render();
 }
 

@@ -26,6 +26,8 @@
 
 구 `skillTree` 15노드·공유 5마법기는 Phase 2에서 대체. 마이그레이션 시 노드 수를 기초 강화도로 환산하거나 초기화.
 
+**레거시 패시브:** 세이브의 `skillTree` 필드는 지우지 않는다. 전투/리더 계산은 여전히 `skillTreeBonuses(save.skillTree)`를 적용한다(해금 UI는 제거됨). 정식 마이그레이션(마법 강화도 환산) 전까지 잔여 패시브가 유지된다.
+
 ## 속성별 키트
 
 데이터 소스: `packages/data/src/summoners.ts`

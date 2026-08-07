@@ -38,27 +38,53 @@ export interface SpinePack {
   stillBackUrl?: string;
 }
 
-/** Fantasy pilot pack — assets under public/art/spine/fire_fang/ (see brief). */
+const PILOT_CLIPS: SpinePack["clips"] = {
+  idle: "idle",
+  walk: "walk",
+  run: "run",
+  attack: "attack",
+  cast: "cast",
+  ult: "ult",
+  hit: "hit",
+  death: "death",
+};
+
+/** Fantasy pilot packs — see docs/art/spine/*.md */
 export const SPINE_PACKS: Record<string, SpinePack> = {
   fire_fang: {
     id: "fire_fang",
     skeletonUrl: "/art/spine/fire_fang/fire_fang.json",
     atlasUrl: "/art/spine/fire_fang/fire_fang-pma.atlas",
-    clips: {
-      idle: "idle",
-      walk: "walk",
-      run: "run",
-      attack: "attack",
-      cast: "cast",
-      ult: "ult",
-      hit: "hit",
-      death: "death",
-    },
+    clips: { ...PILOT_CLIPS },
     scale: 0.36,
     offsetY: 4,
     skins: { front: "front", back: "back" },
     stillFrontUrl: "/art/spine/fire_fang/src/front.png",
     stillBackUrl: "/art/spine/fire_fang/src/back.png",
+  },
+  /** Pilot clone of fire_fang rig until unique Spine export ships. */
+  wolf_fighter: {
+    id: "wolf_fighter",
+    skeletonUrl: "/art/spine/wolf_fighter/wolf_fighter.json",
+    atlasUrl: "/art/spine/wolf_fighter/wolf_fighter-pma.atlas",
+    clips: { ...PILOT_CLIPS },
+    scale: 0.36,
+    offsetY: 4,
+    skins: { front: "front", back: "back" },
+    stillFrontUrl: "/art/monster/battle/wolf_fighter-front.webp",
+    stillBackUrl: "/art/monster/battle/wolf_fighter-back.webp",
+  },
+  /** Pilot clone of fire_fang rig until unique Spine export ships. */
+  moss_turtle: {
+    id: "moss_turtle",
+    skeletonUrl: "/art/spine/moss_turtle/moss_turtle.json",
+    atlasUrl: "/art/spine/moss_turtle/moss_turtle-pma.atlas",
+    clips: { ...PILOT_CLIPS },
+    scale: 0.34,
+    offsetY: 2,
+    skins: { front: "front", back: "back" },
+    stillFrontUrl: "/art/monster/battle/moss_turtle-front.webp",
+    stillBackUrl: "/art/monster/battle/moss_turtle-back.webp",
   },
 };
 
@@ -71,9 +97,13 @@ export function resolveSpinePackId(
 ): string | null {
   if (!monsterOrSummonerKey) return null;
   if (SPINE_PACKS[monsterOrSummonerKey]) return monsterOrSummonerKey;
+  const artKey = getMonsterArtKey(monsterOrSummonerKey);
+  if (artKey && SPINE_PACKS[artKey]) return artKey;
   // Family variants share the family's pilot artKey until per-element Spine skins ship.
   if (monsterOrSummonerKey.startsWith("seokrang_")) return "fire_fang";
   if (monsterOrSummonerKey === "fire_fang") return "fire_fang";
+  if (monsterOrSummonerKey.startsWith("wolf_fighter")) return "wolf_fighter";
+  if (monsterOrSummonerKey.startsWith("moss_turtle")) return "moss_turtle";
   return null;
 }
 

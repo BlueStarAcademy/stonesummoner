@@ -5,7 +5,11 @@ export type GloryBuildingId =
   | "ancient_sword"
   | "guardstone"
   | "crystal_altar"
-  | "sky_totem";
+  | "sky_totem"
+  | "fire_sanctuary"
+  | "water_sanctuary"
+  | "wind_sanctuary"
+  | "fairy_tree";
 
 export interface GloryBuildingDef {
   id: GloryBuildingId;
@@ -69,6 +73,42 @@ export const GLORY_BUILDINGS: GloryBuildingDef[] = [
     maxLevel: 10,
     effectKo: "공격속도 +1/Lv",
     spdFlat: 1,
+  },
+  {
+    id: "fire_sanctuary",
+    nameKo: "불의 성소",
+    swName: "Fire Sanctuary",
+    gloryCostPerLevel: 55,
+    maxLevel: 8,
+    effectKo: "공격력 +1.5%/Lv",
+    atkPct: 0.015,
+  },
+  {
+    id: "water_sanctuary",
+    nameKo: "물의 성소",
+    swName: "Water Sanctuary",
+    gloryCostPerLevel: 55,
+    maxLevel: 8,
+    effectKo: "체력 +1.5%/Lv",
+    hpPct: 0.015,
+  },
+  {
+    id: "wind_sanctuary",
+    nameKo: "바람의 성소",
+    swName: "Wind Sanctuary",
+    gloryCostPerLevel: 55,
+    maxLevel: 8,
+    effectKo: "공격속도 +1/Lv",
+    spdFlat: 1,
+  },
+  {
+    id: "fairy_tree",
+    nameKo: "요정의 나무",
+    swName: "Fairy Tree",
+    gloryCostPerLevel: 45,
+    maxLevel: 10,
+    effectKo: "골드 연못 생산 +2%/Lv",
+    manaProdPct: 0.02,
   },
 ];
 

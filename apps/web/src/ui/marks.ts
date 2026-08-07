@@ -17,7 +17,7 @@ export const RANGE = "\u2013"; // en-dash for ranges like 4-6
 
 /**
  * Soft-rounded grade star (SVG). Color via CSS `currentColor` on `.mon-star`.
- * Prefer this over bare ★ in inventory / inspect / codex overlays.
+ * Prefer this over bare \u2605 in inventory / inspect / codex overlays.
  */
 const MON_STAR_SVG =
   '<svg class="mon-star-ico" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">' +
@@ -36,14 +36,14 @@ export function monStarsHtml(count: number): string {
   return MON_STAR_HTML.repeat(n);
 }
 
-/** Codex button seal — book icon (no CJK). */
+/** Codex button seal - book icon (no CJK). */
 export const CODEX_SEAL_HTML =
   '<svg class="mon-topbar-codex-ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">' +
   '<path fill="currentColor" d="M5 3.5h10.5A2.5 2.5 0 0 1 18 6v14.5H7.25A1.75 1.75 0 0 0 5.5 22.25V5A1.5 1.5 0 0 1 7 3.5H5zm2.5 1.5V18c.4-.16.84-.25 1.3-.25H16.5V6A1 1 0 0 0 15.5 5H7.5z"/>' +
   '<path fill="currentColor" opacity=".55" d="M7.5 5h8v1.25h-8z"/>' +
   "</svg>";
 
-/** Locked codex cell mark — padlock (no CJK \u7981). */
+/** Locked codex cell mark - padlock (no CJK \u7981). */
 export const CODEX_LOCK_HTML =
   '<svg class="codex-lock-ico" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">' +
   '<path fill="currentColor" d="M8 1.5A2.75 2.75 0 0 0 5.25 4.25V6H4.5A1.5 1.5 0 0 0 3 7.5v5A1.5 1.5 0 0 0 4.5 14h7A1.5 1.5 0 0 0 13 12.5v-5A1.5 1.5 0 0 0 11.5 6h-.75V4.25A2.75 2.75 0 0 0 8 1.5zm1.25 4.5h-2.5V4.25a1.25 1.25 0 1 1 2.5 0V6z"/>' +

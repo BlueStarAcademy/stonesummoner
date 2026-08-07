@@ -18,6 +18,8 @@ import {
   createStarterHwalro,
   createSymbol,
   gearEnhanceCrystalCost,
+  grindEnhanceSubstat,
+  grindSymbolPrefix,
   gearEnhanceManaCost,
   gearSellCrystal,
   gearSellMana,
@@ -25,7 +27,7 @@ import {
   gearStarsToInvGrade,
   getMonster,
   getStage,
-  grindSymbolPrefix,
+  bumpSymbolEnhance,
   imprintSymbolMain,
   mainStatAtEnhance,
   MAX_GEAR_ENHANCE,
@@ -276,10 +278,53 @@ describe("phase1 data", () => {
     assert.equal(mainStatAtEnhance("SPD+", 6, 0), 7);
   });
 
+  it("returns Spokland Max at +15", () => {
+    assert.equal(mainStatAtEnhance("HP+", 6, 15), 2448);
+    assert.equal(mainStatAtEnhance("ATK+", 6, 15), 160);
+    assert.equal(mainStatAtEnhance("ATK%", 6, 15), 63);
+  });
+
+  it("unlocks or powers substats at +3/+6/+9/+12", () => {
+    let s = createSymbol("hwalro", 1, "enh", {
+      quality: "normal",
+      rng: () => 0.1,
+    });
+    assert.equal(s.substats.length, 0);
+    const rng = () => 0.25;
+    for (let i = 0; i < 3; i++) s = bumpSymbolEnhance(s, rng);
+    assert.equal(s.enhance, 3);
+    assert.equal(s.substats.length, 1);
+    for (let i = 0; i < 3; i++) s = bumpSymbolEnhance(s, rng);
+    assert.equal(s.enhance, 6);
+    assert.equal(s.substats.length, 2);
+    for (let i = 0; i < 3; i++) s = bumpSymbolEnhance(s, rng);
+    assert.equal(s.enhance, 9);
+    assert.equal(s.substats.length, 3);
+    for (let i = 0; i < 3; i++) s = bumpSymbolEnhance(s, rng);
+    assert.equal(s.enhance, 12);
+    assert.equal(s.substats.length, 4);
+
+    let legend = createSymbol("hwalro", 2, "leg", {
+      quality: "legend",
+      rng: () => 0.2,
+    });
+    assert.equal(legend.substats.length, 4);
+    const vals = legend.substats.map((x) => x.value);
+    legend = { ...legend, enhance: 2 };
+    legend = bumpSymbolEnhance(legend, () => 0);
+    assert.equal(legend.enhance, 3);
+    assert.equal(legend.substats.length, 4);
+    assert.ok(
+      legend.substats.some((sub, i) => sub.value > vals[i]!),
+      "expected one substat powered at +3 when already at max",
+    );
+  });
+
   it("rolls imprintable mains for slots 2/4/6", () => {
     const s = createSymbol("hwalro", 4, "t");
     assert.equal(canImprintSymbol(s), true);
     assert.equal(canImprintSymbol(createSymbol("hwalro", 1, "x")), false);
+    assert.equal(canImprintSymbol(createSymbol("hwalro", 2, "s2")), true);
     const next = imprintSymbolMain(s, () => 0.99);
     assert.ok(next);
     assert.notEqual(next!.mainStat, s.mainStat);
@@ -316,6 +361,16 @@ describe("phase1 data", () => {
     const b = applySymbolsToStats(base, [enhanced]);
     assert.equal(a.hp, 1100);
     assert.equal(b.hp, 1100);
+  });
+
+  it("enhances an existing substat via grindstone helper", () => {
+    const s = {
+      ...createSymbol("hwalro", 4, "g2"),
+      substats: [{ stat: "SPD+", value: 5 }],
+    };
+    const next = grindEnhanceSubstat(s, () => 0);
+    assert.ok(next);
+    assert.ok((next!.substats?.[0]?.value ?? 0) > 5);
   });
 
   it("rolls symbol drops with quality and stars", () => {

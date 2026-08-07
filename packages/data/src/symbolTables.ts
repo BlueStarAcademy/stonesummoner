@@ -224,6 +224,10 @@ export function mainStatAtEnhance(
   enhance: number,
 ): number {
   const g = MAIN_STAT_TABLE[stat][stars];
+  // Spokland Max(+15): SW applies an extra main bonus at +15 — use table max.
+  if (enhance >= 15) {
+    return Number.isInteger(g.perLevel) ? Math.round(g.max) : Math.round(g.max * 100) / 100;
+  }
   const raw = g.base + enhance * g.perLevel;
   const capped = Math.min(raw, g.max);
   return Number.isInteger(g.perLevel) ? Math.round(capped) : Math.round(capped * 100) / 100;

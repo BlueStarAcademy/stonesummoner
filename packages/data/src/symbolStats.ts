@@ -1,6 +1,12 @@
-import type { SymbolInstance, SymbolSetId } from "./symbols.js";
+import type { SymbolInstance, SymbolSetId, SymbolSubstat } from "./symbols.js";
 import { SYMBOL_SETS } from "./symbols.js";
-import { mainStatAtEnhance, type SymbolStatId } from "./symbolTables.js";
+import {
+  mainStatAtEnhance,
+  rollSubstatValue,
+  SUBSTAT_POOL,
+  type SymbolStatId,
+  type SymbolStars,
+} from "./symbolTables.js";
 
 export interface CombatStatBlock {
   hp: number;
@@ -193,13 +199,93 @@ export function symbolEnhanceManaCost(enhance: number): number {
 }
 
 export const MAX_SYMBOL_ENHANCE = 15;
+export const MAX_SYMBOL_SUBSTATS = 4;
+/** Enhance levels that unlock or power a substat (SW-style). */
+export const SYMBOL_SUBSTAT_PROC_LEVELS = [3, 6, 9, 12] as const;
 
-export function bumpSymbolEnhance(s: SymbolInstance): SymbolInstance {
+function rollOneSubstat(
+  mainStat: string,
+  used: Set<string>,
+  stars: SymbolStars,
+  rng: () => number,
+): SymbolSubstat | null {
+  const pool = SUBSTAT_POOL.filter((s) => !used.has(s) && s !== mainStat);
+  if (pool.length === 0) return null;
+  const stat = pool[Math.floor(rng() * pool.length) % pool.length]!;
+  return { stat, value: rollSubstatValue(stat, stars, rng) };
+}
+
+function powerSubstat(
+  sub: SymbolSubstat,
+  stars: SymbolStars,
+  rng: () => number,
+): SymbolSubstat {
+  return {
+    ...sub,
+    value: sub.value + rollSubstatValue(sub.stat, stars, rng),
+  };
+}
+
+/**
+ * Grindstone v1: power one existing substat (SW grindstone).
+ * Returns null when the symbol has no substats.
+ */
+export function grindEnhanceSubstat(
+  s: SymbolInstance,
+  rng: () => number = Math.random,
+  subIndex?: number,
+): SymbolInstance | null {
+  const subs = s.substats ?? [];
+  if (subs.length === 0) return null;
+  const idx =
+    typeof subIndex === "number" &&
+    Number.isFinite(subIndex) &&
+    subIndex >= 0 &&
+    subIndex < subs.length
+      ? Math.floor(subIndex)
+      : Math.floor(rng() * subs.length) % subs.length;
+  return {
+    ...s,
+    substats: subs.map((sub, i) =>
+      i === idx ? powerSubstat(sub, s.stars as SymbolStars, rng) : sub,
+    ),
+  };
+}
+
+/**
+ * +1 enhance; at +3/+6/+9/+12 unlock a new substat (max 4) or power an existing one.
+ */
+export function bumpSymbolEnhance(
+  s: SymbolInstance,
+  rng: () => number = Math.random,
+): SymbolInstance {
   const enhance = s.enhance + 1;
+  let substats = [...(s.substats ?? [])];
+  if ((SYMBOL_SUBSTAT_PROC_LEVELS as readonly number[]).includes(enhance)) {
+    if (substats.length < MAX_SYMBOL_SUBSTATS) {
+      const used = new Set<string>([
+        s.mainStat,
+        ...substats.map((x) => x.stat),
+      ]);
+      const added = rollOneSubstat(
+        s.mainStat,
+        used,
+        s.stars as SymbolStars,
+        rng,
+      );
+      if (added) substats = [...substats, added];
+    } else if (substats.length > 0) {
+      const idx = Math.floor(rng() * substats.length) % substats.length;
+      substats = substats.map((sub, i) =>
+        i === idx ? powerSubstat(sub, s.stars as SymbolStars, rng) : sub,
+      );
+    }
+  }
   return {
     ...s,
     enhance,
     mainValue: mainStatAtEnhance(s.mainStat as SymbolStatId, s.stars, enhance),
+    substats,
   };
 }
 

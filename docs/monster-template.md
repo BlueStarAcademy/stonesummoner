@@ -24,11 +24,26 @@ variants:
 
 데이터: `packages/data/src/monsters/` (`roster.ts` + `curves.ts` + `kitFactory.ts`)
 
-## 3. 확장
+## 3. 각성 (몬스터)
+
+`evolve`(0–2)와 별개. `OwnedMonster.awaken` 0|1.
+
+| 항목 | 값 |
+|------|-----|
+| 비용 | 골드 600 · 크리스탈 5 · 속성 진화재료 10 |
+| 레벨 | `10 + naturalStars × 2` |
+| 효과 | 표시 별 = naturalStars + awaken; ATK/HP +8% |
+| 재료 | 요일 던전 `weekday_evolve` 드롭 (`awakenMats[element]`) |
+
+루프: `runAwakenMonster` · UI: 몬스터 책 각성 탭.
+
+---
+
+## 4. 확장
 
 `FAMILY_ROSTER`에 seed 1줄 추가 → `expandFamily`가 5속성 자동 생성 → 소환 풀·도감 반영.
 초상: `apps/web/public/art/monster/{artKey}.webp` (+ 속성별 CSS 틴트).
 
-## 4. 레거시
+## 5. 레거시
 
 `LEGACY_MONSTER_IDS`가 Phase 1 id/artKey를 Phase 2 id로 해석.

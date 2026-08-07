@@ -31,6 +31,7 @@ import {
   getActiveGear,
   withActiveGear,
   runAwakenSummoner,
+  runAwakenMonster,
   setActiveSummoner,
   runUnlockSkillNode,
   awakenManaCost,
@@ -45,6 +46,9 @@ import {
   runFeedSameMonster,
   runFusion,
   runGrindSymbol,
+  unclaimedMailCount,
+  runClaimMail,
+  runClaimDailyMission,
   runImprintSymbol,
   runJoinGuild,
   runGuildCheckIn,
@@ -53,12 +57,23 @@ import {
   runPracticeDojo,
   runSellSymbol,
   runSetArenaBans,
+  runSetArenaDefense,
   runSetParty,
   runSkillUp,
   runSortie,
   runSummon,
   runUpgradeBuilding,
+  runBuyShopOffer,
+  getDailyShopOffers,
+  runRecipeFusion,
+  ARENA_ATTACKS_DAILY,
+  RAID_BOSS_MAX_HP,
+  RAID_ATTEMPTS_DAILY,
+  GUILD_WEEK_CONTRIB_GOAL,
+  applyRewards,
 } from "./loop.js";
+import { migrateSave } from "./migrateSave.js";
+import { FUSION_RECIPES } from "stonesummoner-data";
 
 describe("game loop", () => {
   it("collects mana from pond", () => {
@@ -445,6 +460,53 @@ describe("game loop", () => {
     assert.ok(ok.save.island.mana < save.island.mana);
   });
 
+  it("awakens monster with level/mana/crystal/mat gates", () => {
+    let save = createNewSave(0);
+    const el = "fire" as const;
+    // starter_0 is cinder_imp_fire
+    save = {
+      ...save,
+      roster: save.roster.map((m, i) =>
+        i === 0 ? { ...m, level: 14, awaken: 0 } : m,
+      ),
+      island: { ...save.island, mana: 5000, crystal: 50 },
+      awakenMats: { [el]: 20 },
+    };
+    const lowLv = runAwakenMonster(
+      {
+        ...save,
+        roster: save.roster.map((m, i) =>
+          i === 0 ? { ...m, level: 5 } : m,
+        ),
+      },
+      "0",
+    );
+    assert.match(lowLv.message, /조건 미달/);
+
+    const noMat = runAwakenMonster(
+      { ...save, awakenMats: { [el]: 0 } },
+      "0",
+    );
+    assert.match(noMat.message, /진화재료/);
+
+    const ok = runAwakenMonster(save, "0");
+    assert.match(ok.message, /각성/);
+    assert.equal(ok.save.roster[0]!.awaken, 1);
+    assert.equal(ok.save.awakenMats[el], 10);
+    assert.ok(ok.save.island.mana < save.island.mana);
+
+    const maxed = runAwakenMonster(ok.save, "0");
+    assert.match(maxed.message, /이미 각성/);
+
+    const before = createStageBattle(getStage("garen_1_1")!, save);
+    const after = createStageBattle(getStage("garen_1_1")!, ok.save);
+    const allyBefore = before.units.find((u) => u.id === save.roster[0]!.uid);
+    const allyAfter = after.units.find((u) => u.id === ok.save.roster[0]!.uid);
+    assert.ok(allyBefore && allyAfter);
+    assert.ok(allyAfter!.stats.atk > allyBefore!.stats.atk);
+    assert.ok(allyAfter!.stats.hp > allyBefore!.stats.hp);
+  });
+
   it("enhance randomly levels a skill", () => {
     let save = createNewSave(0);
     save = {
@@ -483,6 +545,7 @@ describe("game loop", () => {
     save = {
       ...save,
       island: { ...save.island, mana: 5000 },
+      skillMats: 10,
       roster: [
         { ...base, skillLevels: [1, 1, 1] as [number, number, number] },
         fodder,
@@ -490,12 +553,14 @@ describe("game loop", () => {
       ],
     };
     const manaBefore = save.island.mana;
+    const matsBefore = save.skillMats;
     const r = runFeedSameMonster(save, base.uid, fodder.uid);
     assert.match(r.message, /스킬업/);
     assert.equal(r.save.roster.some((m) => m.uid === fodder.uid), false);
     const t = r.save.roster.find((m) => m.uid === base.uid)!;
     assert.ok(t.skillLevels.some((lv) => lv > 1));
     assert.ok(r.save.island.mana < manaBefore);
+    assert.equal(r.save.skillMats, matsBefore - 3);
   });
 
   it("skills up S2 when level and mana met", () => {
@@ -508,6 +573,7 @@ describe("game loop", () => {
           : m,
       ),
       island: { ...save.island, mana: 3000 },
+      skillMats: 10,
     };
     const blocked = runSkillUp(
       {
@@ -525,13 +591,14 @@ describe("game loop", () => {
     assert.match(ok.message, /스킬업/);
     assert.equal(ok.save.roster[0]!.skillLevels[1], 2);
     assert.ok(ok.save.island.mana < save.island.mana);
+    assert.equal(ok.save.skillMats, 7);
   });
 
-  it("buys scrolls and imprints symbol slot 4–6", () => {
+  it("buys scrolls and imprints symbol slots 2/4/6", () => {
     let save = createNewSave(0);
     save = {
       ...save,
-      island: { ...save.island, mana: 2000, crystal: 20 },
+      island: { ...save.island, mana: 2000, crystal: 40 },
     };
     const buy = runBuyScroll(save, 2);
     assert.match(buy.message, /소환서 2장/);
@@ -539,7 +606,8 @@ describe("game loop", () => {
     save = buy.save;
 
     const slot4 = { ...createSymbol("hwalro", 4, "imp_test"), mainStat: "CRI Dmg%", mainValue: 11 };
-    save = { ...save, symbols: [...save.symbols, slot4] };
+    const slot2 = { ...createSymbol("hwalro", 2, "imp_s2"), mainStat: "ATK%", mainValue: 11 };
+    save = { ...save, symbols: [...save.symbols, slot4, slot2] };
     const blocked = runImprintSymbol(save, "0"); // slot 1 starter
     assert.match(blocked.message, /각인 불가/);
 
@@ -550,17 +618,116 @@ describe("game loop", () => {
     assert.ok(
       updated.mainStat !== "CRI Dmg%" || updated.mainValue !== 11,
     );
+
+    const ok2 = runImprintSymbol(ok.save, "imp_s2", () => 0.9);
+    assert.match(ok2.message, /각인/);
+    assert.equal(ok2.save.island.crystal, ok.save.island.crystal - 8);
   });
 
-  it("grinds symbol prefix for mana", () => {
+  it("grinds symbol prefix for mana and grindstone", () => {
     let save = createNewSave(0);
-    save = { ...save, island: { ...save.island, mana: 500 } };
+    const bare = {
+      ...save.symbols[0]!,
+      substats: [] as { stat: string; value: number }[],
+      prefixStat: null as string | null,
+      prefixValue: null as number | null,
+    };
+    save = {
+      ...save,
+      symbols: [bare, ...save.symbols.slice(1)],
+      island: { ...save.island, mana: 500 },
+      grindstones: 3,
+    };
     const ok = runGrindSymbol(save, "0", () => 0);
     assert.match(ok.message, /연마/);
     assert.equal(ok.save.island.mana, save.island.mana - 150);
+    assert.equal(ok.save.grindstones, 2);
     const sym = ok.save.symbols[0]!;
     assert.ok(sym.prefixStat);
     assert.ok((sym.prefixValue ?? 0) > 0);
+
+    const noStone = runGrindSymbol(
+      { ...ok.save, grindstones: 0 },
+      "0",
+      () => 0,
+    );
+    assert.match(noStone.message, /연마석/);
+  });
+
+  it("enhances substat with grindstone when subs exist", () => {
+    let save = createNewSave(0);
+    const withSubs = {
+      ...save.symbols[0]!,
+      substats: [
+        { stat: "SPD+", value: 4 },
+        { stat: "ATK%", value: 5 },
+      ],
+    };
+    save = {
+      ...save,
+      symbols: [withSubs, ...save.symbols.slice(1)],
+      island: { ...save.island, mana: 500 },
+      grindstones: 2,
+    };
+    const before = withSubs.substats[0]!.value;
+    const ok = runGrindSymbol(save, "0", () => 0);
+    assert.match(ok.message, /부옵션/);
+    assert.equal(ok.save.grindstones, 1);
+    const next = ok.save.symbols[0]!;
+    assert.ok((next.substats?.[0]?.value ?? 0) > before);
+  });
+
+  it("claims mailbox and daily wish mission rewards", () => {
+    let save = createNewSave(0);
+    assert.equal(unclaimedMailCount(save), 2);
+    const mail = runClaimMail(save, "welcome_gift");
+    assert.match(mail.message, /우편/);
+    assert.equal(mail.save.island.mana, save.island.mana + 500);
+    assert.deepEqual(mail.save.claimedMailIds, ["welcome_gift"]);
+    save = mail.save;
+    assert.equal(unclaimedMailCount(save), 1);
+
+    const login = runClaimMail(save, "login_gift");
+    assert.ok(login.save.island.energy >= save.island.energy);
+    assert.equal(unclaimedMailCount(login.save), 0);
+
+    const day = "2099-01-15";
+    save = {
+      ...login.save,
+      island: {
+        ...login.save.island,
+        lastWishDay: day,
+        mana: 100,
+        energy: 50,
+        energyMax: 100,
+      },
+      claimedMissionKeys: [],
+    };
+    const blocked = runClaimDailyMission(save, "wish", Date.parse(`${day}T12:00:00Z`));
+    // wish done — should claim
+    assert.match(blocked.message, /일일 미션/);
+    assert.equal(blocked.save.island.mana, 300);
+    assert.equal(blocked.save.island.energy, 60);
+    const again = runClaimDailyMission(
+      blocked.save,
+      "wish",
+      Date.parse(`${day}T12:00:00Z`),
+    );
+    assert.match(again.message, /이미/);
+
+    save = {
+      ...blocked.save,
+      dojoDrills: 3,
+      claimedMissionKeys: blocked.save.claimedMissionKeys,
+      island: { ...blocked.save.island, mana: 100, energy: 40, energyMax: 100 },
+    };
+    const dojo = runClaimDailyMission(
+      save,
+      "dojo",
+      Date.parse(`${day}T12:00:00Z`),
+    );
+    assert.match(dojo.message, /일일 미션/);
+    assert.equal(dojo.save.island.mana, 250);
   });
 
   it("summons and enhances monsters", () => {
@@ -902,5 +1069,178 @@ describe("game loop", () => {
     save = setActiveSummoner(save, "light");
     assert.equal(save.gear.weapon.enhance, 3);
     assert.equal(save.gear.weapon.id, lightWpn);
+  });
+
+  it("sets arena defense and caps daily arena attacks", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      clearedStages: ["garen_1_1", "garen_1_2", "garen_1_3"],
+      island: { ...save.island, summonerLevel: 5, energy: 50 },
+    };
+    const def = runSetArenaDefense(save);
+    assert.ok(def.save.arenaDefense);
+    assert.equal(def.save.arenaDefense!.party.length, save.party.length);
+    save = { ...def.save, arenaAttacksToday: ARENA_ATTACKS_DAILY, arenaAttackDay: "2099-01-01" };
+    const blocked = runSortie(save, "arena_rookie", {
+      rng: () => 0.1,
+      now: Date.parse("2099-01-01T12:00:00Z"),
+    });
+    assert.match(blocked.message, /한도/);
+  });
+
+  it("rotates daily shop offers and marks sold", () => {
+    let save = createNewSave(0);
+    save = { ...save, island: { ...save.island, mana: 50_000, crystal: 100 } };
+    const offers = getDailyShopOffers("2099-06-01");
+    assert.ok(offers.length >= 4 && offers.length <= 6);
+    const offer = offers[0]!;
+    const bought = runBuyShopOffer(save, offer.id, Date.parse("2099-06-01T12:00:00Z"), () => 0.2);
+    assert.ok(bought.save.shopSoldIds.includes(offer.id));
+    const again = runBuyShopOffer(
+      bought.save,
+      offer.id,
+      Date.parse("2099-06-01T12:00:00Z"),
+      () => 0.2,
+    );
+    assert.match(again.message, /이미 구매/);
+  });
+
+  it("chains trial floors and grants B3 token", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      clearedStages: ["garen_1_5", "trial_b1", "trial_b2"],
+      island: { ...save.island, energy: 40 },
+    };
+    assert.equal(isStageUnlocked(save, "trial_b3"), true);
+    const stage = getStage("trial_b3")!;
+    const { save: next, reward } = applyRewards(save, stage, true, () => 0.9);
+    assert.ok(reward.victory);
+    assert.equal(next.trialTokens, 1);
+    assert.equal(next.trialTitleUnlocked, true);
+  });
+
+  it("runs recipe fusion with matching fodder", () => {
+    const recipe = FUSION_RECIPES[0]!;
+    let save = createNewSave(0);
+    const keeper = save.roster[0]!;
+    const fodder = recipe.fodderMonsterIds.map((monsterId, i) => ({
+      ...keeper,
+      uid: `fodder_${i}`,
+      monsterId,
+      level: 1,
+      evolve: 0,
+    }));
+    save = {
+      ...save,
+      island: { ...save.island, mana: 5000, summonerLevel: 17 },
+      roster: [keeper, ...fodder],
+    };
+    const r = runRecipeFusion(
+      save,
+      recipe.id,
+      keeper.uid,
+      fodder.map((m) => m.uid),
+    );
+    assert.match(r.message, /레시피 융합/);
+    const kept = r.save.roster.find((m) => m.uid === keeper.uid);
+    assert.equal(kept?.monsterId, recipe.resultMonsterId);
+    assert.equal(r.save.roster.length, 1);
+  });
+
+  it("tracks guild weekly contrib chest and raid boss hp", () => {
+    let save = createNewSave(0);
+    const now = Date.parse("2099-03-03T12:00:00Z");
+    const weekKey = isoWeekKey(now);
+    save = {
+      ...save,
+      island: { ...save.island, summonerLevel: 12 },
+      guildName: "테스트길드",
+      guildWeekKey: weekKey,
+      guildWeekContrib: GUILD_WEEK_CONTRIB_GOAL - 15,
+      guildChestClaimedWeek: null,
+      raidBossHp: RAID_BOSS_MAX_HP,
+      raidAttemptsDay: 0,
+      raidAttemptDay: null,
+      raidWeekKey: weekKey,
+      clearedStages: ["garen_1_5"],
+    };
+    const joined = runJoinGuild(save, "테스트길드");
+    save = joined.save;
+    const check = runGuildCheckIn(save, now);
+    assert.ok((check.save.guildWeekContrib ?? 0) >= GUILD_WEEK_CONTRIB_GOAL);
+    assert.equal(check.save.guildChestClaimedWeek, weekKey);
+    assert.ok((check.save.island.crystal ?? 0) >= save.island.crystal);
+
+    save = {
+      ...check.save,
+      island: { ...check.save.island, energy: 50 },
+      raidBossHp: RAID_BOSS_MAX_HP,
+      raidAttemptsDay: 0,
+      raidAttemptDay: "2099-03-03",
+      raidWeekKey: weekKey,
+    };
+    const raid = runSortie(save, "guild_raid_boss", {
+      rng: () => 0.05,
+      now,
+      maxTurns: 120,
+    });
+    assert.ok(raid.save.raidAttemptsDay >= 1);
+    if (raid.reward?.victory) {
+      assert.ok((raid.save.raidBossHp ?? RAID_BOSS_MAX_HP) < RAID_BOSS_MAX_HP);
+    }
+    save = {
+      ...raid.save,
+      raidAttemptsDay: RAID_ATTEMPTS_DAILY,
+      raidAttemptDay: "2099-03-03",
+    };
+    const capped = runSortie(save, "guild_raid_boss", {
+      rng: () => 0.05,
+      now: Date.parse("2099-03-03T13:00:00Z"),
+    });
+    assert.match(capped.message, /한도/);
+  });
+
+  it("migrateSave preserves presets, premium scrolls, summoners, awaken", () => {
+    const base = createNewSave(0);
+    const raw = {
+      ...base,
+      scrollsPremium: 7,
+      scrollsMystic: 3,
+      activeSummoner: "fire" as const,
+      activePartyPreset: 2,
+      partyPresets: [
+        { summoner: "fire" as const, party: [...base.party] },
+        { summoner: "water" as const, party: [] as string[] },
+        { summoner: "wind" as const, party: [...base.party].slice(0, 2) },
+        { summoner: "light" as const, party: [] as string[] },
+        { summoner: "dark" as const, party: [] as string[] },
+      ],
+      summoners: {
+        ...base.summoners,
+        fire: { ...base.summoners.fire, level: 12, awaken: 2 },
+      },
+      roster: base.roster.map((m, i) =>
+        i === 0 ? { ...m, awaken: 1 as const } : m,
+      ),
+      skillMats: 9,
+      awakenMats: { fire: 4 },
+    };
+    const round = migrateSave(JSON.parse(JSON.stringify(raw)));
+    assert.ok(round);
+    assert.equal(round!.scrollsPremium, 7);
+    assert.equal(round!.scrollsMystic, 3);
+    assert.equal(round!.activeSummoner, "fire");
+    assert.equal(round!.activePartyPreset, 2);
+    assert.equal(round!.partyPresets[2]?.summoner, "wind");
+    assert.equal(round!.partyPresets[2]?.party.length, 2);
+    assert.equal(round!.summoners.fire.level, 12);
+    assert.equal(round!.roster[0]?.awaken, 1);
+    assert.equal(round!.skillMats, 9);
+    assert.equal(round!.awakenMats.fire, 4);
+    assert.equal(round!.grindstones, base.grindstones);
+    assert.deepEqual(round!.claimedMailIds, []);
+    assert.deepEqual(round!.claimedMissionKeys, []);
   });
 });

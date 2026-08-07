@@ -29,7 +29,7 @@
   },
   "ui.4ae6a748b6": {
     "ko": "다음 수련 시 묘수 미션 (진문석 +1)",
-    "en": "다음 수련 시 묘수 미션 (진문석 +1)"
+    "en": "Next drill: tip mission (rune stone +1)"
   },
   "ui.250a3a4d15": {
     "ko": "스킬을 고른 뒤 적을 탭하세요",
@@ -497,7 +497,7 @@
   },
   "ui.108f04ca6e": {
     "ko": "파티",
-    "en": "파티"
+    "en": "Party"
   },
   "ui.8a1893a931": {
     "ko": "평타",
@@ -1128,8 +1128,8 @@
     "en": "마나·스킬 영구 보너스"
   },
   "ui.956df04e9a": {
-    "ko": "접두어 부여/재부여",
-    "en": "접두어 부여/재부여"
+    "ko": "연마 (부옵션/접두어)",
+    "en": "Grind (substat / prefix)"
   },
   "ui.118337544a": {
     "ko": "기여·보상 수령",
@@ -1339,6 +1339,70 @@
     "ko": "고객센터",
     "en": "Support"
   },
+  "auth.legal.openFull": {
+    "ko": "전체 문서 열기",
+    "en": "Open full document"
+  },
+  "auth.legal.privacyIntro": {
+    "ko": "StoneSummoner는 계정·클라우드 세이브 제공을 위해 아래 정보를 처리합니다. (시행일 2026-08-07)",
+    "en": "StoneSummoner processes the data below for accounts and cloud saves. (Effective 2026-08-07)"
+  },
+  "auth.legal.privacyCollectTitle": {
+    "ko": "수집 항목",
+    "en": "What we collect"
+  },
+  "auth.legal.privacyCollect1": {
+    "ko": "계정: 이메일, 해시된 비밀번호, 닉네임(선택)",
+    "en": "Account: email, hashed password, optional nickname"
+  },
+  "auth.legal.privacyCollect2": {
+    "ko": "게임 진행: 클라우드 세이브 JSON",
+    "en": "Gameplay: cloud save JSON"
+  },
+  "auth.legal.privacyCollect3": {
+    "ko": "기술 로그: 접속·오류 로그(보안·장애 대응)",
+    "en": "Ops logs: access/error logs for security"
+  },
+  "auth.legal.privacyPurposeTitle": {
+    "ko": "이용 목적",
+    "en": "Why we use it"
+  },
+  "auth.legal.privacyPurpose1": {
+    "ko": "로그인·세션 유지 및 계정 식별",
+    "en": "Authentication and session continuity"
+  },
+  "auth.legal.privacyPurpose2": {
+    "ko": "기기 간 진행 상황 동기화",
+    "en": "Sync progress across devices"
+  },
+  "auth.legal.privacyContactTitle": {
+    "ko": "문의",
+    "en": "Contact"
+  },
+  "auth.legal.privacyContactBody": {
+    "ko": "stonesummoners@gmail.com · 010-5484-1960",
+    "en": "stonesummoners@gmail.com · +82-10-5484-1960"
+  },
+  "auth.legal.termsIntro": {
+    "ko": "본 약관은 StoneSummoner 웹·Android 앱 이용에 적용됩니다.",
+    "en": "These terms apply to StoneSummoner on web and Android."
+  },
+  "auth.legal.termsServiceTitle": {
+    "ko": "서비스",
+    "en": "Service"
+  },
+  "auth.legal.termsServiceBody": {
+    "ko": "수집·성장·전투 콘텐츠와 계정·클라우드 세이브를 제공합니다. 데모/오프라인 플레이가 가능하나 온라인 기능은 네트워크가 필요합니다.",
+    "en": "We provide collectible RPG gameplay plus optional cloud save. Demo/offline play works; online features need a network."
+  },
+  "auth.legal.termsAccountTitle": {
+    "ko": "계정",
+    "en": "Accounts"
+  },
+  "auth.legal.termsAccountBody": {
+    "ko": "이용자는 비밀번호를 안전하게 관리해야 하며, 부정 이용 시 이용이 제한될 수 있습니다.",
+    "en": "Keep credentials secure. We may restrict accounts for abuse."
+  },
   "auth.footer.company": {
     "ko": "에코스톤",
     "en": "Ecostone"
@@ -1535,6 +1599,38 @@
     "ko": "바로가기",
     "en": "Go"
   },
+  "mission.claim": {
+    "ko": "수령",
+    "en": "Claim"
+  },
+  "mission.claimed": {
+    "ko": "수령 완료",
+    "en": "Claimed"
+  },
+  "mailbox.badge": {
+    "ko": "읽지 않은 우편 {n}",
+    "en": "{n} unread mail"
+  },
+  "mail.claim": {
+    "ko": "수령",
+    "en": "Claim"
+  },
+  "mail.rewardGold": {
+    "ko": "보상: 골드 +{n}",
+    "en": "Reward: Gold +{n}"
+  },
+  "mail.rewardEnergy": {
+    "ko": "보상: 행동력 +{n}",
+    "en": "Reward: Energy +{n}"
+  },
+  "ui.grindstone": {
+    "ko": "연마석",
+    "en": "Grindstone"
+  },
+  "ui.grindstoneHeld": {
+    "ko": "보유 {n}",
+    "en": "Owned {n}"
+  },
   "mission.daily.wish.title": {
     "ko": "일일 소원",
     "en": "Daily wish"
@@ -1676,8 +1772,68 @@
     "en": "Close skill enhance"
   },
   "ui.skillEnhanceHint": {
-    "ko": "강화 시 스킬이 랜덤으로 상승합니다",
-    "en": "Enhancing randomly levels a skill"
+    "ko": "강화 시 스킬이 랜덤으로 상승합니다 · 스킬재료도 소모됩니다",
+    "en": "Enhancing randomly levels a skill · also spends skill mats"
+  },
+  "ui.shape.corner": {
+    "ko": "귀 점유",
+    "en": "Corner"
+  },
+  "ui.shape.star": {
+    "ko": "화점",
+    "en": "Star point"
+  },
+  "ui.shape.star_control": {
+    "ko": "화점 지배",
+    "en": "Star control"
+  },
+  "ui.shape.tiger": {
+    "ko": "호구",
+    "en": "Tiger mouth"
+  },
+  "ui.shape.kosumi": {
+    "ko": "쌍립",
+    "en": "Diagonal"
+  },
+  "ui.shape.axis": {
+    "ko": "축 연결",
+    "en": "Axis"
+  },
+  "ui.monBookSkillMats": {
+    "ko": "스킬재료 {have}/{need}",
+    "en": "Skill mats {have}/{need}"
+  },
+  "ui.monBookSkillUpCost": {
+    "ko": "골드 {mana} · 스킬재료 {mat}",
+    "en": "Gold {mana} · Skill mats {mat}"
+  },
+  "ui.monBookSkillUpNeedLv": {
+    "ko": "몬스터 Lv.{n}+ 필요",
+    "en": "Needs monster Lv.{n}+"
+  },
+  "ui.monBookSkillFeedBtn": {
+    "ko": "동종 강화",
+    "en": "Feed same"
+  },
+  "res.skillMats": {
+    "ko": "스킬재료",
+    "en": "Skill mats"
+  },
+  "res.awakenMats": {
+    "ko": "진화재료",
+    "en": "Evolve mats"
+  },
+  "ui.summonNeedScroll": {
+    "ko": "소환서 부족",
+    "en": "Need scrolls"
+  },
+  "ui.dojoNextLabel": {
+    "ko": "다음",
+    "en": "Next"
+  },
+  "mission.badge": {
+    "ko": "수령 가능 미션 {n}",
+    "en": "{n} claimable missions"
   },
   "ui.skillCdNone": {
     "ko": "쿨타임 없음",
@@ -1707,9 +1863,61 @@
     "ko": "마나 +{n}",
     "en": "Mana +{n}"
   },
-  "ui.awakenComingSoon": {
-    "ko": "각성 시스템은 추후 업데이트 예정입니다. (아직 구현되지 않았습니다)",
-    "en": "Awakening is planned for a future update. (Not implemented yet)"
+  "ui.hubDojo": {
+    "ko": "마법진 도장",
+    "en": "Magic Circle Dojo"
+  },
+  "ui.hubPond": {
+    "ko": "골드 연못",
+    "en": "Gold Pond"
+  },
+  "ui.hubMine": {
+    "ko": "크리스탈 광산",
+    "en": "Crystal Mine"
+  },
+  "ui.hubWish": {
+    "ko": "소원의 사당",
+    "en": "Wish Temple"
+  },
+  "ui.hubGlory": {
+    "ko": "영광 건물",
+    "en": "Glory Buildings"
+  },
+  "ui.hubGuild": {
+    "ko": "길드",
+    "en": "Guild"
+  },
+  "ui.hubFusion": {
+    "ko": "합성",
+    "en": "Fusion"
+  },
+  "ui.weekdayOpenToday": {
+    "ko": "오늘 개방",
+    "en": "Open today"
+  },
+  "ui.weekdayClosedToday": {
+    "ko": "오늘은 닫힘",
+    "en": "Closed today"
+  },
+  "ui.weekdaySchedule": {
+    "ko": "진화재료: 월·수·금·일 · 스킬재료: 화·목·토·일",
+    "en": "Evolve mats: Mon/Wed/Fri/Sun · Skill mats: Tue/Thu/Sat/Sun"
+  },
+  "ui.imprintSlotsHint": {
+    "ko": "슬롯 2/4/6",
+    "en": "Slots 2/4/6"
+  },
+  "ui.symPrefixLabel": {
+    "ko": "접두 {line}",
+    "en": "Prefix {line}"
+  },
+  "ui.forgeOkGrind": {
+    "ko": "연마",
+    "en": "Grind"
+  },
+  "ui.forgeOkImprint": {
+    "ko": "각인",
+    "en": "Imprint"
   },
   "ui.expandSymbolBag": {
     "ko": "슬롯 +10 (−크리스탈 {cost})",
@@ -2184,6 +2392,46 @@
     "ko": "강화",
     "en": "Enhance"
   },
+  "ui.monBookAwakenBtn": {
+    "ko": "각성하기",
+    "en": "Awaken"
+  },
+  "ui.monBookAwakenMax": {
+    "ko": "각성 완료",
+    "en": "Awakened"
+  },
+  "ui.monBookAwakenNeedLv": {
+    "ko": "몬스터 Lv.{n}+ 필요",
+    "en": "Needs monster Lv.{n}+"
+  },
+  "ui.monBookAwakenCost": {
+    "ko": "골드 {mana} · 크리스탈 {crystal} · 재료 {mat}",
+    "en": "Gold {mana} · Crystal {crystal} · Mats {mat}"
+  },
+  "ui.monBookAwakenMats": {
+    "ko": "진화재료({el}) {have}/{need}",
+    "en": "Evolve mats ({el}) {have}/{need}"
+  },
+  "ui.monBookAwakenBonus": {
+    "ko": "각성 시 ATK/HP +8% · 표시 별 +1",
+    "en": "Awaken: ATK/HP +8% · display stars +1"
+  },
+  "ui.monBookEvolveBtn": {
+    "ko": "진화 +{n}",
+    "en": "Evolve +{n}"
+  },
+  "ui.monBookEvolveMax": {
+    "ko": "진화 MAX",
+    "en": "Evolve MAX"
+  },
+  "ui.monBookEvolveNeedLv": {
+    "ko": "몬스터 Lv.{n}+ 필요",
+    "en": "Needs monster Lv.{n}+"
+  },
+  "ui.monBookEvolveCost": {
+    "ko": "골드 {mana}{crystal}",
+    "en": "Gold {mana}{crystal}"
+  },
   "ui.sumBookAwakenBtn": {
     "ko": "각성 +{n}",
     "en": "Awaken +{n}"
@@ -2395,5 +2643,73 @@
   "ui.bldgInfo.fusion": {
     "ko": "같은 종의 소환수를 융합해 진화합니다|높은 레벨·스킬·상징을 유지한 채 성장합니다|소환사 레벨 17에 해금됩니다",
     "en": "Fuse same-species monsters to evolve|Keep the better level, skills, and symbols|Unlocks at summoner level 17"
+  },
+  "ui.arena.setDefense": {
+    "ko": "방어 덱 설정",
+    "en": "Set defense deck"
+  },
+  "ui.arena.attacksLeft": {
+    "ko": "오늘 남은 공격",
+    "en": "Attacks left today"
+  },
+  "ui.arena.defenseSet": {
+    "ko": "방어 덱 저장됨",
+    "en": "Defense deck saved"
+  },
+  "ui.arena.defenseEmpty": {
+    "ko": "미설정",
+    "en": "Not set"
+  },
+  "ui.shop.dailyOffers": {
+    "ko": "오늘의 특가",
+    "en": "Daily deals"
+  },
+  "ui.shop.soldOut": {
+    "ko": "품절",
+    "en": "Sold out"
+  },
+  "ui.glory.buffSummary": {
+    "ko": "버프 합산",
+    "en": "Buff summary"
+  },
+  "ui.fusion.recipes": {
+    "ko": "합성 레시피",
+    "en": "Fusion recipes"
+  },
+  "ui.fusion.recipeNeed": {
+    "ko": "재료 부족",
+    "en": "Missing materials"
+  },
+  "ui.guild.weeklyGoal": {
+    "ko": "주간 기여",
+    "en": "Weekly contrib"
+  },
+  "ui.guild.streak": {
+    "ko": "연속 출석",
+    "en": "Check-in streak"
+  },
+  "ui.guild.members": {
+    "ko": "길드원",
+    "en": "Members"
+  },
+  "ui.guild.raidHp": {
+    "ko": "레이드 보스 HP",
+    "en": "Raid boss HP"
+  },
+  "ui.guild.raidAttempts": {
+    "ko": "오늘 레이드",
+    "en": "Raid attempts today"
+  },
+  "ui.trial.tokens": {
+    "ko": "시련 토큰",
+    "en": "Trial tokens"
+  },
+  "ui.trial.titleOn": {
+    "ko": "시련 칭호 해금",
+    "en": "Trial title unlocked"
+  },
+  "ui.shop.grindstoneStock": {
+    "ko": "연마석 보유 {n}",
+    "en": "Grindstones {n}"
   }
 }

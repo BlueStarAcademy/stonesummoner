@@ -5,8 +5,10 @@ import {
   CAIROS_NECRO_STAGES,
   EQUIP_STAGES,
   MAIN_QUEST_AREA_COUNT,
+  TRIAL_STAGES,
   WORLD_ARENA_STAGES,
   getStage,
+  isWeekdayStageOpenToday,
   stagesForMap,
   type StageDef,
 } from "stonesummoner-data";
@@ -66,9 +68,13 @@ export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
         save.clearedStages.includes("garen_1_3")
       );
     case "weekday":
-      return save.clearedStages.includes("garen_1_3");
+      return (
+        save.clearedStages.includes("garen_1_3") &&
+        isWeekdayStageOpenToday(stageId)
+      );
     case "trial":
-      return save.clearedStages.includes("garen_1_5");
+      if (!save.clearedStages.includes("garen_1_5")) return false;
+      return chainUnlocked(save, TRIAL_STAGES, stageId);
     case "equip":
       if (!save.clearedStages.includes("garen_1_4")) return false;
       return chainUnlocked(save, EQUIP_STAGES, stageId);
@@ -84,6 +90,9 @@ export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
 
 export function stageUnlockLabel(save: PlayerSave, stage: StageDef): string {
   if (save.clearedStages.includes(stage.id)) return "클리어";
+  if (stage.mode === "weekday" && !isWeekdayStageOpenToday(stage.id)) {
+    return "오늘은 닫힘";
+  }
   if (isStageUnlocked(save, stage.id)) return "해금";
   return "잠김";
 }

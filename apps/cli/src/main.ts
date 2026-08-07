@@ -28,6 +28,7 @@ import {
   runEquipGearBag,
   runSellGearBag,
   runAwakenSummoner,
+  runAwakenMonster,
   runUnlockSkillNode,
   runEnhanceSymbol,
   runEquipSymbol,
@@ -75,7 +76,7 @@ async function interactive(): Promise<void> {
   let save = createNewSave();
   console.log("StoneSummoner CLI — 모바일 루프 검증용");
   console.log(
-    "명령: collect | crystal | wish | upgrade | glory [id] | fuse <a> <b> | energy [n] | essence | craft | dojo | sell-sym <i> | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | awaken | tree | unlock <node> | gear | bag | equip-gear <i> | sell-gear <i> | enh-gear <wpn|robe|acc|orb|cloak|ring> | set-gear <slot> <mana|assault|guardian|sense|tempo> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
+    "명령: collect | crystal | wish | upgrade | glory [id] | fuse <a> <b> | energy [n] | essence | craft | dojo | sell-sym <i> | summon | buy-scroll [n] | enhance <i> | evolve <i> | skillup <i> <0-2> | awaken | awaken-mon <i> | tree | unlock <node> | gear | bag | equip-gear <i> | sell-gear <i> | enh-gear <wpn|robe|acc|orb|cloak|ring> | set-gear <slot> <mana|assault|guardian|sense|tempo> | symbols | equip <m> <s> | enh-sym <i> | grind <i> | imprint <i> | roster | party <i…> | stages | go <id> | status | demo | quit",
   );
   printStatus(save);
 
@@ -350,6 +351,14 @@ async function interactive(): Promise<void> {
 
     if (cmd === "awaken" || cmd === "aw") {
       const r = runAwakenSummoner(save);
+      save = r.save;
+      console.log(r.message);
+      printStatus(save);
+      continue;
+    }
+
+    if (cmd === "awaken-mon" || cmd === "awm") {
+      const r = runAwakenMonster(save, arg ?? "0");
       save = r.save;
       console.log(r.message);
       printStatus(save);

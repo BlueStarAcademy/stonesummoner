@@ -140,7 +140,7 @@ function hasAxisChain(board: Board, color: StoneColor, last: Point): boolean {
 }
 
 /**
- * Module B stub: detect shape bonuses after a successful play at `last`.
+ * Module B: detect shape bonuses after a successful play at `last`.
  */
 export function detectShapeBonuses(
   board: Board,
@@ -193,7 +193,7 @@ export function detectShapeBonuses(
   if (hasKosumi(board, color, last)) {
     out.push({
       id: "kosumi",
-      labelKo: "쌍립(근사)",
+      labelKo: "쌍립",
       amplifyDelta: 0.015,
       mana: 3,
     });

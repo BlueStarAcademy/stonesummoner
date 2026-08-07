@@ -132,6 +132,8 @@ export const IMPRINTABLE_SLOTS = [2, 4, 6] as const;
 
 export const SYMBOL_IMPRINT_CRYSTAL_COST = 8;
 export const SYMBOL_GRIND_MANA_COST = 150;
+/** Grindstone inventory cost per grind (prefix or substat enhance). */
+export const SYMBOL_GRIND_STONE_COST = 1;
 
 const GRIND_PREFIX_POOL: { prefixStat: string; prefixValue: number }[] = [
   { prefixStat: "ATK+", prefixValue: 10 },

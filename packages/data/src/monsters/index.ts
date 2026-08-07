@@ -181,6 +181,6 @@ export {
   ELEMENTS,
   type Element,
   type MonsterDef,
-  type MonsterRole,
   type FamilySeed,
-};
+} from "./types.js";
+export type { MonsterRole } from "./types.js";

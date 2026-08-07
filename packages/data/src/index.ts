@@ -50,6 +50,7 @@ export {
   refreshMainValue,
   SYMBOL_IMPRINT_CRYSTAL_COST,
   SYMBOL_GRIND_MANA_COST,
+  SYMBOL_GRIND_STONE_COST,
   IMPRINTABLE_SLOTS,
   QUALITY_SUBSTAT_COUNT,
   qualityToPlateId,
@@ -73,7 +74,10 @@ export {
   countSymbolSets,
   describeSymbol,
   emptySymbolCombatMods,
+  grindEnhanceSubstat,
   MAX_SYMBOL_ENHANCE,
+  MAX_SYMBOL_SUBSTATS,
+  SYMBOL_SUBSTAT_PROC_LEVELS,
   symbolCombatMods,
   symbolEnhanceManaCost,
   summarizeSymbolSets,
@@ -149,6 +153,9 @@ export {
   WORLD_ARENA_STAGES,
   getStage,
   stagesByMode,
+  isWeekdayStageOpenToday,
+  WEEKDAY_EVOLVE_MAT_DROP,
+  WEEKDAY_SKILL_MAT_DROP,
 } from "./scenario.js";
 export type { ContentMode, CairosDungeon, MainQuestPinId, StageDef } from "./scenario.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";
@@ -174,3 +181,14 @@ export type {
   GloryBuildingId,
   GloryCombatBuff,
 } from "./glory.js";
+export {
+  FUSION_RECIPES,
+  getFusionRecipe,
+} from "./fusion.js";
+export type { FusionRecipeDef } from "./fusion.js";
+export {
+  ARENA_RIVAL_DECKS,
+  getArenaRivalDeck,
+  pickArenaRival,
+} from "./arenaRivals.js";
+export type { ArenaRivalDeck } from "./arenaRivals.js";
