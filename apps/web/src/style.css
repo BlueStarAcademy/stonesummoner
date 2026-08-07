@@ -5728,6 +5728,40 @@ button.battle-unit {
   position: relative;
 }
 
+.board-circle-art {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: min(118%, 540px);
+  aspect-ratio: 1.55;
+  transform: translate(-50%, -50%) rotateX(58deg);
+  transform-origin: center center;
+  pointer-events: none;
+  z-index: 0;
+  object-fit: contain;
+  opacity: 0.92;
+  filter: drop-shadow(0 0 28px #5a4ec855);
+}
+
+.board-frame--has-art.is-placeable .board-circle-art {
+  animation: board-circle-art-pulse 2.4s ease-in-out infinite;
+}
+
+.board-frame--has-art.phase-2 .board-circle-art,
+.board-frame--has-art.phase-3 .board-circle-art {
+  filter: drop-shadow(0 0 36px #c9a22766) saturate(1.2) brightness(1.08);
+  opacity: 1;
+}
+
+.board-frame--has-art.is-rekindling .board-circle-art {
+  filter: drop-shadow(0 0 48px #e8d48aaa) saturate(1.35) brightness(1.15);
+}
+
+@keyframes board-circle-art-pulse {
+  0%, 100% { opacity: 0.88; transform: translate(-50%, -50%) rotateX(58deg) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) rotateX(58deg) scale(1.03); }
+}
+
 .board-circle-aura {
   position: absolute;
   left: 50%;
@@ -5749,6 +5783,13 @@ button.battle-unit {
   filter: blur(0.2px);
 }
 
+.board-frame--has-art .board-circle-aura {
+  opacity: 0.35;
+  background:
+    radial-gradient(ellipse at center, #c9a22722 0%, transparent 50%),
+    radial-gradient(ellipse at center, transparent 58%, #8870ff28 70%, transparent 82%);
+}
+
 .board-circle-ring {
   position: absolute;
   left: 50%;
@@ -5767,8 +5808,16 @@ button.battle-unit {
   opacity: 0.85;
 }
 
+.board-frame--has-art .board-circle-ring {
+  opacity: 0.4;
+}
+
 .board-frame--tilted.is-placeable .board-circle-aura {
   animation: board-aura-pulse 2.4s ease-in-out infinite;
+}
+
+.board-frame--has-art.is-placeable .board-circle-aura {
+  animation: none;
 }
 
 @keyframes board-aura-pulse {
@@ -6337,6 +6386,28 @@ button.battle-unit {
   pointer-events: none;
 }
 
+.board-frame--has-art .board.magic-circle {
+  background:
+    radial-gradient(circle at 50% 42%, #1a142888 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, #0c0a14cc 0%, #080610ee 72%);
+  border-color: #c9a22744;
+  box-shadow:
+    inset 0 0 0 1px #f0e0a012,
+    inset 0 0 20px #0006,
+    0 0 0 1px #7b6cff22,
+    0 0 24px #5a4ec833;
+}
+
+.board-frame--has-art .board.magic-circle::before {
+  opacity: 0.35;
+  border-color: #c9a22733;
+  box-shadow: none;
+}
+
+.board-frame--has-art .board.magic-circle::after {
+  opacity: 0.3;
+}
+
 @keyframes board-in {
   from { opacity: 0; transform: scale(0.97); }
   to { opacity: 1; transform: scale(1); }
@@ -6438,6 +6509,32 @@ button.battle-unit {
   overflow: hidden;
 }
 
+.board button.cell .magic-stone-img {
+  position: absolute;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.board button.cell .magic-stone.has-art:not(.art-failed) {
+  background: transparent;
+  overflow: visible;
+}
+
+.board button.cell .magic-stone.has-art:not(.art-failed) .magic-stone-core {
+  inset: 28%;
+  opacity: 0.45;
+  z-index: 1;
+}
+
+.board button.cell .magic-stone.has-art:not(.art-failed) .magic-stone-flare {
+  z-index: 1;
+  opacity: 0.55;
+}
+
 .board button.cell .magic-stone-core {
   position: absolute;
   inset: 22%;
@@ -6470,6 +6567,13 @@ button.battle-unit {
   background: radial-gradient(circle at 50% 50%, #f0d87866 0%, transparent 65%);
 }
 
+.board button.cell .magic-stone.black.has-art:not(.art-failed) {
+  box-shadow:
+    0 0 12px #c9a227aa,
+    0 0 20px #f0d87866,
+    0 2px 4px #0008;
+}
+
 .board button.cell .stone.white,
 .board button.cell .magic-stone.white {
   background:
@@ -6484,6 +6588,29 @@ button.battle-unit {
 .board button.cell .stone.white .magic-stone-flare,
 .board button.cell .magic-stone.white .magic-stone-flare {
   background: radial-gradient(circle at 50% 50%, #a090ff66 0%, transparent 65%);
+}
+
+.board button.cell .magic-stone.white.has-art:not(.art-failed) {
+  box-shadow:
+    0 0 12px #7b6cffbb,
+    0 0 20px #a090ff66,
+    0 2px 4px #0008;
+}
+
+.board button.cell .magic-stone.el-fire.has-art:not(.art-failed) {
+  filter: drop-shadow(0 0 6px #ff603088);
+}
+.board button.cell .magic-stone.el-water.has-art:not(.art-failed) {
+  filter: drop-shadow(0 0 6px #40b0ff88);
+}
+.board button.cell .magic-stone.el-wind.has-art:not(.art-failed) {
+  filter: drop-shadow(0 0 6px #80e05088);
+}
+.board button.cell .magic-stone.el-light.has-art:not(.art-failed) {
+  filter: drop-shadow(0 0 6px #ffe08088);
+}
+.board button.cell .magic-stone.el-dark.has-art:not(.art-failed) {
+  filter: drop-shadow(0 0 6px #a070ff88);
 }
 
 .board button.cell .token-mark {

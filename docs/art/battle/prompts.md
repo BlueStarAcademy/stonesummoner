@@ -47,3 +47,8 @@ ultra detailed painted environment
 | weekday | Training grounds yard |
 
 Fallback: `map-01`.
+
+## Related battle board art
+
+- Magic circles under the go board: [circle-prompts.md](./circle-prompts.md)
+- Element magic stones: [stone-prompts.md](./stone-prompts.md)

@@ -25,6 +25,12 @@ import {
 } from "./battle/spinePacks";
 import { BATTLE_STILL_FAMILY_SET } from "./battle/battleStills";
 import { battleSkyHtml } from "./battle/battleBg";
+import {
+  battleCircleIdForStage,
+  battleCircleSrc,
+  battleStoneSrc,
+  normalizeBattleStoneId,
+} from "./battle/battleCircle";
 import { dematteArtInTree } from "./ui/dematteArt";
 import { initUiScale } from "./ui/uiScale";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
@@ -1559,11 +1565,34 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
     difficulty: diff,
   });
   battle.tickUntilReady();
+  prefetchBattleBoardArt(stage);
   refreshLegal();
   ensureTarget();
   view = "battle";
   render();
   void resolveCombatUntilAllyInput();
+}
+
+/** Prefetch only the active circle + stone skins for this fight. */
+function prefetchBattleBoardArt(stage: StageDef): void {
+  if (typeof Image === "undefined") return;
+  const urls = new Set<string>();
+  urls.add(battleCircleSrc(battleCircleIdForStage(stage)));
+  const allyEl =
+    battle?.allySummoner.summonerElement ??
+    battle?.units.find((u) => u.team === "ally" && u.kind === "summoner")
+      ?.element;
+  const enemyEl =
+    battle?.enemySummoner.summonerElement ??
+    battle?.units.find((u) => u.team === "enemy" && u.kind === "summoner")
+      ?.element;
+  urls.add(battleStoneSrc(normalizeBattleStoneId(allyEl)));
+  urls.add(battleStoneSrc(normalizeBattleStoneId(enemyEl)));
+  for (const src of urls) {
+    const img = new Image();
+    img.decoding = "async";
+    img.src = src;
+  }
 }
 
 function renderStagePrepDock(): string {
@@ -3600,6 +3629,17 @@ function renderBoard(): string {
     battle.getUnit(battle.activeUnitId!)?.team === "ally" &&
     !autoMode;
 
+  const allySummonerUnit = battle.units.find(
+    (u) => u.team === "ally" && u.kind === "summoner",
+  );
+  const enemySummonerUnit = battle.units.find(
+    (u) => u.team === "enemy" && u.kind === "summoner",
+  );
+  const allyStoneEl =
+    battle.allySummoner.summonerElement ?? allySummonerUnit?.element;
+  const enemyStoneEl =
+    battle.enemySummoner.summonerElement ?? enemySummonerUnit?.element;
+
   let cells = "";
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -3638,7 +3678,15 @@ function renderBoard(): string {
       const baitClass = bait ? " bait" : "";
       const placeable = canClick && legal && !stone && !forbid;
       const stoneHtml = stone
-        ? `<span class="stone magic-stone ${stone}" aria-hidden="true"><i class="magic-stone-core"></i><i class="magic-stone-flare"></i></span>`
+        ? (() => {
+            const team = stone === "black" ? "ally" : "enemy";
+            const el =
+              team === "ally" ? allyStoneEl : enemyStoneEl;
+            const stoneId = normalizeBattleStoneId(el);
+            const src = battleStoneSrc(stoneId);
+            const elClass = stoneId === "enemy" ? "el-enemy" : `el-${stoneId}`;
+            return `<span class="stone magic-stone ${stone} ${elClass} has-art" aria-hidden="true"><img class="magic-stone-img" src="${src}" width="64" height="64" alt="" draggable="false" decoding="async" onerror="this.closest('.magic-stone')?.classList.add('art-failed');this.remove()"/><i class="magic-stone-core"></i><i class="magic-stone-flare"></i></span>`;
+          })()
         : token
           ? `<span class="token-mark">${tokenLabel}</span>`
           : forbid
@@ -3660,7 +3708,10 @@ function renderBoard(): string {
         100,
     ),
   );
-  return `<div class="board-frame board-frame--tilted board-frame--circle phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}${canClick ? " is-placeable" : ""}" data-element="${battle.circleElement ?? ""}">
+  const circleId = battleCircleIdForStage(currentStage);
+  const circleSrc = battleCircleSrc(circleId);
+  return `<div class="board-frame board-frame--tilted board-frame--circle board-frame--has-art phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}${canClick ? " is-placeable" : ""}" data-element="${battle.circleElement ?? ""}" data-circle="${circleId}">
+    <img class="board-circle-art" src="${circleSrc}" width="512" height="512" alt="" draggable="false" decoding="async" aria-hidden="true" onerror="this.remove();this.parentElement?.classList.remove('board-frame--has-art')"/>
     <div class="board-circle-aura" aria-hidden="true"></div>
     <div class="board-circle-ring" aria-hidden="true"></div>
     <div class="board-phase-tag">${rebuildTag}${openingHint}</div>
