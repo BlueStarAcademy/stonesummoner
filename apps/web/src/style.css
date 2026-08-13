@@ -4228,12 +4228,12 @@ main {
   position: absolute;
   left: 0;
   top: 0;
-  width: calc(212% * var(--island-zoom, 1));
-  height: calc(228% * var(--island-zoom, 1));
+  width: calc(285% * var(--island-zoom, 1));
+  height: calc(265% * var(--island-zoom, 1));
   will-change: transform;
   user-select: none;
   transform-style: preserve-3d;
-  transform-origin: 50% 36%;
+  transform-origin: 50% 40%;
 }
 
 .island-map-img {
@@ -4242,7 +4242,7 @@ main {
   width: 106%;
   height: 106%;
   object-fit: cover;
-  object-position: center 12%;
+  object-position: center 18%;
   pointer-events: none;
   -webkit-user-drag: none;
   /* Sharpen feel without soft GPU upscale (zoom grows layout, not transform scale) */
@@ -4256,10 +4256,72 @@ main {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.28;
+  opacity: 0.32;
   background:
-    radial-gradient(ellipse at 50% 48%, transparent 70%, #0c141c30 100%),
-    linear-gradient(180deg, #0a12181a 0%, transparent 8%, transparent 88%, #0a121840 100%);
+    radial-gradient(ellipse at 22% 46%, transparent 18%, #0c141c28 42%, #0a121850 78%),
+    radial-gradient(ellipse at 50% 44%, transparent 20%, #0c141c22 48%, #0a121848 80%),
+    radial-gradient(ellipse at 78% 48%, transparent 18%, #0c141c28 42%, #0a121850 78%),
+    linear-gradient(180deg, #0a12181a 0%, transparent 10%, transparent 86%, #0a121840 100%);
+}
+
+.island-archipelago {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.island-islet {
+  position: absolute;
+  border-radius: 48% 46% 44% 46%;
+  background:
+    radial-gradient(ellipse at 48% 42%, #d8c48a22 0%, #7a9a6828 36%, #3a5a4820 58%, transparent 74%);
+  box-shadow:
+    inset 0 0 0 1px #c9a22722,
+    0 0 40px #1a283422;
+}
+
+.island-islet--west {
+  transform: rotate(-4deg);
+}
+.island-islet--center {
+  border-radius: 46% 48% 45% 47%;
+  background:
+    radial-gradient(ellipse at 50% 40%, #e0d0a028 0%, #6a8a782a 38%, #2a4a4020 60%, transparent 76%);
+}
+.island-islet--east {
+  transform: rotate(3deg);
+  background:
+    radial-gradient(ellipse at 52% 44%, #d0c09022 0%, #5a7a8828 36%, #2a3a5020 58%, transparent 74%);
+}
+
+.island-islet-label {
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid #c9a22744;
+  background: #0e1620aa;
+  color: #e8d9a8cc;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  opacity: 0.72;
+  text-transform: uppercase;
+}
+
+.island-islet-bridges {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(105deg, transparent 28%, #c9a22718 36%, #c9a22728 42%, #c9a22718 48%, transparent 56%),
+    linear-gradient(75deg, transparent 48%, #c9a22716 56%, #c9a22726 62%, #c9a22716 68%, transparent 76%);
+  mask-image: radial-gradient(ellipse at 50% 48%, #000 12%, transparent 55%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 48%, #000 12%, transparent 55%);
+  opacity: 0.85;
 }
 
 #app.home-mode .island-viewport {
@@ -4277,13 +4339,16 @@ main {
 .island-build-zone-pad {
   position: absolute;
   inset: 0;
-  border-radius: 48% 48% 44% 44%;
-  border: 2px dashed #c9a227cc;
+  border-radius: 18% / 22%;
+  border: 2px dashed #c9a22799;
   background:
-    radial-gradient(ellipse at 50% 46%, #fff8d633 0%, #c9a22722 38%, #7bb8e814 62%, transparent 78%);
+    radial-gradient(ellipse at 22% 48%, #fff8d622 0%, transparent 42%),
+    radial-gradient(ellipse at 50% 46%, #fff8d628 0%, transparent 44%),
+    radial-gradient(ellipse at 78% 50%, #fff8d622 0%, transparent 42%),
+    #c9a22714;
   box-shadow:
-    inset 0 0 0 1px #fff8e855,
-    0 0 28px #c9a22744,
+    inset 0 0 0 1px #fff8e844,
+    0 0 28px #c9a22733,
     0 8px 24px #0004;
   animation: island-zone-pulse 2.8s ease-in-out infinite;
 }

@@ -1823,6 +1823,18 @@
     "ko": "진화재료",
     "en": "Evolve mats"
   },
+  "ui.islandIsletHome": {
+    "ko": "생활 섬",
+    "en": "Home islet"
+  },
+  "ui.islandIsletCraft": {
+    "ko": "성장 섬",
+    "en": "Craft islet"
+  },
+  "ui.islandIsletSociety": {
+    "ko": "모험 섬",
+    "en": "Adventure islet"
+  },
   "ui.summonNeedScroll": {
     "ko": "소환서 부족",
     "en": "Need scrolls"

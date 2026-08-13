@@ -828,21 +828,21 @@ let stagePrepSuppressClick = false;
 let islandPan = { x: 0, y: 0 };
 let islandPanCentered = false;
 /** Bump when cover metrics change so the next bind re-centers once. */
-const ISLAND_COVER_FIT_VERSION = 3;
+const ISLAND_COVER_FIT_VERSION = 4;
 let islandCoverFitApplied = 0;
 /** User zoom via island-world layout size (1 = default). Not applied as CSS transform scale. */
 let islandZoom = 1;
-const ISLAND_BASE_SCALE = 1.12;
+const ISLAND_BASE_SCALE = 1.08;
 /** Must stay in sync with .island-world width/height % at --island-zoom: 1. */
-const ISLAND_WORLD_PCT = { w: 2.12, h: 2.28 } as const;
+const ISLAND_WORLD_PCT = { w: 2.85, h: 2.65 } as const;
 /** Extra cover so edges never letterbox after scale. */
-const ISLAND_ZOOM_MIN_OVERSCAN = 1.22;
+const ISLAND_ZOOM_MIN_OVERSCAN = 1.18;
 /** Fallback ceiling; real max is computed from map pixel size. */
 const ISLAND_ZOOM_MAX_HARD = 4;
 /** Stop just before object-fit cover would upsample the bitmap past 1 CSS px / image px. */
 const ISLAND_ZOOM_SHARP_PAD = 0.98;
 const ISLAND_MAP_NATURAL = { w: 1440, h: 2560 } as const;
-const ISLAND_TRANSFORM_ORIGIN = { x: 0.5, y: 0.36 };
+const ISLAND_TRANSFORM_ORIGIN = { x: 0.5, y: 0.4 };
 /** Keep tilt tiny - larger angles foreshorten and leave empty strips at the top. */
 const ISLAND_ROTATE_X_DEG = 2;
 let islandPanDrag: {
@@ -859,29 +859,44 @@ let islandPinch: {
   startZoom: number;
 } | null = null;
 
-const ISLAND_LAYOUT_KEY = "stonesummoner.island-layout.v1";
+/** v2: three-islet archipelago defaults (invalidates cluttered v1 local layouts). */
+const ISLAND_LAYOUT_KEY = "stonesummoner.island-layout.v2";
+/**
+ * Default spots on a wide 3-islet map (% of island-world).
+ * West = hub · Center = craft · East = society / adventure.
+ */
 const ISLAND_LAYOUT_DEFAULT: Record<string, { x: number; y: number }> = {
-  summon_hearth: { x: 30, y: 44 },
-  power_circle: { x: 50, y: 27 },
-  gateway: { x: 72, y: 40 },
-  mana_pond: { x: 24, y: 58 },
-  shop: { x: 52, y: 52 },
-  party: { x: 76, y: 56 },
-  wish: { x: 18, y: 40 },
-  dojo: { x: 40, y: 70 },
-  crystal_mine: { x: 66, y: 68 },
-  glory: { x: 86, y: 74 },
-  guild: { x: 28, y: 82 },
-  fusion: { x: 58, y: 86 },
+  // West islet — daily hub
+  power_circle: { x: 22, y: 30 },
+  summon_hearth: { x: 12, y: 44 },
+  shop: { x: 30, y: 46 },
+  party: { x: 18, y: 60 },
+  // Center islet — growth / production
+  wish: { x: 48, y: 26 },
+  mana_pond: { x: 40, y: 44 },
+  crystal_mine: { x: 58, y: 46 },
+  dojo: { x: 48, y: 62 },
+  // East islet — adventure & endgame
+  gateway: { x: 78, y: 32 },
+  glory: { x: 70, y: 50 },
+  guild: { x: 88, y: 54 },
+  fusion: { x: 76, y: 70 },
 };
 
-/** Placeable terrace (% of island-world). Kept in sync with .island-build-zone CSS. */
+/** Placeable terrace across the three islets (% of island-world). */
 const ISLAND_LAYOUT_BOUNDS = {
-  minX: 14,
-  maxX: 86,
-  minY: 24,
-  maxY: 80,
+  minX: 8,
+  maxX: 92,
+  minY: 18,
+  maxY: 86,
 } as const;
+
+/** Soft landmass pads that read as three linked islets (visual only). */
+const ISLAND_ISLETS = [
+  { id: "west", left: 4, top: 20, width: 38, height: 52, labelKey: "ui.islandIsletHome" },
+  { id: "center", left: 32, top: 16, width: 40, height: 56, labelKey: "ui.islandIsletCraft" },
+  { id: "east", left: 60, top: 20, width: 38, height: 54, labelKey: "ui.islandIsletSociety" },
+] as const;
 
 function clampIslandLayoutPos(x: number, y: number): { x: number; y: number } {
   return {
@@ -1085,7 +1100,7 @@ function looksBrokenLabel(s: string): boolean {
 
 
 /** Footprint ellipse half-axes in % of island-world (scaled by depth). */
-const ISLAND_SPOT_HIT = { rx: 10.5, ry: 12.5 } as const;
+const ISLAND_SPOT_HIT = { rx: 9.2, ry: 11 } as const;
 
 function islandSpotScaleAt(y: number): number {
   return 0.68 + Math.max(0, Math.min(1, y / 100)) * 0.5;
@@ -2897,11 +2912,29 @@ function pulseShapeBonusesAfterStone(
 }
 
 function isGrindSuccessMessage(message: string): boolean {
-  // Loop messages are Hangul; forgeOkGrind EN is "Grind" and would miss.
+  // Loop success: "\uC5F0\uB9C8(...):" — not shortage / fail copy that also mentions grind.
   return (
-    message.includes("\uC5F0\uB9C8") ||
-    message.startsWith(t("ui.forgeOkGrind"))
+    message.startsWith("\uC5F0\uB9C8(") ||
+    /^Grind\s*\(/i.test(message)
   );
+}
+
+function isImprintSuccessMessage(message: string): boolean {
+  // Loop success: "\uAC01\uC778: …" — not fail / unavailable imprint messages.
+  return (
+    message.startsWith("\uAC01\uC778:") ||
+    /^Imprint\s*:/i.test(message)
+  );
+}
+
+/** Dismiss forge result + symbol detail when leaving the current monster context. */
+function clearEnhanceSymbolUi(opts?: { keepDock?: boolean }): void {
+  forgeReveal = null;
+  symbolDetailIndex = null;
+  symbolCompareIndex = null;
+  slotEquipPick = null;
+  symbolInvFilterOpen = null;
+  if (!opts?.keepDock) monBookDock = "roster";
 }
 
 async function onCellClickAsync(x: number, y: number): Promise<void> {
@@ -5483,6 +5516,14 @@ function renderHome(): string {
           decoding="async"
         />
         <div class="island-map-veil" aria-hidden="true"></div>
+        <div class="island-archipelago" aria-hidden="true">
+          ${ISLAND_ISLETS.map(
+            (isle) => `<div class="island-islet island-islet--${isle.id}" style="left:${isle.left}%;top:${isle.top}%;width:${isle.width}%;height:${isle.height}%">
+            <span class="island-islet-label">${escapeHtml(t(isle.labelKey))}</span>
+          </div>`,
+          ).join("")}
+          <div class="island-islet-bridges" aria-hidden="true"></div>
+        </div>
         ${
           islandLayoutEdit
             ? `<div class="island-build-zone" aria-hidden="true" style="left:${ISLAND_LAYOUT_BOUNDS.minX}%;top:${ISLAND_LAYOUT_BOUNDS.minY}%;width:${ISLAND_LAYOUT_BOUNDS.maxX - ISLAND_LAYOUT_BOUNDS.minX}%;height:${ISLAND_LAYOUT_BOUNDS.maxY - ISLAND_LAYOUT_BOUNDS.minY}%">
@@ -5492,30 +5533,30 @@ function renderHome(): string {
         </div>`
             : ""
         }
-        ${spot("summon_hearth", islandSpotTitle("summon_hearth"), 30, 44, { tone: "summon", sub: `${t('ui.fa73f3a42f')} ${save.scrolls}${t('ui.b241493768')}` })}
-        ${spot("power_circle", islandSpotTitle("power_circle"), 50, 27, { tone: "forge", sub: t('ui.1ab42b48a4') })}
-        ${spot("gateway", islandSpotTitle("gateway"), 72, 40, { tone: "gate", sub: t('ui.13c82de693') })}
-        ${spot("mana_pond", islandSpotTitle("mana_pond"), 24, 58, {
+        ${spot("summon_hearth", islandSpotTitle("summon_hearth"), 12, 44, { tone: "summon", sub: `${t('ui.fa73f3a42f')} ${save.scrolls}${t('ui.b241493768')}` })}
+        ${spot("power_circle", islandSpotTitle("power_circle"), 22, 30, { tone: "forge", sub: t('ui.1ab42b48a4') })}
+        ${spot("gateway", islandSpotTitle("gateway"), 78, 32, { tone: "gate", sub: t('ui.13c82de693') })}
+        ${spot("mana_pond", islandSpotTitle("mana_pond"), 40, 44, {
                   tone: "pond",
                   sub: `Lv.${pondLv} ${"\u00B7"} ${t('ui.df72a8753d')} ${storedMana}/${pondCap}`,
                   bubble: storedMana > 0 ? String(storedMana) : undefined,
                   bubbleKind: storedMana > 0 ? "mana" : undefined,
                 })}
-        ${spot("shop", islandSpotTitle("shop"), 52, 52, { tone: "shop", sub: t('ui.ed3a862c2c') })}
-        ${spot("party", islandSpotTitle("party"), 76, 56, { tone: "party", sub: `${save.party.length}/4` })}
-        ${spot("wish", islandSpotTitle("wish"), 18, 40, {
+        ${spot("shop", islandSpotTitle("shop"), 30, 46, { tone: "shop", sub: t('ui.ed3a862c2c') })}
+        ${spot("party", islandSpotTitle("party"), 18, 60, { tone: "party", sub: `${save.party.length}/4` })}
+        ${spot("wish", islandSpotTitle("wish"), 48, 26, {
                   tone: "wish",
                   locked: !hasWish,
                   unlockLv: 7,
                   sub: hasWish ? t('ui.6ca75b551e') : undefined,
                 })}
-        ${spot("dojo", islandSpotTitle("dojo"), 40, 70, {
+        ${spot("dojo", islandSpotTitle("dojo"), 48, 62, {
                   tone: "dojo",
                   locked: !dojoOk,
                   unlockLv: 8,
                   sub: dojoOk ? `${t('ui.ca119dd0f6')} ${save.dojoDrills ?? 0}${t('ui.2fc05c02be')}` : undefined,
                 })}
-        ${spot("crystal_mine", islandSpotTitle("crystal_mine"), 66, 68, {
+        ${spot("crystal_mine", islandSpotTitle("crystal_mine"), 58, 46, {
                   tone: "mine",
                   locked: !mineOk,
                   unlockLv: 10,
@@ -5523,14 +5564,14 @@ function renderHome(): string {
                   bubble: mineOk && storedCrystal > 0 ? String(storedCrystal) : undefined,
                   bubbleKind: mineOk && storedCrystal > 0 ? "crystal" : undefined,
                 })}
-        ${spot("glory", islandSpotTitle("glory"), 86, 74, { tone: "glory", sub: `${t('ui.ba0c9e096f')} ${save.gloryPoints ?? 0}` })}
-        ${spot("guild", save.guildName ? save.guildName : islandSpotTitle("guild"), 28, 82, {
+        ${spot("glory", islandSpotTitle("glory"), 70, 50, { tone: "glory", sub: `${t('ui.ba0c9e096f')} ${save.gloryPoints ?? 0}` })}
+        ${spot("guild", save.guildName ? save.guildName : islandSpotTitle("guild"), 88, 54, {
                   tone: "guild",
                   locked: !guildOk,
                   unlockLv: 12,
                   sub: guildOk ? t('ui.d55c6d0b00') : undefined,
                 })}
-        ${spot("fusion", islandSpotTitle("fusion"), 58, 86, {
+        ${spot("fusion", islandSpotTitle("fusion"), 76, 70, {
                   tone: "fusion",
                   locked: !fusionOk,
                   unlockLv: 17,
@@ -7182,6 +7223,7 @@ function bindSymbolInventoryInteractions(): void {
   const closeSymDetail = () => {
     symbolDetailIndex = null;
     symbolCompareIndex = null;
+    forgeReveal = null;
     render();
   };
   app
@@ -7239,7 +7281,7 @@ function bindSymbolInventoryInteractions(): void {
         save = r.save;
         persist();
         const next = id ? save.symbols.find((x) => x.id === id) : undefined;
-        if (next && before && r.message.startsWith(t("ui.forgeOkImprint"))) {
+        if (next && before && isImprintSuccessMessage(r.message)) {
           forgeReveal = {
             kind: "imprint",
             before,
@@ -8190,13 +8232,15 @@ function renderSummonerBook(): string {
 function renderEnhance(): string {
   enhanceTab = "monsters";
   const dock: "roster" | "symbols" =
-    forgeReveal || monBookDock === "symbols" ? "symbols" : "roster";
+    monBookDock === "symbols" ? "symbols" : "roster";
 
   if (
     !selectedEnhanceUid ||
     !save.roster.some((m) => m.uid === selectedEnhanceUid)
   ) {
-    selectedEnhanceUid = save.roster[0]?.uid ?? null;
+    const nextUid = save.roster[0]?.uid ?? null;
+    if (nextUid !== selectedEnhanceUid) clearEnhanceSymbolUi();
+    selectedEnhanceUid = nextUid;
   }
   const selectedMon = selectedEnhanceUid
     ? save.roster.find((m) => m.uid === selectedEnhanceUid) ?? null
@@ -11181,10 +11225,12 @@ function bind(): void {
     btn.addEventListener("click", () => {
       const uid = btn.dataset.selectMon;
       if (!uid) return;
+      if (uid !== selectedEnhanceUid) {
+        clearEnhanceSymbolUi();
+      }
       selectedEnhanceUid = uid;
       monSkillPick = 0;
       enhanceTab = "monsters";
-      monBookDock = "roster";
       skillFeedModalOpen = false;
       skillFeedFodderUid = null;
       render();
@@ -11590,7 +11636,7 @@ function bind(): void {
       save = r.save;
       persist();
       const next = id ? save.symbols.find((s) => s.id === id) : undefined;
-      if (next && before && r.message.startsWith(t('ui.forgeOkImprint'))) {
+      if (next && before && isImprintSuccessMessage(r.message)) {
         forgeReveal = {
           kind: "imprint",
           before,
