@@ -1784,6 +1784,8 @@ function openStagePrep(stage: StageDef): void {
   }
   partyDraft = new Set(preset.party.length ? preset.party : save.party);
   persist();
+  // Battle button sits where Cancel lands after swap — block the trailing ghost click.
+  suppressGhostClicks();
   applyStagesRegionOpen();
 }
 
@@ -4223,6 +4225,26 @@ function modalCloseX(ariaLabel: string, closeBtnId: string): string {
   return `<button type="button" class="modal-x" data-modal-x-for="${closeBtnId}" aria-label="${escapeHtml(ariaLabel)}"></button>`;
 }
 
+/**
+ * After replacing modal DOM mid-gesture, the same pointer can land on the new
+ * backdrop/Cancel and instantly dismiss the sheet. Swallow trusted click/up briefly.
+ */
+let ghostClickSwallowUntil = 0;
+let ghostClickSwallowBound = false;
+function suppressGhostClicks(ms = 450): void {
+  ghostClickSwallowUntil = Math.max(ghostClickSwallowUntil, Date.now() + ms);
+  if (ghostClickSwallowBound) return;
+  ghostClickSwallowBound = true;
+  const swallow = (e: Event) => {
+    if (!e.isTrusted) return;
+    if (Date.now() > ghostClickSwallowUntil) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+  document.addEventListener("click", swallow, true);
+  document.addEventListener("pointerup", swallow, true);
+}
+
 /** One-time capture delegate so soft-injected modals (chat, drop-info, …) keep a working X. */
 let modalXDelegateBound = false;
 function ensureModalXDelegate(): void {
@@ -4241,19 +4263,8 @@ function ensureModalXDelegate(): void {
       if (!id) return;
       const closeBtn = app.querySelector<HTMLButtonElement>(`#${CSS.escape(id)}`);
       if (!closeBtn) return;
-      // Swallow the trailing trusted click that can land on UI under the modal after it hides.
-      const swallow = (e: Event) => {
-        if (!e.isTrusted) return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-      };
-      document.addEventListener("click", swallow, true);
-      document.addEventListener("pointerup", swallow, true);
+      suppressGhostClicks(400);
       closeBtn.click();
-      window.setTimeout(() => {
-        document.removeEventListener("click", swallow, true);
-        document.removeEventListener("pointerup", swallow, true);
-      }, 400);
     },
     true,
   );
@@ -9124,7 +9135,8 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
       const done = save.clearedStages.includes(s.id);
       const diffOpen = isDifficultyOpen(s, stageEntryDiff);
       const cost = stageEnergyCost(s, stageEntryDiff);
-      const canFight = !locked && diffOpen && (cost <= 0 || energyNow >= cost);
+      // Allow opening prep even when short on energy; Start inside the modal stays gated.
+      const canOpen = !locked && diffOpen;
       const short = cost > energyNow && diffOpen;
       const marker = stageListMarker(s, idx);
       const costLabel = String(cost);
@@ -9136,13 +9148,13 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
         vaultLeft !== null
           ? `${s.nameKo} · ${t("ui.9cbaf58b88")} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}`
           : `${s.nameKo} · ${status}`;
-      return `<div class="stage-sortie${done ? " is-cleared" : ""}${locked ? " is-locked" : ""}${!canFight ? " is-disabled" : ""}" title="${escapeHtml(rowTitle)}">
+      return `<div class="stage-sortie${done ? " is-cleared" : ""}${locked ? " is-locked" : ""}${!canOpen ? " is-disabled" : ""}${short ? " is-short-energy" : ""}" title="${escapeHtml(rowTitle)}">
         <span class="stage-sortie-mark${done ? " is-done" : ""}" aria-hidden="true">
           ${done ? `<span class="stage-sortie-check">${CHECK}</span>` : ""}
           <strong>${escapeHtml(marker)}</strong>
         </span>
         ${stageAppearingMons(s)}
-        <button type="button" class="stage-sortie-battle${short ? " is-short" : ""}" data-stage="${s.id}" aria-label="${escapeHtml(battleAria)}" title="${!diffOpen ? t("ui.4292516afd") : escapeHtml(status)}" ${canFight ? "" : "disabled"}>
+        <button type="button" class="stage-sortie-battle${short ? " is-short" : ""}" data-stage="${s.id}" aria-label="${escapeHtml(battleAria)}" title="${!diffOpen ? t("ui.4292516afd") : escapeHtml(status)}" ${canOpen ? "" : "disabled"}>
           <span class="stage-sortie-cost" aria-hidden="true"><strong>${costLabel}</strong></span>
           <span class="stage-sortie-battle-label">${t("ui.stageBattle")}</span>
         </button>
@@ -9327,7 +9339,9 @@ function bindStagesRegionSheet(): void {
   });
 
   host.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
       const stage = getStage(btn.dataset.stage!);
       if (stage) openStagePrep(stage);
     });
@@ -12009,14 +12023,16 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
     if (btn.closest("#stages-region-host")) return;
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
       const stage = getStage(btn.dataset.stage!);
       if (stage) openStagePrep(stage);
     });
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-region]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (ev) => {
       if (app.querySelector("#stages-viewport")?.getAttribute("data-pan-moved") === "1") {
         return;
       }
@@ -12031,6 +12047,12 @@ function bind(): void {
         stagesDropSetExpand = false;
       }
       stagesRegion = next;
+      // Pin click can retarget onto the new sheet backdrop and close it instantly.
+      if (next) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        suppressGhostClicks();
+      }
       applyStagesRegionOpen();
     });
   });

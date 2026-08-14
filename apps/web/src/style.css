@@ -8858,6 +8858,10 @@ button.stage-prep-slot {
   display: none !important;
 }
 
+#app.stage-prep-open > .app-bar > .home-chat-rail {
+  display: none !important;
+}
+
 .stage-prep-start-cost {
   display: inline-flex;
   align-items: center;
