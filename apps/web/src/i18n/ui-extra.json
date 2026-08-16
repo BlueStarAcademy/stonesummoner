@@ -120,8 +120,8 @@
     "en": "Use a normal scroll to summon an ally."
   },
   "ui.onboard.enhanceTip": {
-    "ko": "강화 버튼으로 소환수를 성장시키세요.",
-    "en": "Tap Enhance to raise your summon."
+    "ko": "상단의 강화 버튼으로 소환수 레벨을 올리세요.",
+    "en": "Use Enhance at the top to raise your summon's level."
   },
   "ui.onboard.partyTip": {
     "ko": "출전할 네 명을 고른 뒤 저장하세요.",
@@ -210,6 +210,26 @@
   "ui.battleUnitSkills": {
     "ko": "스킬",
     "en": "Skills"
+  },
+  "ui.battlePage": {
+    "ko": "Page {current}/{total}",
+    "en": "Page {current}/{total}"
+  },
+  "ui.autoSettings": {
+    "ko": "오토 설정",
+    "en": "Auto settings"
+  },
+  "ui.autoStone": {
+    "ko": "마법석 소환",
+    "en": "Magic stone"
+  },
+  "ui.autoCombat": {
+    "ko": "전투",
+    "en": "Combat"
+  },
+  "ui.autoAll": {
+    "ko": "모두",
+    "en": "All"
   },
   "ui.b72f5a4752": {
     "ko": "이전 스테이지를 먼저 클리어하세요.",
@@ -1663,6 +1683,18 @@
     "ko": "체력",
     "en": "HP"
   },
+  "ui.monStatsTitle": {
+    "ko": "능력치",
+    "en": "Combat Stats"
+  },
+  "ui.monStatsCore": {
+    "ko": "기본",
+    "en": "Core"
+  },
+  "ui.monStatsCombat": {
+    "ko": "전투",
+    "en": "Combat"
+  },
   "ui.statDef": {
     "ko": "방어력",
     "en": "DEF"
@@ -1979,6 +2011,42 @@
     "ko": "동종 강화",
     "en": "Feed same"
   },
+  "ui.skillDetail": {
+    "ko": "스킬 설명",
+    "en": "Skill Details"
+  },
+  "ui.skillGrowth": {
+    "ko": "레벨 성장",
+    "en": "Level Growth"
+  },
+  "ui.skillCurrentLevel": {
+    "ko": "보유 Lv.{n}",
+    "en": "Owned Lv.{n}"
+  },
+  "ui.skillEffect": {
+    "ko": "레벨 효과",
+    "en": "Level Effect"
+  },
+  "ui.skillLvBase": {
+    "ko": "기본 효과",
+    "en": "Base effect"
+  },
+  "ui.skillPreviewPrev": {
+    "ko": "이전 스킬 레벨",
+    "en": "Previous skill level"
+  },
+  "ui.skillPreviewNext": {
+    "ko": "다음 스킬 레벨",
+    "en": "Next skill level"
+  },
+  "ui.skillLevelCurrent": {
+    "ko": "현재",
+    "en": "Current"
+  },
+  "ui.skillLevelPreview": {
+    "ko": "미리보기",
+    "en": "Preview"
+  },
   "res.skillMats": {
     "ko": "스킬재료",
     "en": "Skill mats"
@@ -2076,8 +2144,8 @@
     "en": "Closed today"
   },
   "ui.weekdaySchedule": {
-    "ko": "진화재료: 월·수·금·일 · 스킬재료: 화·목·토·일",
-    "en": "Evolve mats: Mon/Wed/Fri/Sun · Skill mats: Tue/Thu/Sat/Sun"
+    "ko": "속성 정수 던전: 매일 · 스킬재료: 화·목·토·일",
+    "en": "Elemental essence: daily · Skill mats: Tue/Thu/Sat/Sun"
   },
   "ui.imprintSlotsHint": {
     "ko": "슬롯 2/4/6",
@@ -2182,6 +2250,38 @@
   "ui.symCompareEquipped": {
     "ko": "장착중",
     "en": "Equipped"
+  },
+  "ui.symEquipNeedMonster": {
+    "ko": "장착할 소환수를 먼저 선택하세요",
+    "en": "Select a monster to equip first"
+  },
+  "ui.symEquipWrongSlot": {
+    "ko": "슬롯 {need}에 맞는 상징만 장착할 수 있습니다 (이 상징은 슬롯 {got})",
+    "en": "Only slot {need} symbols can be equipped here (this one is slot {got})"
+  },
+  "ui.powerUpTitle": {
+    "ko": "소환수 강화",
+    "en": "Power Up Monster"
+  },
+  "ui.powerUpHint": {
+    "ko": "재료 소환수를 선택하면 EXP를 획득합니다. 동일 소환수를 재료로 쓰면 랜덤 스킬 레벨도 상승합니다. 파티 소환수는 재료로 사용할 수 없습니다.",
+    "en": "Select material monsters to gain EXP. Matching monsters also raise a random skill level. Party monsters cannot be used as materials."
+  },
+  "ui.powerUpMaterials": {
+    "ko": "재료 선택 {n}",
+    "en": "Materials selected: {n}"
+  },
+  "ui.powerUpExp": {
+    "ko": "획득 EXP +{n}",
+    "en": "EXP gained +{n}"
+  },
+  "ui.powerUpEmpty": {
+    "ko": "강화에 사용할 다른 소환수가 없습니다.",
+    "en": "There are no other monsters available as materials."
+  },
+  "ui.powerUpConfirm": {
+    "ko": "강화하기",
+    "en": "Power Up"
   },
   "ui.symFilter": {
     "ko": "세트 필터",
@@ -2351,6 +2451,22 @@
     "ko": "성장은 스킬트리에서",
     "en": "Grow in skill tree"
   },
+  "ui.stagePrepSkillTapHint": {
+    "ko": "기술을 탭한 뒤 아군 패널의 장착 슬롯을 고르세요. 1초간 누르면 상세 정보를 봅니다.",
+    "en": "Tap a skill, then choose a slot on the ally panel. Hold 1 second for details."
+  },
+  "ui.stagePrepSkillChooseSlot": {
+    "ko": "{name} — 아군 패널에서 장착 슬롯을 선택하세요",
+    "en": "{name} — choose an ally-panel slot"
+  },
+  "ui.stagePrepSkillSlots": {
+    "ko": "장착 기술",
+    "en": "Equipped skills"
+  },
+  "ui.stagePrepSkillSlot": {
+    "ko": "기술 {n}",
+    "en": "Skill {n}"
+  },
   "ui.stagePrepInfoClose": {
     "ko": "정보 닫기",
     "en": "Close info"
@@ -2427,7 +2543,6 @@
     "ko": "아이콘을 눌러 기술 효과를 확인",
     "en": "Tap an icon to view skill effects"
   },
-
   "ui.stageDropInfo": {
     "ko": "드롭 정보",
     "en": "Drop info"
@@ -2688,6 +2803,10 @@
     "ko": "{branch} +{n} 필요",
     "en": "Needs {branch} +{n}"
   },
+  "ui.skillLockedHintTier2": {
+    "ko": "{branch}1·{branch}2 +{n} 필요",
+    "en": "Needs {branch}1·{branch}2 +{n}"
+  },
   "ui.resultVictory": {
     "ko": "승리",
     "en": "Victory"
@@ -2771,6 +2890,18 @@
   "ui.buildingInfoTitle": {
     "ko": "{name} 안내",
     "en": "About {name}"
+  },
+  "ui.buildingUnlockTitle": {
+    "ko": "건물 해금",
+    "en": "Building Unlocked"
+  },
+  "ui.buildingUnlockBody": {
+    "ko": "소환사 Lv.{level} — {name}을(를) 이용할 수 있습니다.",
+    "en": "Summoner Lv.{level} — {name} is now available."
+  },
+  "ui.buildingUnlockConfirm": {
+    "ko": "확인",
+    "en": "OK"
   },
   "ui.bldgInfo.summon_hearth": {
     "ko": "스크롤을 소모해 새로운 소환수를 소환합니다|일반·고급·신비 스크롤로 등급이 다른 소환수를 얻을 수 있습니다|소환 결과는 도감과 보유 목록에 반영됩니다",
@@ -2887,5 +3018,105 @@
   "ui.shop.grindstoneStock": {
     "ko": "연마석 보유 {n}",
     "en": "Grindstones {n}"
+  },
+  "ui.gearBonusManaRegen": {
+    "ko": "마나 재생 +{n}",
+    "en": "Mana regen +{n}"
+  },
+  "ui.gearBonusManaMax": {
+    "ko": "마나 최대치 +{n}",
+    "en": "Mana max +{n}"
+  },
+  "ui.gearBonusBoardSense": {
+    "ko": "보드 감응 +{n}%",
+    "en": "Board sense +{n}%"
+  },
+  "ui.gearBonusStartMana": {
+    "ko": "시작 마나 +{n}%",
+    "en": "Start mana +{n}%"
+  },
+  "ui.gearBonusSkillPower": {
+    "ko": "스킬 위력 +{n}%",
+    "en": "Skill power +{n}%"
+  },
+  "ui.gearBonusHp": {
+    "ko": "HP +{n}",
+    "en": "HP +{n}"
+  },
+  "ui.gearBonusDef": {
+    "ko": "DEF +{n}",
+    "en": "DEF +{n}"
+  },
+  "ui.gearBonusLeaderAtk": {
+    "ko": "리더 공격력 +{n}%",
+    "en": "Leader ATK +{n}%"
+  },
+  "ui.sumInfoLeaderBuffs": {
+    "ko": "리더 버프",
+    "en": "Leader buffs"
+  },
+  "ui.sumInfoAllAllies": {
+    "ko": "모든 아군",
+    "en": "All allies"
+  },
+  "ui.sumInfoMatchingElement": {
+    "ko": "{element} 아군",
+    "en": "{element} allies"
+  },
+  "ui.sumInfoDamageReduction": {
+    "ko": "받는 피해 감소",
+    "en": "Damage taken"
+  },
+  "ui.sumInfoProfile": {
+    "ko": "소환사 정보",
+    "en": "Summoner profile"
+  },
+  "ui.sumBookAwakenCostWithMat": {
+    "ko": "골드 {mana} · 크리스탈 {crystal} · {element} 정수 {mat}",
+    "en": "Gold {mana} · Crystal {crystal} · {element} essence {mat}"
+  },
+  "ui.sumBookAwakenMatOwned": {
+    "ko": "보유 {have} / 필요 {need}",
+    "en": "Owned {have} / Need {need}"
+  },
+  "ui.sumAwakenPreview": {
+    "ko": "각성 미리보기",
+    "en": "Awaken preview"
+  },
+  "ui.sumAwakenCurrent": {
+    "ko": "현재",
+    "en": "Current"
+  },
+  "ui.sumAwakenNext": {
+    "ko": "각성 후",
+    "en": "After awaken"
+  },
+  "ui.sumAwakenLeaderBonus": {
+    "ko": "리더 공격력",
+    "en": "Leader ATK"
+  },
+  "ui.sumAwakenManaBonus": {
+    "ko": "마나 최대치",
+    "en": "Max mana"
+  },
+  "ui.sumAwakenSkillBonus": {
+    "ko": "스킬 위력",
+    "en": "Skill power"
+  },
+  "ui.sumAwakenCost": {
+    "ko": "각성 비용",
+    "en": "Awaken cost"
+  },
+  "ui.sumMagicDetailTitle": {
+    "ko": "마법 스킬",
+    "en": "Magic skill"
+  },
+  "ui.sumMagicNextRank": {
+    "ko": "다음 강화",
+    "en": "Next rank"
+  },
+  "ui.sumMagicEnhanceCost": {
+    "ko": "강화 비용",
+    "en": "Enhance cost"
   }
 }

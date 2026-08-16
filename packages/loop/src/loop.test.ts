@@ -24,6 +24,7 @@ import {
   runCraftScroll,
   runDemoLoop,
   runEnhance,
+  runPowerUpMonster,
   runEnhanceGear,
   runAffixGearSet,
   runEquipGearBag,
@@ -36,6 +37,7 @@ import {
   runUnlockSkillNode,
   awakenManaCost,
   awakenCrystalCost,
+  summonerAwakenMatCost,
   awakenMinLevel,
   awakenLeaderAtkPct,
   MAX_SUMMONER_AWAKEN,
@@ -71,8 +73,12 @@ import {
   RAID_ATTEMPTS_DAILY,
   GUILD_WEEK_CONTRIB_GOAL,
   applyRewards,
+  monsterExpToNext,
+  monsterMaxLevel,
+  addOwnedMonsterExp,
 } from "./loop.js";
 import { migrateSave } from "./migrateSave.js";
+import { expForStage } from "./progress.js";
 import { FUSION_RECIPES } from "stonesummoner-data";
 
 describe("game loop", () => {
@@ -534,6 +540,42 @@ describe("game loop", () => {
     assert.equal(bumped, true);
   });
 
+  it("powers up from fodder EXP and levels a matching monster skill", () => {
+    let save = createNewSave(0);
+    const target = { ...save.roster[0]!, level: 1, exp: 0, skillLevels: [1, 1, 1] as [number, number, number] };
+    const matching = {
+      ...target,
+      uid: "power-up-matching",
+      level: 3,
+      skillLevels: [1, 1, 1] as [number, number, number],
+    };
+    const other = {
+      ...save.roster[1]!,
+      uid: "power-up-other",
+      level: 2,
+    };
+    save = {
+      ...save,
+      roster: [target, matching, other],
+      party: [target.uid, other.uid],
+      island: { ...save.island, mana: 5000 },
+    };
+
+    const partyFodder = runPowerUpMonster(save, target.uid, [other.uid], () => 0);
+    assert.match(partyFodder.message, /파티/);
+    assert.equal(partyFodder.save.roster.some((m) => m.uid === other.uid), true);
+
+    save = { ...save, party: [target.uid] };
+    const result = runPowerUpMonster(save, target.uid, [matching.uid, other.uid], () => 0);
+
+    const updated = result.save.roster.find((m) => m.uid === target.uid)!;
+    assert.match(result.message, /EXP/);
+    assert.ok(updated.level > target.level || (updated.exp ?? 0) > 0);
+    assert.equal(updated.skillLevels[0], 2);
+    assert.equal(result.save.roster.some((m) => m.uid === matching.uid), false);
+    assert.equal(result.save.roster.some((m) => m.uid === other.uid), false);
+  });
+
   it("feed same monster randomly skills up and consumes fodder", () => {
     let save = createNewSave(0);
     const base = save.roster[0]!;
@@ -691,6 +733,22 @@ describe("game loop", () => {
     assert.ok(login.save.island.energy >= save.island.energy);
     assert.equal(unclaimedMailCount(login.save), 0);
 
+    const overflowBase = {
+      ...login.save,
+      claimedMailIds: [] as string[],
+      island: {
+        ...login.save.island,
+        energy: login.save.island.energyMax ?? 100,
+        energyMax: login.save.island.energyMax ?? 100,
+      },
+    };
+    const overflow = runClaimMail(overflowBase, "login_gift");
+    assert.equal(
+      overflow.save.island.energy,
+      (overflowBase.island.energyMax ?? 100) + 20,
+    );
+    assert.ok(overflow.save.island.energy > (overflow.save.island.energyMax ?? 100));
+
     const day = "2099-01-15";
     save = {
       ...login.save,
@@ -728,6 +786,91 @@ describe("game loop", () => {
     );
     assert.match(dojo.message, /일일 미션/);
     assert.equal(dojo.save.island.mana, 250);
+  });
+
+  it("raises energy max and unlocks buildings on account level-up", () => {
+    let save = createNewSave(0);
+    assert.equal(save.island.energyMax, 100);
+    // Level active summoner from 6 → 7 to unlock wish_temple (+2 energy max).
+    // SW curve: Lv.6→7 needs 3110 EXP; leave a little room so one Normal clear tips it.
+    save = {
+      ...save,
+      summoners: {
+        ...save.summoners,
+        light: { ...save.summoners.light, level: 6, exp: 3050 },
+      },
+      island: {
+        ...save.island,
+        summonerLevel: 6,
+        energyMax: 100 + (6 - 1) * 2,
+      },
+    };
+    const beforeMax = save.island.energyMax;
+    const stage = getStage("garen_1_1")!;
+    const { save: next, reward } = applyRewards(save, stage, true, () => 0.99);
+    assert.ok((reward.levelsGained ?? 0) >= 1);
+    assert.ok(next.island.energyMax >= beforeMax + 2);
+    assert.ok(next.island.buildings.some((b) => b.id === "wish_temple"));
+    assert.ok((reward.unlockedBuildingIds ?? []).includes("wish_temple"));
+
+    // Non-max element level-up should not raise account energy max.
+    save = {
+      ...next,
+      activeSummoner: "fire",
+      summoners: {
+        ...next.summoners,
+        light: { ...next.summoners.light, level: 10 },
+        fire: { ...next.summoners.fire, level: 3, exp: 90 },
+      },
+      island: {
+        ...next.island,
+        summonerLevel: 10,
+        energyMax: 100 + (10 - 1) * 2,
+      },
+    };
+    const capped = applyRewards(save, stage, true, () => 0.99);
+    assert.equal(capped.save.island.energyMax, save.island.energyMax);
+  });
+
+  it("uses Summoners War account and monster EXP curves with difficulty scaling", () => {
+    const stage = getStage("garen_1_1")!;
+    assert.equal(expForStage(stage, "normal"), 68);
+    assert.equal(expForStage(stage, "hard"), Math.round(68 * 6.96));
+    assert.equal(expForStage(stage, "hell"), Math.round(68 * 14.61));
+
+    const mon = {
+      uid: "t1",
+      monsterId: "cinder_imp_fire",
+      level: 1,
+      exp: 0,
+      symbolSlots: [null, null, null, null, null, null] as (
+        | string
+        | null
+      )[],
+      evolve: 0,
+      awaken: 0,
+      skillLevels: [1, 1, 1] as [number, number, number],
+    };
+    assert.equal(monsterMaxLevel(mon), 15);
+    assert.equal(monsterExpToNext(mon), 460);
+    const leveled = addOwnedMonsterExp(mon, 460);
+    assert.equal(leveled.monster.level, 2);
+    assert.equal(leveled.monster.exp, 0);
+
+    let save = createNewSave(0);
+    save = { ...save, island: { ...save.island, energy: 50 } };
+    const hardLocked = applyRewards(save, stage, true, () => 0.99, "normal");
+    assert.ok(hardLocked.save.clearedStages.includes("garen_1_1"));
+    assert.equal(hardLocked.save.clearedHardStages.includes("garen_1_1"), false);
+    const hardClear = applyRewards(
+      hardLocked.save,
+      stage,
+      true,
+      () => 0.99,
+      "hard",
+    );
+    assert.ok(hardClear.save.clearedHardStages.includes("garen_1_1"));
+    assert.ok((hardClear.reward.summonerExp ?? 0) > (hardLocked.reward.summonerExp ?? 0));
   });
 
   it("summons and enhances monsters", () => {
@@ -872,11 +1015,12 @@ describe("game loop", () => {
     assert.equal(uq.save.roster[1]!.symbolSlots[2], null);
   });
 
-  it("awakens summoner with level/mana/crystal gates", () => {
+  it("awakens summoner with level/mana/crystal/elemental-essence gates", () => {
     let save = createNewSave(0);
     assert.equal(save.summonerAwaken, 0);
     assert.equal(awakenManaCost(0), 500);
     assert.equal(awakenCrystalCost(0), 3);
+    assert.equal(summonerAwakenMatCost(0), 8);
     assert.equal(awakenMinLevel(0), 5);
     assert.equal(awakenLeaderAtkPct(2), 0.024);
 
@@ -895,6 +1039,7 @@ describe("game loop", () => {
         ...save.summoners,
         light: { ...save.summoners.light, level: 5 },
       },
+      awakenMats: { light: summonerAwakenMatCost(0) },
     };
     const ok = runAwakenSummoner(save);
     assert.match(ok.message, /각성 \+1/);
@@ -902,6 +1047,7 @@ describe("game loop", () => {
     assert.equal(ok.save.summoners.light.awaken, 1);
     assert.equal(ok.save.island.mana, 2000 - 500);
     assert.equal(ok.save.island.crystal, 20 - 3);
+    assert.equal(ok.save.awakenMats.light, 0);
     save = ok.save;
 
     const battle = createStageBattle(getStage("garen_1_1")!, {

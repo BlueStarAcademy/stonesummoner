@@ -24,6 +24,7 @@ export {
   magicSkillPower,
   tryUnlockMagicBranch,
   unlockedMagicSkills,
+  magicTier2Unlocked,
 } from "./summoners.js";
 export type {
   MagicBranch,

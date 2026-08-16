@@ -123,12 +123,42 @@ export interface BuildingInstance {
 }
 
 export const ENERGY_MAX = 100;
+/** Extra max energy granted per summoner account level above 1. */
+export const ENERGY_MAX_PER_LEVEL = 2;
 /** Milliseconds per +1 energy while below max (3 minutes). */
 export const ENERGY_REGEN_MS = 180_000;
 /** Derived rate (1 per 3 minutes). Kept for callers that still read per-hour. */
 export const ENERGY_PER_HOUR = Math.round(3_600_000 / ENERGY_REGEN_MS);
-export const SUMMONER_EXP_PER_LEVEL = 100;
+/**
+ * Summoners War player-account EXP required from each level to the next.
+ * The documented table covers Lv.1–20; later levels retain an increasing
+ * curve instead of reverting to the former flat 100 EXP placeholder.
+ */
+export const SUMMONER_EXP_TO_NEXT: readonly number[] = [
+  150, 360, 670, 900, 2070, 3110, 5140, 6440, 8596, 10084,
+  12848, 14932, 17145, 19604, 24921, 31550, 35955, 42030, 48885,
+] as const;
+/** @deprecated Use summonerExpToNext(level); the curve is no longer flat. */
+export const SUMMONER_EXP_PER_LEVEL = SUMMONER_EXP_TO_NEXT[0];
 export const MAX_BUILDING_LEVEL = 10;
+
+/** EXP required to advance a summoner/account from `level` to `level + 1`. */
+export function summonerExpToNext(level: number): number {
+  const lv = Math.max(1, Math.floor(level));
+  const known = SUMMONER_EXP_TO_NEXT[lv - 1];
+  if (known != null) return known;
+  let required = SUMMONER_EXP_TO_NEXT[SUMMONER_EXP_TO_NEXT.length - 1]!;
+  for (let current = SUMMONER_EXP_TO_NEXT.length + 1; current < lv; current++) {
+    required = Math.round(required * 1.16);
+  }
+  return required;
+}
+
+/** Max energy for a summoner/account level (Lv.1 = ENERGY_MAX). */
+export function energyMaxForLevel(level: number): number {
+  const lv = Math.max(1, Math.floor(level));
+  return ENERGY_MAX + (lv - 1) * ENERGY_MAX_PER_LEVEL;
+}
 
 export interface IslandState {
   summonerLevel: number;
@@ -276,8 +306,9 @@ function tickEnergy(island: IslandState, now: number): IslandState {
   const max = island.energyMax ?? ENERGY_MAX;
   const cur = Math.floor(island.energy);
   const updatedAt = island.energyUpdatedAt ?? now;
+  // Preserve overflow above max (e.g. mail rewards); regen only fills up to max.
   if (cur >= max) {
-    return { ...island, energyMax: max, energy: max };
+    return { ...island, energyMax: max, energy: cur };
   }
   const elapsed = Math.max(0, now - updatedAt);
   const gained = Math.floor(elapsed / ENERGY_REGEN_MS);
@@ -441,8 +472,8 @@ export function addSummonerExp(
   let exp = (island.summonerExp ?? 0) + amount;
   let level = island.summonerLevel;
   let gained = 0;
-  while (exp >= SUMMONER_EXP_PER_LEVEL) {
-    exp -= SUMMONER_EXP_PER_LEVEL;
+  while (exp >= summonerExpToNext(level)) {
+    exp -= summonerExpToNext(level);
     level += 1;
     gained += 1;
   }
@@ -450,6 +481,7 @@ export function addSummonerExp(
     ...island,
     summonerLevel: level,
     summonerExp: exp,
+    energyMax: Math.max(island.energyMax ?? ENERGY_MAX, energyMaxForLevel(level)),
   };
   next = syncBuildingUnlocks(next);
   return { island: next, levelsGained: gained };

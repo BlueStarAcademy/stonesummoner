@@ -1,0 +1,55 @@
+---
+description: Overlays/modals must soft-update — never remount the whole screen
+globs: apps/web/src/**/*.{ts,css}
+alwaysApply: true
+---
+
+# Soft modals — no full-screen refresh
+
+## Problem
+`render()` replaces `app.innerHTML` and reloads hub-sky / heavy art. Opening or closing a modal via `render()` feels like a page flash.
+
+## Hard rule
+**Never open, close, or refresh an overlay by calling full `render()`.**
+Use soft UI only. Fall back to `render()` only when the host node is missing (screen not mounted).
+
+## Approved patterns (already in `main.ts`)
+
+1. **Always-mounted layer + `hidden`**
+   - Emit the layer even when closed (`hidden` / `aria-hidden`).
+   - Toggle with `applyXxxOpen()` + `replayModalPop(layer)`.
+   - Examples: settings, mailbox, shop, skill-feed, power-up, building info.
+
+2. **Dedicated host patch**
+   - Keep a stable host (`#sum-modal-host`, `#enhance-modal-host`, `#forge-reveal-host`, `#stages-region-host`).
+   - Patch with `softPatchHost(...)` / `softRefreshOverlayReveals()` / `refreshSumBookModals()`.
+   - Re-bind only the host’s controls after patch.
+
+3. **Inject / remove one overlay node**
+   - `softMountOverlay(id, html)` / `softRemoveOverlay(id)` (chat, codex).
+   - Do not remount the island / hub sky.
+
+## Shared helpers
+Prefer these instead of inventing new full-render paths:
+- `softPatchHost`, `softMountOverlay`, `softRemoveOverlay`
+- `replayModalPop`
+- `softRefreshOverlayReveals` / `softShowForgeReveal` / `softShowFusionReveal` / `softShowWishReveal`
+- `softOpenEnhanceTransientModals`, `softRefreshSumBookUi`
+- Existing `apply*Open()` toggles for hub chrome
+
+## Checklist for new modals
+1. Always mount a host or layer in the parent screen HTML (even when closed), **or** inject via `softMountOverlay`.
+2. Open/close = set flag + soft helper. **No `render()`.**
+3. Content updates = small DOM patch + rebind; not a full screen rebuild.
+4. If host is missing, then `render()` once as fallback.
+
+## Disallowed
+```ts
+someModalOpen = true;
+render(); // BAD — causes hub-sky flash
+```
+```ts
+someModalOpen = true;
+applySomeModalOpen(); // GOOD
+// or softMountOverlay("some-layer", renderSomeLayer());
+```

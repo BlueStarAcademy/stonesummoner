@@ -21,9 +21,20 @@ const VFX_SRC: Record<BattleVfxId, string> = {
   "hit-crit": "/art/battle/fx/fx-hit-crit.webp",
 };
 
+/**
+ * Labeled x1 / x2 / x3 multipliers. x1 is intentionally slower than raw
+ * wall-clock so combat is readable by default.
+ */
+export const BATTLE_SPEED_UNIT = 0.5;
+
+/** Effective pace used by waits / FX (higher = faster). */
+export function battlePace(speed: number): number {
+  return Math.max(0.35, speed * BATTLE_SPEED_UNIT);
+}
+
 export function fxDurationMs(baseMs: number, speed: number): number {
   if (reduceMotion) return 40;
-  return Math.max(40, Math.round(baseMs / Math.max(0.5, speed)));
+  return Math.max(40, Math.round(baseMs / battlePace(speed)));
 }
 
 export function waitFx(ms: number): Promise<void> {
@@ -84,8 +95,11 @@ export function pulseBoardCell(
     `.board .cell[data-x="${x}"][data-y="${y}"]`,
   );
   if (!el) return;
-  el.classList.add(className);
-  window.setTimeout(() => el.classList.remove(className), ms);
+  // classList rejects space-separated tokens — split multi-class strings.
+  const tokens = className.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return;
+  el.classList.add(...tokens);
+  window.setTimeout(() => el.classList.remove(...tokens), ms);
 }
 
 /** Full-screen ult cut-in veil on the battle stage. */

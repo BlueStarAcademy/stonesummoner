@@ -10,6 +10,7 @@ import {
   type LocaleId,
 } from "./i18n";
 import {
+  battlePace,
   fxDurationMs,
   mountUnitAnimHooks,
   playUltCutin,
@@ -120,8 +121,11 @@ import {
   getSummonerKit,
   emptyMagicProgress,
   unlockedMagicSkills,
+  magicTier2Unlocked,
   magicRank,
   magicSkillPower,
+  magicEnhanceManaCost,
+  magicEnhanceCrystalCost,
   MAX_MAGIC_RANK,
   type MagicSkillSlot,
   type SummonerMagicSkillDef,
@@ -163,8 +167,10 @@ import {
   productionManaPerHour,
   productionStorageCap,
   spendEnergy,
+  summonerExpToNext,
   tickProduction,
   todayKey,
+  type BuildingId,
 } from "stonesummoner-home";
 import {
   applyRewards,
@@ -172,6 +178,7 @@ import {
   awakenLeaderAtkPct,
   awakenManaCost,
   awakenMinLevel,
+  summonerAwakenMatCost,
   createDemoSave,
   createNewSave,
   createStageBattle,
@@ -185,13 +192,14 @@ import {
   isStageUnlocked,
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
-  MAX_MONSTER_LEVEL,
   MAX_SKILL_LEVEL,
   MAX_SUMMONER_AWAKEN,
   monsterAwakenCrystalCost,
   monsterAwakenManaCost,
   monsterAwakenMatCost,
   monsterAwakenMinLevel,
+  monsterExpToNext,
+  monsterMaxLevel,
   migrateSave,
   runAwakenMonster,
   runAwakenSummoner,
@@ -220,7 +228,9 @@ import {
   CRAFT_SCROLL_MANA,
   ESSENCE_JINMUN_COST,
   ESSENCE_CRYSTAL_GAIN,
-  runEnhance,
+  monsterPowerUpExp,
+  monsterPowerUpManaCost,
+  runPowerUpMonster,
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
@@ -228,9 +238,6 @@ import {
   previewOwnedCombatStats,
   runEvolve,
   runFeedSameMonster,
-  runSkillUp,
-  skillUpManaCost,
-  skillUpMinMonsterLevel,
   SKILL_UP_MAT_COST,
   runFusion,
   runRecipeFusion,
@@ -391,7 +398,7 @@ function readIslandLayout(): Record<string, { x: number; y: number }> {
       const x = Number(pos?.x);
       const y = Number(pos?.y);
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      out[id] = clampIslandLayoutPos(x, y);
+      out[id] = clampIslandLayoutPos(x, y, out, id);
     }
   } catch {
     /* ignore */
@@ -453,6 +460,23 @@ function exitIslandLayoutEdit(commit: boolean): void {
   islandLayoutDraft = null;
   islandSpotDrag = null;
   islandLongPress = null;
+  clearIslandDropTargets();
+
+  // Soft leave — do not remount via render(). render() would set
+  // islandLayoutEdit=false first, then preserve the *old* island DOM that still
+  // carries the edit HUD / guides, so Done looked like a no-op.
+  const island = app.querySelector<HTMLElement>(".home-island");
+  if (island && view === "home") {
+    app.classList.remove("island-layout-edit");
+    island.querySelector(".island-edit-hud")?.remove();
+    island.querySelector(".island-build-guide")?.remove();
+    const viewport = island.querySelector<HTMLElement>("#island-viewport");
+    viewport?.classList.remove("is-layout-edit", "is-spot-dragging");
+    island.querySelectorAll<HTMLElement>("[data-b]").forEach((el) => {
+      el.classList.remove("is-layout-edit", "is-layout-focus", "is-dragging");
+    });
+    return;
+  }
   render();
 }
 
@@ -463,18 +487,29 @@ function clientToIslandPct(
 ): { x: number; y: number } {
   const rect = world.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return { x: 50, y: 50 };
-  return clampIslandLayoutPos(
-    ((clientX - rect.left) / rect.width) * 100,
-    ((clientY - rect.top) / rect.height) * 100,
-  );
+  return {
+    x: ((clientX - rect.left) / rect.width) * 100,
+    y: ((clientY - rect.top) / rect.height) * 100,
+  };
 }
 
-function applyIslandSpotPosDom(id: string, x: number, y: number): void {
+/** Soft land clamp while dragging — no pad snap (snap only on drop). */
+function dragIslandLayoutPos(x: number, y: number): { x: number; y: number } {
+  return projectToIslandLand(x, y);
+}
+
+function applyIslandSpotPosDom(
+  id: string,
+  x: number,
+  y: number,
+  opts?: { snap?: boolean },
+): void {
   if (!islandLayoutDraft) islandLayoutDraft = { ...readIslandLayout() };
-  const prev = islandLayoutDraft[id] ?? ISLAND_LAYOUT_DEFAULT[id] ?? { x: 50, y: 50 };
   const others = { ...islandLayoutDraft };
   delete others[id];
-  const pos = resolveIslandSpotCollision(id, x, y, others, prev);
+  const pos = opts?.snap
+    ? clampIslandLayoutPos(x, y, others, id)
+    : dragIslandLayoutPos(x, y);
   islandLayoutDraft[id] = pos;
   const btn = app.querySelector<HTMLElement>(`[data-b="${id}"]`);
   if (!btn) return;
@@ -483,10 +518,30 @@ function applyIslandSpotPosDom(id: string, x: number, y: number): void {
   btn.style.top = `${pos.y}%`;
   btn.style.setProperty("--spot-scale", (0.68 + depth * 0.5).toFixed(3));
   btn.style.zIndex = String(Math.round(10 + pos.y));
-  btn.classList.toggle("is-layout-focus", true);
-  app.querySelectorAll<HTMLElement>("[data-b]").forEach((el) => {
-    if (el.dataset.b !== id) el.classList.remove("is-layout-focus");
+}
+
+/** Light up the nearest free pad under the dragged spot (drop preview). */
+function updateIslandDropTarget(id: string, x: number, y: number): void {
+  const layout = islandLayoutDraft ?? {};
+  const others = { ...layout };
+  delete others[id];
+  const target = snapToIslandPad(x, y, others, id);
+  app.querySelectorAll<HTMLElement>(".island-landing-pad").forEach((el) => {
+    const px = Number(el.dataset.padX);
+    const py = Number(el.dataset.padY);
+    const hit =
+      Number.isFinite(px) &&
+      Number.isFinite(py) &&
+      Math.abs(px - target.x) < 0.05 &&
+      Math.abs(py - target.y) < 0.05;
+    el.classList.toggle("is-drop-target", hit);
   });
+}
+
+function clearIslandDropTargets(): void {
+  app
+    .querySelectorAll<HTMLElement>(".island-landing-pad.is-drop-target")
+    .forEach((el) => el.classList.remove("is-drop-target"));
 }
 
 
@@ -632,6 +687,11 @@ let slotEquipPick: { uid: string; slot: number } | null = null;
 let symbolDetailIndex: number | null = null;
 /** Equipped symbol index shown beside candidate for compare. */
 let symbolCompareIndex: number | null = null;
+/** Gear source open in the summoner equipment detail modal. */
+let gearDetailTarget: { kind: "equipped"; slot: GearSlot } | { kind: "bag"; index: number } | null =
+  null;
+/** Magic skill slot open in the summoner skill detail modal. */
+let sumMagicDetailSlot: MagicSkillSlot | null = null;
 /** Grind/imprint before/after reveal card. */
 let forgeReveal: ForgeReveal | null = null;
 /** Fusion success reveal card. */
@@ -666,6 +726,10 @@ let codexDetailMonsterId: string | null = null;
 let skillFeedModalOpen = false;
 /** Selected fodder uid inside the skill-feed modal (confirm to consume). */
 let skillFeedFodderUid: string | null = null;
+/** Material-selection modal for monster EXP power-ups. */
+let powerUpModalOpen = false;
+/** Selected material monster UIDs in the power-up modal. */
+let powerUpFodderUids = new Set<string>();
 /** Monster book / skill-feed inventory slot capacity (two-row rail). */
 const ROSTER_SLOT_CAP = 60;
 
@@ -699,6 +763,204 @@ function applySumDetailTabUi(): boolean {
   return true;
 }
 
+function activeSummonerElement(): SummonerElement {
+  return (save.activeSummoner ?? "light") as SummonerElement;
+}
+
+function syncSumMagicNodeActive(): void {
+  app.querySelectorAll<HTMLButtonElement>("[data-magic-detail-slot]").forEach((btn) => {
+    btn.classList.toggle(
+      "is-active",
+      btn.dataset.magicDetailSlot === sumMagicDetailSlot,
+    );
+  });
+}
+
+/** Soft-patch summoner book modals without rebuilding hub sky / screen. */
+function refreshSumBookModals(): boolean {
+  const host = app.querySelector<HTMLElement>("#sum-modal-host");
+  if (!host) return false;
+  const el = activeSummonerElement();
+  host.innerHTML = `${renderGearDetailModal(el)}${renderSumMagicDetailModal(el)}`;
+  syncSumMagicNodeActive();
+  bindSumBookModalInteractions();
+  return true;
+}
+
+function refreshSumGearPane(): boolean {
+  const pane = app.querySelector<HTMLElement>('[data-sum-pane="gear"]');
+  if (!pane) return false;
+  pane.innerHTML = renderGearDollHtml(activeSummonerElement());
+  bindSumGearSlotClicks();
+  queueMicrotask(() => {
+    enhanceFx = null;
+  });
+  return true;
+}
+
+function refreshSumSkillsPane(): boolean {
+  const pane = app.querySelector<HTMLElement>('[data-sum-pane="skills"]');
+  if (!pane) return false;
+  const wrap = document.createElement("div");
+  wrap.innerHTML = renderSumSkillsPaneHtml(activeSummonerElement());
+  const next = wrap.firstElementChild;
+  if (!(next instanceof HTMLElement)) return false;
+  next.hidden = pane.hidden;
+  pane.replaceWith(next);
+  bindSumMagicNodeClicks();
+  return true;
+}
+
+function softRefreshSumBookUi(opts?: {
+  gear?: boolean;
+  skills?: boolean;
+  modals?: boolean;
+}): void {
+  const wantGear = opts?.gear ?? false;
+  const wantSkills = opts?.skills ?? false;
+  const wantModals = opts?.modals ?? true;
+  let ok = true;
+  if (wantGear) ok = refreshSumGearPane() && ok;
+  if (wantSkills) ok = refreshSumSkillsPane() && ok;
+  if (wantModals) ok = refreshSumBookModals() && ok;
+  if (!ok) render();
+}
+
+function bindSumGearSlotClicks(): void {
+  const root = app.querySelector(".sum-screen") ?? app;
+  root.querySelectorAll<HTMLButtonElement>("[data-gear-detail-slot]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      gearDetailTarget = {
+        kind: "equipped",
+        slot: parseGearSlot(btn.dataset.gearDetailSlot),
+      };
+      sumMagicDetailSlot = null;
+      softRefreshSumBookUi({ modals: true });
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-gear-detail-bag]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const index = Number(btn.dataset.gearDetailBag ?? "-1");
+      if (!Number.isInteger(index) || index < 0 || !save.gearBag?.[index]) return;
+      gearDetailTarget = { kind: "bag", index };
+      sumMagicDetailSlot = null;
+      softRefreshSumBookUi({ modals: true });
+    });
+  });
+}
+
+function bindSumMagicNodeClicks(): void {
+  const root = app.querySelector(".sum-screen") ?? app;
+  root.querySelectorAll<HTMLButtonElement>("[data-magic-detail-slot]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slot = btn.dataset.magicDetailSlot as MagicSkillSlot | undefined;
+      if (!slot || !["A", "B", "A1", "A2", "A3", "A4", "B1", "B2", "B3", "B4"].includes(slot)) return;
+      sumMagicDetailSlot = slot;
+      gearDetailTarget = null;
+      sumDetailTab = "skills";
+      applySumDetailTabUi();
+      softRefreshSumBookUi({ modals: true });
+    });
+  });
+}
+
+function bindSumBookModalInteractions(): void {
+  const host = app.querySelector<HTMLElement>("#sum-modal-host");
+  if (!host) return;
+
+  const closeGearDetail = () => {
+    gearDetailTarget = null;
+    softRefreshSumBookUi({ modals: true });
+  };
+  host.querySelectorAll("#btn-gear-detail-close").forEach((el) => {
+    el.addEventListener("click", closeGearDetail);
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-gear-detail-enhance]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slot = parseGearSlot(btn.dataset.gearDetailEnhance);
+      const r = runEnhanceGear(save, slot);
+      save = r.save;
+      if (r.message.startsWith(t("ui.efa49027d0"))) {
+        enhanceFx = { kind: "gear", slot };
+      }
+      persist();
+      flash(r.message);
+      softRefreshSumBookUi({ gear: true, modals: true });
+    });
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-gear-detail-set]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slot = parseGearSlot(btn.dataset.gearDetailSet);
+      const setRaw = btn.dataset.setId ?? "";
+      if (
+        setRaw !== "mana" &&
+        setRaw !== "assault" &&
+        setRaw !== "guardian" &&
+        setRaw !== "sense" &&
+        setRaw !== "tempo"
+      ) {
+        return;
+      }
+      const r = runAffixGearSet(save, slot, setRaw);
+      save = r.save;
+      persist();
+      flash(r.message);
+      softRefreshSumBookUi({ gear: true, modals: true });
+    });
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-gear-detail-equip]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.gearDetailEquip ?? "-1");
+      const bagLen = (save.gearBag ?? []).length;
+      const r = runEquipGearBag(save, idx);
+      save = r.save;
+      persist();
+      if ((save.gearBag ?? []).length < bagLen) {
+        patchOnboard({ equipped: true });
+      }
+      gearDetailTarget = null;
+      flash(r.message);
+      softRefreshSumBookUi({ gear: true, modals: true });
+    });
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-gear-detail-sell]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.gearDetailSell ?? "-1");
+      const r = runSellGearBag(save, idx);
+      save = r.save;
+      persist();
+      gearDetailTarget = null;
+      flash(r.message);
+      softRefreshSumBookUi({ gear: true, modals: true });
+    });
+  });
+
+  const closeSumMagicDetail = () => {
+    sumMagicDetailSlot = null;
+    softRefreshSumBookUi({ modals: true });
+  };
+  host.querySelectorAll("#btn-sum-magic-detail-close").forEach((el) => {
+    el.addEventListener("click", closeSumMagicDetail);
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-magic-enhance]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.magicEnhance ?? "";
+      if (!id) return;
+      const r = runEnhanceMagicSkill(save, id);
+      save = r.save;
+      persist();
+      flash(r.message);
+      softRefreshSumBookUi({ skills: true, modals: true });
+    });
+  });
+}
+
 /** Soft-update skill icon selection + detail pane (no full re-render). */
 function applyMonSkillPickUi(): boolean {
   const pane = app.querySelector<HTMLElement>('.mon-pane[data-mon-pane="skills"]');
@@ -712,6 +974,13 @@ function applyMonSkillPickUi(): boolean {
   if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
   const focusSk = def?.skills[monSkillPick];
   const focusLv = levels[monSkillPick] ?? 1;
+  if (!Number.isFinite(monSkillPreviewLv) || monSkillPreviewLv < 1) {
+    monSkillPreviewLv = focusLv;
+  }
+  monSkillPreviewLv = Math.max(
+    1,
+    Math.min(MAX_SKILL_LEVEL, monSkillPreviewLv),
+  );
 
   pane.querySelectorAll<HTMLButtonElement>("[data-mon-skill-pick]").forEach((btn) => {
     const slot = Number(btn.dataset.monSkillPick ?? "0");
@@ -720,29 +989,21 @@ function applyMonSkillPickUi(): boolean {
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
 
-  const nameEl = pane.querySelector(".mon-skill-detail-name");
-  if (nameEl) {
-    nameEl.textContent = focusSk?.nameKo ?? `S${monSkillPick + 1}`;
-  }
-  const lvEl = pane.querySelector(".mon-skill-detail-lv");
-  if (lvEl) {
-    lvEl.textContent = `Lv.${focusLv}${focusLv >= MAX_SKILL_LEVEL ? " MAX" : ""}`;
-  }
-  const descEl = pane.querySelector(".mon-skill-detail-desc");
-  if (descEl) {
-    descEl.innerHTML = monsterSkillDescLines(focusSk)
-      .map((line) => `<li>${escapeHtml(line)}</li>`)
-      .join("");
-  }
-  const upEl = pane.querySelector(".mon-skill-upgrades");
-  if (upEl) {
-    upEl.innerHTML = monsterSkillUpgradeRows(focusSk, focusLv);
+  const main = pane.querySelector<HTMLElement>(".mon-skill-main");
+  if (main) {
+    main.innerHTML = renderMonsterSkillDetailHtml(
+      focusSk,
+      focusLv,
+      monSkillPreviewLv,
+    );
   }
   return true;
 }
 
 /** Selected skill slot (0..2) on skills tab detail pane. */
 let monSkillPick = 0;
+/** Previewed level (1..MAX) in the selected monster skill's growth viewer. */
+let monSkillPreviewLv = 1;
 /** Selected monster uid on the monsters book screen. */
 let selectedEnhanceUid: string | null = null;
 /** Skill-feed enhance is only available when entered via island power_circle. */
@@ -775,20 +1036,37 @@ let partyDraft: Set<string> | null = null;
 let toast = "";
 let battleSpeed: 1 | 2 | 3 = 1;
 let autoMode = false;
+type BattleAutoOptions = { stone: boolean; combat: boolean };
+/** Categories driven while the master AUTO mode is enabled. */
+let battleAutoOptions: BattleAutoOptions = { stone: true, combat: true };
+let battleAutoSettingsOpen = false;
 /** Blocks input while place/strike choreography plays. */
 let battleFxBusy = false;
+/** Enemy unit ids currently playing wave-entrance animation. */
+let waveEnterIds = new Set<string>();
+let waveBannerText: string | null = null;
+/** Brief manual-placement beat between choosing a cell and placing its stone. */
+let stoneSummonFx: { element: string; x: number; y: number } | null = null;
 /** Manual skill pick under the active unit (SW: select then tap enemy). */
 let selectedSkillIndex: number | null = null;
 type BattleSummonerSkillId = "open" | "declare" | "dual" | "clean" | "guard";
 let selectedSummonerSkill: BattleSummonerSkillId | null = null;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let energyRegenTimer: ReturnType<typeof setInterval> | null = null;
-let dmgFloats: { id: number; text: string; crit: boolean; ult: boolean }[] = [];
+let dmgFloats: {
+  id: number;
+  text: string;
+  crit: boolean;
+  ult: boolean;
+  targetId: string;
+}[] = [];
 let floatSeq = 0;
 /** Last seen circle phase — detect empowered reset for board FX. */
 let lastSeenBoardPhase = 0;
 /** One-shot collapse/rekindle class on the board frame. */
 let boardRekindleFx = false;
+/** Tokens already shown on the active board; newly spawned tokens receive an entrance FX. */
+let seenBoardTokenKeys = new Set<string>();
 /** Recent Module B shape ids for amplify / board flash. */
 let shapeFlashIds: ShapeBonusId[] = [];
 let shapeFlashUntil = 0;
@@ -806,6 +1084,10 @@ let shopOpen = false;
 let islandSpotMenuId: string | null = null;
 /** Building info sheet open for this island spot id. */
 let buildingInfoId: string | null = null;
+/** Queue of newly unlocked island buildings awaiting modal notice. */
+let pendingBuildingUnlockIds: BuildingId[] = [];
+/** Currently shown building unlock modal id (head of queue). */
+let buildingUnlockModalId: BuildingId | null = null;
 /** Island world chat panel. */
 let chatOpen = false;
 /** True while the player is connected to a world-chat channel session. */
@@ -848,16 +1130,19 @@ let stagesDropSetExpand = false;
 let stagePrepSummonerOpen = false;
 /** Prep inventory dock tab. */
 let stagePrepInvTab: "summoner" | "monster" | "skill" = "monster";
+/** Party hall inventory dock tab (no skills tab). */
+let partyInvTab: "summoner" | "monster" = "monster";
 /** Prep roster sort (mirrors hub roster sorts). */
 let stagePrepSortMode: RosterSortMode = "stars";
 /** Long-press unit info overlay on battle prep. */
 type StagePrepInfoTarget =
   | { kind: "summoner"; element: SummonerElement }
   | { kind: "monster"; uid: string }
-  | { kind: "enemy"; monsterId: string };
+  | { kind: "enemy"; monsterId: string }
+  | { kind: "magic"; skillId: string };
 let stagePrepInfo: StagePrepInfoTarget | null = null;
-/** Selected magic slot in prep Skills tab. */
-let stagePrepSkillPick: MagicSkillSlot = "A";
+/** Magic skill selected before choosing one of the four equipment slots. */
+let stagePrepMagicPendingId: string | null = null;
 /** Prep long-press tracker (mirrors island 520ms hold). */
 let stagePrepLongPress: {
   pointerId: number;
@@ -870,23 +1155,27 @@ let stagePrepSuppressClick = false;
 let islandPan = { x: 0, y: 0 };
 let islandPanCentered = false;
 /** Bump when cover metrics change so the next bind re-centers once. */
-const ISLAND_COVER_FIT_VERSION = 5;
+const ISLAND_COVER_FIT_VERSION = 12;
 let islandCoverFitApplied = 0;
-/** User zoom via island-world layout size (1 = default). Not applied as CSS transform scale. */
+/** Locked at 1 — framing comes from world %; zoom UI is unused. */
 let islandZoom = 1;
 const ISLAND_BASE_SCALE = 1.0;
-/** Must stay in sync with .island-world width/height % at --island-zoom: 1. */
-const ISLAND_WORLD_PCT = { w: 3.45, h: 3.2 } as const;
-/** Extra cover so edges never letterbox after scale. */
-const ISLAND_ZOOM_MIN_OVERSCAN = 1.18;
-/** Fallback ceiling; real max is computed from map pixel size. */
-const ISLAND_ZOOM_MAX_HARD = 4;
-/** Stop just before object-fit cover would upsample the bitmap past 1 CSS px / image px. */
-const ISLAND_ZOOM_SHARP_PAD = 0.98;
-const ISLAND_MAP_NATURAL = { w: 1440, h: 2560 } as const;
-const ISLAND_TRANSFORM_ORIGIN = { x: 0.5, y: 0.42 };
-/** Keep tilt tiny - larger angles foreshorten and leave empty strips at the top. */
-const ISLAND_ROTATE_X_DEG = 2;
+/**
+ * Must stay in sync with --island-oversize on .island-world. The world is sized
+ * at cover-width x this factor and keeps the bitmap's 2:3 ratio, so a spot's
+ * percent coords are the same percent coords as on the painted map. Cover sizing
+ * plus hard pan clamp keep the full bitmap filling the viewport at every stop.
+ * Drag-pan to see the rest of the archipelago; zoom stays locked.
+ */
+const ISLAND_WORLD_OVERSIZE = 1.7;
+/** Active tri-island @2x bitmap (v2 — archipelago inset with sky margin). */
+const ISLAND_MAP_NATURAL = { w: 2880, h: 4320 } as const;
+const ISLAND_TRANSFORM_ORIGIN = { x: 0.5, y: 0.5 };
+/**
+ * Keep at 0 — any X rotation under perspective foreshortens the bitmap and
+ * leaves empty strips at the edges when panned to a stop.
+ */
+const ISLAND_ROTATE_X_DEG = 0;
 let islandPanDrag: {
   pointerId: number;
   startX: number;
@@ -896,56 +1185,154 @@ let islandPanDrag: {
   moved: boolean;
 } | null = null;
 const islandActivePointers = new Map<number, { x: number; y: number }>();
-let islandPinch: {
-  startDist: number;
-  startZoom: number;
-} | null = null;
 
-/** v3: wider map + inward terrace so spots stay on land. */
-const ISLAND_LAYOUT_KEY = "stonesummoner.island-layout.v3";
+/** v7: pads re-measured off the v2 (sky-margin) tri-island bitmap. */
+const ISLAND_LAYOUT_KEY = "stonesummoner.island-layout.v7";
 /**
- * Default spots on the expanded 3-islet map (% of island-world).
- * Clustered toward each islet core so emblems do not hang over the water.
- * West = hub · Center = craft · East = society / adventure.
+ * Default spots snapped onto painted hex / plaza pads.
+ * Center = main hub · SW = growth · SE = society / adventure.
  */
 const ISLAND_LAYOUT_DEFAULT: Record<string, { x: number; y: number }> = {
-  // West islet — daily hub
-  power_circle: { x: 26, y: 36 },
-  summon_hearth: { x: 18, y: 48 },
-  shop: { x: 32, y: 50 },
-  party: { x: 24, y: 60 },
-  // Center islet — growth / production
-  wish: { x: 50, y: 32 },
-  mana_pond: { x: 42, y: 48 },
-  crystal_mine: { x: 58, y: 50 },
-  dojo: { x: 50, y: 62 },
-  // East islet — adventure & endgame
-  gateway: { x: 74, y: 36 },
-  glory: { x: 68, y: 50 },
-  guild: { x: 80, y: 54 },
-  fusion: { x: 74, y: 64 },
+  // Main island — plaza ring
+  summon_hearth: { x: 46.7, y: 38.8 },
+  power_circle: { x: 41.9, y: 31.2 },
+  gateway: { x: 55.5, y: 33.1 },
+  shop: { x: 30.8, y: 37.6 },
+  // SW growth island
+  mana_pond: { x: 19, y: 62.2 },
+  wish: { x: 30.3, y: 58.7 },
+  dojo: { x: 27, y: 67.6 },
+  crystal_mine: { x: 35.5, y: 66.2 },
+  // SE society / adventure island
+  party: { x: 74.3, y: 63.6 },
+  glory: { x: 63.2, y: 64.8 },
+  guild: { x: 85.1, y: 64.4 },
+  fusion: { x: 80.1, y: 69 },
 };
 
-/** Placeable terrace across the three islets (% of island-world). */
-const ISLAND_LAYOUT_BOUNDS = {
-  minX: 14,
-  maxX: 86,
-  minY: 26,
-  maxY: 74,
-} as const;
-
-/** Soft landmass pads that read as three linked islets (visual only). */
-const ISLAND_ISLETS = [
-  { id: "west", left: 8, top: 24, width: 36, height: 50, labelKey: "ui.islandIsletHome" },
-  { id: "center", left: 34, top: 20, width: 36, height: 54, labelKey: "ui.islandIsletCraft" },
-  { id: "east", left: 58, top: 24, width: 36, height: 52, labelKey: "ui.islandIsletSociety" },
+/**
+ * Landmass ellipses traced over the painted islets, in percent of the map
+ * bitmap (which is also percent of .island-world — the two share an aspect
+ * ratio on purpose). Used to pull a dragged spot back onto solid ground.
+ */
+const ISLAND_LAND_ZONES = [
+  { id: "main", cx: 47.5, cy: 36.5, rx: 28, ry: 13.5 },
+  { id: "sw", cx: 22.5, cy: 65.5, rx: 18.5, ry: 13 },
+  { id: "se", cx: 77, cy: 66.5, rx: 19, ry: 12.5 },
 ] as const;
 
-function clampIslandLayoutPos(x: number, y: number): { x: number; y: number } {
-  return {
-    x: Math.min(ISLAND_LAYOUT_BOUNDS.maxX, Math.max(ISLAND_LAYOUT_BOUNDS.minX, x)),
-    y: Math.min(ISLAND_LAYOUT_BOUNDS.maxY, Math.max(ISLAND_LAYOUT_BOUNDS.minY, y)),
+/**
+ * Painted building pads (hex terraces + compass plazas), measured off
+ * home-island-tri@2x.webp. Layout edit snaps onto these so spots never sit on
+ * water, bridges or cliffs. Re-measure with scripts/debug-island-pads.mjs.
+ */
+const ISLAND_LANDING_PADS = [
+  // Main island
+  { id: "main-nw", x: 41.9, y: 31.2 },
+  { id: "main-ne", x: 55.5, y: 33.1 },
+  { id: "main-w", x: 30.8, y: 37.6 },
+  { id: "main-plaza", x: 46.7, y: 38.8 },
+  { id: "main-e", x: 62.4, y: 38.9 },
+  { id: "main-sw", x: 32.9, y: 43.6 },
+  { id: "main-se", x: 58, y: 44.9 },
+  // SW island
+  { id: "sw-n", x: 30.3, y: 58.7 },
+  { id: "sw-plaza", x: 19, y: 62.2 },
+  { id: "sw-e", x: 35.5, y: 66.2 },
+  { id: "sw-s", x: 27, y: 67.6 },
+  // SE island
+  { id: "se-plaza", x: 74.3, y: 63.6 },
+  { id: "se-ne", x: 85.1, y: 64.4 },
+  { id: "se-w", x: 63.2, y: 64.8 },
+  { id: "se-s", x: 80.1, y: 69 },
+] as const;
+
+const ISLAND_PAD_OCCUPY_DIST = 3;
+
+function islandPointInLandZone(
+  x: number,
+  y: number,
+  zone: (typeof ISLAND_LAND_ZONES)[number],
+): boolean {
+  const nx = (x - zone.cx) / zone.rx;
+  const ny = (y - zone.cy) / zone.ry;
+  return nx * nx + ny * ny <= 1;
+}
+
+function projectToIslandLand(x: number, y: number): { x: number; y: number } {
+  for (const zone of ISLAND_LAND_ZONES) {
+    if (islandPointInLandZone(x, y, zone)) return { x, y };
+  }
+  let best: { x: number; y: number } = {
+    x: ISLAND_LAND_ZONES[0].cx,
+    y: ISLAND_LAND_ZONES[0].cy,
   };
+  let bestD = Infinity;
+  for (const zone of ISLAND_LAND_ZONES) {
+    const nx = (x - zone.cx) / zone.rx;
+    const ny = (y - zone.cy) / zone.ry;
+    const d = Math.hypot(nx, ny) || 0.001;
+    // Project onto ellipse rim (slightly inside).
+    const px = zone.cx + (nx / d) * zone.rx * 0.92;
+    const py = zone.cy + (ny / d) * zone.ry * 0.92;
+    const dist = Math.hypot(x - px, y - py);
+    if (dist < bestD) {
+      bestD = dist;
+      best = { x: px, y: py };
+    }
+  }
+  return best;
+}
+
+function islandPadOccupied(
+  pad: { x: number; y: number },
+  layout: Record<string, { x: number; y: number }>,
+  exceptId?: string,
+): boolean {
+  for (const [id, pos] of Object.entries(layout)) {
+    if (exceptId && id === exceptId) continue;
+    if (Math.hypot(pos.x - pad.x, pos.y - pad.y) < ISLAND_PAD_OCCUPY_DIST) return true;
+  }
+  return false;
+}
+
+/** Snap to the nearest free painted pad (falls back to nearest pad if all busy). */
+function snapToIslandPad(
+  x: number,
+  y: number,
+  layout: Record<string, { x: number; y: number }> = {},
+  exceptId?: string,
+): { x: number; y: number } {
+  const land = projectToIslandLand(x, y);
+  let bestFree: { x: number; y: number } | null = null;
+  let bestFreeD = Infinity;
+  let bestAny: { x: number; y: number } = {
+    x: ISLAND_LANDING_PADS[0].x,
+    y: ISLAND_LANDING_PADS[0].y,
+  };
+  let bestAnyD = Infinity;
+  for (const pad of ISLAND_LANDING_PADS) {
+    const d = Math.hypot(land.x - pad.x, land.y - pad.y);
+    if (d < bestAnyD) {
+      bestAnyD = d;
+      bestAny = { x: pad.x, y: pad.y };
+    }
+    if (islandPadOccupied(pad, layout, exceptId)) continue;
+    if (d < bestFreeD) {
+      bestFreeD = d;
+      bestFree = { x: pad.x, y: pad.y };
+    }
+  }
+  return bestFree ?? bestAny;
+}
+
+function clampIslandLayoutPos(
+  x: number,
+  y: number,
+  layout: Record<string, { x: number; y: number }> = {},
+  exceptId?: string,
+): { x: number; y: number } {
+  return snapToIslandPad(x, y, layout, exceptId);
 }
 function islandSpotTitle(id: string, fallback = ""): string {
   const titles: Record<string, string> = {
@@ -1074,6 +1461,92 @@ function closeBuildingInfoSoft(): void {
   applyBuildingInfoOpen();
 }
 
+function buildingUnlockLevel(id: BuildingId): number {
+  return PHASE_BUILDINGS.find((b) => b.id === id)?.unlockLevel ?? 1;
+}
+
+function enqueueBuildingUnlocks(ids: readonly BuildingId[] | undefined): void {
+  if (!ids?.length) return;
+  for (const id of ids) {
+    if (!pendingBuildingUnlockIds.includes(id)) {
+      pendingBuildingUnlockIds.push(id);
+    }
+  }
+}
+
+function renderBuildingUnlockModal(): string {
+  const id = buildingUnlockModalId;
+  const open = !!id;
+  const name = id ? islandSpotTitle(id) : "";
+  const level = id ? buildingUnlockLevel(id) : 1;
+  return `<div class="settings-layer building-unlock-layer" id="building-unlock-layer" ${open ? "" : "hidden"} aria-hidden="${open ? "false" : "true"}">
+    <button type="button" class="settings-backdrop" id="btn-building-unlock-close" aria-label="${escapeHtml(t("ui.buildingUnlockConfirm"))}"></button>
+    <div class="settings-sheet building-unlock-sheet" role="dialog" aria-modal="true" aria-labelledby="building-unlock-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.buildingUnlockConfirm"), "btn-building-unlock-close")}
+      <h2 class="settings-title" id="building-unlock-title">${escapeHtml(t("ui.buildingUnlockTitle"))}</h2>
+      <p class="building-unlock-body" id="building-unlock-body">${escapeHtml(
+        open ? t("ui.buildingUnlockBody", { name, level }) : "",
+      )}</p>
+      <button type="button" class="auth-btn-primary" id="btn-building-unlock-ok">${escapeHtml(t("ui.buildingUnlockConfirm"))}</button>
+    </div>
+  </div>`;
+}
+
+function applyBuildingUnlockOpen(): void {
+  const layer = app.querySelector<HTMLElement>("#building-unlock-layer");
+  if (!layer) return;
+  const open = !!buildingUnlockModalId;
+  layer.hidden = !open;
+  layer.setAttribute("aria-hidden", open ? "false" : "true");
+  if (!open) return;
+  const id = buildingUnlockModalId!;
+  const name = islandSpotTitle(id);
+  const level = buildingUnlockLevel(id);
+  const body = layer.querySelector("#building-unlock-body");
+  if (body) {
+    body.textContent = t("ui.buildingUnlockBody", { name, level });
+  }
+  replayModalPop(layer);
+}
+
+function showNextBuildingUnlockModal(): void {
+  if (view === "battle" || view === "result") return;
+  if (buildingUnlockModalId) {
+    applyBuildingUnlockOpen();
+    return;
+  }
+  const next = pendingBuildingUnlockIds.shift() ?? null;
+  buildingUnlockModalId = next;
+  if (!next) {
+    applyBuildingUnlockOpen();
+    return;
+  }
+  applyBuildingUnlockOpen();
+}
+
+function dismissBuildingUnlockModal(): void {
+  buildingUnlockModalId = null;
+  if (pendingBuildingUnlockIds.length > 0 && view !== "battle" && view !== "result") {
+    showNextBuildingUnlockModal();
+    return;
+  }
+  applyBuildingUnlockOpen();
+}
+
+function leaveResultView(nextView: typeof view = "stages"): void {
+  enqueueBuildingUnlocks(lastReward?.unlockedBuildingIds);
+  battle = null;
+  dmgFloats = [];
+  lastReward = null;
+  lastScrollGain = 0;
+  lastScrollPremiumGain = 0;
+  currentStage = null;
+  view = nextView;
+  render();
+  showNextBuildingUnlockModal();
+}
+
 function applyIslandSpotMenu(): void {
   app.querySelectorAll<HTMLElement>("[data-b]").forEach((el) => {
     const open = !!islandSpotMenuId && el.dataset.b === islandSpotMenuId;
@@ -1097,7 +1570,7 @@ function enterIslandBuilding(id: string): void {
   if (id === "gateway") {
     patchOnboard({ openedStages: true });
     view = "stages";
-    render();
+    renderPreservingIsland();
   } else if (id === "mana_pond") {
     view = "pond";
     renderPreservingIsland();
@@ -1126,13 +1599,11 @@ function enterIslandBuilding(id: string): void {
     enhanceSkillFeedAllowed = true;
     monDetailTab = "skills";
     view = "enhance";
-    render();
+    renderPreservingIsland();
   } else if (id === "shop") {
     openShopModalSoft();
   } else if (id === "party") {
-    view = "party";
-    partyDraft = new Set(save.party);
-    renderPreservingIsland();
+    openPartyHall();
   }
 }
 
@@ -1143,80 +1614,8 @@ function looksBrokenLabel(s: string): boolean {
 }
 
 
-/** Footprint ellipse half-axes in % of island-world (scaled by depth). */
-const ISLAND_SPOT_HIT = { rx: 7.4, ry: 8.8 } as const;
 
-function islandSpotScaleAt(y: number): number {
-  return 0.68 + Math.max(0, Math.min(1, y / 100)) * 0.5;
-}
 
-function islandSpotOverlaps(
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-): boolean {
-  const scale = (islandSpotScaleAt(a.y) + islandSpotScaleAt(b.y)) / 2;
-  const rx = ISLAND_SPOT_HIT.rx * scale;
-  const ry = ISLAND_SPOT_HIT.ry * scale;
-  const dx = (a.x - b.x) / rx;
-  const dy = (a.y - b.y) / ry;
-  return dx * dx + dy * dy < 1;
-}
-
-function islandSpotCollides(
-  id: string,
-  pos: { x: number; y: number },
-  layout: Record<string, { x: number; y: number }>,
-): boolean {
-  for (const [otherId, other] of Object.entries(layout)) {
-    if (otherId === id) continue;
-    if (islandSpotOverlaps(pos, other)) return true;
-  }
-  return false;
-}
-
-/** Push out of overlapping spots, then clamp. Falls back to `fallback` if still blocked. */
-function resolveIslandSpotCollision(
-  id: string,
-  x: number,
-  y: number,
-  layout: Record<string, { x: number; y: number }>,
-  fallback: { x: number; y: number },
-): { x: number; y: number } {
-  let pos = clampIslandLayoutPos(x, y);
-  for (let iter = 0; iter < 10; iter++) {
-    let moved = false;
-    for (const [otherId, other] of Object.entries(layout)) {
-      if (otherId === id) continue;
-      const scale = (islandSpotScaleAt(pos.y) + islandSpotScaleAt(other.y)) / 2;
-      const rx = ISLAND_SPOT_HIT.rx * scale;
-      const ry = ISLAND_SPOT_HIT.ry * scale;
-      let dx = pos.x - other.x;
-      let dy = pos.y - other.y;
-      if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
-        dx = 0.35;
-        dy = 0.35;
-      }
-      const nx = dx / rx;
-      const ny = dy / ry;
-      const d2 = nx * nx + ny * ny;
-      if (d2 >= 1) continue;
-      const d = Math.sqrt(d2) || 0.001;
-      const push = (1.02 - d) / d;
-      pos = clampIslandLayoutPos(pos.x + dx * push, pos.y + dy * push);
-      moved = true;
-    }
-    if (!moved) break;
-  }
-  if (islandSpotCollides(id, pos, layout)) {
-    // Axis-slide toward target from fallback
-    const xOnly = clampIslandLayoutPos(x, fallback.y);
-    if (!islandSpotCollides(id, xOnly, layout)) return xOnly;
-    const yOnly = clampIslandLayoutPos(fallback.x, y);
-    if (!islandSpotCollides(id, yOnly, layout)) return yOnly;
-    return fallback;
-  }
-  return pos;
-}
 
 let islandLayoutEdit = false;
 let islandLayoutDraft: Record<string, { x: number; y: number }> | null = null;
@@ -1603,9 +2002,7 @@ function runOnboardCta(): void {
     return;
   }
   if (step === "party") {
-    view = "party";
-    partyDraft = new Set(save.party);
-    render();
+    openPartyHall();
     return;
   }
   if (step === "enhance" || step === "equip") {
@@ -1958,14 +2355,20 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   lastScrollGain = 0;
   lastScrollPremiumGain = 0;
   autoMode = false;
+  battleAutoSettingsOpen = false;
   clearAutoTimer();
   dmgFloats = [];
   selectedTargetId = null;
   clearBattleSkillSelection();
   lastSeenBoardPhase = 0;
   boardRekindleFx = false;
+  seenBoardTokenKeys = new Set();
   shapeFlashIds = [];
   shapeFlashUntil = 0;
+  waveEnterIds = new Set();
+  waveBannerText = null;
+  stoneSummonFx = null;
+  battleFxBusy = false;
   stageEntryId = null;
   onboardSkillCued = false;
   const rivalEnemies =
@@ -2030,76 +2433,32 @@ function renderStagePrepDock(): string {
     </div>`;
   } else if (stagePrepInvTab === "skill") {
     const el = activeEl;
-    const kit = getSummonerKit(el);
     const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
     const unlocked = unlockedMagicSkills(el, prog);
-    const unlockedIds = new Set(unlocked.map((s) => s.id));
-    const slots = ["A", "B", "A1", "A2", "B1", "B2"] as const;
-    if (!slots.includes(stagePrepSkillPick)) stagePrepSkillPick = "A";
-    const focus = kit.skills[stagePrepSkillPick];
-    const focusOpen = unlockedIds.has(focus.id);
-    const focusRank = magicRank(prog, focus.id);
-    const focusLines = magicSkillDescLines(focus, focusOpen ? focusRank : 0);
-    const icos = slots
-      .map((slot) => {
-        const sk = kit.skills[slot];
-        const open = unlockedIds.has(sk.id);
-        const rank = magicRank(prog, sk.id);
-        const on = stagePrepSkillPick === slot;
-        const maxed = open && rank >= MAX_MAGIC_RANK;
-        return `<button type="button" class="stage-prep-skill-pick${on ? " is-active" : ""}${open ? "" : " is-locked"}${maxed ? " is-max" : ""}" data-stage-prep-skill-pick="${slot}" role="tab" aria-selected="${on}" aria-pressed="${on}" title="${escapeHtml(sk.nameKo)}">
-          ${summonerSkillArtImg(sk.id, "stage-prep-skill-pick-img", 44)}
-          <span class="stage-prep-skill-pick-lv">${open ? (maxed ? "MAX" : `+${rank}`) : "—"}</span>
+    const loadout = save.summonerMagicLoadouts?.[el] ?? [null, null];
+    const equippedIds = new Set(loadout.filter((id): id is string => !!id));
+    const pending = stagePrepMagicPendingId
+      ? unlocked.find((skill) => skill.id === stagePrepMagicPendingId) ?? null
+      : null;
+    if (stagePrepMagicPendingId && !pending) stagePrepMagicPendingId = null;
+    const skillIcons = unlocked
+      .map((skill) => {
+        const rank = magicRank(prog, skill.id);
+        const equipped = equippedIds.has(skill.id);
+        return `<button type="button" class="stage-prep-skill-pick${equipped ? " is-equipped" : ""}${stagePrepMagicPendingId === skill.id ? " is-selected" : ""}" data-stage-prep-magic-skill="${escapeHtml(skill.id)}" data-stage-prep-info="magic" data-stage-prep-magic-id="${escapeHtml(skill.id)}" title="${escapeHtml(skill.nameKo)}">
+          ${summonerSkillArtImg(skill.id, "stage-prep-skill-pick-img", 44)}
+          <span class="stage-prep-skill-pick-lv">+${rank}</span>
         </button>`;
       })
       .join("");
-    const lockedHint =
-      stagePrepSkillPick.startsWith("A") &&
-      stagePrepSkillPick !== "A" &&
-      prog.branch !== "A"
-        ? t("ui.skillLockedHint", { branch: "A", n: MAX_MAGIC_RANK })
-        : stagePrepSkillPick.startsWith("B") &&
-            stagePrepSkillPick !== "B" &&
-            prog.branch !== "B"
-          ? t("ui.skillLockedHint", { branch: "B", n: MAX_MAGIC_RANK })
-          : t("ui.stagePrepSkillLocked");
-    const detailBody = focusOpen
-      ? `<ul class="stage-prep-skill-detail-desc">${focusLines
-          .map((line) => `<li>${escapeHtml(line)}</li>`)
-          .join("")}</ul>
-        ${
-          focusRank < MAX_MAGIC_RANK
-            ? `<button type="button" class="auth-btn-primary stage-prep-magic-enh" data-magic-enhance="${focus.id}">${escapeHtml(t("ui.sumBookEnhance"))} +1</button>`
-            : `<span class="stage-prep-skill-max">MAX</span>`
-        }`
-      : `<p class="stage-prep-skill-locked muted">${escapeHtml(lockedHint)}</p>`;
     dockBody = `<div class="stage-prep-skill-panel">
       <p class="stage-prep-dock-hint">${escapeHtml(
-        prog.branch
-          ? t("ui.sumBookMagicBranch", { branch: prog.branch })
-          : t("ui.sumBookMagicBranchNone"),
+        pending
+          ? t("ui.stagePrepSkillChooseSlot", { name: pending.nameKo })
+          : t("ui.stagePrepSkillTapHint"),
       )}</p>
       <div class="stage-prep-skill-rail">
-        <div class="stage-prep-skill-picks" role="tablist" aria-label="${escapeHtml(t("ui.stagePrepTabSkill"))}">${icos}</div>
-      </div>
-      <div class="stage-prep-skill-detail" role="tabpanel">
-        <div class="stage-prep-skill-detail-head">
-          ${summonerSkillArtImg(focus.id, "stage-prep-skill-detail-ico", 40)}
-          <div class="stage-prep-skill-detail-copy">
-            <strong class="stage-prep-skill-detail-name">${escapeHtml(focus.nameKo)}</strong>
-            <small class="stage-prep-skill-detail-meta">${
-              focusOpen
-                ? escapeHtml(
-                    t("ui.magicRankLabel", {
-                      rank: focusRank,
-                      max: MAX_MAGIC_RANK,
-                    }),
-                  )
-                : escapeHtml(t("ui.stagePrepSkillLocked"))
-            }</small>
-          </div>
-        </div>
-        ${detailBody}
+        <div class="stage-prep-skill-picks" role="list" aria-label="${escapeHtml(t("ui.stagePrepTabSkill"))}">${skillIcons}</div>
       </div>
     </div>`;
   } else {
@@ -2127,7 +2486,6 @@ function renderStagePrepDock(): string {
           monsterArtImg(m.monsterId, "mon-slot-img", 56) ||
           (def?.element?.[0]?.toUpperCase() ?? "?");
         return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${el}${on ? " is-active" : ""}" data-stage-prep-info="monster" data-stage-party-toggle="${m.uid}" role="option" aria-selected="${on}" title="${escapeHtml(describeOwned(m))}">
-          ${invGradePlateImg(grade, "mon-slot-grade-plate", 112)}
           <span class="mon-slot-art" aria-hidden="true">${art}</span>
           <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
           <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
@@ -2183,7 +2541,7 @@ function openStagePrep(stage: StageDef): void {
   stagePrepSummonerOpen = false;
   stagePrepInvTab = "monster";
   stagePrepInfo = null;
-  stagePrepSkillPick = "A";
+  stagePrepMagicPendingId = null;
   clearStagePrepLongPress();
   stagePrepSuppressClick = false;
   const presets = normalizePartyPresets(save, save.partyPresets);
@@ -2232,7 +2590,7 @@ function confirmStagePrepStart(): void {
 
 function stagePrepLeaderPassive(saveRef: PlayerSave): {
   title: string;
-  detail: string;
+  markers: string[];
   pct: number;
 } {
   const active = getActiveSummoner(saveRef);
@@ -2262,8 +2620,11 @@ function stagePrepLeaderPassive(saveRef: PlayerSave): {
         pct: String(Math.round(pct * 1000) / 10),
       }),
     );
-  const detail = bits.length ? bits.join(` ${MIDDOT} `) : t("ui.stagePrepLeaderNone");
-  return { title, detail, pct };
+  return {
+    title,
+    markers: bits.length ? bits : [t("ui.stagePrepLeaderNone")],
+    pct,
+  };
 }
 
 function renderStageEntryModal(): string {
@@ -2292,7 +2653,8 @@ function renderStageEntryModal(): string {
         return `<div class="stage-prep-slot empty" aria-hidden="true"></div>`;
       }
       const m = getMonster(id);
-      return `<button type="button" class="stage-prep-slot el-${m?.element ?? "dark"}" data-stage-prep-info="enemy" data-stage-prep-enemy-id="${id}" title="${escapeHtml(m?.nameKo ?? id)}">
+      const grade = invGradeFromStars(m?.naturalStars ?? 1);
+      return `<button type="button" class="stage-prep-slot inv-grade--${grade} el-${m?.element ?? "dark"}" data-stage-prep-info="enemy" data-stage-prep-enemy-id="${id}" title="${escapeHtml(m?.nameKo ?? id)}">
         <span class="stage-prep-slot-art">${monsterArtImg(id, "stage-prep-slot-img", 52) || "?"}</span>
         <small>${escapeHtml(m?.nameKo ?? id)}</small>
       </button>`;
@@ -2310,7 +2672,8 @@ function renderStageEntryModal(): string {
         return `<div class="stage-prep-slot empty is-open-slot" aria-label="${i + 1}"></div>`;
       }
       const def = getMonster(m.monsterId);
-      return `<button type="button" class="stage-prep-slot el-${def?.element ?? "dark"}" data-stage-prep-info="monster" data-stage-party-toggle="${m.uid}" title="${escapeHtml(describeOwned(m))}">
+      const grade = invGradeFromStars(def?.naturalStars ?? 1);
+      return `<button type="button" class="stage-prep-slot inv-grade--${grade} el-${def?.element ?? "dark"}" data-stage-prep-info="monster" data-stage-party-toggle="${m.uid}" title="${escapeHtml(describeOwned(m))}">
         <span class="stage-prep-slot-art">${monsterArtImg(m.monsterId, "stage-prep-slot-img", 56) || "?"}</span>
         <span class="stage-prep-slot-lv">Lv.${m.level}</span>
       </button>`;
@@ -2326,22 +2689,42 @@ function renderStageEntryModal(): string {
   const magicProg =
     save.summonerMagic?.[save.activeSummoner ?? "light"] ??
     emptyMagicProgress();
-  const skillIcons = unlockedMagicSkills(
+  const unlockedMagic = unlockedMagicSkills(
     save.activeSummoner ?? "light",
     magicProg,
-  )
-    .slice(0, 4)
-    .map((n) => {
-      return `<span class="stage-prep-skill-ico is-on" title="${escapeHtml(n.nameKo)}">${summonerSkillArtImg(n.id, "stage-prep-skill-ico-img", 28)}</span>`;
+  );
+  const magicById = new Map(unlockedMagic.map((skill) => [skill.id, skill]));
+  const loadout = save.summonerMagicLoadouts?.[activeEl] ?? [null, null];
+  const pendingMagic = stagePrepMagicPendingId
+    ? magicById.get(stagePrepMagicPendingId) ?? null
+    : null;
+  if (stagePrepMagicPendingId && !pendingMagic) stagePrepMagicPendingId = null;
+  const equipSlots = loadout
+    .map((skillId, index) => {
+      const skill = skillId ? magicById.get(skillId) : null;
+      return `<button type="button" class="stage-prep-magic-slot${pendingMagic ? " is-target" : ""}${skill ? "" : " is-empty"}" data-stage-prep-magic-slot="${index}" title="${escapeHtml(skill?.nameKo ?? t("ui.stagePrepSkillSlot", { n: index + 1 }))}" ${pendingMagic ? "" : skill ? "" : "disabled"}>
+        <span>${escapeHtml(t("ui.stagePrepSkillSlot", { n: index + 1 }))}</span>
+        ${
+          skill
+            ? summonerSkillArtImg(skill.id, "stage-prep-magic-slot-img", 34)
+            : `<i>+</i>`
+        }
+      </button>`;
     })
     .join("");
 
   const titleText = `${stage.nameKo}(${diff.labelKo})`;
   const canStart = selected.size > 0 && energyNow >= cost;
 
-  return `<div class="stage-prep-layer" role="dialog" aria-modal="true" aria-labelledby="stage-entry-title">
-    <div class="stage-prep stage-prep--board stage-prep--${diff.id}">
+  const leaderMarkers = leader.markers
+    .map((marker) => `<span class="stage-prep-leader-marker">${escapeHtml(marker)}</span>`)
+    .join("");
+
+  return `<div class="stage-prep-layer" role="presentation">
+    <button type="button" class="stage-prep-backdrop" data-core-prep-action="cancel" aria-label="${escapeHtml(t("ui.stagePrepCancel"))}"></button>
+    <div class="stage-prep stage-prep--board stage-prep--${diff.id}" role="dialog" aria-modal="true" aria-labelledby="stage-entry-title">
       <header class="stage-prep-top stage-prep-top--board">
+        <span class="stage-prep-team-label stage-prep-team-label--stage">${escapeHtml(t("ui.stagePrepTitle"))}</span>
         <h2 class="stage-prep-title" id="stage-entry-title">${escapeHtml(titleText)}</h2>
         <div class="stage-prep-energy">
           <img class="res-ico" src="/art/ui/res/energy.svg" width="18" height="18" alt="" draggable="false" />
@@ -2351,6 +2734,7 @@ function renderStageEntryModal(): string {
       </header>
 
       <section class="stage-prep-team stage-prep-team--enemy" aria-label="${escapeHtml(t("ui.stagePrepEnemy"))}">
+        <h3 class="stage-prep-team-label stage-prep-team-label--enemy">${escapeHtml(t("ui.stagePrepEnemy"))}</h3>
         <div class="stage-prep-slots">
           <div class="stage-prep-slot stage-prep-slot--summoner el-dark" title="${escapeHtml(t("ui.stagePrepEnemySummoner"))}">
             <img class="stage-prep-slot-img" src="${summonerArtSrc("dark")}" width="64" height="64" alt="" draggable="false" decoding="async" />
@@ -2366,6 +2750,7 @@ function renderStageEntryModal(): string {
       <div class="stage-prep-vs" aria-hidden="true">VS</div>
 
       <section class="stage-prep-team stage-prep-team--ally" aria-label="${escapeHtml(t("ui.stagePrepParty"))}">
+        <h3 class="stage-prep-team-label stage-prep-team-label--ally">${escapeHtml(t("ui.stagePrepParty"))}</h3>
         <div class="stage-prep-presets">
           ${presetRow}
           <button type="button" class="stage-prep-save-deck" id="btn-stage-prep-save-deck">${escapeHtml(t("ui.stagePrepSaveDeck"))}</button>
@@ -2380,9 +2765,13 @@ function renderStageEntryModal(): string {
         </div>
         <div class="stage-prep-effects stage-prep-effects--ally">
           <div class="stage-prep-effects-main">
-            <p><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span> ${escapeHtml(leader.title)} ${MIDDOT} ${escapeHtml(leader.detail)}</p>
+            <div class="stage-prep-leader-passive">
+              <strong>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</strong>
+              <span class="stage-prep-leader-name">${escapeHtml(leader.title)}</span>
+              <div class="stage-prep-leader-markers">${leaderMarkers}</div>
+            </div>
           </div>
-          <div class="stage-prep-skill-icos" aria-hidden="true">${skillIcons}</div>
+          <div class="stage-prep-magic-slots" aria-label="${escapeHtml(t("ui.stagePrepSkillSlots"))}">${equipSlots}</div>
         </div>
       </section>
 
@@ -2437,6 +2826,10 @@ function openStagePrepInfoFromEl(el: HTMLElement): void {
     const id = el.dataset.stagePrepEnemyId;
     if (!id) return;
     stagePrepInfo = { kind: "enemy", monsterId: id };
+  } else if (infoKind === "magic") {
+    const skillId = el.dataset.stagePrepMagicId;
+    if (!skillId) return;
+    stagePrepInfo = { kind: "magic", skillId };
   } else if (infoKind === "monster" || el.dataset.stagePartyToggle) {
     const uid = el.dataset.stagePartyToggle;
     if (!uid) return;
@@ -2486,7 +2879,7 @@ function renderStagePrepInfoModal(): string {
       <div class="stage-prep-info-hero-copy">
         <strong>${escapeHtml(leader.nameKo)}</strong>
         <small>${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${p.level}${p.awaken > 0 ? ` ${MIDDOT} +${p.awaken}` : ""}</small>
-        <p class="stage-prep-info-leader"><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span> ${escapeHtml(leaderBits.detail)}</p>
+        <p class="stage-prep-info-leader"><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span> ${escapeHtml(leaderBits.markers.join(` ${MIDDOT} `))}</p>
       </div>
     </div>
     <div class="stage-prep-info-section">
@@ -2532,6 +2925,31 @@ function renderStagePrepInfoModal(): string {
     <div class="stage-prep-info-section">
       <h3>${escapeHtml(t("ui.stagePrepInfoSkills"))}</h3>
       <div class="stage-prep-info-skills">${skills}</div>
+    </div>`;
+  } else if (info.kind === "magic") {
+    const el = save.activeSummoner ?? "light";
+    const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
+    const skill = unlockedMagicSkills(el, prog).find(
+      (candidate) => candidate.id === info.skillId,
+    );
+    if (!skill) {
+      stagePrepInfo = null;
+      return "";
+    }
+    const rank = magicRank(prog, skill.id);
+    const lines = magicSkillDescLines(skill, rank);
+    body = `<div class="stage-prep-info-hero el-${el}">
+      ${summonerSkillArtImg(skill.id, "stage-prep-info-art", 72)}
+      <div class="stage-prep-info-hero-copy">
+        <strong>${escapeHtml(skill.nameKo)}</strong>
+        <small>${escapeHtml(t("ui.magicRankLabel", { rank, max: MAX_MAGIC_RANK }))}</small>
+      </div>
+    </div>
+    <div class="stage-prep-info-section">
+      <h3>${escapeHtml(t("ui.stagePrepInfoSkills"))}</h3>
+      <ul class="stage-prep-info-magic-lines">${lines
+        .map((line) => `<li>${escapeHtml(line)}</li>`)
+        .join("")}</ul>
     </div>`;
   } else {
     const def = getMonster(info.monsterId);
@@ -2588,9 +3006,23 @@ function renderStagePrepInfoModal(): string {
 }
 
 function applyStagePrepInfo(opts?: { animate?: boolean }): void {
-  const host = app.querySelector("#stages-region-host");
-  const layer = host?.querySelector(".stage-prep-layer");
-  if (!host || !layer) return;
+  const stageHost = app.querySelector("#stages-region-host");
+  const stageLayer = stageHost?.querySelector(".stage-prep-layer");
+  const partyScreen = app.querySelector(".party-screen");
+
+  let host: ParentNode | null = null;
+  let layer: Element | null = null;
+  if (stageHost && stageLayer && stageEntryId) {
+    host = stageHost;
+    layer = stageLayer;
+  } else if (partyScreen && view === "party") {
+    host = partyScreen;
+    layer = partyScreen;
+  } else {
+    app.querySelector("#stage-prep-info-layer")?.remove();
+    return;
+  }
+
   const existing = host.querySelector("#stage-prep-info-layer");
   if (!stagePrepInfo) {
     existing?.remove();
@@ -2634,7 +3066,7 @@ function bindStagePrepLongPress(host: ParentNode): void {
     const t = ev.target;
     if (!(t instanceof Element)) return null;
     return t.closest<HTMLElement>(
-      "[data-stage-prep-info], [data-stage-party-toggle], [data-stage-prep-summoner]",
+      "[data-stage-prep-info], [data-stage-party-toggle], [data-stage-prep-summoner], [data-stage-prep-magic-skill]",
     );
   };
 
@@ -2756,7 +3188,7 @@ function bindStagePrepDockControls(host: ParentNode): void {
         flash(t("summonerPicker.switched", { element: elementLabel(el) }));
       }
       stagePrepInvTab = "summoner";
-      stagePrepSkillPick = "A";
+      stagePrepMagicPendingId = null;
       applyStagesRegionOpen({ animate: false });
     });
   });
@@ -2776,26 +3208,49 @@ function bindStagePrepDockControls(host: ParentNode): void {
     });
   });
 
-  dock.querySelectorAll<HTMLButtonElement>("[data-stage-prep-skill-pick]").forEach((btn) => {
+  dock.querySelectorAll<HTMLButtonElement>("[data-stage-prep-magic-skill]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const slot = btn.dataset.stagePrepSkillPick as MagicSkillSlot | undefined;
-      if (!slot || slot === stagePrepSkillPick) return;
-      stagePrepSkillPick = slot;
-      refreshStagePrepDock();
-    });
-  });
-
-  dock.querySelectorAll<HTMLButtonElement>("[data-magic-enhance]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.magicEnhance ?? "";
-      if (!id) return;
-      const r = runEnhanceMagicSkill(save, id);
-      save = r.save;
-      persist();
-      flash(r.message);
+      if (consumeStagePrepSuppressClick()) return;
+      const skillId = btn.dataset.stagePrepMagicSkill;
+      if (!skillId) return;
+      stagePrepMagicPendingId =
+        stagePrepMagicPendingId === skillId ? null : skillId;
+      // Ally panel slots need the pending highlight too.
       applyStagesRegionOpen({ animate: false });
     });
   });
+}
+
+function equipStagePrepMagicToSlot(index: number): void {
+  const skillId = stagePrepMagicPendingId;
+  const el = save.activeSummoner ?? "light";
+  const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
+  const unlocked = unlockedMagicSkills(el, prog);
+  if (
+    !skillId ||
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index > 1 ||
+    !unlocked.some((skill) => skill.id === skillId)
+  ) {
+    return;
+  }
+  const loadout = [
+    ...(save.summonerMagicLoadouts?.[el] ?? [null, null]),
+  ] as [string | null, string | null];
+  const existing = loadout.indexOf(skillId);
+  if (existing >= 0) loadout[existing] = loadout[index];
+  loadout[index] = skillId;
+  save = {
+    ...save,
+    summonerMagicLoadouts: {
+      ...save.summonerMagicLoadouts,
+      [el]: loadout,
+    },
+  };
+  persist();
+  stagePrepMagicPendingId = null;
+  applyStagesRegionOpen({ animate: false });
 }
 
 /** Open/update drop-info overlay without rebuilding the region sheet. */
@@ -2925,6 +3380,18 @@ function bindStageEntryModal(): void {
       });
     });
 
+  host.querySelectorAll<HTMLButtonElement>("[data-stage-prep-magic-slot]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
+      if (!stagePrepMagicPendingId) {
+        stagePrepInvTab = "skill";
+        applyStagesRegionOpen({ animate: false });
+        return;
+      }
+      equipStagePrepMagicToSlot(Number(btn.dataset.stagePrepMagicSlot));
+    });
+  });
+
   bindStagePrepDockControls(host);
   bindStagePrepLongPress(host);
   if (stagePrepInfo) bindStagePrepInfoControls(host);
@@ -2983,7 +3450,13 @@ function grantRewardIfNeeded(): void {
   const victory = battle.finishReason === "ally_win";
   const scrollsBefore = save.scrolls;
   const scrollsPremiumBefore = save.scrollsPremium ?? 0;
-  const { save: next, reward } = applyRewards(save, currentStage, victory);
+  const { save: next, reward } = applyRewards(
+    save,
+    currentStage,
+    victory,
+    undefined,
+    stageEntryDiff,
+  );
   save = next;
   persist();
   lastScrollGain = Math.max(0, save.scrolls - scrollsBefore);
@@ -3005,22 +3478,39 @@ function grantRewardIfNeeded(): void {
 }
 
 function resultLootTile(opts: {
-  icon: string;
+  icon?: string;
+  iconHtml?: string;
   label: string;
-  amount: string;
+  amount?: string;
   tone?: string;
   badge?: string;
+  grade?: InvGradeId;
+  stars?: number;
+  hideAmount?: boolean;
 }): string {
   const tone = opts.tone ? ` result-loot-tile--${opts.tone}` : "";
+  const grade = opts.grade ? ` inv-grade--${opts.grade}` : "";
   const badge = opts.badge
     ? `<span class="result-loot-badge">${opts.badge}</span>`
     : "";
-  return `<li class="result-loot-tile${tone}">
+  const stars =
+    opts.stars != null && opts.stars > 0
+      ? `<span class="result-loot-stars" aria-label="${opts.stars}">${monStarsHtml(opts.stars)}</span>`
+      : "";
+  const ico = opts.iconHtml
+    ? opts.iconHtml
+    : `<img class="result-loot-ico" src="${opts.icon ?? ""}" width="40" height="40" alt="" draggable="false" />`;
+  const amount =
+    !opts.hideAmount && opts.amount
+      ? `<strong class="result-loot-amt">${opts.amount}</strong>`
+      : "";
+  return `<li class="result-loot-tile${tone}${grade}">
     <span class="result-loot-frame" aria-hidden="true">
-      <img class="result-loot-ico" src="${opts.icon}" width="40" height="40" alt="" draggable="false" />
+      ${ico}
+      ${stars}
       ${badge}
     </span>
-    <strong class="result-loot-amt">${opts.amount}</strong>
+    ${amount}
     <span class="result-loot-name">${opts.label}</span>
   </li>`;
 }
@@ -3038,28 +3528,40 @@ function resultExpCard(track: ExpTrackGain | null, kind: ExpTrackGain["kind"]): 
   const leveled = track.levelsGained > 0;
   let icon = "/art/auth/logo-mark-192.png";
   let label = t("ui.resultExpUser");
+  let starsHtml = "";
+  let gradeClass = "";
   if (track.kind === "user") {
     label = displayNickname() || t("ui.resultExpUser");
   } else if (track.kind === "summoner") {
     const el = track.element ?? save.activeSummoner ?? "light";
     icon = summonerArtSrc(el);
-    label = t("ui.resultExpSummoner");
+    label = getSummonerLeader(el)?.nameKo || t("ui.resultExpSummoner");
+    const awaken = getActiveSummoner(save).awaken ?? 0;
+    const grade = invGradeFromStars(Math.min(5, Math.max(1, awaken + 1)));
+    gradeClass = ` inv-grade--${grade}`;
   } else if (track.kind === "monster") {
     icon =
       monsterBattleArtSrc(track.monsterId, "front") ??
       monsterArtSrc(track.monsterId) ??
       "/art/auth/logo-mark-192.png";
-    label = track.nameKo || t("ui.resultExpMonster");
+    const def = getMonster(track.monsterId);
+    label = def?.nameKo || track.nameKo || t("ui.resultExpMonster");
+    const starN = Math.max(1, def?.naturalStars ?? 1);
+    starsHtml = `<span class="result-exp-card-stars" aria-label="${starN}">${monStarsHtml(starN)}</span>`;
+    gradeClass = ` inv-grade--${invGradeFromStars(starN)}`;
   }
-  const lvBadge = leveled
+  const lvOverlay = `<span class="result-exp-card-lv-onart">Lv.${track.afterLevel}</span>`;
+  const lvChange = leveled
     ? `<span class="result-exp-card-lv is-up">Lv.${track.beforeLevel}${ARROW_RIGHT}${track.afterLevel}</span>`
-    : `<span class="result-exp-card-lv">Lv.${track.afterLevel}</span>`;
-  return `<li class="result-exp-card result-exp-card--${track.kind}${leveled ? " is-levelup" : ""}">
+    : "";
+  return `<li class="result-exp-card result-exp-card--${track.kind}${leveled ? " is-levelup" : ""}${gradeClass}">
     <span class="result-exp-card-art" aria-hidden="true">
       <img src="${icon}" width="48" height="48" alt="" draggable="false" />
+      ${starsHtml}
+      ${lvOverlay}
     </span>
     <strong class="result-exp-card-name">${escapeHtml(label)}</strong>
-    ${lvBadge}
+    ${lvChange}
     <span class="result-exp-card-delta">+${fmtRes(track.gained)}</span>
     <div class="result-exp-card-bar" role="progressbar" aria-valuenow="${cur}" aria-valuemin="0" aria-valuemax="${per}">
       <i class="result-exp-card-bar-fill" style="width:${pct}%"></i>
@@ -3194,6 +3696,51 @@ function renderResult(): string {
         }),
       );
     }
+    if (reward.gear) {
+      const gearGrade = invGradeFromRarityId(
+        qualityToPlateId(reward.gear.quality ?? "normal"),
+      );
+      const gearName =
+        reward.gear.nameKo ||
+        GEAR_SETS.find((entry) => entry.id === reward.gear!.setId)?.nameKo ||
+        gearSlotLabel(reward.gear.slot);
+      lootTiles.push(
+        resultLootTile({
+          icon: gearSlotArtSrc(
+            reward.gear.slot,
+            reward.gear.element,
+            reward.gear.setId,
+          ),
+          label: escapeHtml(gearName),
+          tone: "gear",
+          grade: gearGrade,
+          stars: reward.gear.stars,
+          hideAmount: true,
+        }),
+      );
+    }
+    if (reward.symbol) {
+      const rarity = symbolQualityMeta(reward.symbol.quality);
+      const setName =
+        SYMBOL_SETS.find((s) => s.id === reward.symbol!.setId)?.nameKo ??
+        reward.symbol.setId;
+      lootTiles.push(
+        resultLootTile({
+          iconHtml: renderSymIco({
+            setId: reward.symbol.setId,
+            slot: reward.symbol.slot,
+            enhance: reward.symbol.enhance,
+            rarityId: rarity.id,
+            size: "sm",
+          }),
+          label: escapeHtml(setName),
+          tone: "symbol",
+          grade: invGradeFromRarityId(rarity.id),
+          stars: reward.symbol.stars,
+          hideAmount: true,
+        }),
+      );
+    }
   }
 
   const tracks = reward.expTracks?.length
@@ -3211,7 +3758,7 @@ function renderResult(): string {
             beforeExp: 0,
             afterLevel: save.island.summonerLevel,
             afterExp: Math.floor(save.island.summonerExp ?? 0),
-            expPerLevel: 100,
+            expPerLevel: summonerExpToNext(save.island.summonerLevel),
             levelsGained: reward.levelsGained ?? 0,
           },
           {
@@ -3226,7 +3773,7 @@ function renderResult(): string {
             beforeExp: 0,
             afterLevel: save.island.summonerLevel,
             afterExp: Math.floor(save.island.summonerExp ?? 0),
-            expPerLevel: 100,
+            expPerLevel: summonerExpToNext(save.island.summonerLevel),
             levelsGained: reward.levelsGained ?? 0,
           },
         ] satisfies ExpTrackGain[])
@@ -3259,47 +3806,6 @@ function renderResult(): string {
       </section>`
       : "";
 
-  const dropCards: string[] = [];
-  if (reward.gear) {
-    dropCards.push(`<article class="result-drop-card result-drop-card--gear">
-      <p class="result-section-label">${t("ui.6be738a130")}</p>
-      <div class="result-drop-body">
-        <span class="result-drop-art" aria-hidden="true">
-          <img src="/art/ui/symbol/gear.svg" width="56" height="56" alt="" draggable="false" />
-        </span>
-        <div class="result-drop-copy">
-          <strong>${escapeHtml(describeGear(reward.gear))}</strong>
-          <small>${escapeHtml(gearSlotLabel(reward.gear.slot))}</small>
-        </div>
-      </div>
-    </article>`);
-  }
-  if (reward.symbol) {
-    const rarity = symbolQualityMeta(reward.symbol.quality);
-    dropCards.push(`<article class="result-drop-card result-drop-card--symbol rarity--${rarity.id}">
-      <p class="result-section-label">${t("ui.resultSymbolDrop")}</p>
-      <div class="result-drop-body">
-        <span class="result-drop-art result-drop-art--sym" aria-hidden="true">
-          ${renderSymIco({
-            setId: reward.symbol.setId,
-            slot: reward.symbol.slot,
-            enhance: reward.symbol.enhance,
-            rarityId: rarity.id,
-            stars: reward.symbol.stars,
-            size: "md",
-          })}
-        </span>
-        <div class="result-drop-copy">
-          <strong>${escapeHtml(describeSymbol(reward.symbol))}</strong>
-          <small>${escapeHtml(rarity.label)}</small>
-        </div>
-      </div>
-    </article>`);
-  }
-  const dropSection = dropCards.length
-    ? `<section class="result-drops">${dropCards.join("")}</section>`
-    : "";
-
   const loseNote = !win
     ? `<p class="result-empty">${escapeHtml(reward.expNote || t("ui.41281baf5a"))}</p>`
     : "";
@@ -3326,18 +3832,16 @@ function renderResult(): string {
       ${progressSection ? `<div class="result-exp-panel">${progressSection}</div>` : ""}
       ${loseNote}
       ${lootSection}
-      ${dropSection}
     </div>
     <div class="result-foot">
       <button type="button" class="auth-btn-primary result-cta-primary" id="btn-result-continue">${t("ui.resultContinue")}</button>
     </div>`;
 
   const stepTwo = `<div class="result-body result-body--choices">
-      <p class="result-choice-hint">${stageLine}</p>
       ${riteContinue}
-    </div>
-    <div class="result-foot">
       ${battleChoices}
+    </div>
+    <div class="result-foot result-foot--choices">
       <nav class="result-nav" aria-label="${escapeHtml(t("nav.main"))}">
         <button type="button" class="secondary" id="btn-result-prep">${t("ui.resultBattlePrep")}</button>
         <button type="button" class="secondary" data-nav="stages">${t("ui.resultBattleMap")}</button>
@@ -3433,7 +3937,7 @@ function clearEnhanceSymbolUi(opts?: { keepDock?: boolean }): void {
 
 async function onCellClickAsync(x: number, y: number): Promise<void> {
   if (!battle || battle.phase !== "await_stone") return;
-  if (autoMode || battleFxBusy) return;
+  if ((autoMode && battleAutoOptions.stone) || battleFxBusy) return;
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
     : null;
@@ -3441,6 +3945,16 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
 
   battleFxBusy = true;
   try {
+    // Close the big flat pick grid first, then the summoner casts and the
+    // stone lands on the map circle with the usual drop FX.
+    stoneSummonFx = {
+      element: battle.allySummoner.summonerElement ?? unit.element,
+      x,
+      y,
+    };
+    if (!refreshBattleView()) render();
+    await waitPaintFrame();
+
     const allySum = battle.units.find(
       (u) => u.team === "ally" && u.kind === "summoner" && u.alive,
     );
@@ -3451,10 +3965,15 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     }
     await waitFx(castMs);
 
-    if (!battle.playStone({ x, y })) return;
+    if (!battle.playStone({ x, y })) {
+      stoneSummonFx = null;
+      if (!refreshBattleView()) render();
+      return;
+    }
+    stoneSummonFx = null;
     const capBonus = battle.pendingCaptureDamageBonus.ally;
     refreshLegal();
-    render();
+    if (!refreshBattleView()) render();
     const dropMs = fxDurationMs(280, battleSpeed);
     pulseBoardCell(app, x, y, "fx-stone-drop", dropMs);
     if (capBonus > 0) {
@@ -3486,6 +4005,7 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
 function pushDamageFloats(hits: SkillResult[]): void {
   const ids: number[] = [];
   for (const h of hits) {
+    if (h.damage === 0 && !h.crit) continue;
     floatSeq += 1;
     ids.push(floatSeq);
     const text =
@@ -3499,24 +4019,56 @@ function pushDamageFloats(hits: SkillResult[]): void {
       text,
       crit: h.crit,
       ult: h.usedSummonerSkill,
+      targetId: h.targetId,
     });
   }
   if (!ids.length) return;
+  refreshDmgLayer();
   setTimeout(() => {
     const idSet = new Set(ids);
     dmgFloats = dmgFloats.filter((f) => !idSet.has(f.id));
-    const layer = app.querySelector(".dmg-layer");
-    if (layer) layer.innerHTML = renderDmgLayer();
-  }, 900 / battleSpeed);
+    refreshDmgLayer();
+  }, 900 / battlePace(battleSpeed));
 }
 
 function renderDmgLayer(): string {
-  return dmgFloats
-    .map(
-      (f, i) =>
-        `<span class="dmg-float${f.crit ? " crit" : ""}${f.ult ? " ult" : ""}" style="--i:${i}">${f.text}</span>`,
-    )
-    .join("");
+  // Floats mount onto unit portraits; the layer stays as a fallback host only.
+  return "";
+}
+
+/** Mount HP change numbers on the hit unit's character (ally & enemy). */
+function layoutDmgFloats(_layer?: HTMLElement | null): void {
+  app.querySelectorAll(".dmg-float").forEach((el) => el.remove());
+  const perTarget = new Map<string, number>();
+  for (const f of dmgFloats) {
+    const unit = app.querySelector<HTMLElement>(
+      `.battle-unit[data-unit="${CSS.escape(f.targetId)}"]`,
+    );
+    const stack = perTarget.get(f.targetId) ?? 0;
+    perTarget.set(f.targetId, stack + 1);
+    const el = document.createElement("span");
+    el.className = `dmg-float${f.crit ? " crit" : ""}${f.ult ? " ult" : ""}`;
+    el.dataset.dmgId = String(f.id);
+    el.dataset.target = f.targetId;
+    el.style.setProperty("--i", String(stack));
+    el.textContent = f.text;
+    if (unit) {
+      // Attach to the unit (not .battle-unit-art) so mask-image does not clip.
+      unit.appendChild(el);
+    } else {
+      const host = app.querySelector<HTMLElement>(".dmg-layer");
+      if (!host) continue;
+      el.classList.add("dmg-float--orphan");
+      host.appendChild(el);
+    }
+  }
+}
+
+function refreshDmgLayer(): void {
+  const layer = app.querySelector<HTMLElement>(".dmg-layer");
+  if (layer) layer.innerHTML = "";
+  layoutDmgFloats(layer);
+  requestAnimationFrame(() => layoutDmgFloats(layer));
 }
 
 /** Monsters with summoner seated in the middle of the line (e.g. M M S M M). */
@@ -3590,6 +4142,8 @@ async function resolveCombatUntilAllyInput(opts?: {
 }): Promise<void> {
   if (!battle) return;
   const autoAlly = opts?.autoAlly ?? autoMode;
+  const autoStone = autoAlly && battleAutoOptions.stone;
+  const autoCombat = autoAlly && battleAutoOptions.combat;
   const ownBusy = !opts?.holdBusy;
   if (ownBusy) {
     if (battleFxBusy) return;
@@ -3597,6 +4151,37 @@ async function resolveCombatUntilAllyInput(opts?: {
   }
   try {
     for (let guard = 0; battle && !battle.finishReason && guard < 80; guard++) {
+      if (battle.phase === "await_wave") {
+        // Empty-rim beat, then spawn the next pack with a staggered entrance.
+        refreshLegal();
+        render();
+        await waitFx(fxDurationMs(720, battleSpeed));
+        if (!battle || battle.phase !== "await_wave") continue;
+        const beforeIds = new Set(
+          battle.units
+            .filter((u) => u.team === "enemy" && u.kind === "monster")
+            .map((u) => u.id),
+        );
+        if (!battle.resolveWaveTransition()) break;
+        const spawned = battle.units.filter(
+          (u) =>
+            u.team === "enemy" &&
+            u.kind === "monster" &&
+            u.alive &&
+            !beforeIds.has(u.id),
+        );
+        waveEnterIds = new Set(spawned.map((u) => u.id));
+        waveBannerText = `${battle.currentWave}/${battle.totalWaves}`;
+        refreshLegal();
+        render();
+        await waitFx(fxDurationMs(1100, battleSpeed));
+        waveEnterIds = new Set();
+        waveBannerText = null;
+        refreshLegal();
+        render();
+        continue;
+      }
+
       if (
         battle.phase === "idle" ||
         battle.phase === "resolved" ||
@@ -3614,33 +4199,45 @@ async function resolveCombatUntilAllyInput(opts?: {
         : null;
       if (!unit) break;
 
-      if (unit.team === "ally" && !autoAlly) {
+      if (unit.team === "ally") {
         if (battle.phase === "await_stone") {
-          clearBattleSkillSelection();
-          selectedTargetId = null;
-          refreshLegal();
-          render();
-          return;
+          if (autoStone) {
+            // Continue below so AUTO can choose a legal point.
+          } else {
+            clearBattleSkillSelection();
+            selectedTargetId = null;
+            refreshLegal();
+            render();
+            return;
+          }
         }
         if (battle.phase === "await_capture_shop") {
-          render();
-          return;
+          if (autoCombat) {
+            // Continue below so AUTO can choose the capture reward.
+          } else {
+            render();
+            return;
+          }
         }
         if (battle.phase === "await_skill") {
-          // Manual: select skill under unit, then tap an enemy.
-          clearBattleSkillSelection();
-          selectedTargetId = null;
-          if (unit.kind === "monster" && battle.canUseSkill(unit, 0)) {
-            selectedSkillIndex = 0;
+          if (autoCombat) {
+            // Continue below so AUTO can select and cast a skill.
+          } else {
+            // Manual: select skill under unit, then tap an enemy.
+            clearBattleSkillSelection();
+            selectedTargetId = null;
+            if (unit.kind === "monster" && battle.canUseSkill(unit, 0)) {
+              selectedSkillIndex = 0;
+            }
+            refreshLegal();
+            render();
+            return;
           }
-          refreshLegal();
-          render();
-          return;
         }
       }
 
       if (battle.phase === "await_stone") {
-        if (unit.team === "ally" && autoAlly) {
+        if (unit.team === "ally" && autoStone) {
           const allySum = battle.units.find(
             (u) => u.team === "ally" && u.kind === "summoner" && u.alive,
           );
@@ -3686,7 +4283,7 @@ async function resolveCombatUntilAllyInput(opts?: {
       }
 
       if (battle.phase === "await_capture_shop") {
-        if (unit.team === "ally" && !autoAlly) {
+        if (unit.team === "ally" && !autoCombat) {
           render();
           return;
         }
@@ -3804,7 +4401,7 @@ function scheduleAuto(): void {
   if (!autoMode || !battle || battle.finishReason) return;
   autoTimer = setTimeout(() => {
     void resolveCombatUntilAllyInput({ autoAlly: true });
-  }, 420 / battleSpeed);
+  }, 420 / battlePace(battleSpeed));
 }
 
 function autoAllyTurn(): void {
@@ -3879,7 +4476,12 @@ async function castSkillAsync(
   mode: BattleSummonerSkillId | "smart" | number,
   forcedTargetId?: string,
 ): Promise<void> {
-  if (!battle || battle.phase !== "await_skill" || autoMode || battleFxBusy)
+  if (
+    !battle ||
+    battle.phase !== "await_skill" ||
+    (autoMode && battleAutoOptions.combat) ||
+    battleFxBusy
+  )
     return;
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
@@ -4078,7 +4680,7 @@ function renderSummonerSkillButtons(
 }
 
 function renderActiveUnitSkills(u: Unit): string {
-  if (!battle || autoMode) return "";
+  if (!battle || (autoMode && battleAutoOptions.combat)) return "";
   if (battle.phase !== "await_skill" || battle.activeUnitId !== u.id)
     return "";
   if (u.team !== "ally" || !u.alive) return "";
@@ -4099,6 +4701,10 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
   const atbPct = Math.min(100, Math.round(u.atb));
   const shield = u.shieldHp && u.shieldHp > 0 ? Math.round(u.shieldHp) : 0;
   const dead = !u.alive ? " dead" : "";
+  const waveEnter =
+    u.team === "enemy" && u.kind === "monster" && waveEnterIds.has(u.id)
+      ? " is-wave-enter"
+      : "";
   const isSummoner = u.kind === "summoner";
   const tag = opts?.targetable && u.alive ? "button" : "div";
   const attrs =
@@ -4147,7 +4753,7 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
     </div>`;
   }
 
-  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""} el-${u.element}${active}${targeted}${dead}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${u.name}">
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${u.name}">
     ${barsHtml}
     ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
     <span class="battle-unit-glow" aria-hidden="true"></span>
@@ -4158,7 +4764,8 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
 }
 
 
-function renderBoard(): string {
+/** Board nodes — shared by the map circle and the manual pick overlay. */
+function renderBoardCells(canClick: boolean): string {
   if (!battle) return "";
   const size = battle.board.size;
   const grid = battle.board.getBoard();
@@ -4170,29 +4777,6 @@ function renderBoard(): string {
     battle.victoryPoint && !battle.victoryPointClaimed
       ? `${battle.victoryPoint.x},${battle.victoryPoint.y}`
       : null;
-  const phase = battle.circle.boardPhase;
-  if (phase > lastSeenBoardPhase) {
-    if (phase > 0) boardRekindleFx = true;
-    lastSeenBoardPhase = phase;
-  }
-  const showRekindle = boardRekindleFx;
-  if (showRekindle) {
-    queueMicrotask(() => {
-      boardRekindleFx = false;
-    });
-  }
-  const rebuildTag =
-    phase <= 0
-      ? t('ui.d2342783cb')
-      : `${t('ui.0f554c7cff')} ${"I".repeat(Math.min(phase, 3))}`;
-  const openingHint = battle.openingBonusPending
-    ? `<span class="board-opening-hint">${t('ui.413147d435')}</span>`
-    : "";
-  const canClick =
-    battle.phase === "await_stone" &&
-    !!battle.activeUnitId &&
-    battle.getUnit(battle.activeUnitId!)?.team === "ally" &&
-    !autoMode;
 
   const allySummonerUnit = battle.units.find(
     (u) => u.team === "ally" && u.kind === "summoner",
@@ -4204,6 +4788,11 @@ function renderBoard(): string {
     battle.allySummoner.summonerElement ?? allySummonerUnit?.element;
   const enemyStoneEl =
     battle.enemySummoner.summonerElement ?? enemySummonerUnit?.element;
+  const activeTokenKeys = new Set(
+    battle.tokens.map(
+      (token) => `${battle.activeBoardIndex}:${token.id}:${token.x}:${token.y}`,
+    ),
+  );
 
   let cells = "";
   for (let y = 0; y < size; y++) {
@@ -4213,6 +4802,19 @@ function renderBoard(): string {
       const legal = legalSet.has(key);
       const token = battle.tokenAt(x, y);
       const tokenClass = token ? ` token token-${token.id}` : "";
+      const tokenKey = token
+        ? `${battle.activeBoardIndex}:${token.id}:${token.x}:${token.y}`
+        : "";
+      const tokenSpawnClass =
+        token && !seenBoardTokenKeys.has(tokenKey) ? " token-spawn" : "";
+      const tokenResource =
+        token &&
+        (token.id === "shield_core" ||
+          token.id === "capture_magnet" ||
+          token.id === "element_ward" ||
+          token.id === "transform_dust")
+          ? "crystal"
+          : "gold";
       const forbid = battle.isForbidden({ x, y });
       const forbidClass = forbid && !stone ? " forbid" : "";
       const starClass = starSet.has(key) && !stone ? " star" : "";
@@ -4253,7 +4855,12 @@ function renderBoard(): string {
             return `<span class="stone magic-stone ${stone} ${elClass} has-art" aria-hidden="true"><img class="magic-stone-img" src="${src}" width="64" height="64" alt="" draggable="false" decoding="async" onerror="this.closest('.magic-stone')?.classList.add('art-failed');this.remove()"/><i class="magic-stone-core"></i><i class="magic-stone-flare"></i></span>`;
           })()
         : token
-          ? `<span class="token-mark">${tokenLabel}</span>`
+          ? `<span class="token-mark token-mark--${tokenResource}">
+              <span class="token-resource-orbit" aria-hidden="true">
+                <img class="token-resource-img" src="/art/ui/res/${tokenResource}.svg" width="36" height="36" alt="" draggable="false" />
+              </span>
+              <span class="token-glyph" aria-hidden="true">${tokenLabel}</span>
+            </span>`
           : forbid
             ? `<span class="forbid-mark">${Mark.forbid}</span>`
             : bait
@@ -4263,9 +4870,40 @@ function renderBoard(): string {
                 : starSet.has(key)
                   ? `<span class="star-mark">${Mark.starDot}</span>`
                   : `<span class="node-mark" aria-hidden="true"></span>`;
-      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${tokenClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
+      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
+  seenBoardTokenKeys = activeTokenKeys;
+  return cells;
+}
+
+/**
+ * Map circle board: always the tilted table view. Manual taps happen on the
+ * large flat pick overlay instead, so this stays presentation-only.
+ */
+function renderBoard(): string {
+  if (!battle) return "";
+  const size = battle.board.size;
+  const phase = battle.circle.boardPhase;
+  if (phase > lastSeenBoardPhase) {
+    if (phase > 0) boardRekindleFx = true;
+    lastSeenBoardPhase = phase;
+  }
+  const showRekindle = boardRekindleFx;
+  if (showRekindle) {
+    queueMicrotask(() => {
+      boardRekindleFx = false;
+    });
+  }
+  const rebuildTag =
+    phase <= 0
+      ? t('ui.d2342783cb')
+      : `${t('ui.0f554c7cff')} ${"I".repeat(Math.min(phase, 3))}`;
+  const openingHint = battle.openingBonusPending
+    ? `<span class="board-opening-hint">${t('ui.413147d435')}</span>`
+    : "";
+  const cells = renderBoardCells(false);
+  const canClick = false;
   const resetPct = Math.min(
     100,
     Math.round(
@@ -4287,6 +4925,36 @@ function renderBoard(): string {
       </div>
     </div>
   </div>`;
+}
+
+/**
+ * Manual turn: a large flat grid over the battle stage so taps are easy.
+ * Always mounted (hidden when idle) so opening it never remounts the screen.
+ */
+function renderStonePickLayer(): string {
+  if (!battle) return "";
+  const size = battle.board.size;
+  const open =
+    battle.phase === "await_stone" &&
+    !!battle.activeUnitId &&
+    battle.getUnit(battle.activeUnitId)?.team === "ally" &&
+    (!autoMode || !battleAutoOptions.stone) &&
+    !stoneSummonFx;
+  return `<div class="stone-pick-layer" id="stone-pick-layer"${open ? "" : ' hidden aria-hidden="true"'}>
+    <div class="stone-pick-card">
+      <p class="stone-pick-hint">${escapeHtml(t("ui.onboard.battleTipStone"))}</p>
+      <div class="stone-pick-hit">
+        <div class="board magic-circle stone-pick-board size-${size}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${open ? renderBoardCells(true) : ""}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/** Wait two animation frames so the summon beat paints before timers run. */
+function waitPaintFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
 }
 
 function renderBoardTabs(): string {
@@ -4510,7 +5178,9 @@ function isFacilityView(v: View = view): boolean {
     v === "glory" ||
     v === "fusion" ||
     v === "party" ||
-    v === "dojo"
+    v === "dojo" ||
+    v === "enhance" ||
+    v === "stages"
   );
 }
 
@@ -4553,11 +5223,13 @@ function mainContent(manaPct: number): string {
   }
 }
 
-/** Island stays mounted under facility hubs; backdrop blocks spot clicks. */
+/** Island stays mounted under facility hubs; backdrop + X close return home. */
 function renderFacilityLayerHtml(manaPct: number): string {
-  return `<div class="facility-layer" id="facility-layer">
+  const kind = view;
+  return `<div class="facility-layer facility-layer--${kind}" id="facility-layer">
     <button type="button" class="facility-backdrop" data-nav="home" aria-label="${escapeHtml(t("ui.d758337556"))}"></button>
-    <div class="facility-modal" role="dialog" aria-modal="true">
+    <div class="facility-modal" role="dialog" aria-modal="true" aria-label="${escapeHtml(t("ui.d758337556"))}">
+      <button type="button" class="modal-x facility-modal-close" data-nav="home" aria-label="${escapeHtml(t("ui.d758337556"))}"></button>
       ${mainContent(manaPct)}
     </div>
   </div>`;
@@ -4656,7 +5328,7 @@ function escapeHtml(s: string): string {
 function formatSymbolStatBonusHtml(delta: number, percent: boolean): string {
   if (delta <= 0) return "";
   const body = percent ? `(+${delta}%)` : `(+${delta})`;
-  return `<span class="stat-cell-bonus">${body}</span>`;
+  return `<span class="mon-stat-tile-bonus">${body}</span>`;
 }
 
 function formatInspectStatValueHtml(
@@ -4666,51 +5338,70 @@ function formatInspectStatValueHtml(
 ): string {
   const percent = Boolean(opts?.percent);
   const main = percent ? `${final}%` : String(final);
-  return `${main}${formatSymbolStatBonusHtml(final - base, percent)}`;
+  return `<span class="mon-stat-tile-num">${main}</span>${formatSymbolStatBonusHtml(final - base, percent)}`;
 }
 
 function renderInspectCombatStatsHtml(
   preview: NonNullable<ReturnType<typeof previewOwnedCombatStats>>,
 ): string {
   const { base, final } = preview;
-  const cells: Array<{ k: string; v: string }> = [
-    { k: t("ui.statHp"), v: formatInspectStatValueHtml(base.hp, final.hp) },
-    { k: t("ui.statAtk"), v: formatInspectStatValueHtml(base.atk, final.atk) },
-    { k: t("ui.statDef"), v: formatInspectStatValueHtml(base.def, final.def) },
-    { k: t("ui.statSpd"), v: formatInspectStatValueHtml(base.spd, final.spd) },
+  const core: Array<{ id: string; k: string; v: string }> = [
+    { id: "hp", k: t("ui.statHp"), v: formatInspectStatValueHtml(base.hp, final.hp) },
+    { id: "atk", k: t("ui.statAtk"), v: formatInspectStatValueHtml(base.atk, final.atk) },
+    { id: "def", k: t("ui.statDef"), v: formatInspectStatValueHtml(base.def, final.def) },
+    { id: "spd", k: t("ui.statSpd"), v: formatInspectStatValueHtml(base.spd, final.spd) },
+  ];
+  const combat: Array<{ id: string; k: string; v: string }> = [
     {
+      id: "cri-rate",
       k: t("ui.statCriRate"),
-      v: formatInspectStatValueHtml(base.critRate, final.critRate, {
-        percent: true,
-      }),
+      v: formatInspectStatValueHtml(base.critRate, final.critRate, { percent: true }),
     },
     {
+      id: "cri-dmg",
       k: t("ui.statCriDmg"),
-      v: formatInspectStatValueHtml(base.critDmg, final.critDmg, {
-        percent: true,
-      }),
+      v: formatInspectStatValueHtml(base.critDmg, final.critDmg, { percent: true }),
     },
     {
+      id: "acc",
       k: t("ui.statAcc"),
-      v: formatInspectStatValueHtml(base.accuracy, final.accuracy, {
-        percent: true,
-      }),
+      v: formatInspectStatValueHtml(base.accuracy, final.accuracy, { percent: true }),
     },
     {
+      id: "res",
       k: t("ui.statRes"),
       v: formatInspectStatValueHtml(base.resistance, final.resistance, {
         percent: true,
       }),
     },
   ];
-  return `<div class="mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list">
-            ${cells
-              .map(
-                (c) =>
-                  `<div class="stat-cell" role="listitem"><span class="stat-cell-k">${c.k}</span><span class="stat-cell-v">${c.v}</span></div>`,
-              )
-              .join("")}
-          </div>`;
+  const tile = (row: { id: string; k: string; v: string }, tone: "core" | "combat") =>
+    `<div class="mon-stat-tile mon-stat-tile--${tone} mon-stat-tile--${row.id}" role="listitem">
+      <span class="mon-stat-tile-k">${escapeHtml(row.k)}</span>
+      <span class="mon-stat-tile-v">${row.v}</span>
+    </div>`;
+
+  return `<section class="mon-stats-panel" aria-label="${escapeHtml(t("ui.monStatsTitle"))}">
+    <header class="mon-stats-panel-head">
+      <span class="mon-stats-panel-ornament" aria-hidden="true"></span>
+      <strong class="mon-stats-panel-title">${escapeHtml(t("ui.monStatsTitle"))}</strong>
+      <span class="mon-stats-panel-ornament mon-stats-panel-ornament--flip" aria-hidden="true"></span>
+    </header>
+    <div class="mon-stats-panel-body">
+      <div class="mon-stats-band">
+        <p class="mon-stats-band-label">${escapeHtml(t("ui.monStatsCore"))}</p>
+        <div class="mon-stats-grid mon-stats-grid--core" role="list">
+          ${core.map((row) => tile(row, "core")).join("")}
+        </div>
+      </div>
+      <div class="mon-stats-band">
+        <p class="mon-stats-band-label">${escapeHtml(t("ui.monStatsCombat"))}</p>
+        <div class="mon-stats-grid mon-stats-grid--combat" role="list">
+          ${combat.map((row) => tile(row, "combat")).join("")}
+        </div>
+      </div>
+    </div>
+  </section>`;
 }
 
 /** Seal-style X close control; triggers the matching backdrop close button. */
@@ -4794,12 +5485,37 @@ function applyResMoreOpen(): void {
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .building-info-sheet",
+    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-sheet, .sum-magic-detail-sheet",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
   void sheet.offsetWidth;
   sheet.style.animation = "";
+}
+
+/**
+ * Soft UI rule: overlays must never remount hub-sky / the whole screen.
+ * Prefer host patch, always-mounted `hidden` layers, or inject/remove one overlay node.
+ */
+function softPatchHost(hostSelector: string, html: string): HTMLElement | null {
+  const host = app.querySelector<HTMLElement>(hostSelector);
+  if (!host) return null;
+  host.innerHTML = html;
+  return host;
+}
+
+/** Inject/replace a single overlay node without remounting the active screen. */
+function softMountOverlay(layerId: string, html: string): HTMLElement | null {
+  app.querySelector(`#${layerId}`)?.remove();
+  if (!html.trim()) return null;
+  app.insertAdjacentHTML("beforeend", html);
+  const layer = app.querySelector<HTMLElement>(`#${layerId}`);
+  if (layer) replayModalPop(layer);
+  return layer;
+}
+
+function softRemoveOverlay(layerId: string): void {
+  app.querySelector(`#${layerId}`)?.remove();
 }
 
 /** Toggle skill-feed modal without a full screen re-render. */
@@ -4809,6 +5525,15 @@ function applySkillFeedOpen(): void {
   layer.hidden = !skillFeedModalOpen;
   layer.setAttribute("aria-hidden", skillFeedModalOpen ? "false" : "true");
   if (skillFeedModalOpen) replayModalPop(layer);
+}
+
+/** Toggle the monster EXP power-up modal without a full screen re-render. */
+function applyPowerUpOpen(): void {
+  const layer = app.querySelector<HTMLElement>("#power-up-layer");
+  if (!layer) return;
+  layer.hidden = !powerUpModalOpen;
+  layer.setAttribute("aria-hidden", powerUpModalOpen ? "false" : "true");
+  if (powerUpModalOpen) replayModalPop(layer);
 }
 
 /** Toggle settings modal without a full screen re-render. */
@@ -5498,7 +6223,10 @@ function render(): void {
     if (refreshBattleView()) return;
   }
   const keepIsland =
-    !islandLayoutEdit && (view === "home" || isFacilityView(view))
+    !islandLayoutEdit &&
+    (view === "home" || isFacilityView(view)) &&
+    // Never re-attach an island that still has edit chrome (stale Done/Reset HUD).
+    !app.querySelector(".home-island .island-edit-hud")
       ? app.querySelector<HTMLElement>(".home-island")
       : null;
   preserveIslandDom = Boolean(keepIsland);
@@ -5616,6 +6344,11 @@ function renderScreen(): void {
   const nick = escapeHtml(displayNickname());
   const userLv = island.summonerLevel;
   const userExp = Math.floor(island.summonerExp ?? 0);
+  const userExpMax = summonerExpToNext(userLv);
+  const userExpPct = Math.max(
+    0,
+    Math.min(100, Math.round((userExp / Math.max(1, userExpMax)) * 100)),
+  );
   const accountLabel = escapeHtml(
     sessionUser?.email ||
       (sessionUser?.kind === "demo"
@@ -5640,12 +6373,19 @@ function renderScreen(): void {
 
   app.classList.remove("auth-mode");
   app.classList.toggle("home-mode", onIsland);
+  // Stages stays a facility sheet over the island, but still uses expedition
+  // chrome: chat rail + back-to-island, no bottom tabs / resource HUD.
   app.classList.toggle("expedition-mode", isStages);
   app.classList.toggle("stage-prep-open", isStages && !!stageEntryId);
   app.classList.toggle("combat-mode", view === "battle" || view === "result");
-  app.classList.toggle("monster-mode", view === "enhance" || view === "summoner");
+  app.classList.toggle(
+    "monster-mode",
+    view === "summoner" || (view === "enhance" && !isFacilityView()),
+  );
   app.classList.toggle("summoner-mode", view === "summoner");
   app.classList.toggle("island-layout-edit", onIsland && islandLayoutEdit);
+  app.classList.toggle("facility-modal-open", isFacilityView());
+  app.classList.toggle("party-modal-open", view === "party");
   app.innerHTML = `
     <header class="app-bar app-bar--hud${onIsland ? " app-bar--home" : ""}${isStages ? " app-bar--expedition" : ""}">
       <div class="app-bar-hud">
@@ -5654,8 +6394,8 @@ function renderScreen(): void {
             <img class="user-profile-img" src="/art/auth/logo-mark-192.png" width="40" height="40" alt="" />
             <span class="user-profile-lv">Lv.${userLv}</span>
             <div class="user-profile-foot">
-              <div class="user-profile-exp" role="progressbar" aria-valuenow="${userExp}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(t("profile.exp", { n: userExp }))}">
-                <div class="user-profile-exp-fill" style="width:${Math.min(100, userExp)}%"></div>
+              <div class="user-profile-exp" role="progressbar" aria-valuenow="${userExp}" aria-valuemin="0" aria-valuemax="${userExpMax}" aria-label="${escapeHtml(t("profile.exp", { n: `${userExp}/${userExpMax}` }))}">
+                <div class="user-profile-exp-fill" style="width:${userExpPct}%"></div>
               </div>
             </div>
           </div>
@@ -5744,7 +6484,7 @@ function renderScreen(): void {
           </div>
         </div>
       </div>
-      ${onIsland ? "" : renderHomeChatRail()}
+      ${onIsland && !isStages ? "" : renderHomeChatRail()}
       ${
         isStages
           ? `<button type="button" class="stages-map-back" data-nav="home" aria-label="${t("ui.d758337556")}">
@@ -5789,6 +6529,20 @@ function renderScreen(): void {
     ${
       onIsland
         ? `<aside class="side-quick" aria-label="${escapeHtml(t("side.quick"))}">
+      <button type="button" class="side-quick-btn" id="btn-island-layout-edit" title="${escapeHtml(t("ui.1ac9a0470a"))}" aria-label="${escapeHtml(t("ui.1ac9a0470a"))}">
+        <span class="side-quick-glow" aria-hidden="true"></span>
+        <span class="seal-badge seal-badge--side">
+          <span class="side-quick-ico" aria-hidden="true">
+            <svg class="side-quick-svg" width="52" height="52" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+              <rect x="10" y="10" width="14" height="14" rx="3" stroke="#e8d9a8" stroke-width="2.2"/>
+              <rect x="28" y="14" width="14" height="14" rx="3" stroke="#c9a227" stroke-width="2.2"/>
+              <rect x="14" y="28" width="14" height="14" rx="3" stroke="#e8d9a8" stroke-width="2.2"/>
+              <path d="M34 36l6-6M40 36l-6-6" stroke="#c9a227" stroke-width="2.2" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="side-quick-caption">${escapeHtml(t("ui.78296b2020"))}</span>
+        </span>
+      </button>
       <button type="button" class="side-quick-btn${mailboxOpen ? " is-open" : ""}" id="btn-mailbox" aria-expanded="${mailboxOpen ? "true" : "false"}" aria-controls="mailbox-layer" title="${escapeHtml(t("mailbox.title"))}">
         <span class="side-quick-glow" aria-hidden="true"></span>
         <span class="seal-badge seal-badge--side">
@@ -5865,6 +6619,7 @@ function renderScreen(): void {
     ${renderCommunityModal()}
     ${renderShopModal()}
     ${renderBuildingInfoModal()}
+    ${renderBuildingUnlockModal()}
     ${
       onIsland ||
       isStages ||
@@ -6030,55 +6785,53 @@ function renderHome(): string {
       <div class="island-world" id="island-world" style="--island-zoom:${islandZoom.toFixed(4)};transform:translate3d(${islandPan.x}px,${islandPan.y}px,0) rotateX(${ISLAND_ROTATE_X_DEG}deg) scale(${ISLAND_BASE_SCALE})">
         <img
           class="island-map-img"
-          src="/art/home/home-island-bg@2x.webp"
-          width="1440"
-          height="2560"
+          src="/art/home/home-island-tri@2x.webp"
+          width="2880"
+          height="4320"
           alt=""
           draggable="false"
           decoding="async"
         />
         <div class="island-map-veil" aria-hidden="true"></div>
-        <div class="island-archipelago" aria-hidden="true">
-          ${ISLAND_ISLETS.map(
-            (isle) => `<div class="island-islet island-islet--${isle.id}" style="left:${isle.left}%;top:${isle.top}%;width:${isle.width}%;height:${isle.height}%">
-            <span class="island-islet-label">${escapeHtml(t(isle.labelKey))}</span>
-          </div>`,
-          ).join("")}
-          <div class="island-islet-bridges" aria-hidden="true"></div>
-        </div>
         ${
           islandLayoutEdit
-            ? `<div class="island-build-zone" aria-hidden="true" style="left:${ISLAND_LAYOUT_BOUNDS.minX}%;top:${ISLAND_LAYOUT_BOUNDS.minY}%;width:${ISLAND_LAYOUT_BOUNDS.maxX - ISLAND_LAYOUT_BOUNDS.minX}%;height:${ISLAND_LAYOUT_BOUNDS.maxY - ISLAND_LAYOUT_BOUNDS.minY}%">
-          <div class="island-build-zone-pad"></div>
-          <div class="island-build-zone-grid"></div>
+            ? `<div class="island-build-guide" aria-hidden="true">
+          ${ISLAND_LAND_ZONES.map(
+            (zone) => `<div class="island-build-zone island-build-zone--${zone.id}" style="left:${zone.cx - zone.rx}%;top:${zone.cy - zone.ry}%;width:${zone.rx * 2}%;height:${zone.ry * 2}%">
+            <div class="island-build-zone-pad"></div>
+          </div>`,
+          ).join("")}
+          ${ISLAND_LANDING_PADS.map(
+            (pad) => `<span class="island-landing-pad" data-pad-x="${pad.x}" data-pad-y="${pad.y}" style="left:${pad.x}%;top:${pad.y}%"></span>`,
+          ).join("")}
           <span class="island-build-zone-label">${t('ui.58c0079ead')}</span>
         </div>`
             : ""
         }
-        ${spot("summon_hearth", islandSpotTitle("summon_hearth"), 18, 48, { tone: "summon", sub: `${t('ui.fa73f3a42f')} ${save.scrolls}${t('ui.b241493768')}` })}
-        ${spot("power_circle", islandSpotTitle("power_circle"), 26, 36, { tone: "forge", sub: t('ui.1ab42b48a4') })}
-        ${spot("gateway", islandSpotTitle("gateway"), 74, 36, { tone: "gate", sub: t('ui.13c82de693') })}
-        ${spot("mana_pond", islandSpotTitle("mana_pond"), 42, 48, {
+        ${spot("summon_hearth", islandSpotTitle("summon_hearth"), 46.7, 38.8, { tone: "summon", sub: `${t('ui.fa73f3a42f')} ${save.scrolls}${t('ui.b241493768')}` })}
+        ${spot("power_circle", islandSpotTitle("power_circle"), 41.9, 31.2, { tone: "forge", sub: t('ui.1ab42b48a4') })}
+        ${spot("gateway", islandSpotTitle("gateway"), 55.5, 33.1, { tone: "gate", sub: t('ui.13c82de693') })}
+        ${spot("mana_pond", islandSpotTitle("mana_pond"), 19, 62.2, {
                   tone: "pond",
                   sub: `Lv.${pondLv} ${"\u00B7"} ${t('ui.df72a8753d')} ${storedMana}/${pondCap}`,
                   bubble: storedMana > 0 ? String(storedMana) : undefined,
                   bubbleKind: storedMana > 0 ? "mana" : undefined,
                 })}
-        ${spot("shop", islandSpotTitle("shop"), 32, 50, { tone: "shop", sub: t('ui.ed3a862c2c') })}
-        ${spot("party", islandSpotTitle("party"), 24, 60, { tone: "party", sub: `${save.party.length}/4` })}
-        ${spot("wish", islandSpotTitle("wish"), 50, 32, {
+        ${spot("shop", islandSpotTitle("shop"), 30.8, 37.6, { tone: "shop", sub: t('ui.ed3a862c2c') })}
+        ${spot("party", islandSpotTitle("party"), 74.3, 63.6, { tone: "party", sub: `${save.party.length}/4` })}
+        ${spot("wish", islandSpotTitle("wish"), 30.3, 58.7, {
                   tone: "wish",
                   locked: !hasWish,
                   unlockLv: 7,
                   sub: hasWish ? t('ui.6ca75b551e') : undefined,
                 })}
-        ${spot("dojo", islandSpotTitle("dojo"), 50, 62, {
+        ${spot("dojo", islandSpotTitle("dojo"), 27, 67.6, {
                   tone: "dojo",
                   locked: !dojoOk,
                   unlockLv: 8,
                   sub: dojoOk ? `${t('ui.ca119dd0f6')} ${save.dojoDrills ?? 0}${t('ui.2fc05c02be')}` : undefined,
                 })}
-        ${spot("crystal_mine", islandSpotTitle("crystal_mine"), 58, 50, {
+        ${spot("crystal_mine", islandSpotTitle("crystal_mine"), 35.5, 66.2, {
                   tone: "mine",
                   locked: !mineOk,
                   unlockLv: 10,
@@ -6086,14 +6839,14 @@ function renderHome(): string {
                   bubble: mineOk && storedCrystal > 0 ? String(storedCrystal) : undefined,
                   bubbleKind: mineOk && storedCrystal > 0 ? "crystal" : undefined,
                 })}
-        ${spot("glory", islandSpotTitle("glory"), 68, 50, { tone: "glory", sub: `${t('ui.ba0c9e096f')} ${save.gloryPoints ?? 0}` })}
-        ${spot("guild", save.guildName ? save.guildName : islandSpotTitle("guild"), 80, 54, {
+        ${spot("glory", islandSpotTitle("glory"), 63.2, 64.8, { tone: "glory", sub: `${t('ui.ba0c9e096f')} ${save.gloryPoints ?? 0}` })}
+        ${spot("guild", save.guildName ? save.guildName : islandSpotTitle("guild"), 85.1, 64.4, {
                   tone: "guild",
                   locked: !guildOk,
                   unlockLv: 12,
                   sub: guildOk ? t('ui.d55c6d0b00') : undefined,
                 })}
-        ${spot("fusion", islandSpotTitle("fusion"), 74, 64, {
+        ${spot("fusion", islandSpotTitle("fusion"), 80.1, 69, {
                   tone: "fusion",
                   locked: !fusionOk,
                   unlockLv: 17,
@@ -6173,6 +6926,87 @@ function renderFusionReveal(): string {
     <p class="forge-reveal-cost muted">${fusionReveal.cost}</p>
     <button type="button" class="secondary full auth-btn-ghost" id="btn-fusion-dismiss">${t('ui.468266d639')}</button>
   </div>`;
+}
+
+function renderWishReveal(): string {
+  if (!wishReveal) return "";
+  return `<div class="forge-reveal forge-reveal--wish" aria-live="polite">
+    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">${Mark.wish}</span>${t('ui.0b4d534507')}</p>
+    <p class="forge-after">${wishReveal}</p>
+    <button type="button" class="secondary full auth-btn-ghost" id="btn-wish-dismiss" style="margin-top:12px">${t('ui.468266d639')}</button>
+  </div>`;
+}
+
+function bindForgeRevealDismiss(): void {
+  app.querySelector("#btn-forge-dismiss")?.addEventListener("click", () => {
+    forgeReveal = null;
+    softRefreshOverlayReveals();
+  });
+}
+
+function bindFusionRevealDismiss(): void {
+  app.querySelector("#btn-fusion-dismiss")?.addEventListener("click", () => {
+    fusionReveal = null;
+    softRefreshOverlayReveals();
+  });
+}
+
+function bindWishRevealDismiss(): void {
+  app.querySelector("#btn-wish-dismiss")?.addEventListener("click", () => {
+    wishReveal = null;
+    softRefreshOverlayReveals();
+  });
+}
+
+function softRefreshOverlayReveals(): boolean {
+  let ok = false;
+  const forgeHost = softPatchHost("#forge-reveal-host", renderForgeReveal());
+  if (forgeHost) {
+    bindForgeRevealDismiss();
+    ok = true;
+  }
+  const fusionHost = softPatchHost("#fusion-reveal-host", renderFusionReveal());
+  if (fusionHost) {
+    bindFusionRevealDismiss();
+    ok = true;
+  }
+  const wishHost = softPatchHost("#wish-reveal-host", renderWishReveal());
+  if (wishHost) {
+    bindWishRevealDismiss();
+    ok = true;
+  }
+  const enhanceHost = softPatchHost(
+    "#enhance-modal-host",
+    `${renderForgeReveal()}${renderSymbolBagExpandModal()}${renderSymbolDetailModal()}`,
+  );
+  if (enhanceHost) {
+    bindForgeRevealDismiss();
+    bindEnhanceTransientModals();
+    bindSymbolInventoryInteractions();
+    ok = true;
+  }
+  return ok;
+}
+
+function softShowForgeReveal(): void {
+  if (!softRefreshOverlayReveals()) render();
+}
+
+function softShowFusionReveal(): void {
+  if (!softRefreshOverlayReveals()) render();
+}
+
+function softShowWishReveal(): void {
+  if (!softRefreshOverlayReveals()) {
+    render();
+    return;
+  }
+  const day = todayKey();
+  if (save.island.lastWishDay === day) {
+    const meta = app.querySelector<HTMLElement>(".hub-meta");
+    if (meta) meta.textContent = `${t("ui.ecc82466ef")} ${MIDDOT} ${day}`;
+    app.querySelector<HTMLButtonElement>("#btn-wish-cast")?.setAttribute("disabled", "");
+  }
 }
 
 function renderDojo(): string {
@@ -6299,18 +7133,11 @@ function renderWish(): string {
   const day = todayKey();
   const last = save.island.lastWishDay ?? null;
   const used = last === day;
-  const reveal = wishReveal
-    ? `<div class="forge-reveal forge-reveal--wish" aria-live="polite">
-    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">${Mark.wish}</span>${t('ui.0b4d534507')}</p>
-        <p class="forge-after">${wishReveal}</p>
-        <button type="button" class="secondary full auth-btn-ghost" id="btn-wish-dismiss" style="margin-top:12px">${t('ui.468266d639')}</button>
-      </div>`
-    : "";
   return hubShell(
     t("ui.hubWish"),
     used ? `${t('ui.ecc82466ef')} ${MIDDOT} ${last}` : t('ui.b65d90440e'),
     `<div class="hub-panel">
-      ${reveal}
+      <div id="wish-reveal-host">${renderWishReveal()}</div>
       <div class="guild-panel wish-panel">
         <p class="guild-panel-title">${t('ui.6667aae26a')}</p>
         <div class="guild-stats">
@@ -6332,55 +7159,195 @@ function ensurePartyDraft(): Set<string> {
   return partyDraft;
 }
 
+/** Prepare party hall draft/presets (does not change view or render). */
+function preparePartyHall(): void {
+  partyInvTab = "monster";
+  stagePrepInfo = null;
+  const presets = normalizePartyPresets(save, save.partyPresets);
+  const idx = clampPartyPresetIndex(save.activePartyPreset);
+  save = {
+    ...save,
+    partyPresets: presets,
+    activePartyPreset: idx,
+  };
+  partyDraft = new Set(save.party);
+  persist();
+}
+
+/** Open party hall with normalized presets + draft from current party. */
+function openPartyHall(): void {
+  preparePartyHall();
+  view = "party";
+  renderPreservingIsland();
+}
+
+/** Commit draft party when leaving the party hall. */
+function commitPartyDraftOnLeave(): void {
+  if (!partyDraft) return;
+  if (partyDraft.size > 0) {
+    const r = runSetParty(save, [...partyDraft]);
+    save = r.save;
+    persist();
+    patchOnboard({ partySet: true });
+  }
+  partyDraft = null;
+  stagePrepInfo = null;
+}
+
+function renderPartyDock(): string {
+  const selected = ensurePartyDraft();
+  const activeEl = save.activeSummoner ?? "light";
+
+  let dockBody = "";
+  if (partyInvTab === "summoner") {
+    dockBody = `<div class="mon-book-inv mon-book-inv--rail stage-prep-roster-rail stage-prep-roster-rail--summoner" role="listbox" aria-label="${escapeHtml(t("ui.stagePrepTabSummoner"))}">
+      ${SUMMONER_ELEMENTS.map((el) => {
+        const on = el === activeEl;
+        const p = save.summoners?.[el] ?? { level: 1, exp: 0, awaken: 0 };
+        return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${on ? " is-active" : ""}" data-party-pick-summoner="${el}" role="option" aria-selected="${on}" title="${escapeHtml(elementLabel(el))}">
+          <span class="mon-slot-art" aria-hidden="true">
+            <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="56" height="56" alt="" draggable="false" decoding="async" />
+          </span>
+          <span class="mon-slot-lv-overlay">Lv.${p.level}</span>
+        </button>`;
+      }).join("")}
+    </div>`;
+  } else {
+    const sorted = sortRosterForSlots(save.roster, stagePrepSortMode);
+    const rosterSlots = Array.from(
+      { length: ROSTER_SLOT_CAP },
+      (_, i) => sorted[i] ?? null,
+    );
+    const invTiles = rosterSlots
+      .map((m) => {
+        if (!m) {
+          return `<div class="mon-slot mon-slot--portrait mon-slot--empty" role="presentation" aria-hidden="true">
+            <span class="mon-slot-art">
+              <img class="mon-slot-img mon-slot-img--empty" src="/art/ui/mon-slot-empty.svg" width="56" height="56" alt="" draggable="false" />
+            </span>
+          </div>`;
+        }
+        const on = selected.has(m.uid);
+        const def = getMonster(m.monsterId);
+        const el = def?.element ?? "dark";
+        const starN = Math.max(1, def?.naturalStars ?? 1);
+        const grade = invGradeFromStars(starN);
+        const starsHtml = monStarsHtml(starN);
+        const art =
+          monsterArtImg(m.monsterId, "mon-slot-img", 56) ||
+          (def?.element?.[0]?.toUpperCase() ?? "?");
+        return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${el}${on ? " is-active" : ""}" data-party-toggle="${m.uid}" role="option" aria-selected="${on}" title="${escapeHtml(describeOwned(m))}">
+          <span class="mon-slot-art" aria-hidden="true">${art}</span>
+          <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
+          <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
+        </button>`;
+      })
+      .join("");
+    dockBody = `<div class="mon-book-inv mon-book-inv--rail stage-prep-roster-rail" role="listbox" aria-label="${escapeHtml(t("ui.stagePrepTabMonster"))}">
+      ${invTiles}
+    </div>`;
+  }
+
+  const sortSelect =
+    partyInvTab === "monster"
+      ? `<label class="stage-prep-sort">
+          <span class="sr-only">${escapeHtml(t("ui.rosterSort"))}</span>
+          <select id="party-inv-sort" aria-label="${escapeHtml(t("ui.rosterSort"))}">
+            <option value="stars"${stagePrepSortMode === "stars" ? " selected" : ""}>${escapeHtml(t("ui.sortStars"))}</option>
+            <option value="level"${stagePrepSortMode === "level" ? " selected" : ""}>${escapeHtml(t("ui.sortLevel"))}</option>
+            <option value="element"${stagePrepSortMode === "element" ? " selected" : ""}>${escapeHtml(t("ui.sortElement"))}</option>
+            <option value="default"${stagePrepSortMode === "default" ? " selected" : ""}>${escapeHtml(t("ui.sortDefault"))}</option>
+            <option value="party"${stagePrepSortMode === "party" ? " selected" : ""}>${escapeHtml(t("ui.sortParty"))}</option>
+          </select>
+        </label>`
+      : "";
+
+  return `<div class="stage-prep-dock party-dock">
+    <div class="stage-prep-dock-bar">
+      <div class="stage-prep-tabs" role="tablist">
+        <button type="button" class="stage-prep-tab${partyInvTab === "summoner" ? " is-on" : ""}" data-party-inv-tab="summoner" role="tab" aria-selected="${partyInvTab === "summoner"}">${escapeHtml(t("ui.stagePrepTabSummoner"))}</button>
+        <button type="button" class="stage-prep-tab${partyInvTab === "monster" ? " is-on" : ""}" data-party-inv-tab="monster" role="tab" aria-selected="${partyInvTab === "monster"}">${escapeHtml(t("ui.stagePrepTabMonster"))}</button>
+      </div>
+      ${sortSelect}
+    </div>
+    <div class="stage-prep-dock-body">${dockBody}</div>
+  </div>`;
+}
+
 function renderParty(): string {
   const selected = ensurePartyDraft();
-  const lineup = [0, 1, 2, 3]
-    .map((i) => {
-      const uid = [...selected][i];
-      const m = uid ? save.roster.find((x) => x.uid === uid) : null;
-      const def = m ? getMonster(m.monsterId) : null;
-      if (!m) {
-        return `<div class="party-slot empty"><span class="party-slot-num">${i + 1}</span><span class="party-slot-name">${Mark.partyEmpty}</span></div>`;
-      }
-      return `<div class="party-slot el-${def?.element ?? "dark"}">
-        <span class="party-slot-num">${i + 1}</span>
-        ${monsterArtImg(m.monsterId, "party-slot-art", 36)}
-        <span class="party-slot-name">${describeOwned(m)}</span>
-      </div>`;
+  const partyUids = [...selected];
+  while (partyUids.length < 4) partyUids.push("");
+  const activeEl = save.activeSummoner ?? "light";
+  const activeSum = getActiveSummoner(save);
+  const leader = stagePrepLeaderPassive(save);
+  const presets = normalizePartyPresets(save, save.partyPresets);
+  const presetIdx = clampPartyPresetIndex(save.activePartyPreset);
+  const magicProg =
+    save.summonerMagic?.[save.activeSummoner ?? "light"] ??
+    emptyMagicProgress();
+  const skillIcons = unlockedMagicSkills(
+    save.activeSummoner ?? "light",
+    magicProg,
+  )
+    .slice(0, 4)
+    .map((n) => {
+      return `<span class="stage-prep-skill-ico is-on" title="${escapeHtml(n.nameKo)}">${summonerSkillArtImg(n.id, "stage-prep-skill-ico-img", 28)}</span>`;
     })
     .join("");
+
+  const allyMonSlots = [0, 1, 2, 3]
+    .map((i) => {
+      const uid = partyUids[i];
+      if (!uid) {
+        return `<div class="stage-prep-slot empty is-open-slot" aria-label="${i + 1}"></div>`;
+      }
+      const m = save.roster.find((x) => x.uid === uid);
+      if (!m) {
+        return `<div class="stage-prep-slot empty is-open-slot" aria-label="${i + 1}"></div>`;
+      }
+      const def = getMonster(m.monsterId);
+      const grade = invGradeFromStars(def?.naturalStars ?? 1);
+      return `<button type="button" class="stage-prep-slot inv-grade--${grade} el-${def?.element ?? "dark"}" data-party-info="monster" data-party-info-uid="${m.uid}" title="${escapeHtml(describeOwned(m))}">
+        <span class="stage-prep-slot-art">${monsterArtImg(m.monsterId, "stage-prep-slot-img", 56) || "?"}</span>
+        <span class="stage-prep-slot-lv">Lv.${m.level}</span>
+      </button>`;
+    })
+    .join("");
+
+  const presetRow = Array.from({ length: PARTY_PRESET_COUNT }, (_, i) => {
+    const on = i === presetIdx;
+    const filled = (presets[i]?.party.length ?? 0) > 0;
+    return `<button type="button" class="stage-prep-preset${on ? " is-on" : ""}${filled ? " is-filled" : ""}" data-party-preset="${i}" aria-pressed="${on}">${i + 1}</button>`;
+  }).join("");
+
   return `<div class="party-screen${onboard.step === "party" ? " is-onboard-rite" : ""}">${hubShell(
     t("ui.108f04ca6e"),
-    `${t('ui.d5e7024eb8')} ${selected.size}/4 ${MIDDOT} ${t('ui.269ecd9013')}`,
-    `<div class="hub-panel">
-      <div class="party-lineup" aria-label="${t('ui.a5d54ca91e')}">
-        <p class="party-lineup-title">${t('ui.a5d54ca91e')}</p>
-        <div class="party-slots">${lineup}</div>
-      </div>
-      <p class="section-label">${t('ui.079b50d844')}</p>
-      <div class="stage-list" id="party-pick">
-        ${save.roster
-          .map((m) => {
-            const on = selected.has(m.uid);
-            const def = getMonster(m.monsterId);
-            const preview = previewOwnedCombatStats(save, m.uid);
-            const stats = preview
-              ? `HP ${preview.final.hp} ${MIDDOT} ATK ${preview.final.atk} ${MIDDOT} DEF ${preview.final.def}`
-              : def?.element ?? "";
-            return `<button type="button" class="stage-card party-card el-${def?.element ?? "dark"}${on ? " picked" : ""}" data-party-toggle="${m.uid}">
-              <span class="stage-card-mark party-card-art" aria-hidden="true">${monsterArtImg(m.monsterId, "party-card-img", 44) || (on ? STAR : (def?.element?.[0]?.toUpperCase() ?? "?"))}</span>
-              <span class="stage-card-body">
-                <strong>${describeOwned(m)}</strong>
-                <small>${stats}</small>
-                <small class="party-card-status">${on ? t('ui.c33ba55e69') : t('ui.df72a8753d')}</small>
-              </span>
-            </button>`;
-          })
-          .join("")}
-      </div>
-      <button type="button" class="auth-btn-primary full" id="btn-party-save" style="margin-top:10px">${t('ui.5ef8e0b5ef')} (${selected.size}/4)</button>
+    `${t("ui.d5e7024eb8")} ${selected.size}/4`,
+    `<div class="hub-panel party-board stage-prep stage-prep--board">
+      <section class="stage-prep-team stage-prep-team--ally" aria-label="${escapeHtml(t("ui.stagePrepParty"))}">
+        <div class="stage-prep-presets">
+          ${presetRow}
+          <button type="button" class="stage-prep-save-deck" id="btn-party-save-deck">${escapeHtml(t("ui.stagePrepSaveDeck"))}</button>
+        </div>
+        <div class="stage-prep-slots">
+          <button type="button" class="stage-prep-slot stage-prep-slot--summoner el-${activeEl}" data-party-info="summoner" title="${escapeHtml(t("ui.stagePrepSummoner"))}">
+            <img class="stage-prep-slot-img" src="${summonerArtSrc(activeEl)}" width="64" height="64" alt="" draggable="false" decoding="async" />
+            <span class="stage-prep-slot-tag">${escapeHtml(t("ui.stagePrepSummoner"))}</span>
+            <span class="stage-prep-slot-lv">Lv.${activeSum.level}</span>
+          </button>
+          ${allyMonSlots}
+        </div>
+        <div class="stage-prep-effects stage-prep-effects--ally">
+          <div class="stage-prep-effects-main">
+            <p><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span> ${escapeHtml(leader.title)} ${MIDDOT} ${escapeHtml(leader.markers.join(` ${MIDDOT} `))}</p>
+          </div>
+          <div class="stage-prep-skill-icos" aria-hidden="true">${skillIcons}</div>
+        </div>
+      </section>
+      ${renderPartyDock()}
     </div>`,
-  )}</div>`;
+  )}${renderStagePrepInfoModal()}</div>`;
 }
 
 function monsterElementLabel(el: string | undefined): string {
@@ -6562,22 +7529,80 @@ function magicSkillDescLines(
   return lines;
 }
 
-function monsterSkillUpgradeRows(
+function monsterSkillLevelEffect(
   skill: { cooldown: number } | null | undefined,
-  currentLv: number,
+  level: number,
 ): string {
-  const rows: string[] = [];
-  for (let lv = 2; lv <= MAX_SKILL_LEVEL; lv++) {
-    const reached = currentLv >= lv;
-    let text = t("ui.skillLvPower", { pct: 8 });
-    if (lv >= MAX_SKILL_LEVEL && (skill?.cooldown ?? 0) > 0) {
-      text = t("ui.skillLvCd");
-    }
-    rows.push(
-      `<div class="mon-skill-uprow${reached ? " is-on" : ""}"><span class="mon-skill-uplv">Lv.${lv}</span><span class="mon-skill-uptext">${text}</span></div>`,
-    );
+  if (level <= 1) return t("ui.skillLvBase");
+  if (level >= MAX_SKILL_LEVEL && (skill?.cooldown ?? 0) > 0) {
+    return t("ui.skillLvCd");
   }
-  return rows.join("");
+  return t("ui.skillLvPower", { pct: 8 * (level - 1) });
+}
+
+function renderMonsterSkillDetailHtml(
+  skill: { nameKo?: string; cooldown: number } | null | undefined,
+  ownedLevel: number,
+  previewLevel: number,
+): string {
+  const owned = Math.max(1, Math.min(MAX_SKILL_LEVEL, ownedLevel));
+  const level = Math.max(1, Math.min(MAX_SKILL_LEVEL, previewLevel));
+  const isCurrent = level === owned;
+  const descLines = monsterSkillDescLines(skill);
+  const levelDots = Array.from({ length: MAX_SKILL_LEVEL }, (_, index) => {
+    const dotLevel = index + 1;
+    const classes = [
+      "mon-skill-level-dot",
+      dotLevel === level ? "is-preview" : "",
+      dotLevel === owned ? "is-current" : "",
+      dotLevel <= owned ? "is-owned" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const marker =
+      dotLevel === owned
+        ? `<em class="mon-skill-level-dot-mark">${escapeHtml(t("ui.skillLevelCurrent"))}</em>`
+        : "";
+    return `<button type="button" class="${classes}" data-mon-skill-preview-set="${dotLevel}" aria-label="Lv.${dotLevel}" aria-current="${dotLevel === level ? "true" : "false"}">
+      <span class="mon-skill-level-dot-num">${dotLevel}</span>${marker}
+    </button>`;
+  }).join("");
+
+  return `<section class="mon-skill-showcase">
+    <header class="mon-skill-showcase-head">
+      <div class="mon-skill-showcase-title">
+        <span class="mon-skill-showcase-kicker">${escapeHtml(t("ui.skillDetail"))}</span>
+        <strong class="mon-skill-detail-name">${escapeHtml(skill?.nameKo ?? "")}</strong>
+      </div>
+      <span class="mon-skill-owned-level">${escapeHtml(
+        t("ui.skillCurrentLevel", { n: owned }),
+      )}</span>
+    </header>
+    <div class="mon-skill-description">
+      ${descLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
+    </div>
+    <section class="mon-skill-growth" aria-label="${escapeHtml(t("ui.skillGrowth"))}">
+      <div class="mon-skill-growth-head">
+        <span>${escapeHtml(t("ui.skillGrowth"))}</span>
+        <strong>Lv.${level}${level === MAX_SKILL_LEVEL ? " MAX" : ""}</strong>
+      </div>
+      <div class="mon-skill-level-viewer">
+        <button type="button" class="mon-skill-level-nav" data-mon-skill-preview="-1" aria-label="${escapeHtml(t("ui.skillPreviewPrev"))}" ${level <= 1 ? "disabled" : ""}>&lsaquo;</button>
+        <div class="mon-skill-level-effect${isCurrent ? " is-current" : ""}">
+          <span class="mon-skill-level-effect-label">
+            ${
+              isCurrent
+                ? `<em class="mon-skill-current-badge">${escapeHtml(t("ui.skillLevelCurrent"))}</em>`
+                : escapeHtml(t("ui.skillLevelPreview"))
+            }
+          </span>
+          <strong>${escapeHtml(monsterSkillLevelEffect(skill, level))}</strong>
+        </div>
+        <button type="button" class="mon-skill-level-nav" data-mon-skill-preview="1" aria-label="${escapeHtml(t("ui.skillPreviewNext"))}" ${level >= MAX_SKILL_LEVEL ? "disabled" : ""}>&rsaquo;</button>
+      </div>
+      <div class="mon-skill-level-track">${levelDots}</div>
+    </section>
+  </section>`;
 }
 
 /** Map catalog role (tank/dps/support/flex). */
@@ -7006,7 +8031,10 @@ function skillFeedFodderList(targetUid: string | null): typeof save.roster {
   const target = save.roster.find((m) => m.uid === targetUid);
   if (!target) return [];
   return sortRosterForSlots(save.roster, rosterSortMode).filter(
-    (x) => x.monsterId === target.monsterId && x.uid !== target.uid,
+    (x) =>
+      x.monsterId === target.monsterId &&
+      x.uid !== target.uid &&
+      !save.party.includes(x.uid),
   );
 }
 
@@ -7061,7 +8089,6 @@ function skillFeedSlotsHtml(targetUid: string | null): string {
         ? `${describeOwned(m)} · ${t("ui.7b191a9f9f")}`
         : describeOwned(m);
       return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${el}${inParty ? " is-party" : ""}${on ? " is-on" : ""}" data-skill-feed-fodder="${m.uid}" role="option" aria-selected="${on}" title="${escapeHtml(title)}">
-        ${invGradePlateImg(grade, "mon-slot-grade-plate", 112)}
         <span class="mon-slot-art" aria-hidden="true">${art}</span>
         <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
         <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
@@ -7101,6 +8128,117 @@ function renderSkillFeedModal(): string {
       </div>
       <p class="skill-feed-empty muted" id="skill-feed-empty"${fodderCount > 0 ? " hidden" : ""}>${escapeHtml(t("ui.skillFeedEmpty"))}</p>
       <div class="skill-feed-foot" id="skill-feed-foot">${skillFeedConfirmBtnHtml(selectedEnhanceUid)}</div>
+    </div>
+  </div>`;
+}
+
+function powerUpTarget(): (typeof save.roster)[number] | null {
+  if (!selectedEnhanceUid) return null;
+  return save.roster.find((monster) => monster.uid === selectedEnhanceUid) ?? null;
+}
+
+function powerUpFodderList(): typeof save.roster {
+  const target = powerUpTarget();
+  if (!target) return [];
+  return sortRosterForSlots(save.roster, rosterSortMode).filter(
+    (monster) =>
+      monster.uid !== target.uid && !save.party.includes(monster.uid),
+  );
+}
+
+function selectedPowerUpFodders(): typeof save.roster {
+  const available = new Set(powerUpFodderList().map((monster) => monster.uid));
+  return save.roster.filter(
+    (monster) =>
+      powerUpFodderUids.has(monster.uid) && available.has(monster.uid),
+  );
+}
+
+function powerUpSlotsHtml(): string {
+  return powerUpFodderList()
+    .map((monster) => {
+      const def = getMonster(monster.monsterId);
+      const element = def?.element ?? "dark";
+      const stars = Math.max(1, def?.naturalStars ?? 1);
+      const grade = invGradeFromStars(stars);
+      const inParty = save.party.includes(monster.uid);
+      const selected = powerUpFodderUids.has(monster.uid);
+      const art =
+        monsterArtImg(monster.monsterId, "mon-slot-img", 56) ||
+        (def?.element?.[0]?.toUpperCase() ?? "?");
+      const title = `${describeOwned(monster)} · EXP +${monsterPowerUpExp(monster)}${
+        monster.monsterId === powerUpTarget()?.monsterId
+          ? " · skill-up"
+          : ""
+      }`;
+      return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${element}${inParty ? " is-party" : ""}${selected ? " is-on" : ""}" data-power-up-fodder="${monster.uid}" role="option" aria-selected="${selected}" title="${escapeHtml(title)}">
+        <span class="mon-slot-art" aria-hidden="true">${art}</span>
+        <span class="mon-slot-stars-overlay" aria-label="${stars}">${monStarsHtml(stars)}</span>
+        <span class="mon-slot-lv-overlay">Lv.${monster.level}</span>
+      </button>`;
+    })
+    .join("");
+}
+
+function powerUpConfirmBtnHtml(): string {
+  const target = powerUpTarget();
+  const materials = selectedPowerUpFodders();
+  const exp = materials.reduce(
+    (total, monster) => total + monsterPowerUpExp(monster),
+    0,
+  );
+  const cost = monsterPowerUpManaCost(materials);
+  const canPay = Math.floor(save.island.mana) >= cost;
+  const disabled =
+    !target ||
+    target.level >= monsterMaxLevel(target) ||
+    materials.length === 0 ||
+    !canPay;
+  return `<button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--cost power-up-confirm" id="btn-power-up-confirm" ${disabled ? "disabled" : ""}>
+    <span class="mon-enh-label">${escapeHtml(t("ui.powerUpConfirm"))}</span>
+    <span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(cost)}</strong><span class="muted"> · ${escapeHtml(t("ui.powerUpExp", { n: exp }))}</span></span>
+  </button>`;
+}
+
+function refreshPowerUpModalDom(): void {
+  const list = app.querySelector<HTMLElement>("#power-up-inv");
+  const summary = app.querySelector<HTMLElement>("#power-up-summary");
+  const footer = app.querySelector<HTMLElement>("#power-up-foot");
+  const empty = app.querySelector<HTMLElement>("#power-up-empty");
+  if (list) {
+    list.innerHTML = powerUpSlotsHtml();
+    dematteArtInTree(list, "img.mon-slot-img");
+  }
+  const materials = selectedPowerUpFodders();
+  if (summary) {
+    summary.textContent = t("ui.powerUpMaterials", { n: materials.length });
+  }
+  if (footer) footer.innerHTML = powerUpConfirmBtnHtml();
+  if (empty) empty.hidden = powerUpFodderList().length > 0;
+}
+
+function renderPowerUpModal(): string {
+  const target = powerUpTarget();
+  const fodderCount = powerUpFodderList().length;
+  const targetName = target
+    ? getMonster(target.monsterId)?.nameKo ?? target.monsterId
+    : "";
+  return `<div class="settings-layer power-up-layer" id="power-up-layer" ${powerUpModalOpen ? "" : "hidden"} aria-hidden="${powerUpModalOpen ? "false" : "true"}">
+    <button type="button" class="settings-backdrop" id="btn-power-up-close" aria-label="${escapeHtml(t("ui.skillFeedClose"))}"></button>
+    <div class="settings-sheet power-up-sheet" role="dialog" aria-modal="true" aria-labelledby="power-up-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.skillFeedClose"), "btn-power-up-close")}
+      <h2 class="settings-title" id="power-up-title">${escapeHtml(t("ui.powerUpTitle"))}</h2>
+      <p class="power-up-target">${escapeHtml(targetName)} · Lv.${target?.level ?? 0}</p>
+      <p class="power-up-hint muted">${escapeHtml(t("ui.powerUpHint"))}</p>
+      <p class="power-up-summary" id="power-up-summary">${escapeHtml(
+        t("ui.powerUpMaterials", { n: selectedPowerUpFodders().length }),
+      )}</p>
+      <div class="mon-book-inv mon-book-inv--rail power-up-inv" id="power-up-inv" role="listbox" aria-label="${escapeHtml(t("ui.powerUpTitle"))}">
+        ${powerUpSlotsHtml()}
+      </div>
+      <p class="power-up-empty muted" id="power-up-empty"${fodderCount > 0 ? " hidden" : ""}>${escapeHtml(t("ui.powerUpEmpty"))}</p>
+      <div class="power-up-foot" id="power-up-foot">${powerUpConfirmBtnHtml()}</div>
     </div>
   </div>`;
 }
@@ -7280,7 +8418,43 @@ function openSymbolDetailFromSlot(uid: string, slot: number, symId: string): voi
   }
   symbolInvFilterSets = new Set(SYMBOL_SETS.map((s) => s.id));
   monDetailTab = "symbols";
-  render();
+  applyMonDetailTabUi();
+  softOpenEnhanceTransientModals();
+}
+
+function softOpenEnhanceTransientModals(): void {
+  if (!softRefreshOverlayReveals()) render();
+  else {
+    replayModalPop(app.querySelector("#sym-detail-layer"));
+    replayModalPop(app.querySelector("#sym-bag-expand-layer"));
+  }
+}
+
+function softRefreshAfterSymbolModalAction(): void {
+  if (!refreshMonsterSymbolsPane()) {
+    render();
+    return;
+  }
+  softOpenEnhanceTransientModals();
+}
+
+function bindEnhanceTransientModals(): void {
+  const closeSymBagExpand = () => {
+    if (!symbolBagExpandOpen) return;
+    symbolBagExpandOpen = false;
+    softOpenEnhanceTransientModals();
+  };
+  app.querySelector("#btn-sym-bag-expand-close")?.addEventListener("click", closeSymBagExpand);
+  app.querySelector("#btn-sym-bag-expand-cancel")?.addEventListener("click", closeSymBagExpand);
+  app.querySelector("#btn-sym-bag-expand-ok")?.addEventListener("click", () => {
+    symbolBagExpandOpen = false;
+    const r = runExpandSymbolBag(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    if (!refreshMonsterSymbolsPane()) render();
+    else softOpenEnhanceTransientModals();
+  });
 }
 
 function renderSymbolBagExpandModal(): string {
@@ -7527,7 +8701,7 @@ function refreshMonsterSymbolsPane(): boolean {
   // Info-tab combat stats can change after equip — update if present.
   const preview = previewOwnedCombatStats(save, uid);
   const statsRoot = app.querySelector<HTMLElement>(
-    '.mon-pane[data-mon-pane="info"] .mon-inspect-stats',
+    '.mon-pane[data-mon-pane="info"] .mon-stats-panel',
   );
   if (preview && statsRoot) {
     const wrap = document.createElement("div");
@@ -7558,7 +8732,7 @@ function bindSymbolInventoryInteractions(): void {
         return;
       }
       symbolBagExpandOpen = true;
-      render();
+      softOpenEnhanceTransientModals();
     },
     opts,
   );
@@ -7652,7 +8826,15 @@ function bindSymbolInventoryInteractions(): void {
 
         // Inventory: empty-slot pick equips immediately; otherwise open detail/compare.
         if (from === "inv" && slotEquipPick) {
-          if (clicked.slot !== slotEquipPick.slot) return;
+          if (clicked.slot !== slotEquipPick.slot) {
+            flash(
+              t("ui.symEquipWrongSlot", {
+                need: slotEquipPick.slot,
+                got: clicked.slot,
+              }),
+            );
+            return;
+          }
           const mon = save.roster.find((m) => m.uid === slotEquipPick!.uid);
           const equippedId = mon?.symbolSlots?.[slotEquipPick.slot - 1] ?? null;
           if (equippedId && equippedId !== clicked.id) {
@@ -7661,7 +8843,8 @@ function bindSymbolInventoryInteractions(): void {
               symbolCompareIndex = eqIdx;
               symbolDetailIndex = idx;
               monDetailTab = "symbols";
-              render();
+              applyMonDetailTabUi();
+              softOpenEnhanceTransientModals();
               return;
             }
           }
@@ -7693,7 +8876,8 @@ function bindSymbolInventoryInteractions(): void {
                 applySymbolInvSlotFilter(clicked.slot as SymbolSlotNum);
               }
               monDetailTab = "symbols";
-              render();
+              applyMonDetailTabUi();
+              softOpenEnhanceTransientModals();
               return;
             }
           }
@@ -7708,7 +8892,8 @@ function bindSymbolInventoryInteractions(): void {
           }
         }
         monDetailTab = "symbols";
-        render();
+        applyMonDetailTabUi();
+        softOpenEnhanceTransientModals();
       },
       opts,
     );
@@ -7746,8 +8931,7 @@ function bindSymbolInventoryInteractions(): void {
   const closeSymDetail = () => {
     symbolDetailIndex = null;
     symbolCompareIndex = null;
-    forgeReveal = null;
-    render();
+    softOpenEnhanceTransientModals();
   };
   app
     .querySelector("#btn-sym-detail-close")
@@ -7777,7 +8961,7 @@ function bindSymbolInventoryInteractions(): void {
           symbolDetailIndex = next >= 0 ? next : null;
         }
         flash(r.message);
-        render();
+        softRefreshAfterSymbolModalAction();
       },
       opts,
     );
@@ -7818,7 +9002,7 @@ function bindSymbolInventoryInteractions(): void {
           symbolDetailIndex = ni >= 0 ? ni : null;
         }
         flash(r.message);
-        render();
+        softRefreshAfterSymbolModalAction();
       },
       opts,
     );
@@ -7859,7 +9043,7 @@ function bindSymbolInventoryInteractions(): void {
           symbolDetailIndex = ni >= 0 ? ni : null;
         }
         flash(r.message);
-        render();
+        softRefreshAfterSymbolModalAction();
       },
       opts,
     );
@@ -7895,7 +9079,7 @@ function bindSymbolInventoryInteractions(): void {
           symbolCompareIndex = null;
         }
         flash(r.message);
-        render();
+        softRefreshAfterSymbolModalAction();
       },
       opts,
     );
@@ -7908,17 +9092,29 @@ function bindSymbolInventoryInteractions(): void {
         const idx = Number(btn.dataset.symIdx);
         if (!Number.isFinite(idx) || !save.symbols[idx]) return;
         const targetUid = slotEquipPick?.uid ?? selectedEnhanceUid;
-        if (!targetUid) return;
+        if (!targetUid) {
+          flash(t("ui.symEquipNeedMonster"));
+          return;
+        }
+        const before = save.roster.find((m) => m.uid === targetUid);
         const r = runEquipSymbol(save, targetUid, String(idx));
         save = r.save;
         persist();
-        patchOnboard({ equipped: true });
-        symbolDetailIndex = null;
-        symbolCompareIndex = null;
-        slotEquipPick = null;
-        applySymbolInvSlotFilter("all");
+        const after = save.roster.find((m) => m.uid === targetUid);
+        const equippedOk =
+          !!before &&
+          !!after &&
+          JSON.stringify(before.symbolSlots ?? []) !==
+            JSON.stringify(after.symbolSlots ?? []);
+        if (equippedOk) {
+          patchOnboard({ equipped: true });
+          symbolDetailIndex = null;
+          symbolCompareIndex = null;
+          slotEquipPick = null;
+          applySymbolInvSlotFilter("all");
+        }
         flash(r.message);
-        render();
+        softRefreshAfterSymbolModalAction();
       },
       opts,
     );
@@ -8221,9 +9417,13 @@ function parseGearSlot(raw: string | undefined): GearSlot {
 function gearSlotArtSrc(
   slot: GearSlot,
   element?: SummonerElement | string,
+  setId?: string,
 ): string {
   if (slot === "weapon" && element) {
     return `/art/ui/gear/weapon-${element}.webp`;
+  }
+  if (slot !== "weapon" && setId) {
+    return `/art/ui/gear/${slot}-${setId}.webp`;
   }
   return `/art/ui/gear/${slot}.webp`;
 }
@@ -8231,9 +9431,13 @@ function gearSlotArtSrc(
 function gearSlotArtFallbackSrc(
   slot: GearSlot,
   element?: SummonerElement | string,
+  setId?: string,
 ): string {
   if (slot === "weapon" && element) {
     return `/art/ui/gear/weapon-${element}.svg`;
+  }
+  if (slot !== "weapon" && setId) {
+    return `/art/ui/gear/${slot}.webp`;
   }
   return `/art/ui/gear/${slot}.svg`;
 }
@@ -8242,96 +9446,292 @@ function gearQualityLabel(quality: GearQuality | string | undefined): string {
   return symbolQualityMeta(quality).label;
 }
 
+function gearStatBonusLines(bonus: {
+  manaRegenBonus?: number;
+  manaMaxBonus?: number;
+  boardSenseBonus?: number;
+  startManaPct?: number;
+  skillPowerBonus?: number;
+  summonerHpBonus?: number;
+  summonerDefBonus?: number;
+  leaderAtkBonus?: number;
+}): string[] {
+  const lines: string[] = [];
+  if (bonus.manaRegenBonus)
+    lines.push(t("ui.gearBonusManaRegen", { n: bonus.manaRegenBonus.toFixed(2) }));
+  if (bonus.manaMaxBonus)
+    lines.push(t("ui.gearBonusManaMax", { n: bonus.manaMaxBonus }));
+  if (bonus.boardSenseBonus)
+    lines.push(
+      t("ui.gearBonusBoardSense", {
+        n: Math.round(bonus.boardSenseBonus * 100),
+      }),
+    );
+  if (bonus.startManaPct)
+    lines.push(
+      t("ui.gearBonusStartMana", { n: Math.round(bonus.startManaPct * 100) }),
+    );
+  if (bonus.skillPowerBonus)
+    lines.push(
+      t("ui.gearBonusSkillPower", {
+        n: Math.round(bonus.skillPowerBonus * 100),
+      }),
+    );
+  if (bonus.summonerHpBonus)
+    lines.push(t("ui.gearBonusHp", { n: bonus.summonerHpBonus }));
+  if (bonus.summonerDefBonus)
+    lines.push(t("ui.gearBonusDef", { n: bonus.summonerDefBonus }));
+  if (bonus.leaderAtkBonus)
+    lines.push(
+      t("ui.gearBonusLeaderAtk", {
+        n: (bonus.leaderAtkBonus * 100).toFixed(1),
+      }),
+    );
+  return lines;
+}
+
+function gearBonusLines(piece: GearPiece): string[] {
+  return gearStatBonusLines(piece);
+}
+
+function activeGearSetBonusLines(setId: string, prog: {
+  active2: boolean;
+  active4: boolean;
+  active6: boolean;
+}): string[] {
+  const def = GEAR_SETS.find((entry) => entry.id === setId);
+  if (!def || !prog.active2) return [];
+  const applied = {
+    manaRegenBonus: 0,
+    manaMaxBonus: 0,
+    boardSenseBonus: 0,
+    startManaPct: 0,
+    skillPowerBonus: 0,
+    summonerHpBonus: 0,
+    summonerDefBonus: 0,
+    leaderAtkBonus: 0,
+  };
+  const merge = (src: Partial<typeof applied>) => {
+    for (const key of Object.keys(applied) as (keyof typeof applied)[]) {
+      applied[key] += src[key] ?? 0;
+    }
+  };
+  merge(def.bonus2);
+  if (prog.active4) merge(def.bonus4);
+  if (prog.active6) merge(def.bonus6);
+  return gearStatBonusLines(applied);
+}
+
+function gearSetSummaryHtml(gear: ReturnType<typeof getActiveGear>): string {
+  const sets = summarizeGearSets(gear).filter((set) => set.count > 0);
+  if (!sets.length) return `<span class="muted">${escapeHtml(t("ui.sumBookNoSets"))}</span>`;
+  return sets
+    .map((set) => {
+      const active = set.active6 ? 6 : set.active4 ? 4 : set.active2 ? 2 : 0;
+      const effectMarkers = activeGearSetBonusLines(set.setId, set)
+        .map(
+          (line) =>
+            `<span class="gear-set-effect-marker">${escapeHtml(line)}</span>`,
+        )
+        .join("");
+      return `<div class="gear-set-brief${active ? " is-active" : ""}">
+        <div class="gear-set-brief-head">
+          <strong>${escapeHtml(set.nameKo)}</strong>
+          <span>${set.count}${active ? `/${active}` : ""}</span>
+        </div>
+        ${
+          effectMarkers
+            ? `<div class="gear-set-effect-markers">${effectMarkers}</div>`
+            : ""
+        }
+      </div>`;
+    })
+    .join("");
+}
+
+function renderGearDetailModal(activeEl: SummonerElement): string {
+  if (!gearDetailTarget) return "";
+  const source =
+    gearDetailTarget.kind === "equipped"
+      ? getActiveGear(save)[gearDetailTarget.slot]
+      : save.gearBag?.[gearDetailTarget.index];
+  if (!source) return "";
+
+  const piece = normalizeGearPiece(source, source.slot);
+  const set = GEAR_SETS.find((entry) => entry.id === piece.setId);
+  const grade = gearStarsToInvGrade(piece.stars);
+  const art = gearSlotArtSrc(piece.slot, piece.element ?? activeEl, piece.setId);
+  const fallback = gearSlotArtFallbackSrc(
+    piece.slot,
+    piece.element ?? activeEl,
+    piece.setId,
+  );
+  const bonusLines = gearBonusLines(piece);
+  const equipped = gearDetailTarget.kind === "equipped";
+  const canEquip = canEquipGearOnElement(piece, activeEl);
+  const action = equipped
+    ? `<button type="button" class="auth-btn-primary" data-gear-detail-enhance="${piece.slot}" ${piece.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>${escapeHtml(t("ui.sumBookEnhance"))} +1</button>`
+    : `<button type="button" class="auth-btn-primary" data-gear-detail-equip="${gearDetailTarget.index}" ${canEquip ? "" : "disabled"}>${escapeHtml(t("ui.sumBookEquip"))}</button>
+       <button type="button" class="secondary" data-gear-detail-sell="${gearDetailTarget.index}">+${gearSellMana(piece)}${gearSellCrystal(piece) > 0 ? ` / +${gearSellCrystal(piece)}` : ""}</button>`;
+  const setChoices = equipped
+    ? `<div class="gear-detail-set-choices">${GEAR_SETS.map(
+        (entry) =>
+          `<button type="button" class="set-chip-btn${entry.id === piece.setId ? " is-active" : ""}" data-gear-detail-set="${piece.slot}" data-set-id="${entry.id}" ${entry.id === piece.setId ? "disabled" : ""}>${escapeHtml(entry.nameKo)}</button>`,
+      ).join("")}</div>`
+    : "";
+
+  return `<div class="settings-layer gear-detail-layer" id="gear-detail-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-gear-detail-close" aria-label="close"></button>
+    <div class="gear-detail-sheet inv-grade--${grade}" role="dialog" aria-modal="true" aria-labelledby="gear-detail-title">
+      ${modalCloseX("close", "btn-gear-detail-close")}
+      <div class="gear-detail-hero">
+        <img src="${art}" width="72" height="72" alt="" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />
+        <div>
+          <h3 id="gear-detail-title">${escapeHtml(describeGear(piece))}</h3>
+          <p>${escapeHtml(gearSlotLabel(piece.slot))} ${MIDDOT} ${escapeHtml(gearQualityLabel(piece.quality))}</p>
+          <p>${escapeHtml(set?.nameKo ?? piece.setId)} ${MIDDOT} ★${piece.stars} +${piece.enhance}</p>
+        </div>
+      </div>
+      <div class="gear-detail-bonuses">
+        ${bonusLines.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}
+      </div>
+      ${setChoices}
+      <div class="gear-detail-actions">${action}</div>
+    </div>
+  </div>`;
+}
+
+function renderSumMagicDetailModal(activeEl: SummonerElement): string {
+  if (!sumMagicDetailSlot) return "";
+  const kit = getSummonerKit(activeEl);
+  const sk = kit.skills[sumMagicDetailSlot];
+  if (!sk) return "";
+  const prog = save.summonerMagic?.[activeEl] ?? emptyMagicProgress();
+  const unlocked = unlockedMagicSkills(activeEl, prog);
+  const open = unlocked.some((entry) => entry.id === sk.id);
+  const rank = magicRank(prog, sk.id);
+  const lockedHint = (() => {
+    const slot = sumMagicDetailSlot;
+    const isTier2 =
+      slot === "A3" || slot === "A4" || slot === "B3" || slot === "B4";
+    if (isTier2) {
+      if (slot.startsWith("A") && (prog.branch !== "A" || !magicTier2Unlocked(activeEl, prog))) {
+        return t("ui.skillLockedHintTier2", { branch: "A", n: MAX_MAGIC_RANK });
+      }
+      if (slot.startsWith("B") && (prog.branch !== "B" || !magicTier2Unlocked(activeEl, prog))) {
+        return t("ui.skillLockedHintTier2", { branch: "B", n: MAX_MAGIC_RANK });
+      }
+    }
+    if (slot.startsWith("A") && slot !== "A" && prog.branch !== "A") {
+      return t("ui.skillLockedHint", { branch: "A", n: MAX_MAGIC_RANK });
+    }
+    if (slot.startsWith("B") && slot !== "B" && prog.branch !== "B") {
+      return t("ui.skillLockedHint", { branch: "B", n: MAX_MAGIC_RANK });
+    }
+    return t("ui.stagePrepSkillLocked");
+  })();
+  const lines = magicSkillDescLines(sk, open ? rank : 0);
+  const nextLines =
+    open && rank < MAX_MAGIC_RANK
+      ? magicSkillDescLines(sk, rank + 1)
+      : [];
+  const manaCost = magicEnhanceManaCost(rank);
+  const crystalCost = magicEnhanceCrystalCost(rank);
+  const canEnhance =
+    open &&
+    rank < MAX_MAGIC_RANK &&
+    save.island.mana >= manaCost &&
+    save.island.crystal >= crystalCost;
+  const action = !open
+    ? `<p class="sum-magic-detail-locked">${escapeHtml(lockedHint)}</p>`
+    : rank >= MAX_MAGIC_RANK
+      ? `<span class="sum-magic-max">MAX</span>`
+      : `<button type="button" class="auth-btn-primary sum-magic-enhance-btn" data-magic-enhance="${sk.id}" ${canEnhance ? "" : "disabled"}>
+          <span class="sum-magic-enhance-label">${escapeHtml(t("ui.sumBookEnhance"))} +1</span>
+          <span class="sum-magic-enhance-costs" aria-label="${escapeHtml(t("ui.sumMagicEnhanceCost"))}">
+            <span class="sum-magic-detail-cost-chip${save.island.mana < manaCost ? " is-short" : ""}">
+              <img src="/art/ui/res/gold.svg" width="18" height="18" alt="" draggable="false" />
+              ${fmtRes(manaCost)}
+            </span>
+            ${
+              crystalCost > 0
+                ? `<span class="sum-magic-detail-cost-chip${save.island.crystal < crystalCost ? " is-short" : ""}">
+                    <img src="/art/ui/res/crystal.svg" width="18" height="18" alt="" draggable="false" />
+                    ${fmtRes(crystalCost)}
+                  </span>`
+                : ""
+            }
+          </span>
+        </button>`;
+
+  return `<div class="settings-layer sum-magic-detail-layer" id="sum-magic-detail-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-sum-magic-detail-close" aria-label="close"></button>
+    <div class="sum-magic-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="sum-magic-detail-title">
+      ${modalCloseX("close", "btn-sum-magic-detail-close")}
+      <div class="sum-magic-detail-hero">
+        ${summonerSkillArtImg(sk.id, "sum-magic-detail-ico", 56)}
+        <div>
+          <span class="sum-magic-detail-slot">${sumMagicDetailSlot}</span>
+          <h3 id="sum-magic-detail-title">${escapeHtml(sk.nameKo)}</h3>
+          <p>${escapeHtml(
+            open
+              ? t("ui.magicRankLabel", { rank, max: MAX_MAGIC_RANK })
+              : t("ui.stagePrepSkillLocked"),
+          )}</p>
+        </div>
+      </div>
+      <ul class="sum-magic-detail-lines">
+        ${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}
+      </ul>
+      ${
+        nextLines.length
+          ? `<div class="sum-magic-detail-next">
+              <p>${escapeHtml(t("ui.sumMagicNextRank"))} · +${rank + 1}</p>
+              <ul>${nextLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>
+            </div>`
+          : ""
+      }
+      ${action}
+    </div>
+  </div>`;
+}
+
 function renderGearDollHtml(activeEl: SummonerElement): string {
   const gear = getActiveGear(save);
   const fxGear = enhanceFx?.kind === "gear" ? enhanceFx.slot : null;
   const slots: GearSlot[] = [...GEAR_SLOTS];
   const slotBtn = (slot: GearSlot, piece: GearPiece): string => {
-    const maxed = piece.enhance >= MAX_GEAR_ENHANCE;
-    const setName =
-      GEAR_SETS.find((s) => s.id === piece.setId)?.nameKo ?? piece.setId;
     const grade = gearStarsToInvGrade(piece.stars);
-    const qLabel = gearQualityLabel(piece.quality);
-    const art = gearSlotArtSrc(slot, piece.element ?? activeEl);
-    const artFb = gearSlotArtFallbackSrc(slot, piece.element ?? activeEl);
-    return `<button type="button" class="gear-slot inv-grade--${grade}${fxGear === slot ? " is-flash" : ""}${maxed ? " is-max" : ""}" data-gear="${slot}" ${maxed ? "disabled" : ""} title="${escapeHtml(describeGear(piece))}">
-      <img class="gear-slot-ico" src="${art}" width="40" height="40" alt="" draggable="false" onerror="this.onerror=null;this.src='${artFb}'" />
-      <span class="gear-slot-seal" aria-hidden="true"><img src="${art}" width="22" height="22" alt="" draggable="false" /></span>
-      <span class="gear-slot-body">
-        <span class="gear-slot-label">${escapeHtml(gearSlotLabel(slot))}</span>
-        <span class="gear-slot-plus">★${piece.stars} +${piece.enhance}</span>
-        <span class="gear-slot-set">${escapeHtml(qLabel)} · ${escapeHtml(setName)}</span>
-        <span class="gear-slot-cost">${maxed ? "MAX" : escapeHtml(gearEnhanceCostLabel(piece.enhance))}</span>
-      </span>
+    const art = gearSlotArtSrc(slot, piece.element ?? activeEl, piece.setId);
+    const artFb = gearSlotArtFallbackSrc(slot, piece.element ?? activeEl, piece.setId);
+    return `<button type="button" class="gear-slot gear-slot--image inv-grade--${grade}${fxGear === slot ? " is-flash" : ""}" data-gear-detail-slot="${slot}" title="${escapeHtml(describeGear(piece))}">
+      <img class="gear-slot-ico" src="${art}" width="56" height="56" alt="${escapeHtml(gearSlotLabel(slot))}" draggable="false" onerror="this.onerror=null;this.src='${artFb}'" />
+      <span class="gear-slot-plus">+${piece.enhance}</span>
     </button>`;
   };
-  const setSummary = summarizeGearSets(gear)
-    .filter((s) => s.count > 0)
-    .map(
-      (s) =>
-        `<span class="set-chip${s.active2 || s.active4 || s.active6 ? " active" : ""}">${escapeHtml(s.nameKo)} ${s.count}${s.active6 ? " ·6" : s.active4 ? " ·4" : s.active2 ? " ·2" : ""}</span>`,
-    )
-    .join("");
-  const gearAffixRows = slots
-    .map((slot) => {
-      const piece = gear[slot];
-      const chips = GEAR_SETS.map((s) => {
-        const active = piece.setId === s.id;
-        return `<button type="button" class="set-chip-btn${active ? " is-active" : ""}" data-gear-set="${slot}" data-set-id="${s.id}" ${active ? "disabled" : ""}>${escapeHtml(s.nameKo)}</button>`;
-      }).join("");
-      return `<div class="gear-set-row">
-        <span class="gear-set-row-label">${escapeHtml(gearSlotLabel(slot))}</span>
-        <div class="gear-set-row-chips">${chips}</div>
-      </div>`;
-    })
-    .join("");
   const bag = save.gearBag ?? [];
-  const bagGrid = bag.length
-    ? `<div class="gear-bag-grid">${bag
-        .map((p, i) => {
+  const bagSlots = Array.from({ length: MAX_GEAR_BAG }, (_, i) => {
+    const p = bag[i];
+    if (!p) {
+      return `<span class="gear-bag-slot gear-bag-slot--empty" aria-hidden="true"></span>`;
+    }
           const piece = normalizeGearPiece(p, p.slot);
-          const sellCrystal = gearSellCrystal(piece);
           const grade = gearStarsToInvGrade(piece.stars);
-          const canEquip = canEquipGearOnElement(piece, activeEl);
-          const lockHint =
-            piece.slot === "weapon" && piece.element
-              ? t("ui.gearWeaponElementLock", {
-                  element: elementLabel(piece.element as SummonerElement),
-                })
-              : "";
-          return `<div class="gear-tile inv-grade--${grade}${canEquip ? "" : " is-element-locked"}">
-          <button type="button" class="gear-tile-main" data-gear-equip="${i}" title="${escapeHtml(describeGear(piece))}${lockHint ? ` · ${escapeHtml(lockHint)}` : ""}">
-            <span class="gear-tile-seal" aria-hidden="true"><img src="${gearSlotArtSrc(piece.slot, piece.element)}" width="28" height="28" alt="" draggable="false" onerror="this.onerror=null;this.src='${gearSlotArtFallbackSrc(piece.slot, piece.element)}'" /></span>
-            <strong>${escapeHtml(describeGear(piece))}</strong>
-            <small>${escapeHtml(gearSlotLabel(piece.slot))} · ${escapeHtml(gearQualityLabel(piece.quality))}${lockHint ? ` · ${escapeHtml(lockHint)}` : ""}</small>
-          </button>
-          <div class="gear-tile-actions">
-            <button type="button" class="secondary${canEquip ? "" : " is-locked"}" data-gear-equip="${i}" aria-disabled="${canEquip ? "false" : "true"}">${escapeHtml(t("ui.sumBookEquip"))}</button>
-            <button type="button" class="secondary" data-gear-sell="${i}">+${gearSellMana(piece)}${sellCrystal > 0 ? ` / +${sellCrystal}` : ""}</button>
-          </div>
-        </div>`;
-        })
-        .join("")}</div>`
-    : `<p class="muted">${escapeHtml(t("ui.sumBookGearEmpty"))}</p>`;
+          const art = gearSlotArtSrc(piece.slot, piece.element, piece.setId);
+          const fallback = gearSlotArtFallbackSrc(piece.slot, piece.element, piece.setId);
+          return `<button type="button" class="gear-bag-slot inv-grade--${grade}" data-gear-detail-bag="${i}" title="${escapeHtml(describeGear(piece))}">
+            <img src="${art}" width="42" height="42" alt="${escapeHtml(gearSlotLabel(piece.slot))}" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />
+            <span>+${piece.enhance}</span>
+          </button>`;
+  }).join("");
 
   return `<div class="sum-gear-panel">
-    <p class="muted gear-per-summoner-hint">${escapeHtml(t("ui.gearPerSummonerHint"))}</p>
     <div class="gear-doll" aria-label="${escapeHtml(t("ui.sumBookTabGear"))}">
-      ${slotBtn("weapon", gear.weapon)}
-      ${slotBtn("necklace", gear.necklace)}
-      ${slotBtn("top", gear.top)}
-      <div class="gear-doll-core" aria-hidden="true">
-        <img src="${summonerArtSrc(activeEl)}" width="40" height="40" alt="" draggable="false" decoding="async" />
-      </div>
-      ${slotBtn("ring", gear.ring)}
-      ${slotBtn("bottom", gear.bottom)}
-      ${slotBtn("shoes", gear.shoes)}
+      ${slots.map((slot) => slotBtn(slot, gear[slot])).join("")}
     </div>
-    <div class="gear-set-summary">${setSummary || `<span class="muted">${escapeHtml(t("ui.sumBookNoSets"))}</span>`}</div>
-    <p class="section-label">${escapeHtml(t("ui.sumBookSetAffix", { n: GEAR_SET_AFFIX_MANA }))}</p>
-    <div class="gear-set-affix">${gearAffixRows}</div>
+    <div class="gear-set-summary gear-set-summary--brief">${gearSetSummaryHtml(gear)}</div>
     <p class="section-label">${escapeHtml(t("ui.sumBookGearBag", { n: bag.length, max: MAX_GEAR_BAG }))}</p>
-    ${bagGrid}
+    <div class="gear-bag-grid" role="list">${bagSlots}</div>
   </div>`;
 }
 
@@ -8562,34 +9962,308 @@ function renderCodexLayer(): string {
   </div>`;
 }
 
+function openCodexSoft(): void {
+  codexOpen = true;
+  codexDetailMonsterId = null;
+  softMountOverlay("codex-layer", renderCodexLayer());
+  bindCodexLayerInteractions();
+}
+
+function closeCodexSoft(): void {
+  if (!codexOpen && !app.querySelector("#codex-layer")) return;
+  codexOpen = false;
+  codexDetailMonsterId = null;
+  softRemoveOverlay("codex-layer");
+}
+
+function refreshCodexSoft(): void {
+  if (!codexOpen) return;
+  softMountOverlay("codex-layer", renderCodexLayer());
+  bindCodexLayerInteractions();
+}
+
+function bindCodexLayerInteractions(): void {
+  const layer = app.querySelector("#codex-layer");
+  if (!layer) return;
+  layer.querySelector("#btn-codex-close")?.addEventListener("click", () => {
+    closeCodexSoft();
+  });
+  bindCodexDetailControls(layer);
+  layer.addEventListener("click", (ev) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest("[data-codex-skill]")) return;
+    if (target.closest("#btn-codex-detail-close")) return;
+    const monBtn = target.closest<HTMLButtonElement>("[data-codex-mon]");
+    if (monBtn?.dataset.codexMon) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const id = monBtn.dataset.codexMon;
+      codexDetailMonsterId = codexDetailMonsterId === id ? null : id;
+      syncCodexActiveCells();
+      refreshCodexDetailDom();
+      return;
+    }
+    closeCodexSkillTips(layer);
+  });
+  layer.querySelectorAll<HTMLButtonElement>("[data-codex-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const raw = btn.dataset.codexTab;
+      if (raw === "monsters" || raw === "summoners") {
+        if (codexTab === raw) return;
+        codexTab = raw;
+        codexDetailMonsterId = null;
+        refreshCodexSoft();
+      }
+    });
+  });
+  layer.querySelectorAll<HTMLSelectElement>("[data-codex-el-stars]").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      const el = sel.dataset.codexElStars as SummonerElement | undefined;
+      if (!el || !(SUMMONER_ELEMENTS as readonly string[]).includes(el)) return;
+      const raw = sel.value;
+      let next: CodexStarsFilter = "all";
+      if (raw === "all") {
+        next = "all";
+      } else {
+        const n = Number(raw);
+        if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) next = n;
+        else return;
+      }
+      codexStarsByElement = { ...codexStarsByElement, [el]: next };
+      rebuildCodexElementGrid(el);
+    });
+  });
+  layer.querySelectorAll<HTMLButtonElement>("[data-codex-summoner]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const el = btn.dataset.codexSummoner as SummonerElement | undefined;
+      if (!el) return;
+      save = setActiveSummoner(save, el);
+      persist();
+      closeCodexSoft();
+      view = "summoner";
+      sumDetailTab = "info";
+      flash(t("summonerPicker.switched", { element: elementLabel(el) }));
+      render();
+    });
+  });
+}
+
+function renderLeaderBuffChips(
+  leader: ReturnType<typeof getSummonerLeader>,
+  element: SummonerElement,
+): string {
+  const allAllies = t("ui.sumInfoAllAllies");
+  const matching = t("ui.sumInfoMatchingElement", {
+    element: elementLabel(element),
+  });
+  const buffs: { stat: string; value: string; scope: string }[] = [];
+  if (leader.atkPct) {
+    buffs.push({
+      stat: t("ui.statAtk"),
+      value: `+${Math.round(leader.atkPct * 100)}%`,
+      scope: allAllies,
+    });
+  }
+  if (leader.elementAtkPct) {
+    buffs.push({
+      stat: t("ui.statAtk"),
+      value: `+${Math.round(leader.elementAtkPct * 100)}%`,
+      scope: matching,
+    });
+  }
+  if (leader.hpPct) {
+    buffs.push({
+      stat: t("ui.statHp"),
+      value: `+${Math.round(leader.hpPct * 100)}%`,
+      scope: allAllies,
+    });
+  }
+  if (leader.spdPct) {
+    buffs.push({
+      stat: t("ui.statSpd"),
+      value: `+${Math.round(leader.spdPct * 100)}%`,
+      scope: allAllies,
+    });
+  }
+  if (leader.accuracyFlat) {
+    buffs.push({
+      stat: t("ui.statAcc"),
+      value: `+${leader.accuracyFlat}`,
+      scope: allAllies,
+    });
+  }
+  if (leader.critRateFlat) {
+    buffs.push({
+      stat: t("ui.statCriRate"),
+      value: `+${leader.critRateFlat}%`,
+      scope: allAllies,
+    });
+  }
+  if (leader.critDmgFlat) {
+    buffs.push({
+      stat: t("ui.statCriDmg"),
+      value: `+${leader.critDmgFlat}%`,
+      scope: allAllies,
+    });
+  }
+  if (leader.damageTakenMul != null) {
+    buffs.push({
+      stat: t("ui.sumInfoDamageReduction"),
+      value: `-${Math.round((1 - leader.damageTakenMul) * 100)}%`,
+      scope: allAllies,
+    });
+  }
+  return buffs
+    .map(
+      (buff) => `<div class="sum-leader-buff">
+        <span class="sum-leader-buff-stat">${escapeHtml(buff.stat)}</span>
+        <strong>${escapeHtml(buff.value)}</strong>
+        <small>${escapeHtml(buff.scope)}</small>
+      </div>`,
+    )
+    .join("");
+}
+
+function renderSumSkillsPaneHtml(activeEl: SummonerElement): string {
+  const kit = getSummonerKit(activeEl);
+  const prog = save.summonerMagic?.[activeEl] ?? emptyMagicProgress();
+  const unlocked = unlockedMagicSkills(activeEl, prog);
+  const unlockedIds = new Set(unlocked.map((s) => s.id));
+  const tier2 = magicTier2Unlocked(activeEl, prog);
+  const magicNode = (slot: MagicSkillSlot): string => {
+    const sk = kit.skills[slot];
+    const open = unlockedIds.has(sk.id);
+    const rank = magicRank(prog, sk.id);
+    const isTier2 = slot === "A3" || slot === "A4" || slot === "B3" || slot === "B4";
+    const lockedHint =
+      isTier2 && slot.startsWith("A") && (!prog.branch || prog.branch !== "A" || !tier2)
+        ? t("ui.skillLockedHintTier2", { branch: "A", n: MAX_MAGIC_RANK })
+        : isTier2 && slot.startsWith("B") && (!prog.branch || prog.branch !== "B" || !tier2)
+          ? t("ui.skillLockedHintTier2", { branch: "B", n: MAX_MAGIC_RANK })
+          : slot.startsWith("A") && slot !== "A" && prog.branch !== "A"
+            ? t("ui.skillLockedHint", { branch: "A", n: MAX_MAGIC_RANK })
+            : slot.startsWith("B") && slot !== "B" && prog.branch !== "B"
+              ? t("ui.skillLockedHint", { branch: "B", n: MAX_MAGIC_RANK })
+              : "";
+    const hint = open
+      ? `+${rank}/${MAX_MAGIC_RANK}`
+      : lockedHint || t("ui.stagePrepSkillLocked");
+    return `<button type="button" class="sum-magic-node${open ? " is-on" : " is-locked"}${sumMagicDetailSlot === slot ? " is-active" : ""}" data-magic-detail-slot="${slot}" title="${escapeHtml(sk.nameKo)}">
+      <span class="sum-magic-node-slot">${slot}</span>
+      <div class="sum-magic-node-seal">
+        ${summonerSkillArtImg(sk.id, "sum-magic-ico", 36)}
+      </div>
+      <strong class="sum-magic-node-name">${escapeHtml(sk.nameKo)}</strong>
+      <small class="sum-magic-node-hint">${escapeHtml(hint)}</small>
+    </button>`;
+  };
+  const openA = unlockedIds.has(kit.skills.A.id);
+  const openB = unlockedIds.has(kit.skills.B.id);
+  const openA1 = unlockedIds.has(kit.skills.A1.id);
+  const openA2 = unlockedIds.has(kit.skills.A2.id);
+  const openA3 = unlockedIds.has(kit.skills.A3.id);
+  const openA4 = unlockedIds.has(kit.skills.A4.id);
+  const openB1 = unlockedIds.has(kit.skills.B1.id);
+  const openB2 = unlockedIds.has(kit.skills.B2.id);
+  const openB3 = unlockedIds.has(kit.skills.B3.id);
+  const openB4 = unlockedIds.has(kit.skills.B4.id);
+  return `<div class="mon-pane mon-pane--skills" data-sum-pane="skills"${sumDetailTab === "skills" ? "" : " hidden"}>
+    <div class="sum-magic-tree" aria-label="${escapeHtml(t("ui.2b47128fd2"))}">
+      <svg class="sum-magic-tree-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path class="sum-magic-edge${openA && openA1 ? " is-live" : ""}" d="M25 18 L12.5 42" />
+        <path class="sum-magic-edge${openA && openA2 ? " is-live" : ""}" d="M25 18 L37.5 42" />
+        <path class="sum-magic-edge${openB && openB1 ? " is-live" : ""}" d="M75 18 L62.5 42" />
+        <path class="sum-magic-edge${openB && openB2 ? " is-live" : ""}" d="M75 18 L87.5 42" />
+        <path class="sum-magic-edge${openA1 && openA3 ? " is-live" : ""}" d="M12.5 42 L12.5 72" />
+        <path class="sum-magic-edge${openA2 && openA4 ? " is-live" : ""}" d="M37.5 42 L37.5 72" />
+        <path class="sum-magic-edge${openB1 && openB3 ? " is-live" : ""}" d="M62.5 42 L62.5 72" />
+        <path class="sum-magic-edge${openB2 && openB4 ? " is-live" : ""}" d="M87.5 42 L87.5 72" />
+        <path class="sum-magic-edge sum-magic-edge--root${openA || openB ? " is-live" : ""}" d="M25 18 H75" />
+      </svg>
+      <div class="sum-magic-tree-grid">
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--a">${magicNode("A")}</div>
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--b">${magicNode("B")}</div>
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--a1">${magicNode("A1")}</div>
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--a2">${magicNode("A2")}</div>
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--b1">${magicNode("B1")}</div>
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--b2">${magicNode("B2")}</div>
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--a3">${magicNode("A3")}</div>
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--a4">${magicNode("A4")}</div>
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--b3">${magicNode("B3")}</div>
+        <div class="sum-magic-tree-cell sum-magic-tree-cell--b4">${magicNode("B4")}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderSummonerBook(): string {
   const activeEl = (save.activeSummoner ?? "light") as SummonerElement;
   const active = getActiveSummoner(save);
   const kit = getSummonerKit(activeEl);
   const leader = kit.leader;
-  const prog = save.summonerMagic?.[activeEl] ?? emptyMagicProgress();
-  const unlocked = unlockedMagicSkills(activeEl, prog);
-  const unlockedIds = new Set(unlocked.map((s) => s.id));
   const awaken = active.awaken;
   const awakenMax = awaken >= MAX_SUMMONER_AWAKEN;
   const awakenNeedLv = awakenMinLevel(awaken);
   const awakenMana = awakenManaCost(awaken);
   const awakenCrystal = awakenCrystalCost(awaken);
+  const awakenMat = summonerAwakenMatCost(awaken);
+  const awakenMatOwned = save.awakenMats?.[activeEl] ?? 0;
   const awakenLocked = active.level < awakenNeedLv;
+  const awakenNext = Math.min(MAX_SUMMONER_AWAKEN, awaken + 1);
+  const canAffordAwaken =
+    save.island.mana >= awakenMana &&
+    save.island.crystal >= awakenCrystal &&
+    awakenMatOwned >= awakenMat;
   const leaderPct = (awakenLeaderAtkPct(awaken) * 100).toFixed(1);
   const levelPct = Math.max(
     0,
-    Math.min(100, Math.round((active.level / MAX_MONSTER_LEVEL) * 100)),
+    Math.min(
+      100,
+      Math.round(
+        ((active.exp ?? 0) / Math.max(1, summonerExpToNext(active.level))) * 100,
+      ),
+    ),
   );
 
-  const infoPanel = `<div class="mon-pane mon-pane--info" data-sum-pane="info"${sumDetailTab === "info" ? "" : " hidden"}>
-    <div class="sum-leader-card">
-      <span class="sum-leader-k">${escapeHtml(t("ui.sumBookLeader"))}</span>
-      <strong>${escapeHtml(leader.nameKo)}</strong>
-      <p class="muted">${escapeHtml(stagePrepLeaderPassive(save).detail)}</p>
-      <small>${escapeHtml(t("ui.sumBookLeaderAtk", { pct: leaderPct }))}</small>
-    </div>
-    <div class="mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list">
+  const leaderBuffs = renderLeaderBuffChips(leader, activeEl);
+  const infoPanel = `<div class="mon-pane mon-pane--info sum-info-panel" data-sum-pane="info"${sumDetailTab === "info" ? "" : " hidden"}>
+    <section class="sum-info-profile" aria-label="${escapeHtml(t("ui.sumInfoProfile"))}">
+      <div class="sum-info-profile-el el-${activeEl}">
+        <img src="${monsterElementArtSrc(activeEl) ?? ""}" width="34" height="34" alt="" draggable="false" />
+      </div>
+      <div class="sum-info-profile-main">
+        <span>${escapeHtml(t("ui.sumInfoProfile"))}</span>
+        <strong>${escapeHtml(elementLabel(activeEl))} ${escapeHtml(t("nav.summoner"))}</strong>
+        <div class="sum-info-level-track" aria-label="level progress">
+          <span style="width:${levelPct}%"></span>
+        </div>
+      </div>
+      <div class="sum-info-profile-level">
+        <strong>Lv.${active.level}</strong>
+        <small>+${awaken}</small>
+      </div>
+    </section>
+    <section class="sum-leader-card">
+      <div class="sum-leader-head">
+        <div class="sum-leader-art">
+          <img src="${summonerArtSrc(activeEl)}" width="52" height="52" alt="" draggable="false" />
+        </div>
+        <div>
+          <span class="sum-leader-k">${escapeHtml(t("ui.sumBookLeader"))}</span>
+          <strong>${escapeHtml(leader.nameKo)}</strong>
+          <p>${escapeHtml(stagePrepLeaderPassive(save).markers.join(` ${MIDDOT} `))}</p>
+        </div>
+      </div>
+      <div class="sum-leader-buffs" aria-label="${escapeHtml(t("ui.sumInfoLeaderBuffs"))}">
+        ${leaderBuffs}
+      </div>
+      <div class="sum-leader-total">
+        <span>${escapeHtml(t("ui.gearBonusLeaderAtk", { n: leaderPct }))}</span>
+        <small>${escapeHtml(t("ui.sumInfoAllAllies"))}</small>
+      </div>
+    </section>
+    <div class="sum-info-stats mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list">
       <div class="stat-cell" role="listitem"><span class="stat-cell-k">Lv</span><span class="stat-cell-v">${active.level}</span></div>
       <div class="stat-cell" role="listitem"><span class="stat-cell-k">EXP</span><span class="stat-cell-v">${Math.floor(active.exp ?? 0)}</span></div>
       <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(t("ui.a2d1ab7b28"))}</span><span class="stat-cell-v">+${awaken}</span></div>
@@ -8597,44 +10271,7 @@ function renderSummonerBook(): string {
     </div>
   </div>`;
 
-  const skillTiles = (["A", "B", "A1", "A2", "B1", "B2"] as const)
-    .map((slot) => {
-      const sk = kit.skills[slot];
-      const open = unlockedIds.has(sk.id);
-      const rank = magicRank(prog, sk.id);
-      const lockedHint =
-        slot.startsWith("A") && slot !== "A" && prog.branch !== "A"
-          ? t("ui.skillLockedHint", { branch: "A", n: MAX_MAGIC_RANK })
-          : slot.startsWith("B") && slot !== "B" && prog.branch !== "B"
-            ? t("ui.skillLockedHint", { branch: "B", n: MAX_MAGIC_RANK })
-            : "";
-      return `<div class="sum-magic-tile${open ? " is-on" : " is-locked"}">
-        <div class="sum-magic-tile-head">
-          ${summonerSkillArtImg(sk.id, "sum-magic-ico", 40)}
-          <div class="sum-magic-tile-copy">
-            <strong>${escapeHtml(sk.nameKo)}</strong>
-            <small>${open ? `+${rank}/${MAX_MAGIC_RANK}` : escapeHtml(lockedHint || t("ui.stagePrepSkillLocked"))}</small>
-          </div>
-        </div>
-        ${
-          open && rank < MAX_MAGIC_RANK
-            ? `<button type="button" class="auth-btn-primary sum-magic-enh" data-magic-enhance="${sk.id}">${escapeHtml(t("ui.sumBookEnhance"))} +1</button>`
-            : open
-              ? `<span class="sum-magic-max">MAX</span>`
-              : ""
-        }
-      </div>`;
-    })
-    .join("");
-
-  const skillsPanel = `<div class="mon-pane mon-pane--skills" data-sum-pane="skills"${sumDetailTab === "skills" ? "" : " hidden"}>
-    <p class="sum-magic-branch muted">${escapeHtml(
-      prog.branch
-        ? t("ui.sumBookMagicBranch", { branch: prog.branch })
-        : t("ui.sumBookMagicBranchNone"),
-    )}</p>
-    <div class="sum-magic-grid">${skillTiles}</div>
-  </div>`;
+  const skillsPanel = renderSumSkillsPaneHtml(activeEl);
 
   const awakenLabel = awakenMax
     ? t("ui.sumBookAwakenMax")
@@ -8642,15 +10279,57 @@ function renderSummonerBook(): string {
       ? t("ui.sumBookAwakenNeedLv", { n: awakenNeedLv })
       : t("ui.sumBookAwakenBtn", { n: awaken + 1 });
   const awakenPanel = `<div class="mon-pane mon-pane--awaken" data-sum-pane="awaken"${sumDetailTab === "awaken" ? "" : " hidden"}>
-    <div class="sum-awaken-card">
-      <strong>+${awaken} / ${MAX_SUMMONER_AWAKEN}</strong>
-      <p class="muted">${escapeHtml(t("ui.sumBookLeaderAtk", { pct: leaderPct }))}</p>
+    <div class="sum-awaken-card${awakenMax ? " is-max" : ""}">
+      <div class="sum-awaken-preview">
+        <p class="sum-awaken-section-title">${escapeHtml(t("ui.sumAwakenPreview"))}</p>
+        <div class="sum-awaken-forms">
+          <div class="sum-awaken-form">
+            <span>${escapeHtml(t("ui.sumAwakenCurrent"))}</span>
+            <div class="sum-awaken-portrait">
+              <img src="${summonerArtSrc(activeEl)}" width="60" height="60" alt="" draggable="false" />
+              <strong>+${awaken}</strong>
+            </div>
+          </div>
+          <span class="sum-awaken-arrow" aria-hidden="true">${ARROW_RIGHT}</span>
+          <div class="sum-awaken-form sum-awaken-form--next">
+            <span>${escapeHtml(t("ui.sumAwakenNext"))}</span>
+            <div class="sum-awaken-portrait">
+              <img src="${summonerArtSrc(activeEl)}" width="60" height="60" alt="" draggable="false" />
+              <strong>+${awakenNext}</strong>
+            </div>
+          </div>
+        </div>
+        <div class="sum-awaken-gains">
+          <div><span>${escapeHtml(t("ui.sumAwakenLeaderBonus"))}</span><strong>+${leaderPct}% ${ARROW_RIGHT} +${(awakenLeaderAtkPct(awakenNext) * 100).toFixed(1)}%</strong></div>
+          <div><span>${escapeHtml(t("ui.sumAwakenManaBonus"))}</span><strong>+${awaken * 8} ${ARROW_RIGHT} +${awakenNext * 8}</strong></div>
+          <div><span>${escapeHtml(t("ui.sumAwakenSkillBonus"))}</span><strong>+${(awaken * 2.5).toFixed(1)}% ${ARROW_RIGHT} +${(awakenNext * 2.5).toFixed(1)}%</strong></div>
+        </div>
+      </div>
       ${
-        !awakenMax && !awakenLocked
-          ? `<p class="muted">${escapeHtml(t("ui.sumBookAwakenCost", { mana: awakenMana, crystal: awakenCrystal }))}</p>`
+        !awakenMax
+          ? `<div class="sum-awaken-cost-panel">
+              <p class="sum-awaken-section-title">${escapeHtml(t("ui.sumAwakenCost"))}</p>
+              <div class="sum-awaken-costs">
+                <div class="sum-awaken-cost${save.island.mana < awakenMana ? " is-short" : ""}">
+                  <img src="/art/ui/res/gold.svg" width="30" height="30" alt="" draggable="false" />
+                  <span>${fmtRes(awakenMana)}</span>
+                  <small>${fmtRes(save.island.mana)}</small>
+                </div>
+                <div class="sum-awaken-cost${save.island.crystal < awakenCrystal ? " is-short" : ""}">
+                  <img src="/art/ui/res/crystal.svg" width="30" height="30" alt="" draggable="false" />
+                  <span>${fmtRes(awakenCrystal)}</span>
+                  <small>${fmtRes(save.island.crystal)}</small>
+                </div>
+                <div class="sum-awaken-cost${awakenMatOwned < awakenMat ? " is-short" : ""}">
+                  <img src="${monsterElementArtSrc(activeEl) ?? ""}" width="30" height="30" alt="" draggable="false" />
+                  <span>${fmtRes(awakenMat)}</span>
+                  <small>${fmtRes(awakenMatOwned)}</small>
+                </div>
+              </div>
+            </div>`
           : ""
       }
-      <button type="button" class="auth-btn-primary" data-awaken ${awakenMax || awakenLocked ? "disabled" : ""}>${escapeHtml(awakenLabel)}</button>
+      <button type="button" class="auth-btn-primary sum-awaken-confirm" data-awaken ${awakenMax || awakenLocked || !canAffordAwaken ? "disabled" : ""}>${escapeHtml(awakenLabel)}</button>
     </div>
   </div>`;
 
@@ -8717,6 +10396,7 @@ function renderSummonerBook(): string {
   </div>`;
 
   const body = `<div class="hub-panel enhance-panel enhance-panel--desk">
+    <div id="sum-modal-host">${renderGearDetailModal(activeEl)}${renderSumMagicDetailModal(activeEl)}</div>
     <div class="mon-book sum-book">
       <div class="mon-book-viewer">${detail}</div>
       ${rail}
@@ -8803,6 +10483,10 @@ function renderEnhance(): string {
         if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
         const focusSk = def?.skills[monSkillPick];
         const focusLv = levels[monSkillPick] ?? 1;
+        monSkillPreviewLv = Math.max(
+          1,
+          Math.min(MAX_SKILL_LEVEL, monSkillPreviewLv || focusLv),
+        );
 
         const skillIcons = [0, 1, 2]
           .map((si) => {
@@ -8818,24 +10502,6 @@ function renderEnhance(): string {
           .join("");
 
         const skillsMaxed = levels.every((lv) => lv >= MAX_SKILL_LEVEL);
-        const skillDescLines = monsterSkillDescLines(focusSk);
-        const skillUpNeedLv = skillUpMinMonsterLevel(focusLv);
-        const skillUpLocked = m.level < skillUpNeedLv;
-        const skillUpMana = skillUpManaCost(monSkillPick, focusLv);
-        const skillMatHave = save.skillMats ?? 0;
-        const skillUpLabel = skillsMaxed
-          ? "MAX"
-          : skillUpLocked
-            ? escapeHtml(t("ui.monBookSkillUpNeedLv", { n: skillUpNeedLv }))
-            : escapeHtml(t("ui.3e1a337d93"));
-        const skillEnhanceBtn = `<button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--rail mon-book-enh--cost" data-skill-up="${m.uid}" data-skill-idx="${monSkillPick}" ${skillsMaxed || skillUpLocked ? "disabled" : ""}>
-            <span class="mon-enh-label">${skillUpLabel}</span>
-            ${
-              skillsMaxed || skillUpLocked
-                ? ""
-                : `<span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(skillUpMana)}</strong><span class="muted"> · ${escapeHtml(t("res.skillMats"))} ${skillMatHave}/${SKILL_UP_MAT_COST}</span></span>`
-            }
-          </button>`;
         const skillFeedBtn = enhanceSkillFeedAllowed
           ? `<button type="button" class="auth-btn-ghost mon-book-enh mon-book-enh--rail" data-skill-feed-open="${m.uid}" ${skillsMaxed ? "disabled" : ""}>
             <span class="mon-enh-label">${escapeHtml(t("ui.monBookSkillFeedBtn"))}</span>
@@ -8844,36 +10510,10 @@ function renderEnhance(): string {
         const skillsPanel = `<div class="mon-pane mon-pane--skills">
         <div class="mon-skill-rail">
           <div class="mon-skill-icos" role="tablist" aria-label="skills">${skillIcons}</div>
-          ${skillEnhanceBtn}
           ${skillFeedBtn}
         </div>
         <div class="mon-skill-main">
-          <div class="mon-skill-detail mon-skill-detail--tall">
-            <div class="mon-skill-detail-head">
-              <strong class="mon-skill-detail-name">${focusSk?.nameKo ?? `S${monSkillPick + 1}`}</strong>
-              <span class="mon-skill-detail-lv">Lv.${focusLv}${focusLv >= MAX_SKILL_LEVEL ? " MAX" : ""}</span>
-            </div>
-            <p class="muted">${escapeHtml(
-              t("ui.monBookSkillMats", {
-                have: skillMatHave,
-                need: SKILL_UP_MAT_COST,
-              }),
-            )}</p>
-            ${
-              skillsMaxed || skillUpLocked
-                ? ""
-                : `<p class="muted">${escapeHtml(
-                    t("ui.monBookSkillUpCost", {
-                      mana: skillUpMana,
-                      mat: SKILL_UP_MAT_COST,
-                    }),
-                  )}</p>`
-            }
-            <ul class="mon-skill-detail-desc">
-              ${skillDescLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}
-            </ul>
-            <div class="mon-skill-upgrades">${monsterSkillUpgradeRows(focusSk, focusLv)}</div>
-          </div>
+          ${renderMonsterSkillDetailHtml(focusSk, focusLv, monSkillPreviewLv)}
         </div>
       </div>`;
 
@@ -8968,7 +10608,7 @@ function renderEnhance(): string {
           ${
             selectedPreview
               ? renderInspectCombatStatsHtml(selectedPreview)
-              : `<div class="mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list"><div class="stat-cell" role="listitem"><span class="stat-cell-k">-</span><span class="stat-cell-v">-</span></div></div>`
+              : `<section class="mon-stats-panel mon-stats-panel--empty" aria-label="${escapeHtml(t("ui.monStatsTitle"))}"><p class="muted">-</p></section>`
           }
         </div>`;
 
@@ -8992,10 +10632,23 @@ function renderEnhance(): string {
         const previewArt =
           monsterBattleArtImg(m.monsterId, "mon-preview-img", 120) ||
           `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
+        const maxLevel = monsterMaxLevel(m);
+        const nextExp = monsterExpToNext(m);
         const levelPct = Math.max(
           0,
-          Math.min(100, Math.round((m.level / MAX_MONSTER_LEVEL) * 100)),
+          Math.min(
+            100,
+            Math.round(
+              m.level >= maxLevel
+                ? 100
+                : ((m.exp ?? 0) / Math.max(1, nextExp)) * 100,
+            ),
+          ),
         );
+        const levelMaxed = m.level >= maxLevel;
+        const levelEnhBtn = `<button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--hero" data-enh="${m.uid}" ${levelMaxed ? "disabled" : ""}>
+            <span class="mon-enh-label">${levelMaxed ? "MAX" : escapeHtml(t("ui.3e1a337d93"))}</span>
+          </button>`;
         const heroBlock = `<div class="mon-inspect-hero">
             <div class="mon-inspect-preview" data-mon-preview="${m.monsterId}">
               <div class="mon-preview-turntable" role="img" aria-label="${def?.nameKo ?? m.monsterId}">
@@ -9021,6 +10674,7 @@ function renderEnhance(): string {
               <div class="mon-inspect-stars-row" aria-label="${def?.naturalStars ?? 0}">
                 <span class="mon-inspect-stars">${starsHtml}</span>${selectedEvo > 0 ? `<span class="mon-evo">+${selectedEvo}</span>` : ""}
               </div>
+              <div class="mon-inspect-hero-actions">${levelEnhBtn}</div>
             </div>
           </div>`;
 
@@ -9114,7 +10768,6 @@ function renderEnhance(): string {
             monsterArtImg(m.monsterId, "mon-slot-img", 56) ||
             (def?.element?.[0]?.toUpperCase() ?? "?");
           return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${el}${on ? " is-active" : ""}" data-select-mon="${m.uid}" role="option" aria-selected="${on ? "true" : "false"}" title="${describeOwned(m)}">
-        ${invGradePlateImg(grade, "mon-slot-grade-plate", 112)}
         <span class="mon-slot-art" aria-hidden="true">${art}</span>
         <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
         <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
@@ -9141,10 +10794,9 @@ function renderEnhance(): string {
   </div>`;
 
   const body = `<div class="hub-panel enhance-panel enhance-panel--desk">
-    ${renderForgeReveal()}
-    ${renderSymbolBagExpandModal()}
-    ${renderSymbolDetailModal()}
+    <div id="enhance-modal-host">${renderForgeReveal()}${renderSymbolBagExpandModal()}${renderSymbolDetailModal()}</div>
     ${renderSkillFeedModal()}
+    ${renderPowerUpModal()}
     ${monstersPanel}
   </div>`;
   queueMicrotask(() => {
@@ -9236,7 +10888,7 @@ function renderShopBody(): string {
       .join("") ||
     `<p class="muted">${t('ui.b9c0de06ae')} (${t('ui.imprintSlotsHint')} ${t('ui.a05d718889')})</p>`;
   return `<div class="hub-panel shop-body">
-    ${renderForgeReveal()}
+    <div id="forge-reveal-host">${renderForgeReveal()}</div>
     <p class="section-label">${t("ui.shop.dailyOffers")}</p>
     <div class="stage-list">${dailyRows}</div>
       <p class="section-label">${t('ui.079b50d844')}</p>
@@ -9348,7 +11000,12 @@ function renderGlory(): string {
 }
 
 function renderCaptureShop(): string {
-  if (!battle || battle.phase !== "await_capture_shop" || autoMode) return "";
+  if (
+    !battle ||
+    battle.phase !== "await_capture_shop" ||
+    (autoMode && battleAutoOptions.combat)
+  )
+    return "";
   const offers = captureShopOffers();
   const markFor = (choice: string) =>
     choice === "mana" ? Mark.mana : choice === "amplify" ? Mark.amplify : Mark.shield;
@@ -9521,7 +11178,7 @@ function renderFusion(): string {
     t("ui.hubFusion"),
     `${t('ui.df9d336285')} ${MIDDOT} ${t('ui.d02987ca08')} +1 ${MIDDOT} ${MINUS}${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
     `<div class="hub-panel">
-    ${renderFusionReveal()}
+    <div id="fusion-reveal-host">${renderFusionReveal()}</div>
     <div class="guild-panel fusion-panel">
         <p class="guild-panel-title">${t("ui.hubFusion")}</p>
       <p class="muted dojo-hint">${t('ui.7882865401')}.</p>
@@ -9574,10 +11231,8 @@ function stageEnergyCost(stage: StageDef, diff: StageDifficulty): number {
 
 function isDifficultyOpen(stage: StageDef, diff: StageDifficulty): boolean {
   if (diff === "normal") return true;
-  const cleared = save.clearedStages.includes(stage.id);
-  if (diff === "hard") return cleared;
-  // hell: require hard clear tracked via clearedStages (same id) + optional later
-  return cleared;
+  if (diff === "hard") return save.clearedStages.includes(stage.id);
+  return (save.clearedHardStages ?? []).includes(stage.id);
 }
 
 function stageDropSlots(stage: StageDef): Array<1 | 2 | 3 | 4 | 5 | 6> {
@@ -9608,7 +11263,7 @@ function stageDropPreview(stage: StageDef, opts?: { equipWeekly?: boolean }): st
     !!opts?.equipWeekly || (stage.gearDropChance ?? 0) > 0 || stage.mode === "equip";
   const gear = hasGear
     ? `<span class="stage-drop-piece stage-drop-piece--gear" title="${t('ui.759f762a02')}">
-        <img class="stage-drop-piece-ico" src="/art/ui/symbol/gear.svg" width="28" height="28" alt="${t('ui.759f762a02')}" draggable="false" />
+        <img class="stage-drop-piece-ico" src="/art/ui/gear/weapon.webp" width="28" height="28" alt="${t('ui.759f762a02')}" draggable="false" />
         <span class="stage-drop-piece-label">${t('ui.e17b206052')}</span>
       </span>`
     : "";
@@ -10005,7 +11660,7 @@ function renderStageDropInfoModal(region: StagesRegion): string {
   const gearSlotIds: GearSlot[] = [...GEAR_SLOTS];
   const gearRows = [
     stageDropInfoRow({
-      icon: "/art/ui/gear/weapon.svg",
+      icon: "/art/ui/gear/weapon.webp",
       name: t("ui.stageDropGearRandom"),
       sub: t("ui.stageDropGearRandomHint"),
     }),
@@ -10275,79 +11930,49 @@ function renderBattleTicker(): string {
     .join("")}</div>`;
 }
 
+/** Always-mounted battle AUTO category sheet; toggled with a battle soft patch. */
+function renderBattleAutoSettings(): string {
+  const allEnabled = battleAutoOptions.stone && battleAutoOptions.combat;
+  const option = (
+    id: "stone" | "combat" | "all",
+    label: Parameters<typeof t>[0],
+    enabled: boolean,
+  ) => `<button type="button" class="battle-auto-option${enabled ? " is-on" : ""}" data-auto-option="${id}" role="switch" aria-checked="${enabled}" aria-label="${escapeHtml(t(label))}">
+      <span>${escapeHtml(t(label))}</span><i aria-hidden="true"></i>
+    </button>`;
+  return `<section class="battle-auto-settings${battleAutoSettingsOpen ? " is-open" : ""}" id="battle-auto-settings" aria-label="${escapeHtml(t("ui.autoSettings"))}"${battleAutoSettingsOpen ? "" : ' hidden aria-hidden="true"'}>
+    <div class="battle-auto-settings-card">
+      <div class="battle-auto-settings-head">
+        <strong>${escapeHtml(t("ui.autoSettings"))}</strong>
+        <button type="button" class="battle-auto-settings-close" data-auto-settings-close aria-label="${escapeHtml(t("ui.1a7f31cadb"))}">&times;</button>
+      </div>
+      <div class="battle-auto-options">
+        ${option("stone", "ui.autoStone", battleAutoOptions.stone)}
+        ${option("combat", "ui.autoCombat", battleAutoOptions.combat)}
+        ${option("all", "ui.autoAll", allEnabled)}
+      </div>
+    </div>
+  </section>`;
+}
+
 function renderBattle(manaPct: number): string {
   if (!battle || !currentStage) return "";
   const allyUnits = battle.units.filter((u) => u.team === "ally");
   const enemyUnits = battle.units.filter((u) => u.team === "enemy");
-  const phase = battle.circle.boardPhase;
-  const phaseLabel =
-    phase <= 0 ? t('ui.d2342783cb') : `${t('ui.00b2768bcc')} ${"I".repeat(Math.min(phase, 3))}`;
   const active = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId) ?? null
     : null;
-  const awaitShop =
-    battle.phase === "await_capture_shop" &&
-    active?.team === "ally" &&
-    !autoMode;
   const awaitSkill =
-    battle.phase === "await_skill" && active?.team === "ally" && !autoMode;
-  const mission =
-    battle.modules.moduleG && !battle.finishReason
-      ? ` ${MIDDOT} ${t('ui.511fa65e38')} ${battle.brilliantCount}/${battle.brilliantGoal}${battle.brilliantDone ? CHECK : ""}`
-      : "";
-  const boardTag =
-    battle.boards.length > 1 ? ` ${MIDDOT} ${battle.boardLabel}` : "";
-  const ampHot =
-    shapeFlashIds.length > 0 && Date.now() < shapeFlashUntil
-      ? " is-hot"
-      : "";
-  const shapeChip =
-    ampHot && shapeFlashIds.length
-      ? ` ${MIDDOT} <span class="battle-shape-chip">${shapeFlashIds
-          .map((id) => {
-            const key =
-              id === "corner"
-                ? "ui.shape.corner"
-                : id === "star"
-                  ? "ui.shape.star"
-                  : id === "star_control"
-                    ? "ui.shape.star_control"
-                    : id === "tiger"
-                      ? "ui.shape.tiger"
-                      : id === "kosumi"
-                        ? "ui.shape.kosumi"
-                        : "ui.shape.axis";
-            return escapeHtml(t(key));
-          })
-          .join(` ${MIDDOT} `)}</span>`
-      : "";
-  const status = battle.finishReason
-    ? battle.finishReason === "ally_win"
-      ? t('ui.ba130f3539')
-      : t('ui.8d9e9106fa')
-    : `${battle.phase} ${MIDDOT} <span class="battle-amp-chip${ampHot}">amp ${battle.currentAmplify().toFixed(2)}/${battle.powerAmplifyCap().toFixed(2)}</span>${shapeChip} ${MIDDOT} ${phaseLabel} (${battle.circle.stoneSummonCount}/${battle.circle.resetThreshold})${mission}${boardTag}`;
-
-  const hasSkillPick =
-    awaitSkill &&
-    (selectedSkillIndex != null || selectedSummonerSkill != null);
-  const skillHint =
-    battle.phase === "await_stone" && active?.team === "ally"
-      ? t("ui.62b39a7abd")
-      : awaitShop
-        ? t("ui.e724206861")
-        : awaitSkill
-          ? hasSkillPick
-            ? t("ui.battlePickEnemy")
-            : t("ui.battlePickSkill")
-          : autoMode
-            ? `AUTO x${battleSpeed}`
-            : "";
-
-  const showBoardSwitch =
-    battle.boards.length > 1 &&
+    battle.phase === "await_skill" &&
+    active?.team === "ally" &&
+    (!autoMode || !battleAutoOptions.combat);
+  const canPlaceStone =
     battle.phase === "await_stone" &&
     active?.team === "ally" &&
-    !autoMode;
+    (!autoMode || !battleAutoOptions.stone);
+
+  const showBoardSwitch =
+    battle.boards.length > 1 && canPlaceStone;
   const utilRow =
     showBoardSwitch
       ? `<div class="battle-util-row">
@@ -10356,6 +11981,12 @@ function renderBattle(manaPct: number): string {
       : "";
 
   const stageTitle = escapeHtml(currentStage.nameKo);
+  const pageLabel = escapeHtml(
+    t("ui.battlePage", {
+      current: battle.currentWave,
+      total: battle.totalWaves,
+    }),
+  );
 
   return `<div class="battle-screen battle-screen--enter${
     onboard.step === "battle" && currentStage?.id === ONBOARD_FIRST_STAGE_ID
@@ -10364,35 +11995,44 @@ function renderBattle(manaPct: number): string {
   }">
     ${battleSkyHtml(currentStage)}
     <header class="battle-chrome">
-      ${renderBattleTicker()}
       <div class="battle-stage-pill" title="${stageTitle}">
         <strong class="battle-stage-name">${stageTitle}</strong>
-        <span class="battle-wave">${currentStage.boardSize}${TIMES}${currentStage.boardSize} (${battle.currentWave}/${battle.totalWaves})</span>
+        <span class="battle-page">${pageLabel}</span>
+        <span class="battle-board-meta">${currentStage.boardSize}${TIMES}${currentStage.boardSize}</span>
       </div>
     </header>
-    <div class="battle-layout battle-layout--framed battle-layout--stage">
-    ${status ? `<div class="battle-status battle-status--overlay">${status}</div>` : ""}
-    <div class="battle-lane enemy">
+    <div class="battle-layout battle-layout--framed battle-layout--stage${canPlaceStone ? " is-stone-pick" : ""}${awaitSkill ? " is-skill-pick" : ""}${stoneSummonFx ? " is-stone-summoning" : ""}">
+    <div class="dmg-layer" aria-hidden="true">${renderDmgLayer()}</div>
+    ${
+      waveBannerText
+        ? `<div class="battle-wave-banner" aria-live="polite"><span>${escapeHtml(
+            t("ui.battlePage", {
+              current: battle.currentWave,
+              total: battle.totalWaves,
+            }),
+          )}</span></div>`
+        : ""
+    }
+    <div class="battle-lane enemy${waveEnterIds.size ? " is-wave-spawning" : ""}">
       ${renderBattleFront(enemyUnits, "enemy", { targetable: awaitSkill })}
     </div>
-    <div class="board-wrap board-wrap--stage">
-      ${renderBoardTabs()}
-      <div class="dmg-layer">${renderDmgLayer()}</div>
-      ${renderBoard()}
-      ${renderCaptureShop()}
+    <div class="board-wrap board-wrap--stage${canPlaceStone ? " is-live" : ""}">
+      ${renderBoardTabs()}${renderBoard()}${renderCaptureShop()}
     </div>
     <div class="battle-lane ally">
       ${renderBattleFront(allyUnits, "ally")}
     </div>
+    ${renderStonePickLayer()}
     ${utilRow}
-    ${skillHint ? `<p class="skill-hint">${skillHint}</p>` : ""}
     <div class="battle-hud battle-hud--stage">
       ${navBackBtn({ id: "btn-back", label: t('ui.1a7f31cadb') })}
       <div class="battle-hud-actions">
         <button type="button" class="secondary" id="btn-speed">x${battleSpeed}</button>
+        <button type="button" class="secondary battle-auto-settings-trigger${battleAutoSettingsOpen ? " is-open" : ""}" id="btn-auto-settings" aria-expanded="${battleAutoSettingsOpen}" aria-controls="battle-auto-settings" aria-label="${escapeHtml(t("ui.autoSettings"))}">&#9881;</button>
         <button type="button" id="btn-auto-toggle" class="${autoMode ? "auto-on" : ""}">${autoMode ? "AUTO ON" : "AUTO"}</button>
       </div>
     </div>
+    ${renderBattleAutoSettings()}
   </div>
   </div>`;
 }
@@ -10455,7 +12095,22 @@ function refreshBattleView(): boolean {
   restoreBattleArt(screen, arts);
   bindBattleInteractive();
   mountUnitAnimHooks(screen);
+  refreshDmgLayer();
   return true;
+}
+
+/** Taps on the large flat pick grid place a stone on the map circle. */
+function bindStonePickTaps(): void {
+  const hit = app.querySelector<HTMLElement>(".stone-pick-hit");
+  if (!hit) return;
+  hit.addEventListener("pointerup", (ev) => {
+    if (ev.button != null && ev.button !== 0) return;
+    const target = ev.target;
+    if (!(target instanceof Element)) return;
+    const btn = target.closest<HTMLButtonElement>("button.cell.is-placeable");
+    if (!btn || btn.disabled || !hit.contains(btn)) return;
+    onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
+  });
 }
 
 /** Rebind combat controls after a soft battle DOM patch. */
@@ -10487,11 +12142,25 @@ function bindBattleInteractive(): void {
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>(".board .cell").forEach((btn) => {
-    btn.addEventListener("click", () => {
+  const boardHit = app.querySelector<HTMLElement>(".board-frame .board-hit");
+  if (boardHit) {
+    boardHit.addEventListener("pointerup", (ev) => {
+      if (ev.button != null && ev.button !== 0) return;
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const btn = t.closest<HTMLButtonElement>("button.cell.is-placeable");
+      if (!btn || btn.disabled || !boardHit.contains(btn)) return;
       onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
     });
-  });
+  } else {
+    app.querySelectorAll<HTMLButtonElement>(".board .cell").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
+      });
+    });
+  }
+
+  bindStonePickTaps();
 
   app.querySelectorAll<HTMLButtonElement>(".suggest-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -10505,7 +12174,7 @@ function bindBattleInteractive(): void {
       if (
         !battle ||
         battle.phase !== "await_skill" ||
-        autoMode ||
+        (autoMode && battleAutoOptions.combat) ||
         battleFxBusy
       ) {
         render();
@@ -10534,7 +12203,12 @@ function bindBattleInteractive(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-skill]").forEach((btn) => {
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      if (!battle || battle.phase !== "await_skill" || autoMode || battleFxBusy)
+      if (
+        !battle ||
+        battle.phase !== "await_skill" ||
+        (autoMode && battleAutoOptions.combat) ||
+        battleFxBusy
+      )
         return;
       const idx = Number(btn.dataset.skill);
       if (!Number.isFinite(idx)) return;
@@ -10552,7 +12226,7 @@ function bindBattleInteractive(): void {
         if (
           !battle ||
           battle.phase !== "await_skill" ||
-          autoMode ||
+          (autoMode && battleAutoOptions.combat) ||
           battleFxBusy
         )
           return;
@@ -10577,6 +12251,37 @@ function bindBattleInteractive(): void {
     if (autoMode) scheduleAuto();
   });
 
+  app.querySelector("#btn-auto-settings")?.addEventListener("click", () => {
+    battleAutoSettingsOpen = !battleAutoSettingsOpen;
+    if (!refreshBattleView()) render();
+  });
+
+  app.querySelector("[data-auto-settings-close]")?.addEventListener("click", () => {
+    battleAutoSettingsOpen = false;
+    if (!refreshBattleView()) render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-auto-option]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const option = btn.dataset.autoOption;
+      if (option === "stone") {
+        battleAutoOptions = { ...battleAutoOptions, stone: !battleAutoOptions.stone };
+      } else if (option === "combat") {
+        battleAutoOptions = {
+          ...battleAutoOptions,
+          combat: !battleAutoOptions.combat,
+        };
+      } else if (option === "all") {
+        const enabled = !(battleAutoOptions.stone && battleAutoOptions.combat);
+        battleAutoOptions = { stone: enabled, combat: enabled };
+      } else {
+        return;
+      }
+      if (!refreshBattleView()) render();
+      if (autoMode) scheduleAuto();
+    });
+  });
+
   app.querySelector("#btn-auto-toggle")?.addEventListener("click", () => {
     if (!battle || battle.finishReason) return;
     autoMode = !autoMode;
@@ -10592,10 +12297,7 @@ function bindBattleInteractive(): void {
     clearAutoTimer();
     if (battle?.finishReason) grantRewardIfNeeded();
     if (view === "result") {
-      battle = null;
-      dmgFloats = [];
-      view = "stages";
-      render();
+      leaveResultView("stages");
       return;
     }
     battle = null;
@@ -10724,37 +12426,6 @@ function bindAuth(): void {
   });
 }
 
-function islandMapNaturalSize(world: HTMLElement): { w: number; h: number } {
-  const img = world.querySelector<HTMLImageElement>(".island-map-img");
-  if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
-    return { w: img.naturalWidth, h: img.naturalHeight };
-  }
-  return { w: ISLAND_MAP_NATURAL.w, h: ISLAND_MAP_NATURAL.h };
-}
-
-/** Min zoom that still full-bleeds the viewport (no letterbox / map-edge framing). */
-function islandZoomMin(): number {
-  const coverW = 1 / (ISLAND_WORLD_PCT.w * ISLAND_BASE_SCALE);
-  const coverH = 1 / (ISLAND_WORLD_PCT.h * ISLAND_BASE_SCALE);
-  return Math.max(coverW, coverH) * ISLAND_ZOOM_MIN_OVERSCAN;
-}
-
-/** Max zoom before the map bitmap is CSS-upsampled (blur). At least default framing (1). */
-function islandZoomMax(world: HTMLElement): number {
-  const W = world.offsetWidth;
-  const H = world.offsetHeight;
-  if (W <= 0 || H <= 0 || islandZoom <= 0) return 1;
-  const nat = islandMapNaturalSize(world);
-  // Layout size at zoom 1 (current size is proportional to islandZoom).
-  const baseW = W / islandZoom;
-  const baseH = H / islandZoom;
-  const coverAt1 = Math.max(baseW / nat.w, baseH / nat.h);
-  if (coverAt1 <= 0) return 1;
-  const sharpMax = ISLAND_ZOOM_SHARP_PAD / coverAt1;
-  const minZ = islandZoomMin();
-  return Math.min(ISLAND_ZOOM_MAX_HARD, Math.max(minZ, 1, sharpMax));
-}
-
 function islandOriginPx(world: HTMLElement): { ox: number; oy: number } {
   return {
     ox: world.offsetWidth * ISLAND_TRANSFORM_ORIGIN.x,
@@ -10778,6 +12449,7 @@ function clampIslandPan(viewport: HTMLElement, world: HTMLElement): void {
   const { ox, oy } = islandOriginPx(world);
   const vw = viewport.clientWidth;
   const vh = viewport.clientHeight;
+  // Hard edge clamp: map always covers the viewport; never show empty past the bitmap.
   const maxX = -ox * (1 - s);
   const minX = vw - W * s - ox * (1 - s);
   const maxY = -oy * (1 - s);
@@ -10795,15 +12467,13 @@ function clampIslandPan(viewport: HTMLElement, world: HTMLElement): void {
 }
 
 /** Frame the island camera on a building spot (percent coords on the world map). */
-function focusIslandSpot(spotId: string, opts?: { zoomMul?: number }): void {
+function focusIslandSpot(spotId: string, _opts?: { zoomMul?: number }): void {
   const viewport = app.querySelector<HTMLElement>("#island-viewport");
   const world = app.querySelector<HTMLElement>("#island-world");
   if (!viewport || !world || world.offsetWidth <= 0) return;
 
-  const minZ = islandZoomMin();
-  const maxZ = islandZoomMax(world);
-  const zoomMul = opts?.zoomMul ?? 1.18;
-  islandZoom = Math.min(maxZ, Math.max(minZ, Math.max(islandZoom, minZ * zoomMul)));
+  // Zoom stays locked; only pan so the guided building sits in view.
+  islandZoom = 1;
   applyIslandPan();
 
   const W = world.offsetWidth;
@@ -10839,83 +12509,28 @@ function maybeFocusOnboardIslandSpot(): void {
   requestAnimationFrame(() => requestAnimationFrame(run));
 }
 
-function zoomIslandAt(
-  viewport: HTMLElement,
-  world: HTMLElement,
-  clientX: number,
-  clientY: number,
-  nextZoom: number,
-): void {
-  const maxZ = islandZoomMax(world);
-  const minZ = islandZoomMin();
-  const z = Math.min(maxZ, Math.max(minZ, nextZoom));
-  if (Math.abs(z - islandZoom) < 1e-5) return;
-
-  const s = ISLAND_BASE_SCALE;
-  const rect = viewport.getBoundingClientRect();
-  const mx = clientX - rect.left;
-  const my = clientY - rect.top;
-  const prevW = world.offsetWidth;
-  const prevH = world.offsetHeight;
-  if (prevW <= 0 || prevH <= 0) return;
-  const { ox, oy } = islandOriginPx(world);
-  const lx = (mx - islandPan.x - ox * (1 - s)) / s;
-  const ly = (my - islandPan.y - oy * (1 - s)) / s;
-  const fx = lx / prevW;
-  const fy = ly / prevH;
-
-  islandZoom = z;
-  applyIslandPan();
-  // Reflow so offsetWidth reflects the new --island-zoom layout size.
-  const newW = world.offsetWidth;
-  const newH = world.offsetHeight;
-  const ox2 = newW * ISLAND_TRANSFORM_ORIGIN.x;
-  const oy2 = newH * ISLAND_TRANSFORM_ORIGIN.y;
-  islandPan.x = mx - fx * newW * s - ox2 * (1 - s);
-  islandPan.y = my - fy * newH * s - oy2 * (1 - s);
-  clampIslandPan(viewport, world);
-  applyIslandPan();
-}
-
-function islandPinchDistance(): number {
-  if (islandActivePointers.size < 2) return 0;
-  const pts = [...islandActivePointers.values()];
-  return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-}
-
-function islandPinchMidpoint(): { x: number; y: number } {
-  const pts = [...islandActivePointers.values()];
-  return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
-}
-
 function bindIslandPan(): void {
   const viewport = app.querySelector<HTMLElement>("#island-viewport");
   const world = app.querySelector<HTMLElement>("#island-world");
   if (!viewport || !world) return;
 
   islandActivePointers.clear();
-  islandPinch = null;
   if (islandCoverFitApplied !== ISLAND_COVER_FIT_VERSION) {
     islandCoverFitApplied = ISLAND_COVER_FIT_VERSION;
     islandPanCentered = false;
-    islandZoom = Math.max(islandZoomMin(), 1);
+    islandZoom = 1;
   }
+  islandZoom = 1;
   applyIslandPan();
 
   const finishClamp = () => {
-    const minZ = islandZoomMin();
-    const maxZ = islandZoomMax(world);
-    if (islandZoom < minZ) {
-      islandZoom = minZ;
-      islandPanCentered = false;
-    }
-    if (islandZoom > maxZ) islandZoom = maxZ;
+    islandZoom = 1;
     if (!islandPanCentered && world.offsetWidth > 0) {
       const s = ISLAND_BASE_SCALE;
       const { ox, oy } = islandOriginPx(world);
       islandPan.x = (viewport.clientWidth - world.offsetWidth * s) / 2 - ox * (1 - s);
       islandPan.y =
-        (viewport.clientHeight - world.offsetHeight * s) / 2 - oy * (1 - s) + viewport.clientHeight * 0.05;
+        (viewport.clientHeight - world.offsetHeight * s) / 2 - oy * (1 - s);
       islandPanCentered = true;
     }
     clampIslandPan(viewport, world);
@@ -10928,12 +12543,11 @@ function bindIslandPan(): void {
     mapImg.addEventListener("load", finishClamp, { once: true });
   }
 
+  // Pan only — wheel / pinch zoom intentionally disabled.
   viewport.addEventListener(
     "wheel",
     (ev) => {
       ev.preventDefault();
-      const factor = Math.exp(-ev.deltaY * 0.0016);
-      zoomIslandAt(viewport, world, ev.clientX, ev.clientY, islandZoom * factor);
     },
     { passive: false },
   );
@@ -10943,13 +12557,10 @@ function bindIslandPan(): void {
     islandActivePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
 
     if (islandActivePointers.size >= 2) {
+      // Ignore multi-touch zoom; keep current pan gesture cancelled.
       islandPanDrag = null;
       clearIslandLongPress();
-      const dist = islandPinchDistance();
-      if (dist > 0) {
-        islandPinch = { startDist: dist, startZoom: islandZoom };
-        viewport.setAttribute("data-pan-moved", "1");
-      }
+      viewport.setAttribute("data-pan-moved", "1");
       try {
         viewport.setPointerCapture(ev.pointerId);
       } catch {
@@ -10984,18 +12595,7 @@ function bindIslandPan(): void {
       islandActivePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     }
 
-    if (islandPinch && islandActivePointers.size >= 2) {
-      const dist = islandPinchDistance();
-      if (dist > 0 && islandPinch.startDist > 0) {
-        const mid = islandPinchMidpoint();
-        zoomIslandAt(
-          viewport,
-          world,
-          mid.x,
-          mid.y,
-          islandPinch.startZoom * (dist / islandPinch.startDist),
-        );
-      }
+    if (islandActivePointers.size >= 2) {
       return;
     }
 
@@ -11011,11 +12611,8 @@ function bindIslandPan(): void {
 
   const endDrag = (ev: PointerEvent) => {
     islandActivePointers.delete(ev.pointerId);
-    if (islandActivePointers.size < 2) {
-      islandPinch = null;
-      if (islandActivePointers.size === 0) {
-        queueMicrotask(() => viewport.removeAttribute("data-pan-moved"));
-      }
+    if (islandActivePointers.size === 0) {
+      queueMicrotask(() => viewport.removeAttribute("data-pan-moved"));
     }
 
     if (!islandPanDrag || islandPanDrag.pointerId !== ev.pointerId) return;
@@ -11218,6 +12815,13 @@ function bindIslandLayoutEdit(): void {
   const viewport = app.querySelector<HTMLElement>("#island-viewport");
   const world = app.querySelector<HTMLElement>("#island-world");
 
+  app.querySelector("#btn-island-layout-edit")?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (islandLayoutEdit) return;
+    setIslandSpotMenu(null);
+    enterIslandLayoutEdit();
+  });
   app.querySelector("#btn-island-layout-done")?.addEventListener("click", (ev) => {
     ev.preventDefault();
     ev.stopPropagation();
@@ -11232,7 +12836,10 @@ function bindIslandLayoutEdit(): void {
     render();
   });
 
-  if (!viewport || !world || !islandLayoutEdit) return;
+  if (!viewport || !world) return;
+  // Soft island re-use: keep existing long-press listeners on the preserved DOM.
+  if (preserveIslandDom && !islandLayoutEdit) return;
+
   app.querySelectorAll<HTMLElement>("[data-b]").forEach((btn) => {
     btn.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0) return;
@@ -11243,16 +12850,24 @@ function bindIslandLayoutEdit(): void {
         ev.preventDefault();
         ev.stopPropagation();
         islandPanDrag = null;
+        clearIslandLongPress();
         islandSpotDrag = { id, pointerId: ev.pointerId };
-        btn.classList.add("is-layout-focus", "is-dragging");
+        viewport.classList.add("is-spot-dragging");
+        app.querySelectorAll<HTMLElement>("[data-b]").forEach((el) => {
+          el.classList.toggle("is-layout-focus", el.dataset.b === id);
+          el.classList.toggle("is-dragging", el.dataset.b === id);
+        });
         try {
           btn.setPointerCapture(ev.pointerId);
         } catch {
           /* ignore */
         }
+        const startPct = clientToIslandPct(ev.clientX, ev.clientY, world);
+        updateIslandDropTarget(id, startPct.x, startPct.y);
         return;
       }
 
+      // Long-press a building to enter layout edit (also available via side button).
       clearIslandLongPress();
       islandLongPress = {
         id,
@@ -11298,12 +12913,15 @@ function bindIslandLayoutEdit(): void {
         return;
       }
 
+      if (!islandLayoutEdit) return;
       if (!islandSpotDrag || islandSpotDrag.pointerId !== ev.pointerId) return;
       if (islandSpotDrag.id !== btn.dataset.b) return;
       ev.preventDefault();
       ev.stopPropagation();
       const pct = clientToIslandPct(ev.clientX, ev.clientY, world);
-      applyIslandSpotPosDom(islandSpotDrag.id, pct.x, pct.y);
+      // Follow the finger freely on land — pad snap waits for drop.
+      applyIslandSpotPosDom(islandSpotDrag.id, pct.x, pct.y, { snap: false });
+      updateIslandDropTarget(islandSpotDrag.id, pct.x, pct.y);
     });
 
     const endSpot = (ev: PointerEvent) => {
@@ -11311,6 +12929,11 @@ function bindIslandLayoutEdit(): void {
         clearIslandLongPress();
       }
       if (!islandSpotDrag || islandSpotDrag.pointerId !== ev.pointerId) return;
+      const dragId = islandSpotDrag.id;
+      const pct = clientToIslandPct(ev.clientX, ev.clientY, world);
+      applyIslandSpotPosDom(dragId, pct.x, pct.y, { snap: true });
+      clearIslandDropTargets();
+      viewport.classList.remove("is-spot-dragging");
       btn.classList.remove("is-dragging");
       islandSpotDrag = null;
       islandLayoutSuppressClick = true;
@@ -11743,9 +13366,9 @@ function bind(): void {
         return;
       }
       if (nav === "party") {
-        partyDraft = new Set(save.party);
+        preparePartyHall();
       } else if (view === "party" && nav !== "party") {
-        partyDraft = null;
+        commitPartyDraftOnLeave();
       }
       if (nav !== "stages") {
         stagesRegion = null;
@@ -11890,6 +13513,9 @@ function bind(): void {
 
   const closeBuildingInfo = () => closeBuildingInfoSoft();
   app.querySelector("#btn-building-info-close")?.addEventListener("click", closeBuildingInfo);
+  const closeBuildingUnlock = () => dismissBuildingUnlockModal();
+  app.querySelector("#btn-building-unlock-close")?.addEventListener("click", closeBuildingUnlock);
+  app.querySelector("#btn-building-unlock-ok")?.addEventListener("click", closeBuildingUnlock);
 
   app.querySelectorAll<HTMLButtonElement>("[data-summon-kind]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -11950,6 +13576,13 @@ function bind(): void {
       }
       selectedEnhanceUid = uid;
       monSkillPick = 0;
+      {
+        const picked = save.roster.find((m) => m.uid === uid);
+        monSkillPreviewLv = Math.max(
+          1,
+          Math.min(MAX_SKILL_LEVEL, picked?.skillLevels?.[0] ?? 1),
+        );
+      }
       enhanceTab = "monsters";
       skillFeedModalOpen = false;
       skillFeedFodderUid = null;
@@ -11999,78 +13632,10 @@ function bind(): void {
     });
   });
 
-  const openCodex = () => {
-    codexOpen = true;
-    codexDetailMonsterId = null;
-    render();
-  };
-  const closeCodex = () => {
-    codexOpen = false;
-    codexDetailMonsterId = null;
-    render();
-  };
-  app.querySelector("#btn-open-codex")?.addEventListener("click", openCodex);
-  app.querySelector("#btn-codex-close")?.addEventListener("click", closeCodex);
-  bindCodexDetailControls(app);
-  // Event delegation: keep detail updates working even after grid rebuilds.
-  app.querySelector("#codex-layer")?.addEventListener("click", (ev) => {
-    const target = ev.target as HTMLElement | null;
-    if (!target) return;
-    if (target.closest("[data-codex-skill]")) return;
-    if (target.closest("#btn-codex-detail-close")) return;
-    const monBtn = target.closest<HTMLButtonElement>("[data-codex-mon]");
-    if (monBtn?.dataset.codexMon) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const id = monBtn.dataset.codexMon;
-      codexDetailMonsterId = codexDetailMonsterId === id ? null : id;
-      syncCodexActiveCells();
-      refreshCodexDetailDom();
-      return;
-    }
-    closeCodexSkillTips(app);
+  app.querySelector("#btn-open-codex")?.addEventListener("click", () => {
+    openCodexSoft();
   });
-  app.querySelectorAll<HTMLButtonElement>("[data-codex-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const raw = btn.dataset.codexTab;
-      if (raw === "monsters" || raw === "summoners") {
-        codexTab = raw;
-        codexDetailMonsterId = null;
-        render();
-      }
-    });
-  });
-  app.querySelectorAll<HTMLSelectElement>("[data-codex-el-stars]").forEach((sel) => {
-    sel.addEventListener("change", () => {
-      const el = sel.dataset.codexElStars as SummonerElement | undefined;
-      if (!el || !(SUMMONER_ELEMENTS as readonly string[]).includes(el)) return;
-      const raw = sel.value;
-      let next: CodexStarsFilter = "all";
-      if (raw === "all") {
-        next = "all";
-      } else {
-        const n = Number(raw);
-        if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) next = n;
-        else return;
-      }
-      codexStarsByElement = { ...codexStarsByElement, [el]: next };
-      rebuildCodexElementGrid(el);
-    });
-  });
-  app.querySelectorAll<HTMLButtonElement>("[data-codex-summoner]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const el = btn.dataset.codexSummoner as SummonerElement | undefined;
-      if (!el) return;
-      save = setActiveSummoner(save, el);
-      persist();
-      codexOpen = false;
-      codexDetailMonsterId = null;
-      view = "summoner";
-      sumDetailTab = "info";
-      flash(t("summonerPicker.switched", { element: elementLabel(el) }));
-      render();
-    });
-  });
+  if (codexOpen) bindCodexLayerInteractions();
 
   app.querySelectorAll<HTMLButtonElement>("[data-mon-dock]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -12089,30 +13654,54 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-enh]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const uid = btn.dataset.enh!;
-      const beforeLv = save.roster.find((m) => m.uid === uid)?.level ?? 0;
-      const r = runEnhance(save, uid);
-      save = r.save;
-      persist();
-      const afterLv = save.roster.find((m) => m.uid === uid)?.level ?? 0;
-      if (afterLv > beforeLv) patchOnboard({ enhanced: true });
-      flash(r.message);
-      render();
+      if (!save.roster.some((monster) => monster.uid === uid)) return;
+      selectedEnhanceUid = uid;
+      powerUpFodderUids = new Set();
+      powerUpModalOpen = true;
+      refreshPowerUpModalDom();
+      applyPowerUpOpen();
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-skill-up]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const uid = btn.dataset.skillUp;
-      const idxRaw = btn.dataset.skillIdx;
-      if (!uid || idxRaw == null) return;
-      const skillIndex = Number(idxRaw);
-      if (!Number.isFinite(skillIndex)) return;
-      const r = runSkillUp(save, uid, skillIndex);
-      save = r.save;
-      persist();
-      flash(r.message);
-      render();
-    });
+  const closePowerUp = (): void => {
+    if (!powerUpModalOpen) return;
+    powerUpModalOpen = false;
+    powerUpFodderUids = new Set();
+    applyPowerUpOpen();
+  };
+  app.querySelector("#btn-power-up-close")?.addEventListener("click", closePowerUp);
+  app
+    .querySelector("#power-up-layer .settings-backdrop")
+    ?.addEventListener("click", closePowerUp);
+  app.querySelector("#power-up-layer")?.addEventListener("click", (ev) => {
+    const fodderBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+      "[data-power-up-fodder]",
+    );
+    if (fodderBtn && app.contains(fodderBtn)) {
+      const uid = fodderBtn.dataset.powerUpFodder;
+      if (!uid) return;
+      if (powerUpFodderUids.has(uid)) powerUpFodderUids.delete(uid);
+      else powerUpFodderUids.add(uid);
+      refreshPowerUpModalDom();
+      return;
+    }
+
+    const confirm = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+      "#btn-power-up-confirm",
+    );
+    if (!confirm || !app.contains(confirm) || confirm.disabled) return;
+    const target = selectedEnhanceUid;
+    if (!target) return;
+    const beforeLevel = save.roster.find((monster) => monster.uid === target)?.level ?? 0;
+    const r = runPowerUpMonster(save, target, [...powerUpFodderUids]);
+    save = r.save;
+    persist();
+    const afterLevel = save.roster.find((monster) => monster.uid === target)?.level ?? 0;
+    if (afterLevel > beforeLevel) patchOnboard({ enhanced: true });
+    powerUpFodderUids = new Set();
+    powerUpModalOpen = false;
+    flash(r.message);
+    render();
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-skill-feed-open]").forEach((btn) => {
@@ -12206,12 +13795,50 @@ function bind(): void {
       const slot = Number(btn.dataset.monSkillPick ?? "0");
       if (slot < 0 || slot > 2 || slot === monSkillPick) return;
       monSkillPick = slot;
+      const owned = selectedEnhanceUid
+        ? save.roster.find((m) => m.uid === selectedEnhanceUid)
+        : null;
+      const ownedLv = owned?.skillLevels?.[slot] ?? 1;
+      monSkillPreviewLv = Math.max(1, Math.min(MAX_SKILL_LEVEL, ownedLv));
       monDetailTab = "skills";
       enhanceTab = "monsters";
       applyMonDetailTabUi();
       if (!applyMonSkillPickUi()) render();
     });
   });
+
+  app
+    .querySelector('.mon-pane[data-mon-pane="skills"]')
+    ?.addEventListener("click", (ev) => {
+      const stepBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+        "[data-mon-skill-preview]",
+      );
+      if (stepBtn && app.contains(stepBtn) && !stepBtn.disabled) {
+        const step = Number(stepBtn.dataset.monSkillPreview ?? "0");
+        if (step === -1 || step === 1) {
+          const next = Math.max(
+            1,
+            Math.min(MAX_SKILL_LEVEL, monSkillPreviewLv + step),
+          );
+          if (next !== monSkillPreviewLv) {
+            monSkillPreviewLv = next;
+            if (!applyMonSkillPickUi()) render();
+          }
+          return;
+        }
+      }
+
+      const setBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+        "[data-mon-skill-preview-set]",
+      );
+      if (setBtn && app.contains(setBtn)) {
+        const lv = Number(setBtn.dataset.monSkillPreviewSet ?? "0");
+        if (!Number.isFinite(lv) || lv < 1 || lv > MAX_SKILL_LEVEL) return;
+        if (lv === monSkillPreviewLv) return;
+        monSkillPreviewLv = lv;
+        if (!applyMonSkillPickUi()) render();
+      }
+    });
 
   app.querySelectorAll<HTMLButtonElement>("[data-enhance-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -12223,82 +13850,13 @@ function bind(): void {
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-gear]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const slot = parseGearSlot(btn.dataset.gear);
-      const r = runEnhanceGear(save, slot);
-      save = r.save;
-      if (r.message.startsWith(t('ui.efa49027d0'))) {
-        enhanceFx = { kind: "gear", slot };
-      }
-      persist();
-      flash(r.message);
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-gear-set]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const slot = parseGearSlot(btn.dataset.gearSet);
-      const setRaw = btn.dataset.setId ?? "";
-      if (
-        setRaw !== "mana" &&
-        setRaw !== "assault" &&
-        setRaw !== "guardian" &&
-        setRaw !== "sense" &&
-        setRaw !== "tempo"
-      ) {
-        return;
-      }
-      const r = runAffixGearSet(save, slot, setRaw);
-      save = r.save;
-      persist();
-      flash(r.message);
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-gear-equip]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = Number(btn.dataset.gearEquip ?? "-1");
-      const bagLen = (save.gearBag ?? []).length;
-      const r = runEquipGearBag(save, idx);
-      save = r.save;
-      persist();
-      if ((save.gearBag ?? []).length < bagLen) {
-        patchOnboard({ equipped: true });
-      }
-      flash(r.message);
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-gear-sell]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = Number(btn.dataset.gearSell ?? "-1");
-      const r = runSellGearBag(save, idx);
-      save = r.save;
-      persist();
-      flash(r.message);
-      render();
-    });
-  });
+  bindSumGearSlotClicks();
+  bindSumMagicNodeClicks();
+  bindSumBookModalInteractions();
 
   app.querySelectorAll<HTMLButtonElement>("[data-awaken]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const r = runAwakenSummoner(save);
-      save = r.save;
-      persist();
-      flash(r.message);
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-magic-enhance]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.magicEnhance ?? "";
-      if (!id) return;
-      const r = runEnhanceMagicSkill(save, id);
       save = r.save;
       persist();
       flash(r.message);
@@ -12328,7 +13886,7 @@ function bind(): void {
         };
       }
       flash(r.message);
-      render();
+      softShowForgeReveal();
     });
   });
 
@@ -12372,21 +13930,23 @@ function bind(): void {
         };
       }
       flash(r.message);
-      render();
+      softShowForgeReveal();
     });
   });
 
-  app.querySelector("#btn-forge-dismiss")?.addEventListener("click", () => {
-    forgeReveal = null;
-    render();
-  });
+  bindForgeRevealDismiss();
+  bindFusionRevealDismiss();
+  bindWishRevealDismiss();
+  bindEnhanceTransientModals();
 
   app.querySelector("#btn-dojo-drill")?.addEventListener("click", () => {
     const r = runPracticeDojo(save);
     save = r.save;
     persist();
     flash(r.message);
+    enqueueBuildingUnlocks(r.unlockedBuildingIds);
     render();
+    showNextBuildingUnlockModal();
   });
 
   app.querySelector("#btn-buy-scroll-1")?.addEventListener("click", () => {
@@ -12421,21 +13981,6 @@ function bind(): void {
   });
   app.querySelector("#btn-arena-defense")?.addEventListener("click", () => {
     const r = runSetArenaDefense(save);
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
-  });
-  const closeSymBagExpand = () => {
-    if (!symbolBagExpandOpen) return;
-    symbolBagExpandOpen = false;
-    render();
-  };
-  app.querySelector("#btn-sym-bag-expand-close")?.addEventListener("click", closeSymBagExpand);
-  app.querySelector("#btn-sym-bag-expand-cancel")?.addEventListener("click", closeSymBagExpand);
-  app.querySelector("#btn-sym-bag-expand-ok")?.addEventListener("click", () => {
-    symbolBagExpandOpen = false;
-    const r = runExpandSymbolBag(save);
     save = r.save;
     persist();
     flash(r.message);
@@ -12477,7 +14022,7 @@ function bind(): void {
         }
       }
       flash(r.message);
-      render();
+      softShowFusionReveal();
     });
   });
 
@@ -12494,11 +14039,6 @@ function bind(): void {
       flash(r.message);
       render();
     });
-  });
-
-  app.querySelector("#btn-fusion-dismiss")?.addEventListener("click", () => {
-    fusionReveal = null;
-    render();
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-glory]").forEach((btn) => {
@@ -12586,11 +14126,7 @@ function bind(): void {
       wishReveal = r.message.replace(/^\uC18C\uC6D0:\s*/, "");
     }
     flash(r.message);
-    render();
-  });
-  app.querySelector("#btn-wish-dismiss")?.addEventListener("click", () => {
-    wishReveal = null;
-    render();
+    softShowWishReveal();
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-equip-sym]").forEach((btn) => {
@@ -12598,7 +14134,10 @@ function bind(): void {
       const idx = Number(btn.dataset.equipSym);
       if (!Number.isFinite(idx) || !save.symbols[idx]) return;
       const uid = selectedEnhanceUid;
-      if (!uid) return;
+      if (!uid) {
+        flash(t("ui.symEquipNeedMonster"));
+        return;
+      }
       const before = save.roster.find((m) => m.uid === uid);
       const r = runEquipSymbol(save, uid, String(idx));
       save = r.save;
@@ -12628,7 +14167,7 @@ function bind(): void {
       if (draft.has(uid)) draft.delete(uid);
       else if (draft.size < 4) draft.add(uid);
       else {
-        flash(t('ui.e44dd9cad3'));
+        flash(t("ui.e44dd9cad3"));
         render();
         return;
       }
@@ -12636,21 +14175,97 @@ function bind(): void {
     });
   });
 
-  app.querySelector("#btn-party-save")?.addEventListener("click", () => {
-    const draft = ensurePartyDraft();
-    if (draft.size === 0) {
-      flash(t('ui.bb044ada8a'));
-      return;
-    }
-    const r = runSetParty(save, [...draft]);
-    save = r.save;
-    persist();
-    partyDraft = null;
-    patchOnboard({ partySet: true });
-    flash(r.message);
-    view = "home";
+  app.querySelectorAll<HTMLButtonElement>("[data-party-pick-summoner]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const el = btn.dataset.partyPickSummoner as SummonerElement | undefined;
+      if (!el) return;
+      if (el !== (save.activeSummoner ?? "light")) {
+        save = setActiveSummoner(save, el);
+        persist();
+        flash(t("summonerPicker.switched", { element: elementLabel(el) }));
+      }
+      partyInvTab = "summoner";
+      render();
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-party-inv-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.partyInvTab;
+      if (tab !== "summoner" && tab !== "monster") return;
+      if (partyInvTab === tab) return;
+      partyInvTab = tab;
+      render();
+    });
+  });
+
+  app.querySelector("#party-inv-sort")?.addEventListener("change", (ev) => {
+    const raw = (ev.target as HTMLSelectElement).value;
+    const allowed: RosterSortMode[] = [
+      "default",
+      "level",
+      "stars",
+      "element",
+      "party",
+    ];
+    if (!allowed.includes(raw as RosterSortMode)) return;
+    stagePrepSortMode = raw as RosterSortMode;
     render();
   });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-party-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = clampPartyPresetIndex(Number(btn.dataset.partyPreset));
+      const r = runLoadPartyPreset(save, idx);
+      save = r.save;
+      partyDraft = new Set(save.party);
+      persist();
+      flash(t("ui.stagePrepDeckLoaded", { n: idx + 1 }));
+      render();
+    });
+  });
+
+  app.querySelector("#btn-party-save-deck")?.addEventListener("click", () => {
+    const draft = ensurePartyDraft();
+    const idx = clampPartyPresetIndex(save.activePartyPreset);
+    const r = runSavePartyPreset(save, idx, {
+      summoner: save.activeSummoner ?? "light",
+      party: [...draft],
+    });
+    save = r.save;
+    persist();
+    if (onboard.step === "party") {
+      patchOnboard({ partySet: true });
+    }
+    flash(t("ui.stagePrepDeckSaved", { n: idx + 1 }));
+    render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-party-info]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const kind = btn.dataset.partyInfo;
+      if (kind === "summoner") {
+        const el = (save.activeSummoner ?? "light") as SummonerElement;
+        stagePrepInfo = { kind: "summoner", element: el };
+        applyStagePrepInfo({ animate: true });
+        return;
+      }
+      if (kind === "monster") {
+        const uid = btn.dataset.partyInfoUid;
+        if (!uid) return;
+        stagePrepInfo = { kind: "monster", uid };
+        applyStagePrepInfo({ animate: true });
+      }
+    });
+  });
+
+  if (view === "party") {
+    const partyScreen = app.querySelector(".party-screen");
+    if (partyScreen) {
+      dematteArtInTree(partyScreen, "img.mon-slot-img, img.stage-prep-slot-img");
+      if (stagePrepInfo) bindStagePrepInfoControls(partyScreen);
+    }
+  }
 
   app.querySelectorAll<HTMLButtonElement>("[data-ban-toggle]").forEach((btn) => {
     if (btn.closest("#stages-region-host")) return;
@@ -12760,11 +14375,25 @@ function bind(): void {
     applyStagesRegionOpen();
   }
 
-  app.querySelectorAll<HTMLButtonElement>(".board .cell").forEach((btn) => {
-    btn.addEventListener("click", () => {
+  const boardHit = app.querySelector<HTMLElement>(".board-frame .board-hit");
+  if (boardHit) {
+    boardHit.addEventListener("pointerup", (ev) => {
+      if (ev.button != null && ev.button !== 0) return;
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const btn = t.closest<HTMLButtonElement>("button.cell.is-placeable");
+      if (!btn || btn.disabled || !boardHit.contains(btn)) return;
       onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
     });
-  });
+  } else {
+    app.querySelectorAll<HTMLButtonElement>(".board .cell").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
+      });
+    });
+  }
+
+  bindStonePickTaps();
 
   app.querySelectorAll<HTMLButtonElement>(".suggest-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -12778,7 +14407,7 @@ function bind(): void {
       if (
         !battle ||
         battle.phase !== "await_skill" ||
-        autoMode ||
+        (autoMode && battleAutoOptions.combat) ||
         battleFxBusy
       ) {
         render();
@@ -12810,7 +14439,12 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-skill]").forEach((btn) => {
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      if (!battle || battle.phase !== "await_skill" || autoMode || battleFxBusy)
+      if (
+        !battle ||
+        battle.phase !== "await_skill" ||
+        (autoMode && battleAutoOptions.combat) ||
+        battleFxBusy
+      )
         return;
       const idx = Number(btn.dataset.skill);
       if (!Number.isFinite(idx)) return;
@@ -12828,7 +14462,7 @@ function bind(): void {
         if (
           !battle ||
           battle.phase !== "await_skill" ||
-          autoMode ||
+          (autoMode && battleAutoOptions.combat) ||
           battleFxBusy
         )
           return;
@@ -12854,6 +14488,37 @@ function bind(): void {
     if (autoMode) scheduleAuto();
   });
 
+  app.querySelector("#btn-auto-settings")?.addEventListener("click", () => {
+    battleAutoSettingsOpen = !battleAutoSettingsOpen;
+    render();
+  });
+
+  app.querySelector("[data-auto-settings-close]")?.addEventListener("click", () => {
+    battleAutoSettingsOpen = false;
+    render();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-auto-option]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const option = btn.dataset.autoOption;
+      if (option === "stone") {
+        battleAutoOptions = { ...battleAutoOptions, stone: !battleAutoOptions.stone };
+      } else if (option === "combat") {
+        battleAutoOptions = {
+          ...battleAutoOptions,
+          combat: !battleAutoOptions.combat,
+        };
+      } else if (option === "all") {
+        const enabled = !(battleAutoOptions.stone && battleAutoOptions.combat);
+        battleAutoOptions = { stone: enabled, combat: enabled };
+      } else {
+        return;
+      }
+      render();
+      if (autoMode) scheduleAuto();
+    });
+  });
+
   app.querySelector("#btn-auto-toggle")?.addEventListener("click", () => {
     if (!battle || battle.finishReason) return;
     autoMode = !autoMode;
@@ -12871,10 +14536,7 @@ function bind(): void {
     clearAutoTimer();
     if (battle?.finishReason) grantRewardIfNeeded();
     if (view === "result") {
-      battle = null;
-      dmgFloats = [];
-      view = "stages";
-      render();
+      leaveResultView("stages");
       return;
     }
     battle = null;
@@ -12893,6 +14555,7 @@ function bind(): void {
   });
 
   app.querySelector("#btn-result-onboard")?.addEventListener("click", () => {
+    enqueueBuildingUnlocks(lastReward?.unlockedBuildingIds);
     battle = null;
     dmgFloats = [];
     lastReward = null;
@@ -12900,6 +14563,7 @@ function bind(): void {
     lastScrollPremiumGain = 0;
     currentStage = null;
     runOnboardCta();
+    showNextBuildingUnlockModal();
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-result-battle]").forEach((btn) => {
@@ -12913,6 +14577,10 @@ function bind(): void {
         btn.dataset.resultDiff === "hard" || btn.dataset.resultDiff === "hell"
           ? btn.dataset.resultDiff
           : "normal";
+      enqueueBuildingUnlocks(lastReward?.unlockedBuildingIds);
+      lastReward = null;
+      lastScrollGain = 0;
+      lastScrollPremiumGain = 0;
       battle = null;
       dmgFloats = [];
       startBattle(next, diff);
@@ -12922,13 +14590,16 @@ function bind(): void {
   app.querySelector("#btn-result-prep")?.addEventListener("click", () => {
     const stage = currentStage;
     if (!stage) {
-      view = "stages";
-      render();
+      leaveResultView("stages");
       return;
     }
     const region = stagesRegions().find((candidate) =>
       candidate.stages.some((candidateStage) => candidateStage.id === stage.id),
     );
+    enqueueBuildingUnlocks(lastReward?.unlockedBuildingIds);
+    lastReward = null;
+    lastScrollGain = 0;
+    lastScrollPremiumGain = 0;
     battle = null;
     dmgFloats = [];
     view = "stages";
@@ -12936,6 +14607,7 @@ function bind(): void {
     stageEntryId = null;
     render();
     if (region) openStagePrep(stage);
+    showNextBuildingUnlockModal();
   });
 
   if (view === "battle") {
@@ -12944,6 +14616,7 @@ function bind(): void {
     // Painted battle stills are already transparent — dematte punches dark cloth.
     dematteArtInTree(app, "img.battle-unit-img:not([data-still-front])");
     void mountBattleSpines(app);
+    requestAnimationFrame(() => refreshDmgLayer());
     // One-shot enter fade; soft patches strip this class.
     queueMicrotask(() => {
       app.querySelector(".battle-screen")?.classList.remove("battle-screen--enter");

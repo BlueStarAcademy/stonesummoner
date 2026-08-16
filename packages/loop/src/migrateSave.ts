@@ -4,9 +4,10 @@ import {
   normalizeSummonerGear,
   resolveMonsterId,
 } from "stonesummoner-data";
-import { tickProduction } from "stonesummoner-home";
+import { energyMaxForLevel, tickProduction } from "stonesummoner-home";
 import {
   createNewSave,
+  createEmptySummonerMagicLoadouts,
   createSummonerRoster,
   MAX_SUMMONER_AWAKEN,
   normalizePartyPresets,
@@ -53,12 +54,27 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     skillLevels: (m.skillLevels ?? [1, 1, 1]) as [number, number, number],
     symbolSlots: m.symbolSlots ?? [null, null, null, null, null, null],
   }));
-  const island = tickProduction({
+  const islandRaw = {
     ...base.island,
     ...p.island,
     summonerExp: p.island.summonerExp ?? 0,
-    energyMax: p.island.energyMax ?? 100,
     energyUpdatedAt: p.island.energyUpdatedAt ?? Date.now(),
+  };
+  const accountLv = Math.max(
+    1,
+    Math.floor(islandRaw.summonerLevel ?? 1),
+    ...(["fire", "water", "wind", "light", "dark"] as const).map((el) => {
+      const slot = p.summoners?.[el];
+      return typeof slot?.level === "number" ? Math.floor(slot.level) : 1;
+    }),
+  );
+  const targetMax = energyMaxForLevel(accountLv);
+  const island = tickProduction({
+    ...islandRaw,
+    energyMax: Math.max(
+      targetMax,
+      typeof p.island.energyMax === "number" ? p.island.energyMax : targetMax,
+    ),
   });
   const activeSummoner: SummonerElement = (
     ["fire", "water", "wind", "light", "dark"] as const
@@ -71,6 +87,12 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     island,
     symbols: p.symbols?.length ? p.symbols : base.symbols,
     clearedStages: p.clearedStages ?? [],
+    clearedHardStages: Array.isArray(p.clearedHardStages)
+      ? p.clearedHardStages.filter((id): id is string => typeof id === "string")
+      : [],
+    clearedHellStages: Array.isArray(p.clearedHellStages)
+      ? p.clearedHellStages.filter((id): id is string => typeof id === "string")
+      : [],
     roster,
     party,
     scrolls: typeof p.scrolls === "number" ? p.scrolls : base.scrolls,
@@ -143,6 +165,20 @@ export function migrateSave(raw: unknown): PlayerSave | null {
         };
       }
       return magicBase;
+    })(),
+    summonerMagicLoadouts: (() => {
+      const baseLoadouts = createEmptySummonerMagicLoadouts();
+      const rawLoadouts = p.summonerMagicLoadouts;
+      if (!rawLoadouts || typeof rawLoadouts !== "object") return baseLoadouts;
+      for (const el of ["fire", "water", "wind", "light", "dark"] as const) {
+        const raw = (rawLoadouts as Record<string, unknown>)[el];
+        if (!Array.isArray(raw)) continue;
+        baseLoadouts[el] = [
+          typeof raw[0] === "string" ? raw[0] : null,
+          typeof raw[1] === "string" ? raw[1] : null,
+        ];
+      }
+      return baseLoadouts;
     })(),
     equipVaultWeekKey:
       typeof p.equipVaultWeekKey === "string" ? p.equipVaultWeekKey : null,

@@ -1,11 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ENERGY_MAX,
   PHASE1_BUILDINGS,
   addSummonerExp,
   buildingUpgradeManaCost,
   collectMana,
   createStarterIsland,
+  energyMaxForLevel,
   energyRegenRemainingMs,
   hasBuilding,
   productionStorageCap,
@@ -101,9 +103,31 @@ describe("Phase1 island", () => {
 
   it("levels summoner from exp", () => {
     const island = createStarterIsland(0);
-    const r = addSummonerExp(island, 250);
+    const r = addSummonerExp(island, 510);
     assert.equal(r.levelsGained, 2);
     assert.equal(r.island.summonerLevel, 3);
-    assert.equal(r.island.summonerExp, 50);
+    assert.equal(r.island.summonerExp, 0);
+  });
+
+  it("scales energy max with summoner level", () => {
+    assert.equal(energyMaxForLevel(1), ENERGY_MAX);
+    assert.equal(energyMaxForLevel(2), ENERGY_MAX + 2);
+    assert.equal(energyMaxForLevel(10), ENERGY_MAX + 18);
+    const island = createStarterIsland(0);
+    const r = addSummonerExp(island, 510);
+    assert.equal(r.island.energyMax, energyMaxForLevel(3));
+  });
+
+  it("preserves overflow energy above max during regen ticks", () => {
+    let island = createStarterIsland(0);
+    island = {
+      ...island,
+      energy: 120,
+      energyMax: 100,
+      energyUpdatedAt: 0,
+    };
+    island = tickProduction(island, 180_000 * 10);
+    assert.equal(island.energy, 120);
+    assert.equal(energyRegenRemainingMs(island, 180_000 * 10), null);
   });
 });

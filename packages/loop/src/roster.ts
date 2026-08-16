@@ -4,7 +4,7 @@ export interface OwnedMonster {
   uid: string;
   monsterId: string;
   level: number;
-  /** Battle EXP toward next level (0 .. MONSTER_EXP_PER_LEVEL-1). */
+  /** Battle EXP toward the next level (uses grade table). */
   exp?: number;
   /** Equipped symbol instance ids by slot index 0..5 (slot 1..6). */
   symbolSlots: (string | null)[];
@@ -16,20 +16,49 @@ export interface OwnedMonster {
   skillLevels: [number, number, number];
 }
 
-export const MAX_MONSTER_LEVEL = 15;
-export const MONSTER_EXP_PER_LEVEL = 100;
+/** Highest monster level supported by the Summoners War grade table. */
+export const MAX_MONSTER_LEVEL = 40;
+/** @deprecated Use monsterExpToNext; monster EXP depends on grade and level. */
+export const MONSTER_EXP_PER_LEVEL = 460;
 export const MAX_EVOLVE = 2;
 export const MAX_MONSTER_AWAKEN = 1;
 export const MAX_SKILL_LEVEL = 3;
 /** ATK/HP multiplier when awaken >= 1. */
 export const MONSTER_AWAKEN_STAT_PCT = 0.08;
 
+const MONSTER_EXP_TABLE: readonly (readonly number[])[] = [
+  [460, 516, 579, 650, 728, 818, 918, 1029, 1155, 1296, 1455, 1631, 1831, 2054],
+  [552, 619, 695, 779, 875, 981, 1102, 1235, 1386, 1555, 1745, 1958, 2197, 2465, 2765, 3103, 3481, 3906, 4423],
+  [662, 743, 834, 936, 1049, 1178, 1321, 1483, 1663, 1866, 2094, 2350, 2636, 2957, 3319, 3723, 4178, 4687, 5307, 6009, 6802, 7703, 8720, 9962],
+  [796, 892, 1002, 1124, 1261, 1415, 1587, 1781, 1998, 2243, 2515, 2823, 3167, 3553, 3987, 4473, 5019, 5631, 6376, 7219, 8172, 9254, 10476, 11969, 13673, 15619, 17844, 20386, 23495],
+  [952, 1068, 1199, 1344, 1509, 1693, 1899, 2131, 2392, 2682, 3010, 3378, 3789, 4252, 4770, 5352, 6006, 6738, 7628, 8638, 9779, 11072, 12535, 14321, 16360, 18690, 21350, 24392, 28113, 32404, 37348, 43048, 49617, 57188],
+  [1150, 1290, 1447, 1624, 1823, 2044, 2294, 2574, 2888, 3240, 3635, 4079, 4576, 5135, 5762, 6464, 7252, 8138, 9214, 10431, 11811, 13371, 15140, 17296, 19758, 22572, 25786, 29458, 33954, 39134, 45107, 51990, 59924, 69068, 76085, 83816, 92332, 101712, 112046],
+] as const;
+
+/** Current grade includes the existing evolution stage. */
+export function monsterGrade(owned: OwnedMonster): number {
+  const naturalStars = getMonster(owned.monsterId)?.naturalStars ?? 1;
+  return Math.max(1, Math.min(6, naturalStars + (owned.evolve ?? 0)));
+}
+
+/** Summoners War grade cap: 1★→15 through 6★→40. */
+export function monsterMaxLevel(owned: OwnedMonster): number {
+  return 10 + monsterGrade(owned) * 5;
+}
+
+/** EXP required to advance this monster from `level` to `level + 1`. */
+export function monsterExpToNext(owned: OwnedMonster, level = owned.level): number {
+  const current = Math.max(1, Math.floor(level));
+  return MONSTER_EXP_TABLE[monsterGrade(owned) - 1]?.[current - 1] ?? 0;
+}
+
 export function addOwnedMonsterExp(
   owned: OwnedMonster,
   amount: number,
 ): { monster: OwnedMonster; levelsGained: number } {
   const gain = Math.max(0, Math.floor(amount));
-  if (gain <= 0 || owned.level >= MAX_MONSTER_LEVEL) {
+  const maxLevel = monsterMaxLevel(owned);
+  if (gain <= 0 || owned.level >= maxLevel) {
     return {
       monster: { ...owned, exp: owned.exp ?? 0 },
       levelsGained: 0,
@@ -38,12 +67,14 @@ export function addOwnedMonsterExp(
   let exp = (owned.exp ?? 0) + gain;
   let level = owned.level;
   let levelsGained = 0;
-  while (exp >= MONSTER_EXP_PER_LEVEL && level < MAX_MONSTER_LEVEL) {
-    exp -= MONSTER_EXP_PER_LEVEL;
+  while (level < maxLevel) {
+    const required = monsterExpToNext(owned, level);
+    if (required <= 0 || exp < required) break;
+    exp -= required;
     level += 1;
     levelsGained += 1;
   }
-  if (level >= MAX_MONSTER_LEVEL) exp = 0;
+  if (level >= maxLevel) exp = 0;
   return {
     monster: { ...owned, level, exp },
     levelsGained,

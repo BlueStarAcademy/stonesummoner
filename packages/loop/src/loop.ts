@@ -63,6 +63,7 @@ import {
   MAX_MAGIC_RANK,
   tryUnlockMagicBranch,
   unlockedMagicSkills,
+  magicTier2Unlocked,
   isWeekdayStageOpenToday,
   WEEKDAY_EVOLVE_MAT_DROP,
   WEEKDAY_SKILL_MAT_DROP,
@@ -83,17 +84,18 @@ import {
 } from "stonesummoner-data";
 export { MAX_GEAR_BAG };
 import {
-  addSummonerExp,
   collectCrystal,
   collectMana,
   createStarterIsland,
+  energyMaxForLevel,
   runWish,
   syncBuildingUnlocks,
   tickProduction,
   upgradeBuilding,
   spendEnergy,
   todayKey,
-  SUMMONER_EXP_PER_LEVEL,
+  ENERGY_MAX,
+  summonerExpToNext,
   type BuildingId,
   type IslandState,
 } from "stonesummoner-home";
@@ -107,7 +109,8 @@ import {
   evolveMinLevel,
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
-  MAX_MONSTER_LEVEL,
+  monsterExpToNext,
+  monsterMaxLevel,
   MAX_SKILL_LEVEL,
   nextUid,
   normalizeSkillLevels,
@@ -135,12 +138,17 @@ import {
   type OwnedMonster,
   type ScrollKind,
   addOwnedMonsterExp,
-  MONSTER_EXP_PER_LEVEL,
 } from "./roster.js";
-import { expForStage, isStageUnlocked, stageUnlockLabel } from "./progress.js";
+import {
+  expForStage,
+  isStageUnlocked,
+  stageUnlockLabel,
+  type ScenarioDifficulty,
+} from "./progress.js";
 
 export type { OwnedMonster, ScrollKind } from "./roster.js";
 export {
+  addOwnedMonsterExp,
   describeOwned,
   enhanceManaCost,
   evolveCrystalCost,
@@ -149,8 +157,11 @@ export {
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
   MAX_MONSTER_LEVEL,
-  MAX_SKILL_LEVEL,
   MONSTER_EXP_PER_LEVEL,
+  monsterExpToNext,
+  monsterGrade,
+  monsterMaxLevel,
+  MAX_SKILL_LEVEL,
   displayedMonsterStars,
   monsterAwakenCrystalCost,
   monsterAwakenManaCost,
@@ -171,7 +182,12 @@ export {
   SUMMON_MULTI_COUNT,
   SUMMON_SCROLL_COST,
 } from "./roster.js";
-export { isStageUnlocked, stageUnlockLabel } from "./progress.js";
+export {
+  expForStage,
+  isStageUnlocked,
+  stageUnlockLabel,
+} from "./progress.js";
+export type { ScenarioDifficulty } from "./progress.js";
 
 /** Shared weekly entry budget across equip vault stages. */
 export const EQUIP_VAULT_WEEKLY_LIMIT = 5;
@@ -650,6 +666,22 @@ export function createEmptySummonerMagic(): Record<
   };
 }
 
+/** Two battle-ready magic skills per summoner element. */
+export type SummonerMagicLoadout = [string | null, string | null];
+
+export function createEmptySummonerMagicLoadouts(): Record<
+  SummonerElement,
+  SummonerMagicLoadout
+> {
+  return {
+    fire: [null, null],
+    water: [null, null],
+    wind: [null, null],
+    light: [null, null],
+    dark: [null, null],
+  };
+}
+
 export function accountSummonerLevel(
   summoners: Record<SummonerElement, ElementSummonerProfile>,
 ): number {
@@ -702,6 +734,17 @@ export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
   for (const el of SUMMONER_ELEMENTS) {
     if (!summonerMagic[el]) summonerMagic[el] = emptyMagicProgress();
   }
+  const summonerMagicLoadouts = {
+    ...createEmptySummonerMagicLoadouts(),
+    ...(save.summonerMagicLoadouts ?? {}),
+  };
+  for (const el of SUMMONER_ELEMENTS) {
+    const loadout = summonerMagicLoadouts[el];
+    summonerMagicLoadouts[el] = [
+      typeof loadout?.[0] === "string" ? loadout[0] : null,
+      typeof loadout?.[1] === "string" ? loadout[1] : null,
+    ];
+  }
   const gearBag = (save.gearBag ?? []).map((g) =>
     normalizeGearPiece(g, g.slot),
   );
@@ -711,6 +754,7 @@ export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
     activeSummoner,
     summonerAwaken: active.awaken,
     summonerMagic,
+    summonerMagicLoadouts,
     gear: activeGear,
     gearBag,
     island: {
@@ -732,15 +776,25 @@ export function setActiveSummoner(
 export function addActiveSummonerExp(
   save: PlayerSave,
   amount: number,
-): { save: PlayerSave; levelsGained: number } {
+  now = Date.now(),
+): {
+  save: PlayerSave;
+  levelsGained: number;
+  accountLevelsGained: number;
+  unlockedBuildingIds: BuildingId[];
+} {
   const synced = syncSummonerMirrors(save);
+  const beforeAccountLv = accountSummonerLevel(
+    synced.summoners ?? createSummonerRoster(),
+  );
+  const beforeBuildingIds = new Set(synced.island.buildings.map((b) => b.id));
   const el = synced.activeSummoner;
   const cur = synced.summoners[el];
   let exp = cur.exp + amount;
   let level = cur.level;
   let levelsGained = 0;
-  while (exp >= 100) {
-    exp -= 100;
+  while (exp >= summonerExpToNext(level)) {
+    exp -= summonerExpToNext(level);
     level += 1;
     levelsGained += 1;
   }
@@ -748,9 +802,25 @@ export function addActiveSummonerExp(
     ...synced.summoners,
     [el]: { ...cur, level, exp },
   };
+  let next = syncSummonerMirrors({ ...synced, summoners });
+  const afterAccountLv = accountSummonerLevel(
+    next.summoners ?? createSummonerRoster(),
+  );
+  const accountLevelsGained = Math.max(0, afterAccountLv - beforeAccountLv);
+  const targetMax = energyMaxForLevel(afterAccountLv);
+  let island = {
+    ...next.island,
+    energyMax: Math.max(next.island.energyMax ?? ENERGY_MAX, targetMax),
+  };
+  island = syncBuildingUnlocks(island, now);
+  const unlockedBuildingIds = island.buildings
+    .map((b) => b.id)
+    .filter((id) => !beforeBuildingIds.has(id));
   return {
-    save: syncSummonerMirrors({ ...synced, summoners }),
+    save: { ...next, island },
     levelsGained,
+    accountLevelsGained,
+    unlockedBuildingIds,
   };
 }
 
@@ -771,6 +841,10 @@ export interface PlayerSave {
   island: IslandState;
   symbols: SymbolInstance[];
   clearedStages: string[];
+  /** Scenario stages cleared on Hard (Hell unlock gate). */
+  clearedHardStages: string[];
+  /** Scenario stages cleared on Hell. */
+  clearedHellStages: string[];
   roster: OwnedMonster[];
   /** Up to 4 owned monster uids for battle. */
   party: string[];
@@ -797,6 +871,8 @@ export interface PlayerSave {
   skillTree: string[];
   /** Phase 2 per-element magic skill ranks + branch. */
   summonerMagic: Record<SummonerElement, SummonerMagicProgress>;
+  /** Four equipped magic skills per summoner element. */
+  summonerMagicLoadouts: Record<SummonerElement, SummonerMagicLoadout>;
   /** Phase 2: arena glory currency. */
   gloryPoints: number;
   /** Phase 2: magic-circle trial tokens. */
@@ -905,6 +981,8 @@ export interface BattleReward {
   levelsGained?: number;
   /** User / summoner / party monster EXP progress for the result screen. */
   expTracks?: ExpTrackGain[];
+  /** Island buildings unlocked by account-level gain this battle. */
+  unlockedBuildingIds?: BuildingId[];
 }
 
 export interface LoopStepResult {
@@ -912,6 +990,8 @@ export interface LoopStepResult {
   message: string;
   reward?: BattleReward;
   battleLog?: string[];
+  /** Island buildings unlocked by account-level gain this step. */
+  unlockedBuildingIds?: BuildingId[];
 }
 
 function resolveOwned(
@@ -950,6 +1030,11 @@ export function awakenManaCost(awaken: number): number {
 
 export function awakenCrystalCost(awaken: number): number {
   return 3 + awaken * 2;
+}
+
+/** Elemental essence required for summon awaken → awaken+1. */
+export function summonerAwakenMatCost(awaken: number): number {
+  return 8 + Math.max(0, awaken) * 4;
 }
 
 /** Minimum summoner level to attempt this awaken step. */
@@ -1034,11 +1119,12 @@ function enemySummonerProfile(stage: StageDef): {
   const awaken = isPvp
     ? Math.min(4, Math.floor(stage.stage) + 1)
     : Math.min(3, Math.floor(stage.stage / 2));
-  const weakBoard = !isPvp && stage.stage <= 2;
+  // Keep early scenario summoners soft — stage 3 was a hard cliff with full sense.
+  const weakBoard = !isPvp && stage.stage <= 3;
   const skillTree: string[] = [];
   if (stage.stage >= 2 || isPvp) skillTree.push("root_power");
-  if (stage.stage >= 3 || isPvp) skillTree.push("root_mana");
-  if (stage.stage >= 4 || (isPvp && stage.stage >= 2)) {
+  if (stage.stage >= 4 || isPvp) skillTree.push("root_mana");
+  if (stage.stage >= 5 || (isPvp && stage.stage >= 2)) {
     skillTree.push("power_focus");
   }
   return { weakBoard, awaken, skillTree };
@@ -1168,6 +1254,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     island: createStarterIsland(now),
     symbols: [s1, s2],
     clearedStages: [],
+    clearedHardStages: [],
+    clearedHellStages: [],
     roster,
     party,
     partyPresets: [
@@ -1188,6 +1276,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     activeSummoner: "light",
     skillTree: [],
     summonerMagic: createEmptySummonerMagic(),
+    summonerMagicLoadouts: createEmptySummonerMagicLoadouts(),
     gloryPoints: 0,
     jinmunStones: 0,
     gloryLevels: {},
@@ -1843,6 +1932,7 @@ export function runPracticeDojo(
         ? ` · 소환사 Lv.${nextActive.level}`
         : ""
     }${missionNote}`,
+    unlockedBuildingIds: leveled.unlockedBuildingIds,
   };
 }
 
@@ -2170,7 +2260,7 @@ export function runSummon(
 }
 
 /**
- * Enhance at 강화진 — spend mana, +1 level (cap MAX_MONSTER_LEVEL).
+ * Enhance at 강화진 — spend mana, +1 level (up to the current grade cap).
  * Like Summoners War power-up: also randomly levels one non-max skill.
  */
 export function runEnhance(
@@ -2181,10 +2271,11 @@ export function runEnhance(
   if (!owned) {
     return { save, message: `소환수를 찾을 수 없음: ${uidOrIndex}` };
   }
-  if (owned.level >= MAX_MONSTER_LEVEL) {
+  const maxLevel = monsterMaxLevel(owned);
+  if (owned.level >= maxLevel) {
     return {
       save,
-      message: `${describeOwned(owned)} 이미 최대 레벨(${MAX_MONSTER_LEVEL})`,
+      message: `${describeOwned(owned)} 이미 최대 레벨(${maxLevel})`,
     };
   }
 
@@ -2222,6 +2313,106 @@ export function runEnhance(
   };
 }
 
+/** EXP a monster contributes when consumed as power-up material. */
+export function monsterPowerUpExp(fodder: OwnedMonster): number {
+  const stars = Math.max(1, getMonster(fodder.monsterId)?.naturalStars ?? 1);
+  return stars * 35 + fodder.level * 12 + (fodder.evolve ?? 0) * 25;
+}
+
+/** Mana cost for a material-based monster power-up. */
+export function monsterPowerUpManaCost(fodders: readonly OwnedMonster[]): number {
+  const exp = fodders.reduce((total, fodder) => total + monsterPowerUpExp(fodder), 0);
+  return Math.max(100, Math.ceil(exp * 0.5));
+}
+
+/**
+ * Consume owned monsters to grant EXP to a target.
+ * Matching monster IDs additionally raise one non-max target skill at random.
+ */
+export function runPowerUpMonster(
+  save: PlayerSave,
+  targetUidOrIndex: string,
+  fodderUidOrIndices: readonly string[],
+  rng: () => number = Math.random,
+): LoopStepResult {
+  const target = resolveOwned(save, targetUidOrIndex);
+  if (!target) {
+    return { save, message: `소환수를 찾을 수 없음: ${targetUidOrIndex}` };
+  }
+  const maxLevel = monsterMaxLevel(target);
+  if (target.level >= maxLevel) {
+    return {
+      save,
+      message: `${describeOwned(target)} 이미 최대 레벨(${maxLevel})`,
+    };
+  }
+
+  const uniqueIds = [...new Set(fodderUidOrIndices)];
+  if (uniqueIds.length === 0) {
+    return { save, message: "강화 재료 소환수를 선택하세요" };
+  }
+  if (uniqueIds.includes(target.uid)) {
+    return { save, message: "대상 소환수는 재료로 사용할 수 없습니다" };
+  }
+  const partyBlocked = uniqueIds.find((id) => save.party.includes(id));
+  if (partyBlocked) {
+    const blocked = resolveOwned(save, partyBlocked);
+    return {
+      save,
+      message: blocked
+        ? `${describeOwned(blocked)}는 파티 소환수라 재료로 사용할 수 없습니다`
+        : "파티 소환수는 재료로 사용할 수 없습니다",
+    };
+  }
+  const fodders = uniqueIds.map((id) => resolveOwned(save, id));
+  if (fodders.some((fodder) => !fodder)) {
+    return { save, message: "강화 재료 소환수를 찾을 수 없습니다" };
+  }
+  const materials = fodders as OwnedMonster[];
+  const cost = monsterPowerUpManaCost(materials);
+  if (save.island.mana < cost) {
+    return {
+      save,
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+
+  const expGain = materials.reduce(
+    (total, fodder) => total + monsterPowerUpExp(fodder),
+    0,
+  );
+  const powered = addOwnedMonsterExp(target, expGain).monster;
+  const nextLevels = normalizeSkillLevels(target.skillLevels);
+  let skillUps = 0;
+  for (const fodder of materials) {
+    if (fodder.monsterId !== target.monsterId) continue;
+    const skillIdx = pickRandomSkillUpIndex(nextLevels, rng);
+    if (skillIdx == null) continue;
+    nextLevels[skillIdx] = (nextLevels[skillIdx] ?? 1) + 1;
+    skillUps += 1;
+  }
+  const updated: OwnedMonster = {
+    ...powered,
+    skillLevels: nextLevels,
+  };
+  const consumed = new Set(uniqueIds);
+  const roster = save.roster
+    .filter((monster) => !consumed.has(monster.uid))
+    .map((monster) => (monster.uid === target.uid ? updated : monster));
+  const party = save.party.filter((uid) => !consumed.has(uid));
+  const skillNote = skillUps > 0 ? ` · 동일 소환수 스킬 +${skillUps}` : "";
+
+  return {
+    save: {
+      ...save,
+      island: { ...save.island, mana: save.island.mana - cost },
+      roster,
+      party,
+    },
+    message: `강화: ${describeOwned(updated)} · EXP +${expGain}${skillNote} (재료 ${materials.length} · −골드 ${cost})`,
+  };
+}
+
 /**
  * Feed a same-species duplicate into target (Summoners War-style).
  * Consumes fodder and randomly levels one non-max skill on the target.
@@ -2241,6 +2432,12 @@ export function runFeedSameMonster(
   }
   if (target.uid === fodder.uid) {
     return { save, message: "같은 소환수는 재료로 쓸 수 없습니다" };
+  }
+  if (save.party.includes(fodder.uid)) {
+    return {
+      save,
+      message: `${describeOwned(fodder)}는 파티 소환수라 재료로 사용할 수 없습니다`,
+    };
   }
   if (target.monsterId !== fodder.monsterId) {
     return { save, message: "동일 소환수만 스킬 강화 재료로 사용할 수 있습니다" };
@@ -2665,6 +2862,9 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
   }
   const manaCost = awakenManaCost(cur);
   const crystalCost = awakenCrystalCost(cur);
+  const matCost = summonerAwakenMatCost(cur);
+  const mats = synced.awakenMats ?? {};
+  const haveMat = mats[el] ?? 0;
   if (synced.island.mana < manaCost) {
     return {
       save: synced,
@@ -2677,22 +2877,33 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
       message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${synced.island.crystal})`,
     };
   }
+  if (haveMat < matCost) {
+    return {
+      save: synced,
+      message: `${SUMMONER_ELEMENT_LABEL[el]} 정수 부족 (필요 ${matCost}, 보유 ${haveMat})`,
+    };
+  }
   const next = cur + 1;
   const summoners = {
     ...synced.summoners,
     [el]: { ...active, awaken: next },
   };
+  const awakenMats = {
+    ...mats,
+    [el]: haveMat - matCost,
+  };
   return {
     save: syncSummonerMirrors({
       ...synced,
       summoners,
+      awakenMats,
       island: {
         ...synced.island,
         mana: synced.island.mana - manaCost,
         crystal: synced.island.crystal - crystalCost,
       },
     }),
-    message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 각성 +${next} (−골드 ${manaCost} · −크리스탈 ${crystalCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
+    message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 각성 +${next} (−골드 ${manaCost} · −크리스탈 ${crystalCost} · −정수 ${matCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
   };
 }
 
@@ -2776,6 +2987,24 @@ export function runEnhanceMagicSkill(
       message: `${def.nameKo} — B 기초를 +${MAX_MAGIC_RANK}까지 강화해 해금`,
     };
   }
+  if (
+    (def.slot === "A3" || def.slot === "A4") &&
+    (prog.branch !== "A" || !magicTier2Unlocked(el, prog))
+  ) {
+    return {
+      save: synced,
+      message: `${def.nameKo} — A1·A2를 +${MAX_MAGIC_RANK}까지 강화해 해금`,
+    };
+  }
+  if (
+    (def.slot === "B3" || def.slot === "B4") &&
+    (prog.branch !== "B" || !magicTier2Unlocked(el, prog))
+  ) {
+    return {
+      save: synced,
+      message: `${def.nameKo} — B1·B2를 +${MAX_MAGIC_RANK}까지 강화해 해금`,
+    };
+  }
   const cur = magicRank(prog, skillId);
   if (cur >= MAX_MAGIC_RANK) {
     return {
@@ -2797,12 +3026,16 @@ export function runEnhanceMagicSkill(
       message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${synced.island.crystal})`,
     };
   }
+  const beforeTier2 = magicTier2Unlocked(el, prog);
   prog.ranks[skillId] = cur + 1;
   const nextProg = tryUnlockMagicBranch(el, prog);
+  const afterTier2 = magicTier2Unlocked(el, nextProg);
   const unlockedNote =
     !prog.branch && nextProg.branch
       ? ` · ${nextProg.branch} 상위 스킬 해금`
-      : "";
+      : !beforeTier2 && afterTier2
+        ? ` · ${nextProg.branch ?? ""} 심화 스킬 해금`
+        : "";
   return {
     save: syncSummonerMirrors({
       ...synced,
@@ -3016,7 +3249,8 @@ export function runClaimMail(
   const island = {
     ...save.island,
     mana: save.island.mana + def.mana,
-    energy: Math.min(max, save.island.energy + def.energy),
+    // Mail may exceed energyMax (overflow allowed).
+    energy: save.island.energy + def.energy,
   };
   const bits: string[] = [];
   if (def.mana > 0) bits.push(`골드 +${def.mana}`);
@@ -3027,7 +3261,11 @@ export function runClaimMail(
       island,
       claimedMailIds: [...claimed, mailId],
     },
-    message: `우편 수령: ${bits.join(" · ") || "보상 없음"}`,
+    message: `우편 수령: ${bits.join(" · ") || "보상 없음"}${
+      def.energy > 0 && island.energy > max
+        ? ` · 보유 ${Math.floor(island.energy)}/${max}`
+        : ""
+    }`,
   };
 }
 
@@ -3424,14 +3662,25 @@ export function createStageBattle(
 
   const modules = modulesForStage(stage);
   const enemyProfile = enemySummonerProfile(stage);
-  const allyMagic = unlockedMagicSkills(activeEl, magicProg).map((sk) => ({
-    id: sk.id,
-    nameKo: sk.nameKo,
-    manaCostFrac: sk.manaCostFrac,
-    kind: sk.kind,
-    power: magicSkillPower(sk, magicRank(magicProg, sk.id)),
-    turns: sk.turns,
-  }));
+  const unlockedAllyMagic = unlockedMagicSkills(activeEl, magicProg);
+  const equippedMagicIds = new Set(
+    (save.summonerMagicLoadouts?.[activeEl] ?? []).filter(
+      (id): id is string => typeof id === "string",
+    ),
+  );
+  const allyMagic = unlockedAllyMagic
+    .filter((sk) =>
+      // Preserve legacy saves until the player first changes their loadout.
+      equippedMagicIds.size === 0 || equippedMagicIds.has(sk.id),
+    )
+    .map((sk) => ({
+      id: sk.id,
+      nameKo: sk.nameKo,
+      manaCostFrac: sk.manaCostFrac,
+      kind: sk.kind,
+      power: magicSkillPower(sk, magicRank(magicProg, sk.id)),
+      turns: sk.turns,
+    }));
   const enemyEl: Element = "dark";
   const enemyMagic = unlockedMagicSkills(enemyEl, emptyMagicProgress()).map(
     (sk) => ({
@@ -3502,6 +3751,7 @@ export function applyRewards(
   stage: StageDef,
   victory: boolean,
   rng: () => number = Math.random,
+  difficulty: ScenarioDifficulty = "normal",
 ): { save: PlayerSave; reward: BattleReward } {
   if (!victory) {
     return {
@@ -3535,7 +3785,7 @@ export function applyRewards(
   const gloryGain = stage.gloryReward ?? 0;
   const jinmunGain = stage.jinmunReward ?? 0;
   const dropChance = stage.dropChance ?? 0.65;
-  const expGain = expForStage(stage);
+  const expGain = expForStage(stage, difficulty);
   const monsterExpGain = Math.max(1, Math.round(expGain * 0.75));
 
   let working = syncSummonerMirrors({
@@ -3584,7 +3834,7 @@ export function applyRewards(
       beforeExp: beforeActive.exp,
       afterLevel: afterAccountLv,
       afterExp: afterActive.exp,
-      expPerLevel: SUMMONER_EXP_PER_LEVEL,
+      expPerLevel: summonerExpToNext(afterAccountLv),
       levelsGained: Math.max(0, afterAccountLv - beforeAccountLv),
     },
     {
@@ -3596,7 +3846,7 @@ export function applyRewards(
       beforeExp: beforeActive.exp,
       afterLevel: afterActive.level,
       afterExp: afterActive.exp,
-      expPerLevel: SUMMONER_EXP_PER_LEVEL,
+      expPerLevel: summonerExpToNext(afterActive.level),
       levelsGained: leveled.levelsGained,
     },
     ...beforeParty.map((bp) => {
@@ -3612,7 +3862,7 @@ export function applyRewards(
         beforeExp: bp.exp,
         afterLevel: after.level,
         afterExp: after.exp ?? 0,
-        expPerLevel: MONSTER_EXP_PER_LEVEL,
+        expPerLevel: monsterExpToNext(after),
         levelsGained: gainedLevels,
       };
     }),
@@ -3699,6 +3949,18 @@ export function applyRewards(
   const cleared = save.clearedStages.includes(stage.id)
     ? save.clearedStages
     : [...save.clearedStages, stage.id];
+  const clearedHard =
+    difficulty === "hard" || difficulty === "hell"
+      ? save.clearedHardStages?.includes(stage.id)
+        ? (save.clearedHardStages ?? [])
+        : [...(save.clearedHardStages ?? []), stage.id]
+      : (save.clearedHardStages ?? []);
+  const clearedHell =
+    difficulty === "hell"
+      ? save.clearedHellStages?.includes(stage.id)
+        ? (save.clearedHellStages ?? [])
+        : [...(save.clearedHellStages ?? []), stage.id]
+      : (save.clearedHellStages ?? []);
 
   let gloryPoints = (save.gloryPoints ?? 0) + gloryGain;
   let jinmunStones = (save.jinmunStones ?? 0) + jinmunGain;
@@ -3765,13 +4027,16 @@ export function applyRewards(
 
   let awakenMats = { ...(working.awakenMats ?? {}) };
   let skillMats = working.skillMats ?? 0;
-  if (stage.id === "weekday_evolve") {
-    const el = (working.activeSummoner ?? "light") as Element;
+  const awakenDungeonElement = stage.id.match(/^weekday_awaken_(fire|water|wind|light|dark)$/)?.[1] as
+    | Element
+    | undefined;
+  if (awakenDungeonElement) {
+    const el = awakenDungeonElement;
     awakenMats = {
       ...awakenMats,
       [el]: (awakenMats[el] ?? 0) + WEEKDAY_EVOLVE_MAT_DROP,
     };
-    extras.push(`진화재료(${el}) +${WEEKDAY_EVOLVE_MAT_DROP}`);
+    extras.push(`${SUMMONER_ELEMENT_LABEL[el]} 정수 +${WEEKDAY_EVOLVE_MAT_DROP}`);
   } else if (stage.id === "weekday_skill") {
     skillMats += WEEKDAY_SKILL_MAT_DROP;
     extras.push(`스킬재료 +${WEEKDAY_SKILL_MAT_DROP}`);
@@ -3791,6 +4056,8 @@ export function applyRewards(
       gear,
       gearBag,
       clearedStages: cleared,
+      clearedHardStages: clearedHard,
+      clearedHellStages: clearedHell,
       scrolls,
       scrollsPremium,
       gloryPoints,
@@ -3830,6 +4097,7 @@ export function applyRewards(
       summonerExp: expGain,
       levelsGained: leveled.levelsGained,
       expTracks,
+      unlockedBuildingIds: leveled.unlockedBuildingIds,
     },
   };
 }
@@ -3847,6 +4115,7 @@ export function runSortie(
     enemyMonsterIds?: string[];
     rivalId?: string;
     now?: number;
+    difficulty?: ScenarioDifficulty;
   },
 ): LoopStepResult {
   const stage = getStage(stageId);
@@ -3882,11 +4151,19 @@ export function runSortie(
       };
     }
   }
+  const difficulty = opts?.difficulty ?? "normal";
+  const energyCost =
+    stage.mode === "scenario"
+      ? Math.ceil(
+          stage.energyCost *
+            (difficulty === "hell" ? 2 : difficulty === "hard" ? 1.5 : 1),
+        )
+      : stage.energyCost;
   const energy = Math.floor(working.island.energy);
-  if (stage.energyCost > 0 && energy < stage.energyCost) {
+  if (energyCost > 0 && energy < energyCost) {
     return {
       save: working,
-      message: `에너지 부족 (필요 ${stage.energyCost}, 보유 ${energy})`,
+      message: `에너지 부족 (필요 ${energyCost}, 보유 ${energy})`,
     };
   }
   if (!isStageUnlocked(working, stageId)) {
@@ -3907,8 +4184,8 @@ export function runSortie(
   }
 
   const island =
-    stage.energyCost > 0
-      ? spendEnergy(working.island, stage.energyCost)
+    energyCost > 0
+      ? spendEnergy(working.island, energyCost)
       : working.island;
   const mid: PlayerSave = {
     ...working,
@@ -3966,9 +4243,16 @@ export function runSortie(
     banEnemyIds: opts?.banEnemyIds ?? mid.arenaBanIds,
     rng: opts?.rng,
     enemyMonsterIds,
+    difficulty,
   });
   const { victory, turns } = resolveBattleAuto(battle, opts?.maxTurns ?? 80);
-  const { save: next, reward } = applyRewards(mid, stage, victory, opts?.rng);
+  const { save: next, reward } = applyRewards(
+    mid,
+    stage,
+    victory,
+    opts?.rng,
+    difficulty,
+  );
   return {
     save: next,
     message: victory

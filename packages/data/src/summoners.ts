@@ -2,7 +2,17 @@ import type { Element } from "./monsters.js";
 
 export type MagicBranch = "A" | "B";
 
-export type MagicSkillSlot = "A" | "B" | "A1" | "A2" | "B1" | "B2";
+export type MagicSkillSlot =
+  | "A"
+  | "B"
+  | "A1"
+  | "A2"
+  | "A3"
+  | "A4"
+  | "B1"
+  | "B2"
+  | "B3"
+  | "B4";
 
 export type SummonerMagicSkillKind =
   | "aoe_damage"
@@ -140,6 +150,44 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         power: 0.18,
         rankScale: 0.02,
       },
+      A3: {
+        slot: "A3",
+        id: "fire_nova",
+        nameKo: "화염신성",
+        manaCostFrac: 1,
+        kind: "aoe_damage",
+        power: 1.75,
+        turns: 2,
+        rankScale: 0.08,
+      },
+      A4: {
+        slot: "A4",
+        id: "fire_meteor",
+        nameKo: "운석강타",
+        manaCostFrac: 1,
+        kind: "single_damage",
+        power: 2.8,
+        rankScale: 0.12,
+      },
+      B3: {
+        slot: "B3",
+        id: "fire_bloodlust",
+        nameKo: "혈염광기",
+        manaCostFrac: 0.55,
+        kind: "ally_buff_atk",
+        power: 0.3,
+        turns: 3,
+        rankScale: 0.03,
+      },
+      B4: {
+        slot: "B4",
+        id: "fire_overheat",
+        nameKo: "과열증폭",
+        manaCostFrac: 0.6,
+        kind: "amplify",
+        power: 0.26,
+        rankScale: 0.03,
+      },
     },
   },
   water: {
@@ -205,6 +253,43 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         kind: "ally_heal",
         power: 0.22,
         rankScale: 0.025,
+      },
+      A3: {
+        slot: "A3",
+        id: "water_abyss",
+        nameKo: "심연한파",
+        manaCostFrac: 1,
+        kind: "aoe_damage",
+        power: 1.65,
+        turns: 2,
+        rankScale: 0.08,
+      },
+      A4: {
+        slot: "A4",
+        id: "water_geyser",
+        nameKo: "용솟음",
+        manaCostFrac: 1,
+        kind: "single_damage",
+        power: 2.6,
+        rankScale: 0.11,
+      },
+      B3: {
+        slot: "B3",
+        id: "water_bastion",
+        nameKo: "심해성벽",
+        manaCostFrac: 0.5,
+        kind: "ally_shield",
+        power: 0.28,
+        rankScale: 0.03,
+      },
+      B4: {
+        slot: "B4",
+        id: "water_spring",
+        nameKo: "원천회귀",
+        manaCostFrac: 0.55,
+        kind: "ally_heal",
+        power: 0.32,
+        rankScale: 0.03,
       },
     },
   },
@@ -273,6 +358,44 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         turns: 2,
         rankScale: 0.02,
       },
+      A3: {
+        slot: "A3",
+        id: "wind_tempest",
+        nameKo: "태풍참",
+        manaCostFrac: 1,
+        kind: "aoe_damage",
+        power: 1.7,
+        rankScale: 0.08,
+      },
+      A4: {
+        slot: "A4",
+        id: "wind_pierce",
+        nameKo: "풍인관통",
+        manaCostFrac: 0.95,
+        kind: "single_damage",
+        power: 2.55,
+        turns: 2,
+        rankScale: 0.1,
+      },
+      B3: {
+        slot: "B3",
+        id: "wind_purge",
+        nameKo: "진공청소",
+        manaCostFrac: 0.5,
+        kind: "board_clean",
+        power: 1,
+        rankScale: 0,
+      },
+      B4: {
+        slot: "B4",
+        id: "wind_gale",
+        nameKo: "질풍전령",
+        manaCostFrac: 0.5,
+        kind: "ally_buff_spd",
+        power: 0.3,
+        turns: 3,
+        rankScale: 0.03,
+      },
     },
   },
   light: {
@@ -339,6 +462,43 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         power: 0.15,
         turns: 2,
         rankScale: 0.02,
+      },
+      A3: {
+        slot: "A3",
+        id: "light_radiance",
+        nameKo: "성광폭",
+        manaCostFrac: 1,
+        kind: "aoe_damage",
+        power: 1.7,
+        rankScale: 0.08,
+      },
+      A4: {
+        slot: "A4",
+        id: "light_lance",
+        nameKo: "성창강림",
+        manaCostFrac: 1,
+        kind: "single_damage",
+        power: 2.85,
+        rankScale: 0.12,
+      },
+      B3: {
+        slot: "B3",
+        id: "light_renew",
+        nameKo: "축복재생",
+        manaCostFrac: 0.55,
+        kind: "ally_heal",
+        power: 0.32,
+        rankScale: 0.03,
+      },
+      B4: {
+        slot: "B4",
+        id: "light_sanctum",
+        nameKo: "성역수호",
+        manaCostFrac: 0.6,
+        kind: "damage_reduce",
+        power: 0.22,
+        turns: 2,
+        rankScale: 0.025,
       },
     },
   },
@@ -409,6 +569,44 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         turns: 2,
         rankScale: 0.025,
       },
+      A3: {
+        slot: "A3",
+        id: "dark_rift",
+        nameKo: "균열파열",
+        manaCostFrac: 1,
+        kind: "aoe_damage",
+        power: 1.8,
+        rankScale: 0.09,
+      },
+      A4: {
+        slot: "A4",
+        id: "dark_reap",
+        nameKo: "심연수확",
+        manaCostFrac: 1,
+        kind: "single_damage",
+        power: 2.7,
+        rankScale: 0.11,
+      },
+      B3: {
+        slot: "B3",
+        id: "dark_hex",
+        nameKo: "파멸낙인",
+        manaCostFrac: 0.55,
+        kind: "enemy_debuff",
+        power: 0.36,
+        turns: 3,
+        rankScale: 0.03,
+      },
+      B4: {
+        slot: "B4",
+        id: "dark_eclipse",
+        nameKo: "월식장막",
+        manaCostFrac: 0.55,
+        kind: "ally_buff_crit",
+        power: 0.28,
+        turns: 3,
+        rankScale: 0.03,
+      },
     },
   },
 };
@@ -446,6 +644,25 @@ export function magicRank(
   return Math.max(0, Math.min(MAX_MAGIC_RANK, progress?.ranks[skillId] ?? 0));
 }
 
+/** Mid-tier (A1/A2 or B1/B2) both maxed → unlocks tier-2 pair. */
+export function magicTier2Unlocked(
+  element: Element,
+  progress: SummonerMagicProgress | undefined,
+): boolean {
+  if (!progress?.branch) return false;
+  const kit = SUMMONER_KITS[element];
+  if (progress.branch === "A") {
+    return (
+      magicRank(progress, kit.skills.A1.id) >= MAX_MAGIC_RANK &&
+      magicRank(progress, kit.skills.A2.id) >= MAX_MAGIC_RANK
+    );
+  }
+  return (
+    magicRank(progress, kit.skills.B1.id) >= MAX_MAGIC_RANK &&
+    magicRank(progress, kit.skills.B2.id) >= MAX_MAGIC_RANK
+  );
+}
+
 /** Skills usable in battle for this summoner element + progress. */
 export function unlockedMagicSkills(
   element: Element,
@@ -456,8 +673,14 @@ export function unlockedMagicSkills(
   const branch = progress?.branch;
   if (branch === "A") {
     out.push(kit.skills.A1, kit.skills.A2);
+    if (magicTier2Unlocked(element, progress)) {
+      out.push(kit.skills.A3, kit.skills.A4);
+    }
   } else if (branch === "B") {
     out.push(kit.skills.B1, kit.skills.B2);
+    if (magicTier2Unlocked(element, progress)) {
+      out.push(kit.skills.B3, kit.skills.B4);
+    }
   }
   return out;
 }

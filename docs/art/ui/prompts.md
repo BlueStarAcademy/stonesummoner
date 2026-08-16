@@ -34,6 +34,6 @@ Centered magical motif on dark matte, 256².
 
 ## Gear slots
 
-**Output:** `apps/web/public/art/ui/gear/{slot}.webp` and `weapon-{element}.webp`
+Set × slot painted icons live in [`docs/art/ui/gear/prompts.md`](gear/prompts.md).
 
-Painted inventory icons: weapon, top, bottom, shoes, necklace, ring + element weapons.
+**Output:** `apps/web/public/art/ui/gear/{slot}-{setId}.webp`, `weapon-{element}.webp`, plus generic `{slot}.webp` fallbacks.

@@ -14,6 +14,8 @@ import {
 } from "stonesummoner-data";
 import type { PlayerSave } from "./loop.js";
 
+export type ScenarioDifficulty = "normal" | "hard" | "hell";
+
 function chainUnlocked(
   save: PlayerSave,
   stages: StageDef[],
@@ -97,8 +99,16 @@ export function stageUnlockLabel(save: PlayerSave, stage: StageDef): string {
   return "잠김";
 }
 
-export function expForStage(stage: StageDef): number {
+export function expForStage(
+  stage: StageDef,
+  difficulty: ScenarioDifficulty = "normal",
+): number {
   const base = 40 + stage.map * 8 + stage.stage * 20;
+  if (stage.mode === "scenario") {
+    const multiplier =
+      difficulty === "hell" ? 14.61 : difficulty === "hard" ? 6.96 : 1;
+    return Math.round(base * multiplier);
+  }
   if (stage.mode === "depth") return base + 30;
   if (stage.mode === "arena") return Math.floor(base * 0.5);
   if (stage.mode === "trial") return base + 20;

@@ -350,6 +350,10 @@ describe("Battle flow", () => {
     b.autoStone();
     b.useSkill({ targetId: "e-m1" });
     assert.equal(b.finishReason, null);
+    assert.equal(b.phase, "await_wave");
+    assert.equal(b.currentWave, 1);
+    assert.equal(waveCalls, 0);
+    assert.equal(b.resolveWaveTransition(), true);
     assert.equal(b.currentWave, 2);
     assert.equal(waveCalls, 1);
     assert.ok(b.getUnit("e-w2-0")?.alive);

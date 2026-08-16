@@ -66,25 +66,29 @@ const MAIN_QUEST_AREAS: MainQuestAreaDef[] = [
   { map: 13, slug: "end", areaKo: "종언의 신전", tone: "warena", dropSetId: "pamyeol", x: 50, y: 33 },
 ];
 
+/** Low → high: early maps only unlock the front of the pool. */
 const MQ_ENEMY_POOL = [
+  "cinder_imp_fire",
+  "dew_slime_water",
+  "gale_bat_wind",
+  "magic_archer_fire",
+  "capture_hound_dark",
+  "seal_apprentice_light",
   "scout_sniper_wind",
   "dew_healer_water",
   "wolf_fighter_fire",
   "steel_armor_water",
-  "magic_archer_fire",
-  "capture_hound_dark",
-  "storm_spearmaster_light",
   "lotus_dancer_wind",
-  "abyss_priest_dark",
-  "seal_elder_light",
-  "cinder_imp_fire",
   "flame_warrior_fire",
+  "seal_elder_light",
+  "storm_spearmaster_light",
+  "abyss_priest_dark",
   "glacier_mage_water",
   "dragon_knight_fire",
 ] as const;
 
 function mqBoardSize(map: number, stage: number): CombatBoardSize {
-  if (map === 1 && stage <= 2) return 5;
+  if (map === 1 && stage <= 3) return 5;
   if (map <= 2 && stage <= 4) return 7;
   return 9;
 }
@@ -99,11 +103,19 @@ function mqWaves(stage: number): number {
   return 3;
 }
 
+/** How far into MQ_ENEMY_POOL a map/stage may reach (inclusive index). */
+function mqEnemyPoolCap(map: number, stage: number): number {
+  // Map 1 stays on 1★–2★ fodder; higher maps unlock mid/late entries gradually.
+  const unlocked = 2 + (map - 1) * 2 + Math.floor((stage - 1) / 2);
+  return Math.min(MQ_ENEMY_POOL.length - 1, unlocked);
+}
+
 function mqEnemies(map: number, stage: number): string[] {
   const count = Math.min(4, 1 + Math.floor((stage - 1) / 2) + (map >= 8 ? 1 : 0));
-  const start = (map * 3 + stage) % MQ_ENEMY_POOL.length;
+  const pool = MQ_ENEMY_POOL.slice(0, mqEnemyPoolCap(map, stage) + 1);
+  const start = (map * 3 + stage) % pool.length;
   return Array.from({ length: count }, (_, i) => {
-    return MQ_ENEMY_POOL[(start + i) % MQ_ENEMY_POOL.length]!;
+    return pool[(start + i) % pool.length]!;
   });
 }
 
@@ -411,20 +423,33 @@ export const ARENA_STAGES: StageDef[] = [
   },
 ];
 
+const ELEMENT_AWAKEN_DUNGEONS: {
+  element: "fire" | "water" | "wind" | "light" | "dark";
+  nameKo: string;
+  enemyMonsterIds: string[];
+  dropSetId: SymbolSetId;
+}[] = [
+  { element: "fire", nameKo: "화염 정수 던전", enemyMonsterIds: ["wolf_fighter_fire", "flame_warrior_fire"], dropSetId: "jipjung" },
+  { element: "water", nameKo: "심해 정수 던전", enemyMonsterIds: ["dew_healer_water", "glacier_mage_water"], dropSetId: "hwalro" },
+  { element: "wind", nameKo: "폭풍 정수 던전", enemyMonsterIds: ["lotus_dancer_wind", "scout_sniper_wind"], dropSetId: "haengma" },
+  { element: "light", nameKo: "광휘 정수 던전", enemyMonsterIds: ["seal_elder_light", "storm_spearmaster_light"], dropSetId: "yongmaeng" },
+  { element: "dark", nameKo: "심연 정수 던전", enemyMonsterIds: ["capture_hound_dark", "abyss_priest_dark"], dropSetId: "mussang" },
+];
+
 export const WEEKDAY_STAGES: StageDef[] = [
-  {
-    id: "weekday_evolve",
-    nameKo: "요일 · 진화재료",
+  ...ELEMENT_AWAKEN_DUNGEONS.map((dungeon, i) => ({
+    id: `weekday_awaken_${dungeon.element}`,
+    nameKo: dungeon.nameKo,
     map: 70,
-    stage: 1,
-    boardSize: 7,
+    stage: i + 1,
+    boardSize: 7 as CombatBoardSize,
     energyCost: 5,
-    enemyMonsterIds: ["wolf_fighter_fire", "steel_armor_water"],
-    dropSetId: "gunhim",
+    enemyMonsterIds: dungeon.enemyMonsterIds,
+    dropSetId: dungeon.dropSetId,
     waves: 2,
-    mode: "weekday",
+    mode: "weekday" as const,
     dropChance: 0.35,
-  },
+  })),
   {
     id: "weekday_skill",
     nameKo: "요일 · 스킬재료",
@@ -446,9 +471,7 @@ export function isWeekdayStageOpenToday(
   now = Date.now(),
 ): boolean {
   const d = new Date(now).getDay();
-  if (stageId === "weekday_evolve") {
-    return d === 0 || d === 1 || d === 3 || d === 5;
-  }
+  if (stageId.startsWith("weekday_awaken_")) return true;
   if (stageId === "weekday_skill") {
     return d === 0 || d === 2 || d === 4 || d === 6;
   }

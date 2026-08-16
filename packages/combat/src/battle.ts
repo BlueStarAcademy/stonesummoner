@@ -361,6 +361,7 @@ export class Battle {
   /** Advance ATB until a unit is ready, or battle finished. */
   tickUntilReady(maxTicks = 1000): Unit | null {
     if (this.finishReason) return null;
+    if (this.phase === "await_wave") return null;
     for (let i = 0; i < maxTicks; i++) {
       this.regenMana();
       for (const u of this.units) {
@@ -2103,15 +2104,33 @@ export class Battle {
       this.phase = "finished";
       return;
     }
-    // Enemy summons wiped — advance wave or win.
+    // Enemy summons wiped — pause for next-wave intro, or win.
     if (aliveSummons(this.units, "enemy").length === 0) {
       if (this.currentWave < this.totalWaves && this.spawnWaveFn) {
-        this.advanceWave();
+        // Clear fallen enemy monsters so the rim empties before the next wave.
+        this.units = this.units.filter(
+          (u) => !(u.team === "enemy" && u.kind === "monster"),
+        );
+        this.phase = "await_wave";
+        this.activeUnitId = null;
+        this.log.push(`웨이브 ${this.currentWave} 격파`);
         return;
       }
       this.finishReason = "ally_win";
       this.phase = "finished";
     }
+  }
+
+  /**
+   * Spawn the next enemy wave after a wipe. Call from UI after a short beat
+   * so the empty rim / entrance animation can play.
+   */
+  resolveWaveTransition(): boolean {
+    if (this.phase !== "await_wave" || !this.spawnWaveFn) return false;
+    this.advanceWave();
+    this.phase = "idle";
+    this.activeUnitId = null;
+    return true;
   }
 
   /** Replace fallen enemy summons with the next wave; keep board & summoners. */
@@ -2143,6 +2162,9 @@ export class Battle {
 
   /** Run one full auto turn: ATB → stone → skill. */
   runAutoTurn(): SkillResult[] {
+    if (this.phase === "await_wave") {
+      this.resolveWaveTransition();
+    }
     const unit = this.tickUntilReady();
     if (!unit) return [];
     if (this.phase === "await_stone") {

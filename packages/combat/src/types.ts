@@ -146,6 +146,7 @@ export type BattlePhase =
   | "await_stone"
   | "await_capture_shop"
   | "await_skill"
+  | "await_wave"
   | "resolved"
   | "finished";
 

@@ -20,6 +20,9 @@ export {
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
   MAX_MONSTER_LEVEL,
+  monsterExpToNext,
+  monsterGrade,
+  monsterMaxLevel,
   MAX_SKILL_LEVEL,
   MONSTER_EXP_PER_LEVEL,
   MAX_SUMMONER_AWAKEN,
@@ -53,6 +56,7 @@ export {
   awakenCrystalCost,
   awakenLeaderAtkPct,
   awakenManaCost,
+  summonerAwakenMatCost,
   awakenMinLevel,
   displayedMonsterStars,
   monsterAwakenCrystalCost,
@@ -86,6 +90,9 @@ export {
   runDailyWish,
   runDemoLoop,
   runEnhance,
+  monsterPowerUpExp,
+  monsterPowerUpManaCost,
+  runPowerUpMonster,
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
@@ -186,3 +193,4 @@ export type {
   ShopOfferKind,
   SummonerElement,
 } from "./loop.js";
+export type { ScenarioDifficulty } from "./progress.js";
