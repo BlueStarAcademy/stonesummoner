@@ -177,6 +177,7 @@ export type {
   ExpTrackGain,
   GuildRankRow,
   LoopStepResult,
+  OnboardRiteSave,
   OwnedMonster,
   PartyPreset,
   PlayerSave,

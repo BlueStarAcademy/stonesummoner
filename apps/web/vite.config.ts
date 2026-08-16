@@ -16,6 +16,18 @@ export default defineConfig({
       "stonesummoner-loop": path.resolve(root, "../../packages/loop/src/index.ts"),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("pixi.js") || id.includes("@pixi")) return "pixi";
+          if (id.includes("@esotericsoftware/spine")) return "spine";
+        },
+      },
+    },
+  },
   plugins: [
     VitePWA({
       registerType: "autoUpdate",

@@ -11,6 +11,7 @@
     "start": "node server.mjs",
     "i18n:gen": "node scripts/gen-i18n-packs.mjs",
     "check:encoding": "node scripts/check-encoding.mjs",
+    "smoke:onboarding": "node --experimental-strip-types scripts/smoke-onboarding.mjs",
     "spine:fire_fang": "node scripts/build-fire-fang-spine.mjs",
     "spine:fire_fang:verify": "node scripts/_verify-fire-fang-spine.mjs",
     "cap:sync": "npx cap sync android",

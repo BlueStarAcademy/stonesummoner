@@ -754,6 +754,19 @@ export function addActiveSummonerExp(
   };
 }
 
+/** Serialized first-rite guide progress (mirrors web onboard snapshot). */
+export type OnboardRiteSave = {
+  step: string;
+  openedStages: boolean;
+  openedRegion: boolean;
+  summoned: boolean;
+  enhanced: boolean;
+  partySet: boolean;
+  equipped: boolean;
+  hasBattleDrop: boolean;
+  welcomeSeen: boolean;
+};
+
 export interface PlayerSave {
   island: IslandState;
   symbols: SymbolInstance[];
@@ -854,6 +867,11 @@ export interface PlayerSave {
   claimedMailIds: string[];
   /** Claimed daily mission keys (`missionId:YYYY-MM-DD`). */
   claimedMissionKeys: string[];
+  /**
+   * First-session rite checkpoint (client UI). Null = never written;
+   * cloud sync carries it so Capacitor / multi-device stays aligned.
+   */
+  onboardRite: OnboardRiteSave | null;
 }
 
 export interface ExpTrackGain {
@@ -1205,6 +1223,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     grindstones: 5,
     claimedMailIds: [],
     claimedMissionKeys: [],
+    onboardRite: null,
   };
 }
 
@@ -1230,6 +1249,17 @@ export function createDemoSave(now = Date.now()): PlayerSave {
       i === 0 ? { ...m, level: 8, evolve: 0 } : { ...m, level: 5 },
     ),
     clearedStages: ["garen_1_1", "garen_1_2", "garen_1_3", "garen_1_4", "garen_1_5"],
+    onboardRite: {
+      step: "done",
+      openedStages: true,
+      openedRegion: true,
+      summoned: true,
+      enhanced: true,
+      partySet: true,
+      equipped: true,
+      hasBattleDrop: false,
+      welcomeSeen: true,
+    },
   });
 }
 

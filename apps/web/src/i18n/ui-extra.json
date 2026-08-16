@@ -1,4 +1,168 @@
 {
+  "settings.resetSave": {
+    "ko": "모험 초기화",
+    "en": "Reset adventure"
+  },
+  "settings.resetSaveConfirm": {
+    "ko": "진행도와 소환수를 모두 지우고 처음부터 시작할까요?",
+    "en": "Erase progress and summons, and start over?"
+  },
+  "settings.resetSaveDone": {
+    "ko": "모험을 초기화했습니다.",
+    "en": "Adventure reset."
+  },
+  "ui.resultNextStage": {
+    "ko": "다음 스테이지",
+    "en": "Next stage"
+  },
+  "ui.resultBattlePrep": {
+    "ko": "전투 준비",
+    "en": "Battle prep"
+  },
+  "ui.resultBattleMap": {
+    "ko": "전투 맵",
+    "en": "Battle map"
+  },
+  "ui.resultIsland": {
+    "ko": "섬으로",
+    "en": "Island"
+  },
+  "ui.resultContinue": {
+    "ko": "다음",
+    "en": "Next"
+  },
+  "ui.resultEmptyPartySlot": {
+    "ko": "빈 슬롯",
+    "en": "Empty"
+  },
+  "ui.onboard.gatewayTitle": {
+    "ko": "출정문을 열어라",
+    "en": "Open the Gateway"
+  },
+  "ui.onboard.gatewayDetail": {
+    "ko": "섬의 출정문으로 들어가 첫 전장으로 향하세요.",
+    "en": "Enter the island Gateway and march to your first battlefield."
+  },
+  "ui.onboard.gatewayCta": {
+    "ko": "출정문 열기",
+    "en": "Enter Gateway"
+  },
+  "ui.onboard.stagesTitle": {
+    "ko": "월영숲을 선택하라",
+    "en": "Choose Moonveil Forest"
+  },
+  "ui.onboard.stagesDetail": {
+    "ko": "첫 지역 핀을 눌러 스테이지 목록을 여세요.",
+    "en": "Tap the first region pin to open the stage list."
+  },
+  "ui.onboard.stagesCta": {
+    "ko": "지역 열기",
+    "en": "Open region"
+  },
+  "ui.onboard.battleTitle": {
+    "ko": "첫 전투를 승리하라",
+    "en": "Win your first battle"
+  },
+  "ui.onboard.battleDetail": {
+    "ko": "1-1 전투를 시작하고, 바둑알을 놓은 뒤 스킬로 적을 쓰러뜨리세요.",
+    "en": "Start stage 1-1, place a stone, then finish the fight with skills."
+  },
+  "ui.onboard.battleCta": {
+    "ko": "1-1 도전",
+    "en": "Challenge 1-1"
+  },
+  "ui.onboard.summonTitle": {
+    "ko": "소환의 불꽃을 피워라",
+    "en": "Kindle the summon flame"
+  },
+  "ui.onboard.summonDetail": {
+    "ko": "소환의 화로에서 스크롤로 새로운 소환수를 맞이하세요.",
+    "en": "Use a scroll at the Summon Hearth to welcome a new ally."
+  },
+  "ui.onboard.summonCta": {
+    "ko": "소환하기",
+    "en": "Summon"
+  },
+  "ui.onboard.enhanceTitle": {
+    "ko": "소환수를 단련하라",
+    "en": "Temper your summon"
+  },
+  "ui.onboard.enhanceDetail": {
+    "ko": "강화진에서 소환수를 성장시켜 다음 전투를 준비하세요.",
+    "en": "Raise a summon in the forge so the next fight hits harder."
+  },
+  "ui.onboard.enhanceCta": {
+    "ko": "강화하기",
+    "en": "Enhance"
+  },
+  "ui.onboard.equipTitle": {
+    "ko": "전리품을 장착하라",
+    "en": "Equip your spoils"
+  },
+  "ui.onboard.equipDetail": {
+    "ko": "전투에서 얻은 상징이나 장비를 장착해 전력을 완성하세요.",
+    "en": "Equip a dropped symbol or gear piece to complete your power."
+  },
+  "ui.onboard.equipCta": {
+    "ko": "장착하기",
+    "en": "Equip"
+  },
+  "ui.onboard.battleTipStone": {
+    "ko": "빛나는 칸에 바둑알을 놓아 턴을 시작하세요.",
+    "en": "Place a stone on a glowing cell to begin your turn."
+  },
+  "ui.onboard.battleTipSkill": {
+    "ko": "스킬을 선택해 적을 공격하세요.",
+    "en": "Choose a skill and strike the enemy."
+  },
+  "ui.onboard.summonTip": {
+    "ko": "일반 스크롤로 소환을 진행하세요.",
+    "en": "Use a normal scroll to summon an ally."
+  },
+  "ui.onboard.enhanceTip": {
+    "ko": "강화 버튼으로 소환수를 성장시키세요.",
+    "en": "Tap Enhance to raise your summon."
+  },
+  "ui.onboard.partyTip": {
+    "ko": "출전할 네 명을 고른 뒤 저장하세요.",
+    "en": "Pick four allies, then save the party."
+  },
+  "ui.onboard.equipTip": {
+    "ko": "가방의 상징이나 장비를 장착하세요.",
+    "en": "Equip a symbol or gear from your bag."
+  },
+  "ui.onboard.resultSummonCta": {
+    "ko": "소환으로 이어가기",
+    "en": "Continue to Summon"
+  },
+  "ui.onboard.welcomeTitle": {
+    "ko": "신비의 마법석으로",
+    "en": "Into the Mystic Stones"
+  },
+  "ui.onboard.welcomeBody": {
+    "ko": "소환사를 깨우고, 전장에서 승리하며, 전리품으로 성장하는 여정이 시작됩니다.",
+    "en": "Awaken your summoner, win the field, and grow stronger with every spoil."
+  },
+  "ui.onboard.welcomeCta": {
+    "ko": "여정 시작",
+    "en": "Begin the rite"
+  },
+  "ui.onboard.welcomeRoster": {
+    "ko": "함께 시작하는 동료",
+    "en": "Your starting allies"
+  },
+  "ui.onboard.partyTitle": {
+    "ko": "출전 파티를 짜라",
+    "en": "Set your battle party"
+  },
+  "ui.onboard.partyDetail": {
+    "ko": "파티 건물에서 출전할 소환수 네 명을 확정하세요.",
+    "en": "Confirm four summons in the Party hall for your next sortie."
+  },
+  "ui.onboard.partyCta": {
+    "ko": "파티 편성",
+    "en": "Open party"
+  },
   "ui.efd1a0e80b": {
     "ko": "서버가 메모리 DB입니다. Railway에 DATABASE_URL(Postgres)을 연결하세요. 로컬 세이브는 유지됩니다.",
     "en": "서버가 메모리 DB입니다. Railway에 DATABASE_URL(Postgres)을 연결하세요. 로컬 세이브는 유지됩니다."

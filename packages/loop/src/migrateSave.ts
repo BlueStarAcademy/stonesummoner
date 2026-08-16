@@ -13,9 +13,27 @@ import {
   RAID_BOSS_MAX_HP,
   SYMBOL_BAG_BASE_SLOTS,
   SYMBOL_BAG_MAX_SLOTS,
+  type OnboardRiteSave,
   type PlayerSave,
   type SummonerElement,
 } from "./loop.js";
+
+function normalizeOnboardRite(raw: unknown): OnboardRiteSave | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Partial<OnboardRiteSave>;
+  const step = typeof o.step === "string" ? o.step : "gateway";
+  return {
+    step,
+    openedStages: Boolean(o.openedStages),
+    openedRegion: Boolean(o.openedRegion),
+    summoned: Boolean(o.summoned),
+    enhanced: Boolean(o.enhanced),
+    partySet: Boolean(o.partySet),
+    equipped: Boolean(o.equipped),
+    hasBattleDrop: Boolean(o.hasBattleDrop),
+    welcomeSeen: Boolean(o.welcomeSeen),
+  };
+}
 
 /** Normalize cloud/local JSON into a full PlayerSave (preserve progress fields). */
 export function migrateSave(raw: unknown): PlayerSave | null {
@@ -216,6 +234,7 @@ export function migrateSave(raw: unknown): PlayerSave | null {
           (id): id is string => typeof id === "string",
         )
       : [],
+    onboardRite: normalizeOnboardRite(p.onboardRite),
     activeSummoner,
     summoners:
       p.summoners && typeof p.summoners === "object"

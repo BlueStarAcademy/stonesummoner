@@ -34,6 +34,23 @@ import {
 import { dematteArtInTree } from "./ui/dematteArt";
 import { initUiScale } from "./ui/uiScale";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
+import { bindCoreStageMapController } from "./core-loop/stages/mapController";
+import { bindCoreStagePrepController } from "./core-loop/stages/prepController";
+import { bindCoreStageRegionController } from "./core-loop/stages/regionController";
+import {
+  ONBOARD_FIRST_STAGE_ID,
+  advanceOnboard,
+  defaultOnboardSnapshot,
+  deriveOnboardStep,
+  fromOnboardRiteSave,
+  onboardFocusSpotId,
+  onboardObjective,
+  readOnboardSnapshot,
+  skipOnboardForProgressedSave,
+  toOnboardRiteSave,
+  writeOnboardSnapshot,
+  type OnboardSnapshot,
+} from "./core-loop/onboarding";
 import {
   ARROW_DOWN,
   ARROW_RIGHT,
@@ -321,8 +338,14 @@ type SessionUser = { id: string; email: string | null; kind: string };
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 initUiScale();
-const SAVE_KEY = "stonesummoner.save.v5";
-const DEMO_SAVE_KEY = "stonesummoner.save.demo.v5";
+/**
+ * Core-loop saves intentionally start clean. The preceding UI controller mixed
+ * incompatible stage state into account saves, so loading it would recreate
+ * broken progression rather than migrate it.
+ */
+const SAVE_KEY = "stonesummoner.save.v6";
+const DEMO_SAVE_KEY = "stonesummoner.save.demo.v6";
+const CORE_LOOP_RESET_KEY = "stonesummoner.core-loop-reset.v1";
 
 const AUTH_PREFS_KEY = "stonesummoner.auth.prefs.v1";
 
@@ -586,6 +609,18 @@ let legalHints: Point[] = [];
 let stoneSuggestions: StoneSuggestion[] = [];
 let selectedTargetId: string | null = null;
 let lastReward: BattleReward | null = null;
+/** Result sheet step: 1 = exp/rewards, 2 = retry / navigation choices. */
+let resultStep: 1 | 2 = 1;
+/** First-session guided loop (Summoners War–style progression). */
+let onboard: OnboardSnapshot = defaultOnboardSnapshot();
+/** Soft welcome veil shown once when a fresh adventure begins. */
+let onboardWelcomeOpen = false;
+/** First-rite battle: skill cue already fired after the opening stone. */
+let onboardSkillCued = false;
+/** Island camera already framed for this onboard step (avoid yanking the map). */
+let onboardIslandFocusStep: OnboardSnapshot["step"] | null = null;
+/** Stages atlas already framed for this onboard step. */
+let onboardStagesFocusStep: OnboardSnapshot["step"] | null = null;
 /** Normal / premium scroll deltas granted with the last battle reward. */
 let lastScrollPremiumGain = 0;
 let lastScrollGain = 0;
@@ -796,6 +831,13 @@ let stagesRegion: StagesRegionId | null = null;
 type StageDifficulty = "normal" | "hard" | "hell";
 let stageEntryId: string | null = null;
 let stageEntryDiff: StageDifficulty = "normal";
+/** Stable map delegate; prevents pin activation from depending on global bind order. */
+let coreStageMapViewport: HTMLElement | null = null;
+let unbindCoreStageMap: (() => void) | null = null;
+/** Stable-host delegate for the rebuilt region → prep stage action. */
+let coreStageRegionHost: HTMLElement | null = null;
+let unbindCoreStageRegion: (() => void) | null = null;
+let unbindCoreStagePrep: (() => void) | null = null;
 /** Open region drop-info modal (SW-style). */
 let stagesDropInfoOpen = false;
 /** Active tab inside drop-info modal: scrolls | summoner gear. */
@@ -828,13 +870,13 @@ let stagePrepSuppressClick = false;
 let islandPan = { x: 0, y: 0 };
 let islandPanCentered = false;
 /** Bump when cover metrics change so the next bind re-centers once. */
-const ISLAND_COVER_FIT_VERSION = 4;
+const ISLAND_COVER_FIT_VERSION = 5;
 let islandCoverFitApplied = 0;
 /** User zoom via island-world layout size (1 = default). Not applied as CSS transform scale. */
 let islandZoom = 1;
-const ISLAND_BASE_SCALE = 1.08;
+const ISLAND_BASE_SCALE = 1.0;
 /** Must stay in sync with .island-world width/height % at --island-zoom: 1. */
-const ISLAND_WORLD_PCT = { w: 2.85, h: 2.65 } as const;
+const ISLAND_WORLD_PCT = { w: 3.45, h: 3.2 } as const;
 /** Extra cover so edges never letterbox after scale. */
 const ISLAND_ZOOM_MIN_OVERSCAN = 1.18;
 /** Fallback ceiling; real max is computed from map pixel size. */
@@ -842,7 +884,7 @@ const ISLAND_ZOOM_MAX_HARD = 4;
 /** Stop just before object-fit cover would upsample the bitmap past 1 CSS px / image px. */
 const ISLAND_ZOOM_SHARP_PAD = 0.98;
 const ISLAND_MAP_NATURAL = { w: 1440, h: 2560 } as const;
-const ISLAND_TRANSFORM_ORIGIN = { x: 0.5, y: 0.4 };
+const ISLAND_TRANSFORM_ORIGIN = { x: 0.5, y: 0.42 };
 /** Keep tilt tiny - larger angles foreshorten and leave empty strips at the top. */
 const ISLAND_ROTATE_X_DEG = 2;
 let islandPanDrag: {
@@ -859,43 +901,44 @@ let islandPinch: {
   startZoom: number;
 } | null = null;
 
-/** v2: three-islet archipelago defaults (invalidates cluttered v1 local layouts). */
-const ISLAND_LAYOUT_KEY = "stonesummoner.island-layout.v2";
+/** v3: wider map + inward terrace so spots stay on land. */
+const ISLAND_LAYOUT_KEY = "stonesummoner.island-layout.v3";
 /**
- * Default spots on a wide 3-islet map (% of island-world).
+ * Default spots on the expanded 3-islet map (% of island-world).
+ * Clustered toward each islet core so emblems do not hang over the water.
  * West = hub · Center = craft · East = society / adventure.
  */
 const ISLAND_LAYOUT_DEFAULT: Record<string, { x: number; y: number }> = {
   // West islet — daily hub
-  power_circle: { x: 22, y: 30 },
-  summon_hearth: { x: 12, y: 44 },
-  shop: { x: 30, y: 46 },
-  party: { x: 18, y: 60 },
+  power_circle: { x: 26, y: 36 },
+  summon_hearth: { x: 18, y: 48 },
+  shop: { x: 32, y: 50 },
+  party: { x: 24, y: 60 },
   // Center islet — growth / production
-  wish: { x: 48, y: 26 },
-  mana_pond: { x: 40, y: 44 },
-  crystal_mine: { x: 58, y: 46 },
-  dojo: { x: 48, y: 62 },
+  wish: { x: 50, y: 32 },
+  mana_pond: { x: 42, y: 48 },
+  crystal_mine: { x: 58, y: 50 },
+  dojo: { x: 50, y: 62 },
   // East islet — adventure & endgame
-  gateway: { x: 78, y: 32 },
-  glory: { x: 70, y: 50 },
-  guild: { x: 88, y: 54 },
-  fusion: { x: 76, y: 70 },
+  gateway: { x: 74, y: 36 },
+  glory: { x: 68, y: 50 },
+  guild: { x: 80, y: 54 },
+  fusion: { x: 74, y: 64 },
 };
 
 /** Placeable terrace across the three islets (% of island-world). */
 const ISLAND_LAYOUT_BOUNDS = {
-  minX: 8,
-  maxX: 92,
-  minY: 18,
-  maxY: 86,
+  minX: 14,
+  maxX: 86,
+  minY: 26,
+  maxY: 74,
 } as const;
 
 /** Soft landmass pads that read as three linked islets (visual only). */
 const ISLAND_ISLETS = [
-  { id: "west", left: 4, top: 20, width: 38, height: 52, labelKey: "ui.islandIsletHome" },
-  { id: "center", left: 32, top: 16, width: 40, height: 56, labelKey: "ui.islandIsletCraft" },
-  { id: "east", left: 60, top: 20, width: 38, height: 54, labelKey: "ui.islandIsletSociety" },
+  { id: "west", left: 8, top: 24, width: 36, height: 50, labelKey: "ui.islandIsletHome" },
+  { id: "center", left: 34, top: 20, width: 36, height: 54, labelKey: "ui.islandIsletCraft" },
+  { id: "east", left: 58, top: 24, width: 36, height: 52, labelKey: "ui.islandIsletSociety" },
 ] as const;
 
 function clampIslandLayoutPos(x: number, y: number): { x: number; y: number } {
@@ -1052,6 +1095,7 @@ function enterIslandBuilding(id: string): void {
   setIslandSpotMenu(null);
   closeBuildingInfoSoft();
   if (id === "gateway") {
+    patchOnboard({ openedStages: true });
     view = "stages";
     render();
   } else if (id === "mana_pond") {
@@ -1100,7 +1144,7 @@ function looksBrokenLabel(s: string): boolean {
 
 
 /** Footprint ellipse half-axes in % of island-world (scaled by depth). */
-const ISLAND_SPOT_HIT = { rx: 9.2, ry: 11 } as const;
+const ISLAND_SPOT_HIT = { rx: 7.4, ry: 8.8 } as const;
 
 function islandSpotScaleAt(y: number): number {
   return 0.68 + Math.max(0, Math.min(1, y / 100)) * 0.5;
@@ -1210,7 +1254,31 @@ let stagesMapFitApplied = 0;
 let stagesWorldResizeObs: ResizeObserver | null = null;
 
 function localSaveKey(): string {
-  return sessionUser?.kind === "demo" ? DEMO_SAVE_KEY : SAVE_KEY;
+  if (sessionUser?.kind === "demo") return DEMO_SAVE_KEY;
+  if (sessionUser?.id) return `${SAVE_KEY}.${sessionUser.id}`;
+  return SAVE_KEY;
+}
+
+function coreLoopResetKey(user: SessionUser): string {
+  return `${CORE_LOOP_RESET_KEY}.${user.id}`;
+}
+
+function needsCoreLoopReset(user: SessionUser): boolean {
+  try {
+    return localStorage.getItem(coreLoopResetKey(user)) !== "1";
+  } catch {
+    // Failing safe is preferable: a storage-restricted session gets a clean
+    // runtime save rather than resurrecting old, incompatible UI state.
+    return true;
+  }
+}
+
+function markCoreLoopReset(user: SessionUser): void {
+  try {
+    localStorage.setItem(coreLoopResetKey(user), "1");
+  } catch {
+    /* Storage may be unavailable in private/webview contexts. */
+  }
 }
 
 async function apiJson<T>(
@@ -1257,15 +1325,17 @@ function resetCloudSync(): void {
   cloudAuthWarned = false;
 }
 
+function readRawLocalSave(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 function loadLocalSave(key = localSaveKey()): PlayerSave | null {
   try {
-    const raw =
-      localStorage.getItem(key) ??
-      (key === SAVE_KEY
-        ? localStorage.getItem("stonesummoner.save.v4") ??
-          localStorage.getItem("stonesummoner.save.v3") ??
-          localStorage.getItem("stonesummoner.save.v2")
-        : null);
+    const raw = readRawLocalSave(key);
     if (raw) return migrateSave(JSON.parse(raw));
   } catch {
     /* ignore */
@@ -1290,12 +1360,314 @@ function persist(): void {
   scheduleCloudSave();
 }
 
+function persistOnboard(): void {
+  writeOnboardSnapshot(sessionUser?.id, onboard);
+  const blob = toOnboardRiteSave(onboard);
+  if (
+    !save.onboardRite ||
+    JSON.stringify(save.onboardRite) !== JSON.stringify(blob)
+  ) {
+    save = { ...save, onboardRite: blob };
+    persist();
+  }
+}
+
+function loadOnboardForSession(): OnboardSnapshot {
+  const fromCloud = fromOnboardRiteSave(save.onboardRite);
+  if (fromCloud) return fromCloud;
+  return readOnboardSnapshot(sessionUser?.id);
+}
+
+function syncOnboardFromSave(opts?: { offerWelcome?: boolean }): void {
+  const cleared = save.clearedStages ?? [];
+  const skipped = skipOnboardForProgressedSave(onboard, cleared);
+  if (skipped) {
+    onboard = skipped;
+    onboardWelcomeOpen = false;
+    onboardIslandFocusStep = null;
+    onboardStagesFocusStep = null;
+    persistOnboard();
+    return;
+  }
+  const prev = onboard.step;
+  onboard = {
+    ...onboard,
+    step: deriveOnboardStep(onboard, {
+      clearedStages: cleared,
+      hasBattleDrop: onboard.hasBattleDrop,
+    }),
+  };
+  if (onboard.step !== prev) {
+    onboardIslandFocusStep = null;
+    onboardStagesFocusStep = null;
+  }
+  persistOnboard();
+  if (
+    opts?.offerWelcome &&
+    !onboard.welcomeSeen &&
+    onboard.step !== "done"
+  ) {
+    onboardWelcomeOpen = true;
+  }
+}
+
+function patchOnboard(patch: Partial<OnboardSnapshot>): void {
+  const prev = onboard.step;
+  onboard = advanceOnboard(onboard, patch, {
+    clearedStages: save.clearedStages ?? [],
+    hasBattleDrop: patch.hasBattleDrop ?? onboard.hasBattleDrop,
+  });
+  persistOnboard();
+  if (onboard.step !== prev) {
+    onboardIslandFocusStep = null;
+    onboardStagesFocusStep = null;
+    if (app.querySelector(".onboard-chip, #onboard-welcome, .onboard-view-tip")) {
+      refreshOnboardChrome();
+    }
+  }
+}
+
+function resetOnboardProgress(opts?: { offerWelcome?: boolean }): void {
+  onboard = defaultOnboardSnapshot();
+  onboardWelcomeOpen = false;
+  onboardIslandFocusStep = null;
+  onboardStagesFocusStep = null;
+  persistOnboard();
+  syncOnboardFromSave({ offerWelcome: opts?.offerWelcome });
+}
+
+function renderOnboardObjectiveChip(): string {
+  if (onboard.step === "done" || view === "auth" || view === "battle") return "";
+  const obj = onboardObjective(onboard.step);
+  if (!obj) return "";
+  const title = t(obj.titleKey as Parameters<typeof t>[0]);
+  const detail = t(obj.detailKey as Parameters<typeof t>[0]);
+  const cta = obj.ctaKey ? t(obj.ctaKey as Parameters<typeof t>[0]) : "";
+  return `<aside class="onboard-chip" data-onboard-step="${onboard.step}" role="status">
+    <div class="onboard-chip-copy">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(detail)}</span>
+    </div>
+    ${
+      cta
+        ? `<button type="button" class="onboard-chip-cta" id="btn-onboard-cta">${escapeHtml(cta)}</button>`
+        : ""
+    }
+  </aside>`;
+}
+
+function renderOnboardWelcome(): string {
+  if (!onboardWelcomeOpen || onboard.step === "done") return "";
+  const roster = (save.roster ?? []).slice(0, 4);
+  const rosterHtml = roster.length
+    ? `<div class="onboard-welcome-roster" aria-label="${escapeHtml(t("ui.onboard.welcomeRoster"))}">
+      <p class="onboard-welcome-roster-label">${escapeHtml(t("ui.onboard.welcomeRoster"))}</p>
+      <ul class="onboard-welcome-roster-list">
+        ${roster
+          .map((m) => {
+            const src = monsterArtSrc(m.monsterId) ?? "/art/auth/logo-mark-192.png";
+            return `<li class="onboard-welcome-ally">
+              <img src="${src}" width="56" height="56" alt="" draggable="false" decoding="async" />
+            </li>`;
+          })
+          .join("")}
+      </ul>
+    </div>`
+    : "";
+  return `<div class="onboard-welcome" id="onboard-welcome" role="dialog" aria-modal="true" aria-labelledby="onboard-welcome-title">
+    <div class="onboard-welcome-veil" aria-hidden="true"></div>
+    <div class="onboard-welcome-card">
+      <h2 id="onboard-welcome-title">${escapeHtml(t("ui.onboard.welcomeTitle"))}</h2>
+      <p class="onboard-welcome-body">${escapeHtml(t("ui.onboard.welcomeBody"))}</p>
+      ${rosterHtml}
+      <button type="button" class="auth-btn-primary onboard-welcome-cta" id="btn-onboard-welcome">${escapeHtml(t("ui.onboard.welcomeCta"))}</button>
+    </div>
+  </div>`;
+}
+
+function renderOnboardViewTip(): string {
+  if (onboard.step === "done" || view === "auth") return "";
+  let tipKey: Parameters<typeof t>[0] | null = null;
+  if (
+    view === "battle" &&
+    onboard.step === "battle" &&
+    currentStage?.id === ONBOARD_FIRST_STAGE_ID
+  ) {
+    tipKey =
+      onboardSkillCued || battle?.phase === "await_skill"
+        ? "ui.onboard.battleTipSkill"
+        : "ui.onboard.battleTipStone";
+  } else if (view === "summon" && onboard.step === "summon") {
+    tipKey = "ui.onboard.summonTip";
+  } else if (view === "enhance" && onboard.step === "enhance") {
+    tipKey = "ui.onboard.enhanceTip";
+  } else if (view === "enhance" && onboard.step === "equip") {
+    tipKey = "ui.onboard.equipTip";
+  } else if (view === "party" && onboard.step === "party") {
+    tipKey = "ui.onboard.partyTip";
+  }
+  if (!tipKey) return "";
+  return `<aside class="onboard-view-tip" data-onboard-tip="${onboard.step}" role="status">${escapeHtml(t(tipKey))}</aside>`;
+}
+
+/** Briefly spotlight placeable cells + ally lead on the first rite battle. */
+function cueOnboardFirstBattle(): void {
+  if (
+    onboard.step !== "battle" ||
+    currentStage?.id !== ONBOARD_FIRST_STAGE_ID ||
+    !battle
+  ) {
+    return;
+  }
+  const run = (): void => {
+    const placeMs = fxDurationMs(1600, battleSpeed);
+    app.querySelectorAll<HTMLElement>(".board .cell.is-placeable").forEach((el, i) => {
+      window.setTimeout(() => {
+        el.classList.add("fx-onboard-place");
+        window.setTimeout(() => el.classList.remove("fx-onboard-place"), placeMs);
+      }, i * 40);
+    });
+    const ally =
+      battle?.units.find((u) => u.team === "ally" && u.kind === "summoner") ??
+      battle?.units.find((u) => u.team === "ally" && u.hp > 0);
+    if (ally) {
+      window.setTimeout(() => {
+        pulseUnitClass(app, ally.id, "fx-onboard-unit", fxDurationMs(1200, battleSpeed));
+      }, 500);
+    }
+  };
+  window.requestAnimationFrame(() => window.setTimeout(run, 120));
+}
+
+/** After the opening stone, pulse ready skill buttons once. */
+function cueOnboardFirstSkills(): void {
+  if (
+    onboardSkillCued ||
+    onboard.step !== "battle" ||
+    currentStage?.id !== ONBOARD_FIRST_STAGE_ID ||
+    battle?.phase !== "await_skill"
+  ) {
+    return;
+  }
+  onboardSkillCued = true;
+  const tip = app.querySelector(".onboard-view-tip");
+  if (tip) tip.textContent = t("ui.onboard.battleTipSkill");
+  const ms = fxDurationMs(1400, battleSpeed);
+  window.requestAnimationFrame(() => {
+    app
+      .querySelectorAll<HTMLElement>(
+        ".battle-unit-skills .skill-btn.ready, .battle-hud .skill-btn.ready",
+      )
+      .forEach((el, i) => {
+        window.setTimeout(() => {
+          el.classList.add("fx-onboard-skill");
+          window.setTimeout(() => el.classList.remove("fx-onboard-skill"), ms);
+        }, i * 60);
+      });
+  });
+}
+
+function runOnboardCta(): void {
+  const step = onboard.step;
+  if (step === "gateway") {
+    patchOnboard({ openedStages: true });
+    view = "stages";
+    stagesRegion = null;
+    stageEntryId = null;
+    render();
+    return;
+  }
+  if (step === "stages") {
+    patchOnboard({ openedStages: true, openedRegion: true });
+    view = "stages";
+    stagesRegion = "mq1";
+    stageEntryId = null;
+    render();
+    applyStagesRegionOpen();
+    return;
+  }
+  if (step === "battle") {
+    patchOnboard({ openedStages: true, openedRegion: true });
+    view = "stages";
+    stagesRegion = "mq1";
+    stageEntryId = null;
+    const stage = getStage(ONBOARD_FIRST_STAGE_ID);
+    render();
+    if (stage) openStagePrep(stage);
+    else applyStagesRegionOpen();
+    return;
+  }
+  if (step === "summon") {
+    view = "summon";
+    render();
+    return;
+  }
+  if (step === "party") {
+    view = "party";
+    partyDraft = new Set(save.party);
+    render();
+    return;
+  }
+  if (step === "enhance" || step === "equip") {
+    view = "enhance";
+    enhanceTab = "monsters";
+    monBookDock = step === "equip" ? "symbols" : "roster";
+    monDetailTab = step === "equip" ? "symbols" : "info";
+    render();
+  }
+}
+
+function bindOnboardUi(): void {
+  app.querySelector("#btn-onboard-welcome")?.addEventListener("click", () => {
+    onboardWelcomeOpen = false;
+    patchOnboard({ welcomeSeen: true });
+    render();
+  });
+  app.querySelector("#btn-onboard-cta")?.addEventListener("click", () => {
+    runOnboardCta();
+  });
+}
+
+function refreshOnboardChrome(): void {
+  const nextChip = renderOnboardObjectiveChip();
+  const existingChip = app.querySelector(".onboard-chip");
+  if (nextChip) {
+    if (existingChip) existingChip.outerHTML = nextChip;
+    else {
+      const anchor =
+        app.querySelector("nav.tabs") ?? app.querySelector("main");
+      if (anchor) anchor.insertAdjacentHTML("beforebegin", nextChip);
+      else app.insertAdjacentHTML("beforeend", nextChip);
+    }
+  } else {
+    existingChip?.remove();
+  }
+  const nextWelcome = renderOnboardWelcome();
+  const existingWelcome = app.querySelector("#onboard-welcome");
+  if (nextWelcome) {
+    if (existingWelcome) existingWelcome.outerHTML = nextWelcome;
+    else app.insertAdjacentHTML("beforeend", nextWelcome);
+  } else {
+    existingWelcome?.remove();
+  }
+  const nextTip = renderOnboardViewTip();
+  const existingTip = app.querySelector(".onboard-view-tip");
+  if (nextTip) {
+    if (existingTip) existingTip.outerHTML = nextTip;
+    else app.insertAdjacentHTML("beforeend", nextTip);
+  } else {
+    existingTip?.remove();
+  }
+  bindOnboardUi();
+}
+
 async function hydrateSession(
   user: SessionUser,
   opts?: { demo?: boolean; fresh?: boolean },
 ): Promise<void> {
   sessionUser = user;
   resetCloudSync();
+  let forcedFresh = Boolean(opts?.fresh);
   if (opts?.demo) {
     save = createDemoSave();
     localStorage.setItem(DEMO_SAVE_KEY, JSON.stringify(save));
@@ -1305,11 +1677,32 @@ async function hydrateSession(
         body: JSON.stringify({ save }),
       });
     }
+    // Demo already cleared early stages — never revive a stale rite checkpoint.
+    onboard =
+      skipOnboardForProgressedSave(
+        defaultOnboardSnapshot(),
+        save.clearedStages ?? [],
+      ) ?? defaultOnboardSnapshot();
+    onboardWelcomeOpen = false;
+    persistOnboard();
     return;
   }
-  if (opts?.fresh) {
+  if (opts?.fresh || needsCoreLoopReset(user)) {
+    forcedFresh = true;
     save = createNewSave();
     persist();
+    markCoreLoopReset(user);
+    if (!user.id.startsWith("local-")) {
+      // Do not let a reload race the debounced cloud save and restore the
+      // pre-core-loop save from the server.
+      await apiJson("/api/save", {
+        method: "PUT",
+        body: JSON.stringify({ save }),
+      });
+    }
+    onboard = defaultOnboardSnapshot();
+    persistOnboard();
+    syncOnboardFromSave({ offerWelcome: true });
     return;
   }
   if (!user.id.startsWith("local-")) {
@@ -1326,15 +1719,23 @@ async function hydrateSession(
       });
       localStorage.setItem(localSaveKey(), JSON.stringify(save));
     }
-    return;
+  } else {
+    save = loadLocalSave() ?? createNewSave();
+    localStorage.setItem(localSaveKey(), JSON.stringify(save));
   }
-  save = loadLocalSave() ?? createNewSave();
-  localStorage.setItem(localSaveKey(), JSON.stringify(save));
+  onboard = loadOnboardForSession();
+  syncOnboardFromSave({
+    offerWelcome: forcedFresh || (!onboard.welcomeSeen && onboard.step === "gateway"),
+  });
 }
 
 async function enterWithUser(
   user: SessionUser,
-  opts?: { demo?: boolean; fresh?: boolean; enterGame?: boolean },
+  opts?: {
+    demo?: boolean;
+    fresh?: boolean;
+    enterGame?: boolean;
+  },
 ): Promise<void> {
   await hydrateSession(user, opts);
   authUi.pane = "gate";
@@ -1366,6 +1767,9 @@ async function enterWithUser(
 function startGameFromAuth(): void {
   if (!sessionUser) return;
   view = "home";
+  syncOnboardFromSave({
+    offerWelcome: !onboard.welcomeSeen && onboard.step !== "done",
+  });
   flash(
     sessionUser.kind === "demo"
         ? t('ui.0b00025fb4')
@@ -1388,6 +1792,11 @@ async function logout(): Promise<void> {
   authUi.pane = "gate";
   view = "auth";
   save = createNewSave();
+  onboard = defaultOnboardSnapshot();
+  onboardWelcomeOpen = false;
+  onboardSkillCued = false;
+  onboardIslandFocusStep = null;
+  onboardStagesFocusStep = null;
   flash(t('ui.493fff2990'));
   render();
 }
@@ -1545,6 +1954,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   persist();
   currentStage = stage;
   lastReward = null;
+  resultStep = 1;
   lastScrollGain = 0;
   lastScrollPremiumGain = 0;
   autoMode = false;
@@ -1557,6 +1967,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   shapeFlashIds = [];
   shapeFlashUntil = 0;
   stageEntryId = null;
+  onboardSkillCued = false;
   const rivalEnemies =
     stage.mode === "arena"
       ? pickArenaRival(`${todayKey()}:${stage.id}`).enemyMonsterIds
@@ -1573,6 +1984,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   ensureTarget();
   view = "battle";
   render();
+  cueOnboardFirstBattle();
   void resolveCombatUntilAllyInput();
 }
 
@@ -1764,6 +2176,9 @@ function openStagePrep(stage: StageDef): void {
     flash(t("ui.a4d2cdf322"));
     return;
   }
+  if (stage.id === ONBOARD_FIRST_STAGE_ID) {
+    patchOnboard({ openedStages: true, openedRegion: true });
+  }
   stageEntryId = stage.id;
   stagePrepSummonerOpen = false;
   stagePrepInvTab = "monster";
@@ -1784,8 +2199,6 @@ function openStagePrep(stage: StageDef): void {
   }
   partyDraft = new Set(preset.party.length ? preset.party : save.party);
   persist();
-  // Battle button sits where Cancel lands after swap — block the trailing ghost click.
-  suppressGhostClicks();
   applyStagesRegionOpen();
 }
 
@@ -1811,6 +2224,9 @@ function confirmStagePrepStart(): void {
   save = r.save;
   persist();
   partyDraft = null;
+  if (onboard.step === "party") {
+    patchOnboard({ partySet: true });
+  }
   startBattle(stage, stageEntryDiff);
 }
 
@@ -1973,11 +2389,11 @@ function renderStageEntryModal(): string {
       ${renderStagePrepDock()}
 
       <footer class="stage-prep-footer">
-        <button type="button" class="stage-prep-start" id="btn-stage-entry-start" ${canStart ? "" : "disabled"}>
+        <button type="button" class="stage-prep-start" id="btn-stage-entry-start" data-core-prep-action="start" ${canStart ? "" : "disabled"}>
           <span class="stage-prep-start-cost" aria-hidden="true"><img src="/art/ui/res/energy.svg" width="15" height="15" alt="" draggable="false" />${cost}</span>
           <span>${escapeHtml(t("ui.stagePrepStart"))}</span>
         </button>
-        <button type="button" class="stage-prep-cancel" id="btn-stage-entry-cancel">${escapeHtml(t("ui.stagePrepCancel"))}</button>
+        <button type="button" class="stage-prep-cancel" id="btn-stage-entry-cancel" data-core-prep-action="cancel">${escapeHtml(t("ui.stagePrepCancel"))}</button>
       </footer>
     </div>
     ${renderStagePrepInfoModal()}
@@ -2449,14 +2865,6 @@ function bindStageEntryModal(): void {
   if (!host) return;
   dematteArtInTree(host, "img.mon-slot-img");
 
-  host.querySelector("#btn-stage-entry-start")?.addEventListener("click", () => {
-    confirmStagePrepStart();
-  });
-
-  host.querySelector("#btn-stage-entry-cancel")?.addEventListener("click", () => {
-    closeStagePrep();
-  });
-
   host.querySelector("#btn-stage-prep-buy-energy")?.addEventListener("click", () => {
     const r = runBuyEnergy(save, 1);
     save = r.save;
@@ -2474,6 +2882,9 @@ function bindStageEntryModal(): void {
     });
     save = r.save;
     persist();
+    if (onboard.step === "party") {
+      patchOnboard({ partySet: true });
+    }
     flash(t("ui.stagePrepDeckSaved", { n: idx + 1 }));
     applyStagesRegionOpen({ animate: false });
   });
@@ -2581,6 +2992,15 @@ function grantRewardIfNeeded(): void {
     (save.scrollsPremium ?? 0) - scrollsPremiumBefore,
   );
   lastReward = reward;
+  resultStep = 1;
+  if (victory && currentStage.id === ONBOARD_FIRST_STAGE_ID) {
+    const drop = Boolean(reward.gear || reward.symbol);
+    patchOnboard({
+      openedStages: true,
+      openedRegion: true,
+      hasBattleDrop: drop || onboard.hasBattleDrop,
+    });
+  }
   view = "result";
 }
 
@@ -2605,14 +3025,22 @@ function resultLootTile(opts: {
   </li>`;
 }
 
-function resultExpTrackRow(track: ExpTrackGain): string {
+function resultExpCard(track: ExpTrackGain | null, kind: ExpTrackGain["kind"]): string {
+  if (!track) {
+    return `<li class="result-exp-card result-exp-card--empty result-exp-card--${kind}" aria-hidden="true">
+      <span class="result-exp-card-art"></span>
+      <span class="result-exp-card-name">${escapeHtml(t("ui.resultEmptyPartySlot"))}</span>
+    </li>`;
+  }
   const per = Math.max(1, track.expPerLevel);
   const cur = Math.min(per, Math.max(0, track.afterExp));
   const pct = Math.round((cur / per) * 100);
   const leveled = track.levelsGained > 0;
   let icon = "/art/auth/logo-mark-192.png";
   let label = t("ui.resultExpUser");
-  if (track.kind === "summoner") {
+  if (track.kind === "user") {
+    label = displayNickname() || t("ui.resultExpUser");
+  } else if (track.kind === "summoner") {
     const el = track.element ?? save.activeSummoner ?? "light";
     icon = summonerArtSrc(el);
     label = t("ui.resultExpSummoner");
@@ -2624,24 +3052,43 @@ function resultExpTrackRow(track: ExpTrackGain): string {
     label = track.nameKo || t("ui.resultExpMonster");
   }
   const lvBadge = leveled
-    ? `<span class="result-exp-lvup">Lv.${track.beforeLevel}${ARROW_RIGHT}${track.afterLevel}</span>`
-    : `<span class="result-exp-lv">Lv.${track.afterLevel}</span>`;
-  return `<li class="result-exp-row result-exp-row--${track.kind}${leveled ? " is-levelup" : ""}">
-    <span class="result-exp-art" aria-hidden="true">
-      <img src="${icon}" width="40" height="40" alt="" draggable="false" />
+    ? `<span class="result-exp-card-lv is-up">Lv.${track.beforeLevel}${ARROW_RIGHT}${track.afterLevel}</span>`
+    : `<span class="result-exp-card-lv">Lv.${track.afterLevel}</span>`;
+  return `<li class="result-exp-card result-exp-card--${track.kind}${leveled ? " is-levelup" : ""}">
+    <span class="result-exp-card-art" aria-hidden="true">
+      <img src="${icon}" width="48" height="48" alt="" draggable="false" />
     </span>
-    <div class="result-exp-body">
-      <div class="result-exp-top">
-        <strong class="result-exp-name">${escapeHtml(label)}</strong>
-        ${lvBadge}
-        <span class="result-exp-frac">${t("ui.resultExpToNext", { cur, max: per })}</span>
-        <strong class="result-exp-delta">+${fmtRes(track.gained)}</strong>
-      </div>
-      <div class="result-exp-bar" role="progressbar" aria-valuenow="${cur}" aria-valuemin="0" aria-valuemax="${per}">
-        <i class="result-exp-bar-fill" style="width:${pct}%"></i>
-      </div>
+    <strong class="result-exp-card-name">${escapeHtml(label)}</strong>
+    ${lvBadge}
+    <span class="result-exp-card-delta">+${fmtRes(track.gained)}</span>
+    <div class="result-exp-card-bar" role="progressbar" aria-valuenow="${cur}" aria-valuemin="0" aria-valuemax="${per}">
+      <i class="result-exp-card-bar-fill" style="width:${pct}%"></i>
     </div>
+    <span class="result-exp-card-frac">${t("ui.resultExpToNext", { cur, max: per })}</span>
   </li>`;
+}
+
+function nextCampaignStage(stage: StageDef): StageDef | null {
+  const index = MAIN_QUEST_STAGES.findIndex((candidate) => candidate.id === stage.id);
+  if (index < 0) return null;
+  const next = MAIN_QUEST_STAGES[index + 1] ?? null;
+  return next && isStageUnlocked(save, next.id) ? next : null;
+}
+
+function resultBattleAction(
+  stage: StageDef,
+  action: "again" | "next",
+  label: string,
+  diff: StageDifficulty = stageEntryDiff,
+): string {
+  const cost = stageEnergyCost(stage, diff);
+  const energy = Math.floor(save.island.energy);
+  const enabled = energy >= cost;
+  return `<button type="button" class="result-battle-action result-battle-action--${action}${enabled ? "" : " is-disabled"}" data-result-battle="${action}" data-result-diff="${diff}" ${enabled ? "" : "disabled"}>
+    <span class="result-battle-action-label">${escapeHtml(label)}</span>
+    <span class="result-battle-action-energy"><img src="/art/ui/res/energy.svg" width="16" height="16" alt="" draggable="false" />${cost}</span>
+    <small>${energy}/${save.island.energyMax ?? 100}</small>
+  </button>`;
 }
 
 function renderResult(): string {
@@ -2667,6 +3114,13 @@ function renderResult(): string {
   const win = reward.victory;
   const title = win ? t("ui.resultVictory") : t("ui.resultDefeat");
   const stageLine = escapeHtml(stage.nameKo);
+  const firstRite =
+    win &&
+    stage.id === ONBOARD_FIRST_STAGE_ID &&
+    (onboard.step === "summon" ||
+      onboard.step === "enhance" ||
+      onboard.step === "party" ||
+      onboard.step === "equip");
 
   const lootTiles: string[] = [];
   if (win) {
@@ -2747,6 +3201,20 @@ function renderResult(): string {
     : win
       ? ([
           {
+            kind: "user",
+            id: "user",
+            gained: reward.summonerExp ?? 0,
+            beforeLevel: Math.max(
+              1,
+              save.island.summonerLevel - (reward.levelsGained ?? 0),
+            ),
+            beforeExp: 0,
+            afterLevel: save.island.summonerLevel,
+            afterExp: Math.floor(save.island.summonerExp ?? 0),
+            expPerLevel: 100,
+            levelsGained: reward.levelsGained ?? 0,
+          },
+          {
             kind: "summoner",
             id: "summoner",
             element: save.activeSummoner ?? "light",
@@ -2764,10 +3232,23 @@ function renderResult(): string {
         ] satisfies ExpTrackGain[])
       : [];
 
+  const userTrack = tracks.find((track) => track.kind === "user") ?? null;
+  const summonerTrack = tracks.find((track) => track.kind === "summoner") ?? null;
+  const monsters = tracks.filter((track) => track.kind === "monster");
+  const monsterSlots = [0, 1, 2, 3].map((index) =>
+    resultExpCard(monsters[index] ?? null, "monster"),
+  );
+
   const progressSection =
-    win && tracks.length
+    win && (userTrack || summonerTrack || monsters.length > 0)
       ? `<section class="result-progress" aria-label="${t("ui.resultExpUser")}">
-        <ul class="result-exp-list">${tracks.map(resultExpTrackRow).join("")}</ul>
+        <ul class="result-exp-row result-exp-row--lead">
+          ${resultExpCard(userTrack, "user")}
+          ${resultExpCard(summonerTrack, "summoner")}
+        </ul>
+        <ul class="result-exp-row result-exp-row--party">
+          ${monsterSlots.join("")}
+        </ul>
       </section>`
       : "";
 
@@ -2791,9 +3272,6 @@ function renderResult(): string {
           <small>${escapeHtml(gearSlotLabel(reward.gear.slot))}</small>
         </div>
       </div>
-      <div class="result-drop-acts">
-        <button type="button" class="auth-btn-primary" data-nav="enhance">${t("ui.bbef9e1b47")}</button>
-      </div>
     </article>`);
   }
   if (reward.symbol) {
@@ -2816,10 +3294,6 @@ function renderResult(): string {
           <small>${escapeHtml(rarity.label)}</small>
         </div>
       </div>
-      <div class="result-drop-acts${reward.symbol ? " result-drop-acts--split" : ""}">
-        <button type="button" class="auth-btn-primary" data-nav="enhance">${t("ui.7533294263")}</button>
-        <button type="button" class="secondary auth-btn-ghost" data-nav="shop">${t("ui.9efcf019b7")}</button>
-      </div>
     </article>`);
   }
   const dropSection = dropCards.length
@@ -2829,39 +3303,57 @@ function renderResult(): string {
   const loseNote = !win
     ? `<p class="result-empty">${escapeHtml(reward.expNote || t("ui.41281baf5a"))}</p>`
     : "";
+  const nextStage = win ? nextCampaignStage(stage) : null;
+  const riteContinue =
+    firstRite && onboard.step === "summon"
+      ? `<button type="button" class="auth-btn-primary result-cta-primary result-onboard-cta" id="btn-result-onboard">${escapeHtml(t("ui.onboard.resultSummonCta"))}</button>`
+      : "";
+  const battleChoices = `<section class="result-battle-choices${firstRite ? " is-onboard-secondary" : ""}" aria-label="${escapeHtml(t("ui.be85833944"))}">
+    ${resultBattleAction(stage, "again", t("ui.03d1f975cb"))}
+    ${
+      nextStage
+        ? resultBattleAction(
+            nextStage,
+            "next",
+            t("ui.resultNextStage"),
+            "normal",
+          )
+        : ""
+    }
+  </section>`;
+
+  const stepOne = `<div class="result-body">
+      ${progressSection ? `<div class="result-exp-panel">${progressSection}</div>` : ""}
+      ${loseNote}
+      ${lootSection}
+      ${dropSection}
+    </div>
+    <div class="result-foot">
+      <button type="button" class="auth-btn-primary result-cta-primary" id="btn-result-continue">${t("ui.resultContinue")}</button>
+    </div>`;
+
+  const stepTwo = `<div class="result-body result-body--choices">
+      <p class="result-choice-hint">${stageLine}</p>
+      ${riteContinue}
+    </div>
+    <div class="result-foot">
+      ${battleChoices}
+      <nav class="result-nav" aria-label="${escapeHtml(t("nav.main"))}">
+        <button type="button" class="secondary" id="btn-result-prep">${t("ui.resultBattlePrep")}</button>
+        <button type="button" class="secondary" data-nav="stages">${t("ui.resultBattleMap")}</button>
+        <button type="button" class="secondary" data-nav="home">${t("ui.resultIsland")}</button>
+      </nav>
+    </div>`;
 
   return `<div class="result-wrap result-wrap--enter">
     ${navBackBtn({ nav: "stages", label: t("ui.1a7f31cadb") })}
     ${battleSkyHtml(stage)}
-    <div class="result-screen ${win ? "is-win" : "is-lose"}">
+    <div class="result-screen ${win ? "is-win" : "is-lose"}${firstRite ? " is-onboard-first" : ""}" data-result-step="${resultStep}">
       <div class="result-banner result-banner--compact">
         <h2 class="result-title">${title}</h2>
         <p class="result-stage">${stageLine}</p>
       </div>
-      <div class="result-body">
-        ${
-          progressSection
-            ? `<div class="result-exp-panel">${progressSection}</div>`
-            : ""
-        }
-        ${loseNote}
-      </div>
-      <div class="result-foot">
-        ${lootSection}
-        ${dropSection}
-        <div class="result-cta">
-          <button type="button" class="auth-btn-primary result-cta-primary" id="btn-result-again">${t("ui.03d1f975cb")}</button>
-          <div class="result-cta-row">
-            <button type="button" class="secondary auth-btn-ghost" data-nav="stages">${t("ui.0f9f095864")}</button>
-            ${
-              win
-                ? `<button type="button" class="secondary auth-btn-ghost" data-nav="party">${t("ui.108f04ca6e")}</button>`
-                : ""
-            }
-            <button type="button" class="secondary auth-btn-ghost" data-nav="home">${t("ui.d8c261904f")}</button>
-          </div>
-        </div>
-      </div>
+      ${resultStep === 1 ? stepOne : stepTwo}
     </div>
   </div>`;
 }
@@ -2985,6 +3477,7 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
       ),
     );
     await resolveCombatUntilAllyInput({ holdBusy: true });
+    cueOnboardFirstSkills();
   } finally {
     battleFxBusy = false;
   }
@@ -4225,26 +4718,6 @@ function modalCloseX(ariaLabel: string, closeBtnId: string): string {
   return `<button type="button" class="modal-x" data-modal-x-for="${closeBtnId}" aria-label="${escapeHtml(ariaLabel)}"></button>`;
 }
 
-/**
- * After replacing modal DOM mid-gesture, the same pointer can land on the new
- * backdrop/Cancel and instantly dismiss the sheet. Swallow trusted click/up briefly.
- */
-let ghostClickSwallowUntil = 0;
-let ghostClickSwallowBound = false;
-function suppressGhostClicks(ms = 450): void {
-  ghostClickSwallowUntil = Math.max(ghostClickSwallowUntil, Date.now() + ms);
-  if (ghostClickSwallowBound) return;
-  ghostClickSwallowBound = true;
-  const swallow = (e: Event) => {
-    if (!e.isTrusted) return;
-    if (Date.now() > ghostClickSwallowUntil) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  };
-  document.addEventListener("click", swallow, true);
-  document.addEventListener("pointerup", swallow, true);
-}
-
 /** One-time capture delegate so soft-injected modals (chat, drop-info, …) keep a working X. */
 let modalXDelegateBound = false;
 function ensureModalXDelegate(): void {
@@ -4263,7 +4736,24 @@ function ensureModalXDelegate(): void {
       if (!id) return;
       const closeBtn = app.querySelector<HTMLButtonElement>(`#${CSS.escape(id)}`);
       if (!closeBtn) return;
-      suppressGhostClicks(400);
+      // Closing hides the sheet mid-gesture; eat only the one trailing trusted
+      // event of this same tap so it cannot activate UI underneath.
+      let done = false;
+      const release = (): void => {
+        if (done) return;
+        done = true;
+        document.removeEventListener("click", swallow, true);
+        document.removeEventListener("pointerup", swallow, true);
+      };
+      function swallow(e: Event): void {
+        if (!e.isTrusted) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        release();
+      }
+      document.addEventListener("click", swallow, true);
+      document.addEventListener("pointerup", swallow, true);
+      window.setTimeout(release, 400);
       closeBtn.click();
     },
     true,
@@ -5155,6 +5645,7 @@ function renderScreen(): void {
   app.classList.toggle("combat-mode", view === "battle" || view === "result");
   app.classList.toggle("monster-mode", view === "enhance" || view === "summoner");
   app.classList.toggle("summoner-mode", view === "summoner");
+  app.classList.toggle("island-layout-edit", onIsland && islandLayoutEdit);
   app.innerHTML = `
     <header class="app-bar app-bar--hud${onIsland ? " app-bar--home" : ""}${isStages ? " app-bar--expedition" : ""}">
       <div class="app-bar-hud">
@@ -5279,6 +5770,7 @@ function renderScreen(): void {
             ${languageOptionsHtml()}
           </select>
         </label>
+        <button type="button" class="settings-logout settings-reset-save" id="btn-reset-save">${escapeHtml(t("settings.resetSave"))}</button>
         <button type="button" class="settings-logout" id="btn-logout">${escapeHtml(t("settings.logout"))}</button>
       </div>
     </div>
@@ -5373,6 +5865,20 @@ function renderScreen(): void {
     ${renderCommunityModal()}
     ${renderShopModal()}
     ${renderBuildingInfoModal()}
+    ${
+      onIsland ||
+      isStages ||
+      view === "summon" ||
+      view === "enhance" ||
+      view === "party" ||
+      view === "result"
+        ? view === "home"
+          ? ""
+          : renderOnboardObjectiveChip()
+        : ""
+    }
+    ${renderOnboardWelcome()}
+    ${renderOnboardViewTip()}
     <nav class="tabs tabs--overlay" aria-label="${escapeHtml(t("nav.main"))}">
       <button type="button" data-nav="stages" class="${tabBattle ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--battle" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/battle.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.battle"))}</span></span></button>
       <button type="button" id="btn-nav-summoner" class="${tabSummoner ? "active" : ""}" title="${escapeHtml(t("nav.summoner"))}">
@@ -5397,6 +5903,7 @@ function renderScreen(): void {
   `;
 
   bind();
+  bindOnboardUi();
   if (toast) {
     const toastText = toast;
     toast = "";
@@ -5480,13 +5987,16 @@ function renderHome(): string {
       ? `${displayTitle} ${ARROW_RIGHT} Lv.${opts.unlockLv} ${t('ui.d1496ce82d')}`
       : displayTitle;
     const menuOpen = !locked && islandSpotMenuId === id;
+    const focusSpot = onboardFocusSpotId(onboard.step);
+    const onboardFocus =
+      !locked && !islandLayoutEdit && focusSpot === id ? " is-onboard-focus" : "";
     const fabs = locked
       ? ""
-      : `<div class="island-spot-fabs" ${menuOpen ? "" : "hidden"} aria-hidden="${menuOpen ? "false" : "true"}">
+      : `<div class="island-spot-fabs" ${menuOpen || onboardFocus ? "" : "hidden"} aria-hidden="${menuOpen || onboardFocus ? "false" : "true"}">
       <button type="button" class="island-spot-fab island-spot-fab--enter" data-spot-enter="${id}">${escapeHtml(t("ui.islandEnter"))}</button>
       <button type="button" class="island-spot-fab island-spot-fab--info" data-spot-info="${id}">${escapeHtml(t("ui.islandInfo"))}</button>
     </div>`;
-    return `<div class="island-spot${tone}${locked ? " is-locked" : ""}${islandLayoutEdit ? " is-layout-edit" : ""}${focus}${menuOpen ? " is-menu-open" : ""}" style="left:${x}%;top:${y}%;--spot-scale:${spotScale};z-index:${spotZ}" data-b="${id}" data-locked="${locked ? "1" : "0"}" ${opts?.unlockLv ? `data-unlock="${opts.unlockLv}"` : ""} role="group" aria-label="${escapeHtml(label)}">
+    return `<div class="island-spot${tone}${locked ? " is-locked" : ""}${islandLayoutEdit ? " is-layout-edit" : ""}${focus}${onboardFocus}${menuOpen ? " is-menu-open" : ""}" style="left:${x}%;top:${y}%;--spot-scale:${spotScale};z-index:${spotZ}" data-b="${id}" data-locked="${locked ? "1" : "0"}" ${opts?.unlockLv ? `data-unlock="${opts.unlockLv}"` : ""} role="group" aria-label="${escapeHtml(label)}">
       <button type="button" class="island-spot-hit" data-spot-open="${id}" aria-label="${escapeHtml(label)}">
         <span class="island-spot-art" aria-hidden="true">
           <span class="island-spot-glow"></span>
@@ -5503,6 +6013,7 @@ function renderHome(): string {
 
   return `<div class="home-island">
     ${renderHomeChatRail()}
+    ${renderOnboardObjectiveChip()}
     ${
       islandLayoutEdit
         ? `<div class="island-edit-hud" role="toolbar" aria-label="${t('ui.1ac9a0470a')}">
@@ -5544,30 +6055,30 @@ function renderHome(): string {
         </div>`
             : ""
         }
-        ${spot("summon_hearth", islandSpotTitle("summon_hearth"), 12, 44, { tone: "summon", sub: `${t('ui.fa73f3a42f')} ${save.scrolls}${t('ui.b241493768')}` })}
-        ${spot("power_circle", islandSpotTitle("power_circle"), 22, 30, { tone: "forge", sub: t('ui.1ab42b48a4') })}
-        ${spot("gateway", islandSpotTitle("gateway"), 78, 32, { tone: "gate", sub: t('ui.13c82de693') })}
-        ${spot("mana_pond", islandSpotTitle("mana_pond"), 40, 44, {
+        ${spot("summon_hearth", islandSpotTitle("summon_hearth"), 18, 48, { tone: "summon", sub: `${t('ui.fa73f3a42f')} ${save.scrolls}${t('ui.b241493768')}` })}
+        ${spot("power_circle", islandSpotTitle("power_circle"), 26, 36, { tone: "forge", sub: t('ui.1ab42b48a4') })}
+        ${spot("gateway", islandSpotTitle("gateway"), 74, 36, { tone: "gate", sub: t('ui.13c82de693') })}
+        ${spot("mana_pond", islandSpotTitle("mana_pond"), 42, 48, {
                   tone: "pond",
                   sub: `Lv.${pondLv} ${"\u00B7"} ${t('ui.df72a8753d')} ${storedMana}/${pondCap}`,
                   bubble: storedMana > 0 ? String(storedMana) : undefined,
                   bubbleKind: storedMana > 0 ? "mana" : undefined,
                 })}
-        ${spot("shop", islandSpotTitle("shop"), 30, 46, { tone: "shop", sub: t('ui.ed3a862c2c') })}
-        ${spot("party", islandSpotTitle("party"), 18, 60, { tone: "party", sub: `${save.party.length}/4` })}
-        ${spot("wish", islandSpotTitle("wish"), 48, 26, {
+        ${spot("shop", islandSpotTitle("shop"), 32, 50, { tone: "shop", sub: t('ui.ed3a862c2c') })}
+        ${spot("party", islandSpotTitle("party"), 24, 60, { tone: "party", sub: `${save.party.length}/4` })}
+        ${spot("wish", islandSpotTitle("wish"), 50, 32, {
                   tone: "wish",
                   locked: !hasWish,
                   unlockLv: 7,
                   sub: hasWish ? t('ui.6ca75b551e') : undefined,
                 })}
-        ${spot("dojo", islandSpotTitle("dojo"), 48, 62, {
+        ${spot("dojo", islandSpotTitle("dojo"), 50, 62, {
                   tone: "dojo",
                   locked: !dojoOk,
                   unlockLv: 8,
                   sub: dojoOk ? `${t('ui.ca119dd0f6')} ${save.dojoDrills ?? 0}${t('ui.2fc05c02be')}` : undefined,
                 })}
-        ${spot("crystal_mine", islandSpotTitle("crystal_mine"), 58, 46, {
+        ${spot("crystal_mine", islandSpotTitle("crystal_mine"), 58, 50, {
                   tone: "mine",
                   locked: !mineOk,
                   unlockLv: 10,
@@ -5575,14 +6086,14 @@ function renderHome(): string {
                   bubble: mineOk && storedCrystal > 0 ? String(storedCrystal) : undefined,
                   bubbleKind: mineOk && storedCrystal > 0 ? "crystal" : undefined,
                 })}
-        ${spot("glory", islandSpotTitle("glory"), 70, 50, { tone: "glory", sub: `${t('ui.ba0c9e096f')} ${save.gloryPoints ?? 0}` })}
-        ${spot("guild", save.guildName ? save.guildName : islandSpotTitle("guild"), 88, 54, {
+        ${spot("glory", islandSpotTitle("glory"), 68, 50, { tone: "glory", sub: `${t('ui.ba0c9e096f')} ${save.gloryPoints ?? 0}` })}
+        ${spot("guild", save.guildName ? save.guildName : islandSpotTitle("guild"), 80, 54, {
                   tone: "guild",
                   locked: !guildOk,
                   unlockLv: 12,
                   sub: guildOk ? t('ui.d55c6d0b00') : undefined,
                 })}
-        ${spot("fusion", islandSpotTitle("fusion"), 76, 70, {
+        ${spot("fusion", islandSpotTitle("fusion"), 74, 64, {
                   tone: "fusion",
                   locked: !fusionOk,
                   unlockLv: 17,
@@ -5838,7 +6349,7 @@ function renderParty(): string {
       </div>`;
     })
     .join("");
-  return hubShell(
+  return `<div class="party-screen${onboard.step === "party" ? " is-onboard-rite" : ""}">${hubShell(
     t("ui.108f04ca6e"),
     `${t('ui.d5e7024eb8')} ${selected.size}/4 ${MIDDOT} ${t('ui.269ecd9013')}`,
     `<div class="hub-panel">
@@ -5869,7 +6380,7 @@ function renderParty(): string {
       </div>
       <button type="button" class="auth-btn-primary full" id="btn-party-save" style="margin-top:10px">${t('ui.5ef8e0b5ef')} (${selected.size}/4)</button>
     </div>`,
-  );
+  )}</div>`;
 }
 
 function monsterElementLabel(el: string | undefined): string {
@@ -6293,7 +6804,7 @@ function renderSummon(): string {
           </div>`;
         }).join("")}
       </div>`;
-  return `<div class="summon-screen">
+  return `<div class="summon-screen${onboard.step === "summon" ? " is-onboard-rite" : ""}">
     ${hubShell(
       t('ui.0d242e234f'),
       "",
@@ -7158,6 +7669,7 @@ function bindSymbolInventoryInteractions(): void {
             const r = runEquipSymbol(save, slotEquipPick.uid, String(idx));
             save = r.save;
             persist();
+            patchOnboard({ equipped: true });
             slotEquipPick = null;
             symbolDetailIndex = null;
             symbolCompareIndex = null;
@@ -7400,6 +7912,7 @@ function bindSymbolInventoryInteractions(): void {
         const r = runEquipSymbol(save, targetUid, String(idx));
         save = r.save;
         persist();
+        patchOnboard({ equipped: true });
         symbolDetailIndex = null;
         symbolCompareIndex = null;
         slotEquipPick = null;
@@ -8644,7 +9157,9 @@ function renderEnhance(): string {
       rail.scrollTo({ left: nextLeft, behavior: "smooth" });
     }
   });
-  return `<div class="hub-screen enhance-screen">
+  return `<div class="hub-screen enhance-screen${
+    onboard.step === "enhance" || onboard.step === "equip" ? " is-onboard-rite" : ""
+  }">
     <div class="hub-sky" aria-hidden="true">
       <img
         class="hub-sky-img"
@@ -9148,13 +9663,17 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
         vaultLeft !== null
           ? `${s.nameKo} · ${t("ui.9cbaf58b88")} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}`
           : `${s.nameKo} · ${status}`;
-      return `<div class="stage-sortie${done ? " is-cleared" : ""}${locked ? " is-locked" : ""}${!canOpen ? " is-disabled" : ""}${short ? " is-short-energy" : ""}" title="${escapeHtml(rowTitle)}">
+      return `<div class="stage-sortie${done ? " is-cleared" : ""}${locked ? " is-locked" : ""}${!canOpen ? " is-disabled" : ""}${short ? " is-short-energy" : ""}${
+        onboard.step === "battle" && s.id === ONBOARD_FIRST_STAGE_ID
+          ? " is-onboard-focus"
+          : ""
+      }" title="${escapeHtml(rowTitle)}">
         <span class="stage-sortie-mark${done ? " is-done" : ""}" aria-hidden="true">
           ${done ? `<span class="stage-sortie-check">${CHECK}</span>` : ""}
           <strong>${escapeHtml(marker)}</strong>
         </span>
         ${stageAppearingMons(s)}
-        <button type="button" class="stage-sortie-battle${short ? " is-short" : ""}" data-stage="${s.id}" aria-label="${escapeHtml(battleAria)}" title="${!diffOpen ? t("ui.4292516afd") : escapeHtml(status)}" ${canOpen ? "" : "disabled"}>
+        <button type="button" class="stage-sortie-battle${short ? " is-short" : ""}" data-stage="${s.id}" data-core-stage="${s.id}" aria-label="${escapeHtml(battleAria)}" title="${!diffOpen ? t("ui.4292516afd") : escapeHtml(status)}" ${canOpen ? "" : "disabled"}>
           <span class="stage-sortie-cost" aria-hidden="true"><strong>${costLabel}</strong></span>
           <span class="stage-sortie-battle-label">${t("ui.stageBattle")}</span>
         </button>
@@ -9267,11 +9786,67 @@ function regionDifficultyOpen(region: StagesRegion, diff: StageDifficulty): bool
   return region.stages.some((s) => isDifficultyOpen(s, diff));
 }
 
+function bindCoreStageMap(): void {
+  const viewport = app.querySelector<HTMLElement>("#stages-viewport");
+  if (!viewport || coreStageMapViewport === viewport) return;
+  unbindCoreStageMap?.();
+  coreStageMapViewport = viewport;
+  unbindCoreStageMap = bindCoreStageMapController(viewport, {
+    openRegion: (regionId) => {
+      const region = stagesRegions().find((candidate) => candidate.id === regionId);
+      if (!region) return;
+      const isSameRegion = stagesRegion === region.id;
+      const next = isSameRegion ? null : region.id;
+      stagesRegion = next;
+      stageEntryId = null;
+      if (!isSameRegion) {
+        stagesDropInfoOpen = false;
+        stagesDropSetExpand = false;
+        if (region.id === "mq1") {
+          patchOnboard({ openedStages: true, openedRegion: true });
+        } else {
+          patchOnboard({ openedStages: true });
+        }
+      }
+      applyStagesRegionOpen();
+      if (
+        stagesRegion === "mq1" &&
+        (onboard.step === "stages" || onboard.step === "battle")
+      ) {
+        requestAnimationFrame(() => focusStagesRegion("mq1"));
+      }
+    },
+    locked: () => flash(t("ui.b72f5a4752")),
+  });
+}
+
 /** Open/close/refresh the region sheet without redrawing the world map. */
 function applyStagesRegionOpen(opts?: { animate?: boolean }): void {
   const animate = opts?.animate !== false;
   const host = app.querySelector<HTMLElement>("#stages-region-host");
   if (!host) return;
+  if (coreStageRegionHost !== host) {
+    unbindCoreStageRegion?.();
+    unbindCoreStagePrep?.();
+    coreStageRegionHost = host;
+    unbindCoreStageRegion = bindCoreStageRegionController(host, {
+      openStage: (stageId) => {
+        const stage = getStage(stageId);
+        if (stage) openStagePrep(stage);
+      },
+      closeRegion: () => {
+        stagesRegion = null;
+        stageEntryId = null;
+        stagesDropInfoOpen = false;
+        stagesDropSetExpand = false;
+        applyStagesRegionOpen();
+      },
+    });
+    unbindCoreStagePrep = bindCoreStagePrepController(host, {
+      start: confirmStagePrepStart,
+      cancel: closeStagePrep,
+    });
+  }
 
   app.querySelectorAll<HTMLButtonElement>("[data-region]").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.region === stagesRegion);
@@ -9308,14 +9883,6 @@ function bindStagesRegionSheet(): void {
   if (!host) return;
   ensureModalXDelegate();
 
-  host.querySelector("#btn-region-close")?.addEventListener("click", () => {
-    stagesRegion = null;
-    stageEntryId = null;
-    stagesDropInfoOpen = false;
-    stagesDropSetExpand = false;
-    applyStagesRegionOpen();
-  });
-
   host.querySelector("#btn-region-drop-info")?.addEventListener("click", () => {
     stagesDropInfoOpen = !stagesDropInfoOpen;
     if (stagesDropInfoOpen) {
@@ -9336,15 +9903,6 @@ function bindStagesRegionSheet(): void {
       stageEntryDiff = v;
       applyStagesRegionOpen({ animate: false });
     }
-  });
-
-  host.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const stage = getStage(btn.dataset.stage!);
-      if (stage) openStagePrep(stage);
-    });
   });
 
   host.querySelectorAll<HTMLButtonElement>("[data-ban-toggle]").forEach((btn) => {
@@ -9587,7 +10145,7 @@ function renderStagesRegionSheet(region: StagesRegion): string {
     : region.name;
 
   return `<div class="stages-region-layer" id="stages-region-layer">
-    <button type="button" class="stages-region-backdrop" id="btn-region-close" aria-label="${t('ui.94b7dba159')}"></button>
+    <button type="button" class="stages-region-backdrop" id="btn-region-close" data-core-region-close aria-label="${t('ui.94b7dba159')}"></button>
     <div class="stages-region-sheet stages-region-sheet--card stages-region-sheet--sortie stages-region-sheet--${region.tone}" data-diff="${stageEntryDiff}" role="dialog" aria-modal="true" aria-labelledby="stages-region-title">
       ${modalCloseX(t("ui.94b7dba159"), "btn-region-close")}
       <header class="stages-region-head stages-region-head--sortie">
@@ -9625,6 +10183,12 @@ function renderStages(): string {
       const prog = regionProgress(r.stages);
       const active = stagesRegion === r.id;
       const mq = isMainQuestRegion(r.id);
+      const onboardPin =
+        onboard.step === "stages" && r.id === "mq1"
+          ? " is-onboard-focus is-active"
+          : onboard.step === "battle" && r.id === "mq1"
+            ? " is-onboard-focus"
+            : "";
       const pinLayout = mq
         ? MAIN_QUEST_PIN_LAYOUT.find((p) => p.id === r.id)
         : null;
@@ -9639,7 +10203,7 @@ function renderStages(): string {
         ? `<span class="stages-pin-num" aria-hidden="true">${mark}</span>`
         : "";
       const ariaName = mark ? `${mark} ${r.name}` : r.name;
-      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${prog.unlocked ? "" : " is-locked"}${active ? " is-active" : ""}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" aria-label="${ariaName}${prog.unlocked ? "" : ` ${MIDDOT} ${t('ui.b35f488f01')}`}" ${prog.unlocked ? "" : 'data-locked="1"'}>
+      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${prog.unlocked ? "" : " is-locked"}${active ? " is-active" : ""}${onboardPin}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" data-core-region="${r.id}" aria-label="${ariaName}${prog.unlocked ? "" : ` ${MIDDOT} ${t('ui.b35f488f01')}`}" ${prog.unlocked ? "" : 'data-locked="1"'}>
         <span class="stages-pin-dot" aria-hidden="true">${mq ? `<span class="stages-pin-mark">${mark}</span>` : ""}</span>
         <span class="stages-pin-label">
           <strong>${lockMark}${titleNum}${r.name}</strong>
@@ -9793,7 +10357,11 @@ function renderBattle(manaPct: number): string {
 
   const stageTitle = escapeHtml(currentStage.nameKo);
 
-  return `<div class="battle-screen battle-screen--enter">
+  return `<div class="battle-screen battle-screen--enter${
+    onboard.step === "battle" && currentStage?.id === ONBOARD_FIRST_STAGE_ID
+      ? " is-onboard-rite"
+      : ""
+  }">
     ${battleSkyHtml(currentStage)}
     <header class="battle-chrome">
       ${renderBattleTicker()}
@@ -10142,9 +10710,12 @@ function bindAuth(): void {
           render();
           return;
         }
-        const enterGame =
-          authUi.pane === "register" ? true : readAuthPrefs().autoLogin;
-        await enterWithUser(body.user, { enterGame });
+        const isRegister = authUi.pane === "register";
+        const enterGame = isRegister ? true : readAuthPrefs().autoLogin;
+        await enterWithUser(body.user, {
+          enterGame,
+          fresh: isRegister,
+        });
       } catch {
     flash(t('ui.b72f5a4752'));
         render();
@@ -10221,6 +10792,51 @@ function clampIslandPan(viewport: HTMLElement, world: HTMLElement): void {
   } else {
     islandPan.y = Math.min(maxY, Math.max(minY, islandPan.y));
   }
+}
+
+/** Frame the island camera on a building spot (percent coords on the world map). */
+function focusIslandSpot(spotId: string, opts?: { zoomMul?: number }): void {
+  const viewport = app.querySelector<HTMLElement>("#island-viewport");
+  const world = app.querySelector<HTMLElement>("#island-world");
+  if (!viewport || !world || world.offsetWidth <= 0) return;
+
+  const minZ = islandZoomMin();
+  const maxZ = islandZoomMax(world);
+  const zoomMul = opts?.zoomMul ?? 1.18;
+  islandZoom = Math.min(maxZ, Math.max(minZ, Math.max(islandZoom, minZ * zoomMul)));
+  applyIslandPan();
+
+  const W = world.offsetWidth;
+  const H = world.offsetHeight;
+  if (W <= 0 || H <= 0) return;
+  const pos = resolveIslandSpotPos(spotId, 50, 50);
+  const fx = Math.max(0.05, Math.min(0.95, pos.x / 100));
+  const fy = Math.max(0.05, Math.min(0.95, pos.y / 100));
+  const s = ISLAND_BASE_SCALE;
+  const { ox, oy } = islandOriginPx(world);
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  // Bias slightly upward so the spot sits above the objective chip / tabs.
+  const targetX = vw * 0.5;
+  const targetY = vh * 0.42;
+  islandPan.x = targetX - fx * W * s - ox * (1 - s);
+  islandPan.y = targetY - fy * H * s - oy * (1 - s);
+  islandPanCentered = true;
+  clampIslandPan(viewport, world);
+  applyIslandPan();
+}
+
+/** Once per onboard step, pull the island camera to the guided building. */
+function maybeFocusOnboardIslandSpot(): void {
+  if (view !== "home" || islandLayoutEdit || onboardWelcomeOpen) return;
+  if (onboard.step === "done") return;
+  const spotId = onboardFocusSpotId(onboard.step);
+  if (!spotId) return;
+  if (onboardIslandFocusStep === onboard.step) return;
+  onboardIslandFocusStep = onboard.step;
+  const run = (): void => focusIslandSpot(spotId);
+  // After bindIslandPan's initial clamp rAF so we do not get recentered away.
+  requestAnimationFrame(() => requestAnimationFrame(run));
 }
 
 function zoomIslandAt(
@@ -10453,6 +11069,69 @@ function clampStagesPan(viewport: HTMLElement, world: HTMLElement): void {
   stagesPan.y = Math.min(0, Math.max(minY, stagesPan.y));
 }
 
+/** Frame the stages atlas so a region pin sits in the readable sweet spot. */
+function focusStagesRegion(regionId: string): void {
+  const viewport = app.querySelector<HTMLElement>("#stages-viewport");
+  const world = app.querySelector<HTMLElement>("#stages-world");
+  if (!viewport || !world) return;
+  sizeStagesWorld(viewport, world);
+  const W = world.offsetWidth;
+  const H = world.offsetHeight;
+  if (W <= 0 || H <= 0) return;
+  const pin =
+    MAIN_QUEST_PIN_LAYOUT.find((p) => p.id === regionId) ??
+    stagesRegions().find((r) => r.id === regionId);
+  if (!pin) return;
+  const fx = Math.max(0.05, Math.min(0.95, pin.x / 100));
+  const fy = Math.max(0.05, Math.min(0.95, pin.y / 100));
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  // Keep the pin above the region sheet / objective chip.
+  const targetX = vw * 0.5;
+  const targetY = vh * (stagesRegion ? 0.32 : 0.48);
+  stagesPan.x = targetX - fx * W;
+  stagesPan.y = targetY - fy * H;
+  stagesPanCentered = true;
+  clampStagesPan(viewport, world);
+  applyStagesPan();
+}
+
+/** Once per onboard stages/battle step: frame mq1, open sheet, and prep 1-1. */
+function maybeGuideOnboardStages(): void {
+  if (view !== "stages") return;
+  if (onboard.step !== "stages" && onboard.step !== "battle") return;
+  if (onboardStagesFocusStep === onboard.step) return;
+  const guidedStep = onboard.step;
+  onboardStagesFocusStep = guidedStep;
+  const run = (): void => {
+    focusStagesRegion("mq1");
+    if (guidedStep === "stages") {
+      if (stagesRegion !== "mq1" || stageEntryId) {
+        stagesRegion = "mq1";
+        stageEntryId = null;
+        patchOnboard({ openedStages: true, openedRegion: true });
+        // patch may advance to battle and clear the focus token — reclaim it.
+        onboardStagesFocusStep = onboard.step;
+        applyStagesRegionOpen();
+        focusStagesRegion("mq1");
+      }
+      return;
+    }
+    // battle: open Moonveil + first-stage prep once
+    stagesRegion = "mq1";
+    const stage = getStage(ONBOARD_FIRST_STAGE_ID);
+    if (stage && stageEntryId !== stage.id) {
+      openStagePrep(stage);
+      onboardStagesFocusStep = onboard.step;
+      focusStagesRegion("mq1");
+      return;
+    }
+    applyStagesRegionOpen();
+    focusStagesRegion("mq1");
+  };
+  requestAnimationFrame(() => requestAnimationFrame(run));
+}
+
 function bindStagesPan(): void {
   const viewport = app.querySelector<HTMLElement>("#stages-viewport");
   const world = app.querySelector<HTMLElement>("#stages-world");
@@ -10538,13 +11217,14 @@ function clearIslandLongPress(): void {
 function bindIslandLayoutEdit(): void {
   const viewport = app.querySelector<HTMLElement>("#island-viewport");
   const world = app.querySelector<HTMLElement>("#island-world");
-  if (!viewport || !world) return;
 
   app.querySelector("#btn-island-layout-done")?.addEventListener("click", (ev) => {
+    ev.preventDefault();
     ev.stopPropagation();
     exitIslandLayoutEdit(true);
   });
   app.querySelector("#btn-island-layout-reset")?.addEventListener("click", (ev) => {
+    ev.preventDefault();
     ev.stopPropagation();
     islandLayoutDraft = { ...ISLAND_LAYOUT_DEFAULT };
     writeIslandLayout(islandLayoutDraft);
@@ -10552,6 +11232,7 @@ function bindIslandLayoutEdit(): void {
     render();
   });
 
+  if (!viewport || !world || !islandLayoutEdit) return;
   app.querySelectorAll<HTMLElement>("[data-b]").forEach((btn) => {
     btn.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0) return;
@@ -10651,10 +11332,12 @@ function bind(): void {
   }
 
   if (view === "home" || isFacilityView()) {
+    // Always rebind Done/Reset; drag handlers only when the island DOM is fresh.
+    bindIslandLayoutEdit();
     if (!preserveIslandDom) {
       bindIslandPan();
-      bindIslandLayoutEdit();
     }
+    maybeFocusOnboardIslandSpot();
   }
   bindChatUi();
 
@@ -10707,6 +11390,7 @@ function bind(): void {
 
   if (view === "stages") {
     bindStagesPan();
+    maybeGuideOnboardStages();
   }
 
   app.querySelector("#btn-res-more")?.addEventListener("click", (ev) => {
@@ -10911,6 +11595,19 @@ function bind(): void {
     render();
   });
 
+  app.querySelector("#btn-reset-save")?.addEventListener("click", () => {
+    if (!window.confirm(t("settings.resetSaveConfirm"))) return;
+    save = createNewSave();
+    persist();
+    resetOnboardProgress({ offerWelcome: true });
+    settingsOpen = false;
+    stageEntryId = null;
+    stagesRegion = null;
+    partyDraft = null;
+    flash(t("settings.resetSaveDone"));
+    render();
+  });
+
   app.querySelector("#btn-logout")?.addEventListener("click", () => {
     settingsOpen = false;
     void logout();
@@ -11064,6 +11761,9 @@ function bind(): void {
         enhanceTab = "monsters";
         enhanceSkillFeedAllowed = false;
       }
+      if (nav === "stages") {
+        patchOnboard({ openedStages: true });
+      }
       if (nav === "home") {
         enhanceSkillFeedAllowed = false;
         skillFeedModalOpen = false;
@@ -11206,6 +11906,9 @@ function bind(): void {
       lastSummonUids = save.roster
         .filter((m) => !before.has(m.uid))
         .map((m) => m.uid);
+      if (lastSummonUids.length) {
+        patchOnboard({ summoned: true });
+      }
       flash(r.message);
       render();
     });
@@ -11231,6 +11934,9 @@ function bind(): void {
     const r = runSetParty(save, next);
     save = r.save;
     persist();
+    if (onboard.step === "party") {
+      patchOnboard({ partySet: true });
+    }
     flash(r.message);
     render();
   });
@@ -11383,9 +12089,12 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-enh]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const uid = btn.dataset.enh!;
+      const beforeLv = save.roster.find((m) => m.uid === uid)?.level ?? 0;
       const r = runEnhance(save, uid);
       save = r.save;
       persist();
+      const afterLv = save.roster.find((m) => m.uid === uid)?.level ?? 0;
+      if (afterLv > beforeLv) patchOnboard({ enhanced: true });
       flash(r.message);
       render();
     });
@@ -11552,9 +12261,13 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-gear-equip]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.gearEquip ?? "-1");
+      const bagLen = (save.gearBag ?? []).length;
       const r = runEquipGearBag(save, idx);
       save = r.save;
       persist();
+      if ((save.gearBag ?? []).length < bagLen) {
+        patchOnboard({ equipped: true });
+      }
       flash(r.message);
       render();
     });
@@ -11886,9 +12599,19 @@ function bind(): void {
       if (!Number.isFinite(idx) || !save.symbols[idx]) return;
       const uid = selectedEnhanceUid;
       if (!uid) return;
+      const before = save.roster.find((m) => m.uid === uid);
       const r = runEquipSymbol(save, uid, String(idx));
       save = r.save;
       persist();
+      const after = save.roster.find((m) => m.uid === uid);
+      if (
+        before &&
+        after &&
+        JSON.stringify(before.symbolSlots ?? []) !==
+          JSON.stringify(after.symbolSlots ?? [])
+      ) {
+        patchOnboard({ equipped: true });
+      }
       slotEquipPick = null;
       monDetailTab = "symbols";
       monBookDock = "symbols";
@@ -11923,6 +12646,7 @@ function bind(): void {
     save = r.save;
     persist();
     partyDraft = null;
+    patchOnboard({ partySet: true });
     flash(r.message);
     view = "home";
     render();
@@ -12031,39 +12755,8 @@ function bind(): void {
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-region]").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
-      if (app.querySelector("#stages-viewport")?.getAttribute("data-pan-moved") === "1") {
-        return;
-      }
-      const id = btn.dataset.region as StagesRegionId;
-      if (btn.dataset.locked === "1") {
-        flash(t("ui.b72f5a4752"));
-        return;
-      }
-      const next = stagesRegion === id ? null : id;
-      if (next !== stagesRegion) {
-        stagesDropInfoOpen = false;
-        stagesDropSetExpand = false;
-      }
-      stagesRegion = next;
-      // Pin click can retarget onto the new sheet backdrop and close it instantly.
-      if (next) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        suppressGhostClicks();
-      }
-      applyStagesRegionOpen();
-    });
-  });
-
-  app.querySelector("#btn-region-close")?.addEventListener("click", () => {
-    stagesRegion = null;
-    stageEntryId = null;
-    applyStagesRegionOpen();
-  });
-
   if (view === "stages") {
+    bindCoreStageMap();
     applyStagesRegionOpen();
   }
 
@@ -12194,16 +12887,55 @@ function bind(): void {
     render();
   });
 
-  app.querySelector("#btn-result-again")?.addEventListener("click", () => {
+  app.querySelector("#btn-result-continue")?.addEventListener("click", () => {
+    resultStep = 2;
+    render();
+  });
+
+  app.querySelector("#btn-result-onboard")?.addEventListener("click", () => {
+    battle = null;
+    dmgFloats = [];
+    lastReward = null;
+    lastScrollGain = 0;
+    lastScrollPremiumGain = 0;
+    currentStage = null;
+    runOnboardCta();
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-result-battle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const current = currentStage;
+      if (!current) return;
+      const next =
+        btn.dataset.resultBattle === "next" ? nextCampaignStage(current) : current;
+      if (!next) return;
+      const diff =
+        btn.dataset.resultDiff === "hard" || btn.dataset.resultDiff === "hell"
+          ? btn.dataset.resultDiff
+          : "normal";
+      battle = null;
+      dmgFloats = [];
+      startBattle(next, diff);
+    });
+  });
+
+  app.querySelector("#btn-result-prep")?.addEventListener("click", () => {
     const stage = currentStage;
     if (!stage) {
       view = "stages";
       render();
       return;
     }
+    const region = stagesRegions().find((candidate) =>
+      candidate.stages.some((candidateStage) => candidateStage.id === stage.id),
+    );
     battle = null;
     dmgFloats = [];
-    startBattle(stage);
+    view = "stages";
+    stagesRegion = region?.id ?? null;
+    stageEntryId = null;
+    render();
+    if (region) openStagePrep(stage);
   });
 
   if (view === "battle") {

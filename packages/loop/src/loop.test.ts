@@ -1242,5 +1242,31 @@ describe("game loop", () => {
     assert.equal(round!.grindstones, base.grindstones);
     assert.deepEqual(round!.claimedMailIds, []);
     assert.deepEqual(round!.claimedMissionKeys, []);
+    assert.equal(round!.onboardRite, null);
+  });
+
+  it("migrateSave preserves onboardRite checkpoint", () => {
+    const base = createNewSave(0);
+    const rite = {
+      step: "party",
+      openedStages: true,
+      openedRegion: true,
+      summoned: true,
+      enhanced: true,
+      partySet: false,
+      equipped: false,
+      hasBattleDrop: true,
+      welcomeSeen: true,
+    };
+    const round = migrateSave(
+      JSON.parse(JSON.stringify({ ...base, onboardRite: rite })),
+    );
+    assert.ok(round);
+    assert.deepEqual(round!.onboardRite, rite);
+    const cleared = migrateSave(
+      JSON.parse(JSON.stringify({ ...base, onboardRite: "bad" })),
+    );
+    assert.ok(cleared);
+    assert.equal(cleared!.onboardRite, null);
   });
 });
