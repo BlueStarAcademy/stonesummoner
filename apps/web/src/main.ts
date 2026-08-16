@@ -779,12 +779,18 @@ function syncSumMagicNodeActive(): void {
 /** Soft-patch summoner book modals without rebuilding hub sky / screen. */
 function refreshSumBookModals(): boolean {
   const host = app.querySelector<HTMLElement>("#sum-modal-host");
-  if (!host) return false;
+  const onBook = !!host || !!app.querySelector(".sum-screen");
+  if (host) host.innerHTML = "";
   const el = activeSummonerElement();
-  host.innerHTML = `${renderGearDetailModal(el)}${renderSumMagicDetailModal(el)}`;
+  softRemoveOverlay("gear-detail-layer");
+  softRemoveOverlay("sum-magic-detail-layer");
+  const gear = renderGearDetailModal(el);
+  const magic = renderSumMagicDetailModal(el);
+  if (gear) softMountOverlay("gear-detail-layer", gear);
+  if (magic) softMountOverlay("sum-magic-detail-layer", magic);
   syncSumMagicNodeActive();
   bindSumBookModalInteractions();
-  return true;
+  return onBook;
 }
 
 function refreshSumGearPane(): boolean {
@@ -1430,6 +1436,7 @@ function applyBuildingInfoOpen(): void {
         : "";
   }
   replayModalPop(layer);
+  promoteOverlayToAppRoot(layer);
 }
 
 function openBuildingInfoSoft(id: string): void {
@@ -1508,6 +1515,7 @@ function applyBuildingUnlockOpen(): void {
     body.textContent = t("ui.buildingUnlockBody", { name, level });
   }
   replayModalPop(layer);
+  promoteOverlayToAppRoot(layer);
 }
 
 function showNextBuildingUnlockModal(): void {
@@ -1599,7 +1607,7 @@ function enterIslandBuilding(id: string): void {
     enhanceSkillFeedAllowed = true;
     monDetailTab = "skills";
     view = "enhance";
-    renderPreservingIsland();
+    render();
   } else if (id === "shop") {
     openShopModalSoft();
   } else if (id === "party") {
@@ -1885,18 +1893,9 @@ function renderOnboardWelcome(): string {
 }
 
 function renderOnboardViewTip(): string {
-  if (onboard.step === "done" || view === "auth") return "";
+  if (onboard.step === "done" || view === "auth" || view === "battle") return "";
   let tipKey: Parameters<typeof t>[0] | null = null;
-  if (
-    view === "battle" &&
-    onboard.step === "battle" &&
-    currentStage?.id === ONBOARD_FIRST_STAGE_ID
-  ) {
-    tipKey =
-      onboardSkillCued || battle?.phase === "await_skill"
-        ? "ui.onboard.battleTipSkill"
-        : "ui.onboard.battleTipStone";
-  } else if (view === "summon" && onboard.step === "summon") {
+  if (view === "summon" && onboard.step === "summon") {
     tipKey = "ui.onboard.summonTip";
   } else if (view === "enhance" && onboard.step === "enhance") {
     tipKey = "ui.onboard.enhanceTip";
@@ -1949,8 +1948,6 @@ function cueOnboardFirstSkills(): void {
     return;
   }
   onboardSkillCued = true;
-  const tip = app.querySelector(".onboard-view-tip");
-  if (tip) tip.textContent = t("ui.onboard.battleTipSkill");
   const ms = fxDurationMs(1400, battleSpeed);
   window.requestAnimationFrame(() => {
     app
@@ -2200,6 +2197,10 @@ async function logout(): Promise<void> {
 
 function flash(msg: string): void {
   toast = msg;
+  if (view === "auth" || app.classList.contains("auth-mode")) {
+    showAuthToast(msg);
+    return;
+  }
   const bar = app.querySelector("header.app-bar");
   if (!bar) return;
   bar.querySelector(".toast")?.remove();
@@ -2207,6 +2208,25 @@ function flash(msg: string): void {
   p.className = "toast";
   p.textContent = msg;
   bar.appendChild(p);
+  setTimeout(() => {
+    if (toast === msg) toast = "";
+    p.remove();
+  }, 2200);
+}
+
+/** Small overlay toast above the auth panel — does not shift layout. */
+function showAuthToast(msg: string): void {
+  const stack =
+    app.querySelector<HTMLElement>(".auth-form-stack") ??
+    app.querySelector<HTMLElement>(".auth-gate") ??
+    app.querySelector<HTMLElement>(".auth-screen");
+  if (!stack) return;
+  stack.querySelector(".auth-toast")?.remove();
+  const p = document.createElement("p");
+  p.className = "toast auth-toast";
+  p.setAttribute("role", "alert");
+  p.textContent = msg;
+  stack.insertBefore(p, stack.firstChild);
   setTimeout(() => {
     if (toast === msg) toast = "";
     p.remove();
@@ -3023,7 +3043,9 @@ function applyStagePrepInfo(opts?: { animate?: boolean }): void {
     return;
   }
 
-  const existing = host.querySelector("#stage-prep-info-layer");
+  const existing =
+    host.querySelector("#stage-prep-info-layer") ??
+    app.querySelector("#stage-prep-info-layer");
   if (!stagePrepInfo) {
     existing?.remove();
     return;
@@ -3035,13 +3057,12 @@ function applyStagePrepInfo(opts?: { animate?: boolean }): void {
   }
   if (existing) existing.outerHTML = html;
   else layer.insertAdjacentHTML("beforeend", html);
-  bindStagePrepInfoControls(host);
+  const next = promoteOverlayToAppRoot(app.querySelector("#stage-prep-info-layer"));
+  bindStagePrepInfoControls(app);
   if (opts?.animate !== false) {
-    const next = host.querySelector<HTMLElement>("#stage-prep-info-layer");
     if (next) replayModalPop(next);
-  } else {
-    const next = host.querySelector<HTMLElement>("#stage-prep-info-layer");
-    if (next) next.style.animation = "none";
+  } else if (next) {
+    next.style.animation = "none";
   }
 }
 
@@ -3269,7 +3290,9 @@ function applyStageDropInfo(opts?: { animate?: boolean }): void {
     btn.setAttribute("aria-pressed", stagesDropInfoOpen ? "true" : "false");
   }
 
-  const existing = host.querySelector("#stage-drop-info-layer");
+  const existing =
+    host.querySelector("#stage-drop-info-layer") ??
+    app.querySelector("#stage-drop-info-layer");
   if (!stagesDropInfoOpen) {
     existing?.remove();
     return;
@@ -3279,16 +3302,12 @@ function applyStageDropInfo(opts?: { animate?: boolean }): void {
   const animate = opts?.animate !== false;
   if (existing) {
     existing.outerHTML = html;
-    const next = host.querySelector<HTMLElement>("#stage-drop-info-layer");
-    if (next && !animate) next.style.animation = "none";
   } else {
     regionLayer.insertAdjacentHTML("beforeend", html);
-    if (!animate) {
-      const next = host.querySelector<HTMLElement>("#stage-drop-info-layer");
-      if (next) next.style.animation = "none";
-    }
   }
-  bindStageDropInfoControls(host);
+  const next = promoteOverlayToAppRoot(app.querySelector("#stage-drop-info-layer"));
+  if (next && !animate) next.style.animation = "none";
+  bindStageDropInfoControls(app);
 }
 
 function bindStageDropInfoControls(host: ParentNode): void {
@@ -3966,7 +3985,9 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     await waitFx(castMs);
 
     if (!battle.playStone({ x, y })) {
+      const reason = battle.log[battle.log.length - 1] ?? t("ui.b72f5a4752");
       stoneSummonFx = null;
+      flash(reason);
       if (!refreshBattleView()) render();
       return;
     }
@@ -3974,6 +3995,7 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     const capBonus = battle.pendingCaptureDamageBonus.ally;
     refreshLegal();
     if (!refreshBattleView()) render();
+    await waitPaintFrame();
     const dropMs = fxDurationMs(280, battleSpeed);
     pulseBoardCell(app, x, y, "fx-stone-drop", dropMs);
     if (capBonus > 0) {
@@ -4844,16 +4866,28 @@ function renderBoardCells(canClick: boolean): string {
         !stone;
       const baitClass = bait ? " bait" : "";
       const placeable = canClick && legal && !stone && !forbid;
+      const summoning =
+        !!stoneSummonFx &&
+        stoneSummonFx.x === x &&
+        stoneSummonFx.y === y &&
+        !stone;
+      const renderStoneSpan = (
+        color: "black" | "white",
+        el: string | undefined,
+        extraClass = "",
+      ): string => {
+        const stoneId = normalizeBattleStoneId(el);
+        const src = battleStoneSrc(stoneId);
+        const elClass = stoneId === "enemy" ? "el-enemy" : `el-${stoneId}`;
+        return `<span class="stone magic-stone ${color} ${elClass} has-art${extraClass}" aria-hidden="true"><img class="magic-stone-img" src="${src}" width="64" height="64" alt="" draggable="false" decoding="async" onerror="this.closest('.magic-stone')?.classList.add('art-failed');this.remove()"/><i class="magic-stone-core"></i><i class="magic-stone-flare"></i></span>`;
+      };
       const stoneHtml = stone
-        ? (() => {
-            const team = stone === "black" ? "ally" : "enemy";
-            const el =
-              team === "ally" ? allyStoneEl : enemyStoneEl;
-            const stoneId = normalizeBattleStoneId(el);
-            const src = battleStoneSrc(stoneId);
-            const elClass = stoneId === "enemy" ? "el-enemy" : `el-${stoneId}`;
-            return `<span class="stone magic-stone ${stone} ${elClass} has-art" aria-hidden="true"><img class="magic-stone-img" src="${src}" width="64" height="64" alt="" draggable="false" decoding="async" onerror="this.closest('.magic-stone')?.classList.add('art-failed');this.remove()"/><i class="magic-stone-core"></i><i class="magic-stone-flare"></i></span>`;
-          })()
+        ? renderStoneSpan(
+            stone,
+            stone === "black" ? allyStoneEl : enemyStoneEl,
+          )
+        : summoning
+          ? renderStoneSpan("black", stoneSummonFx?.element ?? allyStoneEl, " is-summon-preview")
         : token
           ? `<span class="token-mark token-mark--${tokenResource}">
               <span class="token-resource-orbit" aria-hidden="true">
@@ -4870,7 +4904,7 @@ function renderBoardCells(canClick: boolean): string {
                 : starSet.has(key)
                   ? `<span class="star-mark">${Mark.starDot}</span>`
                   : `<span class="node-mark" aria-hidden="true"></span>`;
-      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
+      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${summoning ? " is-summoning" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
   seenBoardTokenKeys = activeTokenKeys;
@@ -4942,8 +4976,7 @@ function renderStonePickLayer(): string {
     !stoneSummonFx;
   return `<div class="stone-pick-layer" id="stone-pick-layer"${open ? "" : ' hidden aria-hidden="true"'}>
     <div class="stone-pick-card">
-      <p class="stone-pick-hint">${escapeHtml(t("ui.onboard.battleTipStone"))}</p>
-      <div class="stone-pick-hit">
+      <div class="stone-pick-hit" aria-label="${escapeHtml(t("ui.onboard.battleTipStone"))}">
         <div class="board magic-circle stone-pick-board size-${size}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${open ? renderBoardCells(true) : ""}</div>
       </div>
     </div>
@@ -5123,14 +5156,16 @@ function renderAuth(): string {
     return `${authHeroLayer()}
     <div class="auth-screen auth-screen--form">
       ${authBrand()}
-      <div class="auth-panel">
-        <h2 class="auth-title">${t("ui.ecb4cc8789")}</h2>
-        <form id="auth-form" class="auth-form">
-          <label>${t("ui.3c37764a2b")}<input name="email" type="email" autocomplete="username" required /></label>
-          <label>${t("ui.81973897c7")}<input name="password" type="password" autocomplete="new-password" minlength="6" required /></label>
-          <button type="submit" class="auth-btn-primary">${t("ui.ecb4cc8789")}</button>
-        </form>
-        <button type="button" class="secondary full auth-btn-ghost" id="auth-back">${t("ui.1a7f31cadb")}</button>
+      <div class="auth-form-stack">
+        <div class="auth-panel">
+          <h2 class="auth-title">${t("ui.ecb4cc8789")}</h2>
+          <form id="auth-form" class="auth-form">
+            <label>${t("ui.3c37764a2b")}<input name="email" type="email" autocomplete="username" required /></label>
+            <label>${t("ui.81973897c7")}<input name="password" type="password" autocomplete="new-password" minlength="6" required /></label>
+            <button type="submit" class="auth-btn-primary">${t("ui.ecb4cc8789")}</button>
+          </form>
+          <button type="button" class="secondary full auth-btn-ghost" id="auth-back">${t("ui.1a7f31cadb")}</button>
+        </div>
       </div>
     </div>`;
   }
@@ -5143,23 +5178,25 @@ function renderAuth(): string {
   return `${authHeroLayer()}
   <div class="auth-screen auth-screen--form">
     ${authBrand()}
-    <div class="auth-panel">
-      <h2 class="auth-title">${t("ui.e225a6fd75")}</h2>
-      <form id="auth-form" class="auth-form">
-        <label>${t("ui.3c37764a2b")}<input name="email" type="email" autocomplete="username" value="${emailAttr}" required /></label>
-        <label>${t("ui.81973897c7")}<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
-        <div class="auth-checks">
-          <label class="auth-check"><input type="checkbox" name="saveId" ${prefs.saveId ? "checked" : ""} /> ${t("ui.929b21bf23")}</label>
-          <label class="auth-check"><input type="checkbox" name="autoLogin" ${prefs.autoLogin ? "checked" : ""} /> ${t("ui.217211959e")}</label>
+    <div class="auth-form-stack">
+      <div class="auth-panel">
+        <h2 class="auth-title">${t("ui.e225a6fd75")}</h2>
+        <form id="auth-form" class="auth-form">
+          <label>${t("ui.3c37764a2b")}<input name="email" type="email" autocomplete="username" value="${emailAttr}" required /></label>
+          <label>${t("ui.81973897c7")}<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
+          <div class="auth-checks">
+            <label class="auth-check"><input type="checkbox" name="saveId" ${prefs.saveId ? "checked" : ""} /> ${t("ui.929b21bf23")}</label>
+            <label class="auth-check"><input type="checkbox" name="autoLogin" ${prefs.autoLogin ? "checked" : ""} /> ${t("ui.217211959e")}</label>
+          </div>
+          <button type="submit" class="auth-btn-primary">${t("ui.e225a6fd75")}</button>
+        </form>
+        <div class="auth-link-row">
+          <button type="button" class="auth-text-link" id="auth-register">${t("ui.ecb4cc8789")}</button>
+          <span class="auth-link-sep" aria-hidden="true">${MIDDOT}</span>
+          <button type="button" class="auth-text-link" id="auth-demo">${t("ui.275aaa8da4")}</button>
         </div>
-        <button type="submit" class="auth-btn-primary">${t("ui.e225a6fd75")}</button>
-      </form>
-      <div class="auth-link-row">
-        <button type="button" class="auth-text-link" id="auth-register">${t("ui.ecb4cc8789")}</button>
-        <span class="auth-link-sep" aria-hidden="true">${MIDDOT}</span>
-        <button type="button" class="auth-text-link" id="auth-demo">${t("ui.275aaa8da4")}</button>
+        <button type="button" class="secondary full auth-btn-ghost" id="auth-back">${t("ui.94b7dba159")}</button>
       </div>
-      <button type="button" class="secondary full auth-btn-ghost" id="auth-back">${t("ui.94b7dba159")}</button>
     </div>
     ${
       ephemeralStore
@@ -5179,7 +5216,6 @@ function isFacilityView(v: View = view): boolean {
     v === "fusion" ||
     v === "party" ||
     v === "dojo" ||
-    v === "enhance" ||
     v === "stages"
   );
 }
@@ -5504,13 +5540,52 @@ function softPatchHost(hostSelector: string, html: string): HTMLElement | null {
   return host;
 }
 
+/** Move a modal layer to `#app` so it escapes `main` / facility stacking contexts. */
+function promoteOverlayToAppRoot(el: Element | null | undefined): HTMLElement | null {
+  if (!(el instanceof HTMLElement)) return null;
+  if (el.parentElement !== app) app.appendChild(el);
+  return el;
+}
+
+/** Button-opened overlays that must always paint above HUD / nested screens. */
+const APP_ROOT_OVERLAY_IDS = [
+  "settings-layer",
+  "mailbox-layer",
+  "notif-layer",
+  "mission-layer",
+  "community-layer",
+  "shop-layer",
+  "summoner-picker-layer",
+  "chat-layer",
+  "building-info-layer",
+  "building-unlock-layer",
+  "skill-feed-layer",
+  "power-up-layer",
+  "gear-detail-layer",
+  "sum-magic-detail-layer",
+  "sym-detail-layer",
+  "sym-bag-expand-layer",
+  "codex-layer",
+  "stage-prep-info-layer",
+  "stage-drop-info-layer",
+] as const;
+
+function promoteKnownOverlays(): void {
+  for (const id of APP_ROOT_OVERLAY_IDS) {
+    promoteOverlayToAppRoot(app.querySelector(`#${id}`));
+  }
+}
+
 /** Inject/replace a single overlay node without remounting the active screen. */
 function softMountOverlay(layerId: string, html: string): HTMLElement | null {
   app.querySelector(`#${layerId}`)?.remove();
   if (!html.trim()) return null;
   app.insertAdjacentHTML("beforeend", html);
   const layer = app.querySelector<HTMLElement>(`#${layerId}`);
-  if (layer) replayModalPop(layer);
+  if (layer) {
+    promoteOverlayToAppRoot(layer);
+    replayModalPop(layer);
+  }
   return layer;
 }
 
@@ -5524,7 +5599,10 @@ function applySkillFeedOpen(): void {
   if (!layer) return;
   layer.hidden = !skillFeedModalOpen;
   layer.setAttribute("aria-hidden", skillFeedModalOpen ? "false" : "true");
-  if (skillFeedModalOpen) replayModalPop(layer);
+  if (skillFeedModalOpen) {
+    promoteOverlayToAppRoot(layer);
+    replayModalPop(layer);
+  }
 }
 
 /** Toggle the monster EXP power-up modal without a full screen re-render. */
@@ -5533,7 +5611,10 @@ function applyPowerUpOpen(): void {
   if (!layer) return;
   layer.hidden = !powerUpModalOpen;
   layer.setAttribute("aria-hidden", powerUpModalOpen ? "false" : "true");
-  if (powerUpModalOpen) replayModalPop(layer);
+  if (powerUpModalOpen) {
+    promoteOverlayToAppRoot(layer);
+    replayModalPop(layer);
+  }
 }
 
 /** Toggle settings modal without a full screen re-render. */
@@ -5548,7 +5629,10 @@ function applySettingsOpen(): void {
   if (layer) {
     layer.hidden = !settingsOpen;
     layer.setAttribute("aria-hidden", settingsOpen ? "false" : "true");
-    if (settingsOpen) replayModalPop(layer);
+    if (settingsOpen) {
+      promoteOverlayToAppRoot(layer);
+      replayModalPop(layer);
+    }
   }
 }
 
@@ -5563,7 +5647,10 @@ function applyMailboxOpen(): void {
   if (layer) {
     layer.hidden = !mailboxOpen;
     layer.setAttribute("aria-hidden", mailboxOpen ? "false" : "true");
-    if (mailboxOpen) replayModalPop(layer);
+    if (mailboxOpen) {
+      promoteOverlayToAppRoot(layer);
+      replayModalPop(layer);
+    }
   }
 }
 
@@ -5578,7 +5665,10 @@ function applyNotifOpen(): void {
   if (layer) {
     layer.hidden = !notifOpen;
     layer.setAttribute("aria-hidden", notifOpen ? "false" : "true");
-    if (notifOpen) replayModalPop(layer);
+    if (notifOpen) {
+      promoteOverlayToAppRoot(layer);
+      replayModalPop(layer);
+    }
   }
 }
 
@@ -5593,7 +5683,10 @@ function applyMissionOpen(): void {
   if (layer) {
     layer.hidden = !missionOpen;
     layer.setAttribute("aria-hidden", missionOpen ? "false" : "true");
-    if (missionOpen) replayModalPop(layer);
+    if (missionOpen) {
+      promoteOverlayToAppRoot(layer);
+      replayModalPop(layer);
+    }
   }
 }
 
@@ -5608,7 +5701,10 @@ function applyCommunityOpen(): void {
   if (layer) {
     layer.hidden = !communityOpen;
     layer.setAttribute("aria-hidden", communityOpen ? "false" : "true");
-    if (communityOpen) replayModalPop(layer);
+    if (communityOpen) {
+      promoteOverlayToAppRoot(layer);
+      replayModalPop(layer);
+    }
   }
 }
 
@@ -5636,7 +5732,10 @@ function applyShopOpen(): void {
   if (layer) {
     layer.hidden = !shopOpen;
     layer.setAttribute("aria-hidden", shopOpen ? "false" : "true");
-    if (shopOpen) replayModalPop(layer);
+    if (shopOpen) {
+      promoteOverlayToAppRoot(layer);
+      replayModalPop(layer);
+    }
   }
 }
 
@@ -5660,7 +5759,10 @@ function applySummonerPickerOpen(): void {
   if (layer) {
     layer.hidden = !summonerPickerOpen;
     layer.setAttribute("aria-hidden", summonerPickerOpen ? "false" : "true");
-    if (summonerPickerOpen) replayModalPop(layer);
+    if (summonerPickerOpen) {
+      promoteOverlayToAppRoot(layer);
+      replayModalPop(layer);
+    }
   }
 }
 
@@ -6318,20 +6420,13 @@ function renderScreen(): void {
     app.classList.remove("summoner-mode");
     app.innerHTML = `
       <main class="auth-main auth-main--center">${authPwaInstallBtn()}${renderAuth()}${authFooter()}</main>
-      ${toast ? `<p class="toast auth-toast">${toast}</p>` : ""}
     `;
     bind();
 
     if (toast) {
       const toastText = toast;
+      showAuthToast(toastText);
       toast = "";
-      setTimeout(() => {
-        if (!toast) {
-          const el = app.querySelector(".toast");
-          if (el) el.remove();
-        }
-        void toastText;
-      }, 2200);
     }
     return;
   }
@@ -6380,7 +6475,7 @@ function renderScreen(): void {
   app.classList.toggle("combat-mode", view === "battle" || view === "result");
   app.classList.toggle(
     "monster-mode",
-    view === "summoner" || (view === "enhance" && !isFacilityView()),
+    view === "summoner" || view === "enhance",
   );
   app.classList.toggle("summoner-mode", view === "summoner");
   app.classList.toggle("island-layout-edit", onIsland && islandLayoutEdit);
@@ -6402,7 +6497,7 @@ function renderScreen(): void {
           <div class="user-profile-info">
             <p class="user-profile-nick">${nick}${demoTag ? ` ${demoTag}` : ""}</p>
             ${
-              onIsland
+              onIsland || view === "summoner" || view === "enhance"
                 ? ""
                 : `<p class="user-profile-sub">${escapeHtml(elementLabel(activeEl))} Lv.${activeSum.level}${
                     activeSum.awaken > 0 ? ` - ${escapeHtml(t("summonerPicker.awaken", { n: activeSum.awaken }))}` : ""
@@ -6431,10 +6526,10 @@ function renderScreen(): void {
           <div class="res-item res-item--crystal" title="${escapeHtml(t("res.crystal"))}">
             <img class="res-ico" src="/art/ui/res/crystal.svg" width="18" height="18" alt="" draggable="false" />
             <strong class="res-val">${fmtRes(island.crystal)}</strong>
+            <button type="button" class="res-more-btn${resMoreOpen ? " is-open" : ""}" id="btn-res-more" aria-expanded="${resMoreOpen ? "true" : "false"}" aria-controls="res-more-panel" title="${escapeHtml(resMoreOpen ? t("res.moreClose") : t("res.moreOpen"))}" aria-label="${escapeHtml(resMoreOpen ? t("res.moreClose") : t("res.moreOpen"))}">
+              <span class="res-more-chevron" aria-hidden="true"></span>
+            </button>
           </div>
-          <button type="button" class="res-more-btn${resMoreOpen ? " is-open" : ""}" id="btn-res-more" aria-expanded="${resMoreOpen ? "true" : "false"}" aria-controls="res-more-panel" title="${escapeHtml(resMoreOpen ? t("res.moreClose") : t("res.moreOpen"))}" aria-label="${escapeHtml(resMoreOpen ? t("res.moreClose") : t("res.moreOpen"))}">
-            <span class="res-more-chevron" aria-hidden="true"></span>
-          </button>
           <div class="res-more-panel${resMoreOpen ? " is-open" : ""}" id="res-more-panel" role="region" aria-label="${escapeHtml(t("res.more"))}" ${resMoreOpen ? "" : "hidden"}>
             <div class="res-item res-item--scroll" title="${escapeHtml(t("res.scrollNormal"))}">
               <img class="res-ico" src="/art/ui/res/scroll.svg" width="16" height="16" alt="" draggable="false" />
@@ -6975,12 +7070,18 @@ function softRefreshOverlayReveals(): boolean {
     bindWishRevealDismiss();
     ok = true;
   }
-  const enhanceHost = softPatchHost(
-    "#enhance-modal-host",
-    `${renderForgeReveal()}${renderSymbolBagExpandModal()}${renderSymbolDetailModal()}`,
-  );
+  const enhanceHost = softPatchHost("#enhance-modal-host", renderForgeReveal());
   if (enhanceHost) {
     bindForgeRevealDismiss();
+    ok = true;
+  }
+  softRemoveOverlay("sym-detail-layer");
+  softRemoveOverlay("sym-bag-expand-layer");
+  const symDetail = renderSymbolDetailModal();
+  const symBag = renderSymbolBagExpandModal();
+  if (symDetail) softMountOverlay("sym-detail-layer", symDetail);
+  if (symBag) softMountOverlay("sym-bag-expand-layer", symBag);
+  if (enhanceHost || symDetail || symBag) {
     bindEnhanceTransientModals();
     bindSymbolInventoryInteractions();
     ok = true;
@@ -9705,7 +9806,7 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
     const art = gearSlotArtSrc(slot, piece.element ?? activeEl, piece.setId);
     const artFb = gearSlotArtFallbackSrc(slot, piece.element ?? activeEl, piece.setId);
     return `<button type="button" class="gear-slot gear-slot--image inv-grade--${grade}${fxGear === slot ? " is-flash" : ""}" data-gear-detail-slot="${slot}" title="${escapeHtml(describeGear(piece))}">
-      <img class="gear-slot-ico" src="${art}" width="56" height="56" alt="${escapeHtml(gearSlotLabel(slot))}" draggable="false" onerror="this.onerror=null;this.src='${artFb}'" />
+      <img class="gear-slot-ico" src="${art}" width="52" height="52" alt="${escapeHtml(gearSlotLabel(slot))}" draggable="false" onerror="this.onerror=null;this.src='${artFb}'" />
       <span class="gear-slot-plus">+${piece.enhance}</span>
     </button>`;
   };
@@ -9726,10 +9827,12 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
   }).join("");
 
   return `<div class="sum-gear-panel">
-    <div class="gear-doll" aria-label="${escapeHtml(t("ui.sumBookTabGear"))}">
-      ${slots.map((slot) => slotBtn(slot, gear[slot])).join("")}
+    <div class="sum-gear-equip-row">
+      <div class="gear-doll" aria-label="${escapeHtml(t("ui.sumBookTabGear"))}">
+        ${slots.map((slot) => slotBtn(slot, gear[slot])).join("")}
+      </div>
+      <div class="gear-set-summary gear-set-summary--brief">${gearSetSummaryHtml(gear)}</div>
     </div>
-    <div class="gear-set-summary gear-set-summary--brief">${gearSetSummaryHtml(gear)}</div>
     <p class="section-label">${escapeHtml(t("ui.sumBookGearBag", { n: bag.length, max: MAX_GEAR_BAG }))}</p>
     <div class="gear-bag-grid" role="list">${bagSlots}</div>
   </div>`;
@@ -10148,8 +10251,11 @@ function renderSumSkillsPaneHtml(activeEl: SummonerElement): string {
               : "";
     const hint = open
       ? `+${rank}/${MAX_MAGIC_RANK}`
-      : lockedHint || t("ui.stagePrepSkillLocked");
-    return `<button type="button" class="sum-magic-node${open ? " is-on" : " is-locked"}${sumMagicDetailSlot === slot ? " is-active" : ""}" data-magic-detail-slot="${slot}" title="${escapeHtml(sk.nameKo)}">
+      : t("ui.stagePrepSkillLocked");
+    const title = lockedHint
+      ? `${sk.nameKo} · ${lockedHint}`
+      : sk.nameKo;
+    return `<button type="button" class="sum-magic-node${open ? " is-on" : " is-locked"}${sumMagicDetailSlot === slot ? " is-active" : ""}" data-magic-detail-slot="${slot}" title="${escapeHtml(title)}">
       <span class="sum-magic-node-slot">${slot}</span>
       <div class="sum-magic-node-seal">
         ${summonerSkillArtImg(sk.id, "sum-magic-ico", 36)}
@@ -10396,7 +10502,7 @@ function renderSummonerBook(): string {
   </div>`;
 
   const body = `<div class="hub-panel enhance-panel enhance-panel--desk">
-    <div id="sum-modal-host">${renderGearDetailModal(activeEl)}${renderSumMagicDetailModal(activeEl)}</div>
+    <div id="sum-modal-host"></div>
     <div class="mon-book sum-book">
       <div class="mon-book-viewer">${detail}</div>
       ${rail}
@@ -10405,6 +10511,7 @@ function renderSummonerBook(): string {
 
   queueMicrotask(() => {
     enhanceFx = null;
+    refreshSumBookModals();
   });
 
   return `<div class="hub-screen enhance-screen sum-screen">
@@ -10794,7 +10901,7 @@ function renderEnhance(): string {
   </div>`;
 
   const body = `<div class="hub-panel enhance-panel enhance-panel--desk">
-    <div id="enhance-modal-host">${renderForgeReveal()}${renderSymbolBagExpandModal()}${renderSymbolDetailModal()}</div>
+    <div id="enhance-modal-host">${renderForgeReveal()}</div>
     ${renderSkillFeedModal()}
     ${renderPowerUpModal()}
     ${monstersPanel}
@@ -12161,6 +12268,7 @@ function bindBattleInteractive(): void {
   }
 
   bindStonePickTaps();
+  syncActiveUnitSkillPosition();
 
   app.querySelectorAll<HTMLButtonElement>(".suggest-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -12312,6 +12420,26 @@ function bindBattleInteractive(): void {
   });
 }
 
+/** Keep the active unit's action strip within the visible viewport. */
+function syncActiveUnitSkillPosition(): void {
+  requestAnimationFrame(() => {
+    const skills = app.querySelector<HTMLElement>(
+      ".battle-unit.active .battle-unit-skills",
+    );
+    if (!skills) return;
+    skills.style.removeProperty("--battle-skill-shift");
+    const rect = skills.getBoundingClientRect();
+    const inset = 6;
+    const shift =
+      rect.left < inset
+        ? inset - rect.left
+        : rect.right > window.innerWidth - inset
+          ? window.innerWidth - inset - rect.right
+          : 0;
+    skills.style.setProperty("--battle-skill-shift", `${Math.round(shift)}px`);
+  });
+}
+
 function bindAuth(): void {
   bindAuthPwaInstall();
 
@@ -12409,7 +12537,6 @@ function bindAuth(): void {
                 ? t('ui.0e5bf793ef')
                 : t('ui.c17466f9ed'),
           );
-          render();
           return;
         }
         const isRegister = authUi.pane === "register";
@@ -12420,7 +12547,6 @@ function bindAuth(): void {
         });
       } catch {
     flash(t('ui.b72f5a4752'));
-        render();
       }
     })();
   });
@@ -14637,6 +14763,7 @@ function bind(): void {
   }
 
   startEnergyRegenTimer();
+  promoteKnownOverlays();
 }
 
 async function boot(): Promise<void> {

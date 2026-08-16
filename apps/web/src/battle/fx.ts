@@ -92,7 +92,7 @@ export function pulseBoardCell(
   ms: number,
 ): void {
   const el = root.querySelector<HTMLElement>(
-    `.board .cell[data-x="${x}"][data-y="${y}"]`,
+    `.board-frame .board .cell[data-x="${x}"][data-y="${y}"]`,
   );
   if (!el) return;
   // classList rejects space-separated tokens — split multi-class strings.

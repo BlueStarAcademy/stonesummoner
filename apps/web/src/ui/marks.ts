@@ -36,11 +36,23 @@ export function monStarsHtml(count: number): string {
   return MON_STAR_HTML.repeat(n);
 }
 
-/** Codex button seal - book icon (no CJK). */
+/** Codex button seal - ornate tome glyph (no CJK). */
 export const CODEX_SEAL_HTML =
-  '<svg class="mon-topbar-codex-ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">' +
-  '<path fill="currentColor" d="M5 3.5h10.5A2.5 2.5 0 0 1 18 6v14.5H7.25A1.75 1.75 0 0 0 5.5 22.25V5A1.5 1.5 0 0 1 7 3.5H5zm2.5 1.5V18c.4-.16.84-.25 1.3-.25H16.5V6A1 1 0 0 0 15.5 5H7.5z"/>' +
-  '<path fill="currentColor" opacity=".55" d="M7.5 5h8v1.25h-8z"/>' +
+  '<svg class="mon-topbar-codex-ico" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
+  '<defs>' +
+  '<linearGradient id="codexSealGold" x1="4" y1="3" x2="20" y2="21" gradientUnits="userSpaceOnUse">' +
+  '<stop stop-color="#FFF6D0"/><stop offset=".45" stop-color="#E8C84A"/><stop offset="1" stop-color="#9A7018"/>' +
+  "</linearGradient>" +
+  '<linearGradient id="codexSealPage" x1="8" y1="5" x2="18" y2="20" gradientUnits="userSpaceOnUse">' +
+  '<stop stop-color="#F7EFD8"/><stop offset="1" stop-color="#D8C49A"/>' +
+  "</linearGradient>" +
+  "</defs>" +
+  '<path fill="url(#codexSealGold)" d="M5.2 3.4h9.2c1.5 0 2.7 1.2 2.7 2.7v13.2c0 .7-.6 1.3-1.3 1.3H6.8c-1.1 0-2-.9-2-2V5.1c0-.9.8-1.7 1.7-1.7h-.3z"/>' +
+  '<path fill="url(#codexSealPage)" d="M7.1 5.1h8.6c.6 0 1.1.5 1.1 1.1v11.8c0 .3-.2.5-.5.5H8.4c-.7 0-1.3-.6-1.3-1.3V5.1z"/>' +
+  '<path fill="url(#codexSealGold)" opacity=".9" d="M4.4 4.2c0-.7.6-1.3 1.3-1.3h.8v16.6h-.8c-.7 0-1.3-.6-1.3-1.3V4.2z"/>' +
+  '<path fill="#8A2818" opacity=".55" d="M9.2 8.2h5.8v1.1H9.2zm0 2.6h5.8v1.1H9.2zm0 2.6h4.2v1.1H9.2z"/>' +
+  '<circle cx="17.6" cy="11.2" r="1.15" fill="#FFF6D0" opacity=".85"/>' +
+  '<path fill="none" stroke="#FFF6D0" stroke-width="1.1" stroke-linecap="round" opacity=".7" d="M17.6 9.6v-1.3"/>' +
   "</svg>";
 
 /** Locked codex cell mark - padlock (no CJK \u7981). */

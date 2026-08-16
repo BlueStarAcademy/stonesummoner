@@ -1,10 +1,9 @@
 /**
  * Uniform UI scale.
  *
- * Width drives the scale so the canvas always spans the screen edge to edge,
- * and the design canvas grows taller to absorb whatever height is left over.
- * Scaling by the smaller of both axes instead would letterbox every phone that
- * is proportionally taller than the design canvas.
+ * Width drives the scale so the canvas always spans the screen edge to edge.
+ * Height matches the viewport (via design-h = vh / scale) so short phones
+ * never grow a taller-than-screen canvas; book UIs compact with CSS instead.
  */
 export const DESIGN_W = 430;
 export const DESIGN_H = 780;
@@ -23,11 +22,11 @@ export function computeUiScale(vw = viewportSize().w): number {
 }
 
 /**
- * Height of the design canvas in unscaled px. Never shorter than the design
- * height, so short/landscape viewports keep a usable vertical budget.
+ * Height of the design canvas in unscaled px. Always matches the viewport so
+ * the scaled app fits without page scroll; short phones compact via CSS.
  */
 export function computeDesignHeight(vh = viewportSize().h, scale = computeUiScale()): number {
-  return Math.max(DESIGN_H, vh / scale);
+  return vh / scale;
 }
 
 export function applyUiScale(): number {
