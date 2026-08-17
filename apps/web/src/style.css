@@ -1106,10 +1106,7 @@ nav.tabs button.active .tab-ico {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  padding:
-    calc(56px + env(safe-area-inset-top))
-    16px
-    calc(88px + env(safe-area-inset-bottom));
+  padding: 0;
 }
 
 .settings-layer[hidden] {
@@ -1122,11 +1119,11 @@ nav.tabs button.active .tab-ico {
   border: 0;
   padding: 0;
   margin: 0;
-  background: transparent;
+  background: #07050ccc;
   cursor: default;
   pointer-events: auto;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .settings-sheet {
@@ -1134,7 +1131,7 @@ nav.tabs button.active .tab-ico {
   z-index: 1;
   width: min(100%, 360px);
   max-width: 360px;
-  max-height: min(72dvh, 560px);
+  max-height: min(78%, 560px);
   margin: 0;
   padding: 16px 16px 18px;
   border-radius: 18px;
@@ -1744,15 +1741,57 @@ main {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.facility-modal-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 40;
+.facility-modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  min-height: 52px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #7a6a3a55;
+  background: linear-gradient(180deg, #17121feF, #120e1cf2);
+  box-shadow: 0 4px 14px #0008;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-/* Facility chrome already has X — hide duplicate back arrows inside sheets.
-   Stages keeps app-bar 섬으로 (expedition chrome), not an in-modal back. */
+.facility-modal-back,
+.facility-modal-header-spacer {
+  width: 40px;
+  height: 40px;
+}
+
+.facility-modal-back {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #7a6a3a66;
+  border-radius: 12px;
+  background: #0e0b16aa;
+  cursor: pointer;
+}
+
+.facility-modal-back img {
+  width: 20px;
+  height: 20px;
+}
+
+.facility-modal-title {
+  margin: 0;
+  overflow: hidden;
+  color: #f5e6b8;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The common facility header owns navigation and title placement. */
 .facility-modal .nav-back {
   display: none !important;
 }
@@ -1769,11 +1808,33 @@ main {
 }
 
 .facility-modal .mon-topbar {
-  padding-right: 44px;
+  min-height: 0;
+  padding: 0 12px;
+  justify-content: flex-end;
 }
 
 .facility-modal .hub-hud {
-  padding-right: 44px;
+  padding: 4px 12px 8px;
+}
+
+.facility-modal .hub-hud--meta-only {
+  text-align: center;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.facility-modal .mon-topbar--tools {
+  justify-content: flex-end;
+  min-height: 0;
+  padding: 4px 12px 0;
+}
+
+.facility-modal .hub-hud .hub-title,
+.facility-modal .hub-hud .hub-title-rule,
+.facility-modal .mon-topbar-title {
+  display: none;
 }
 
 /* Stages map: edge-to-edge under expedition chat + 섬으로 chrome. */
@@ -1790,11 +1851,6 @@ main {
   border-radius: 0;
   overflow: hidden;
   background: #152430;
-}
-
-/* Exit is the app-bar 섬으로 control — hide duplicate modal X. */
-.facility-layer--stages .facility-modal-close {
-  display: none !important;
 }
 
 /* Float chat + 섬으로 above the stages facility sheet. */
@@ -6185,6 +6241,14 @@ button.battle-unit {
   width: min(250px, calc(100% - 16px));
 }
 
+.battle-auto-settings.is-ported {
+  position: fixed;
+  right: max(8px, env(safe-area-inset-right));
+  bottom: calc(58px + env(safe-area-inset-bottom));
+  z-index: var(--z-modal, 80);
+  pointer-events: auto;
+}
+
 .battle-auto-settings[hidden] {
   display: none;
 }
@@ -6195,6 +6259,9 @@ button.battle-unit {
   border-radius: 14px;
   background: linear-gradient(160deg, #211a36f7, #100d1bf7);
   box-shadow: 0 12px 26px #000b, inset 0 1px 0 #ffffff1a;
+}
+
+.battle-auto-settings.is-open .battle-auto-settings-card {
   animation: battle-auto-settings-in 0.16s ease-out both;
 }
 
@@ -6345,15 +6412,12 @@ button.battle-unit {
 }
 
 .board-wrap--stage.is-live .board-frame--tilted .board {
-  box-shadow:
-    0 0 0 2px #f0d87899,
-    0 0 32px #c9a22766,
-    0 10px 24px #0008;
+  box-shadow: none;
 }
 
 .board-wrap--stage .board {
   /* Design-canvas px — vw overflows #app; bare % can shrink-wrap to zero. */
-  width: min(400px, 100%);
+  width: min(420px, 100%);
   padding: 14px;
   gap: 3px;
   border-radius: 22px;
@@ -6361,7 +6425,10 @@ button.battle-unit {
 }
 
 .board-frame--has-art.board-frame--tilted .board {
+  background: transparent;
+  border: 0;
   box-shadow: none;
+  padding: 8px;
 }
 
 /* Arena table: steep tilt so the board sits BETWEEN the two rims */
@@ -6390,7 +6457,7 @@ button.battle-unit {
   left: 50%;
   top: 54%;
   /* Match the tilted grid projection so circle art and playable board read as one plane. */
-  width: min(400px, 100%);
+  width: min(420px, 100%);
   aspect-ratio: 1.55;
   transform: translate(-50%, -50%) rotateX(52deg) scaleX(1.08);
   transform-origin: center center;
@@ -6488,6 +6555,7 @@ button.battle-unit {
   z-index: 1;
   transform: rotateX(52deg) scaleX(1.08);
   transform-origin: center 58%;
+  transform-style: preserve-3d;
   will-change: transform;
   filter: drop-shadow(0 18px 18px #000a);
   /* Ensure transformed cells still receive precise touch hits. */
@@ -6497,14 +6565,111 @@ button.battle-unit {
 
 .board-frame--tilted .board {
   /* Wider base so foreshortening still reads as a full table */
-  width: min(400px, 100%);
+  width: min(420px, 100%);
   pointer-events: auto;
+  overflow: visible;
+  transform-style: preserve-3d;
 }
 
 .board-frame--tilted .board button.cell {
   /* Expand hit area slightly so foreshortened rim cells remain tappable. */
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  transform-style: preserve-3d;
+  background: transparent;
+  box-shadow: none;
+}
+
+.board-frame--tilted .board button.cell.has-stone,
+.board-frame--tilted .board button.cell.is-summoning,
+.board-frame--tilted .board button.cell.fx-stone-materialize {
+  overflow: visible;
+  z-index: 3;
+  background: transparent;
+  box-shadow: none;
+}
+
+.board-frame--tilted .board button.cell.is-summoning,
+.board-frame--tilted .board button.cell.fx-stone-materialize {
+  z-index: 5;
+}
+
+.board-frame--tilted .board button.cell .node-mark {
+  display: none;
+}
+
+.board-frame--tilted .board button.cell .magic-stone {
+  width: 118%;
+  height: 118%;
+  overflow: visible;
+  z-index: 3;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  transform: rotateX(-28deg);
+  transform-origin: center center;
+  filter: drop-shadow(0 5px 6px #000b);
+}
+
+.board-frame--tilted .board button.cell .magic-stone.has-art:not(.art-failed),
+.board-frame--tilted .board button.cell .magic-stone.black.has-art:not(.art-failed),
+.board-frame--tilted .board button.cell .magic-stone.white.has-art:not(.art-failed) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.board-frame--tilted .board button.cell .magic-stone.black.has-art:not(.art-failed) {
+  filter: drop-shadow(0 5px 6px #000b) drop-shadow(0 0 7px #c9a22777);
+}
+
+.board-frame--tilted .board button.cell .magic-stone.white.has-art:not(.art-failed) {
+  filter: drop-shadow(0 5px 6px #000b) drop-shadow(0 0 7px #8a70ff77);
+}
+
+.board-frame--tilted .board button.cell .magic-stone-core,
+.board-frame--tilted .board button.cell .magic-stone-flare {
+  display: none;
+}
+
+.board-frame--tilted.fx-capture-flash .board {
+  box-shadow: none;
+}
+
+.board-frame .board .cell.is-summoning {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Local summon seal — only on the tapped node, never a camera zoom. */
+.board-frame--tilted .board button.cell .summon-seal {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 1.5px solid #f0d878cc;
+  box-shadow: none;
+  background: transparent;
+  animation: summon-seal-expand 0.36s ease-out both;
+}
+
+.board-frame--tilted .board button.cell .summon-seal > i {
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  border: 1px solid #c9a227aa;
+  background: transparent;
+  animation: summon-seal-inner 0.36s ease-out both;
+}
+
+.board-frame--tilted .board button.cell.fx-stone-materialize .magic-stone {
+  width: 128%;
+  height: 128%;
+  animation: stone-materialize 0.42s ease-out both;
+}
+
+.board-frame--tilted .board button.cell.fx-stone-materialize--enemy .magic-stone {
+  animation-name: stone-materialize-enemy;
+  animation-duration: 0.28s;
 }
 
 /*
@@ -6600,36 +6765,44 @@ button.battle-unit {
 }
 
 .board-frame--tilted.fx-capture-flash .board {
-  box-shadow:
-    0 0 0 2px #f0d878aa,
-    0 0 28px #c9a22788,
-    0 8px 20px #0007;
+  box-shadow: none;
 }
 
 .board .cell.fx-stone-drop .stone,
 .board .cell.fx-stone-drop .magic-stone {
-  animation: stone-drop-in 0.28s ease-out both;
+  animation: stone-drop-in 0.48s ease-out both;
 }
 
 .board-frame .board .cell.is-summoning {
-  box-shadow: inset 0 0 0 2px #f0d878cc, 0 0 16px #c9a22788;
-  background: radial-gradient(circle at 50% 45%, #4a3878bb 0%, #221830cc 70%);
+  background: transparent;
+  box-shadow: none;
 }
 
-.board-frame .board .cell.is-summoning .magic-stone.is-summon-preview {
-  opacity: 0.72;
-  filter: drop-shadow(0 0 10px #c9a227aa);
-  animation: stone-summon-pulse 0.42s ease-in-out infinite alternate;
+@keyframes summon-seal-expand {
+  0% { transform: scale(0.2); opacity: 0; }
+  55% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.85; }
 }
 
-@keyframes stone-summon-pulse {
-  from { transform: translateY(-18%) scale(0.86); }
-  to { transform: translateY(-6%) scale(0.96); }
+@keyframes summon-seal-inner {
+  0% { transform: scale(0.05) rotate(-40deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg); opacity: 0.9; }
+}
+
+@keyframes stone-materialize {
+  0% { transform: rotateX(-28deg) scale(0.22); opacity: 0; filter: brightness(1.8); }
+  58% { transform: rotateX(-28deg) scale(1.12); opacity: 1; filter: brightness(1.15); }
+  100% { transform: rotateX(-28deg) scale(1); opacity: 1; filter: brightness(1); }
+}
+
+@keyframes stone-materialize-enemy {
+  0% { transform: rotateX(-28deg) scale(0.4); opacity: 0; }
+  100% { transform: rotateX(-28deg) scale(1); opacity: 1; }
 }
 
 @keyframes stone-drop-in {
-  0% { transform: translateY(-140%) scale(0.6); opacity: 0; }
-  70% { transform: translateY(8%) scale(1.05); opacity: 1; }
+  0% { transform: translateY(-220%) scale(1.85); opacity: 0; }
+  58% { transform: translateY(10%) scale(1.22); opacity: 1; }
   100% { transform: translateY(0) scale(1); }
 }
 
@@ -6835,8 +7008,14 @@ button.battle-unit {
   .board .cell.fx-capture,
   .board-frame--tilted.is-placeable .board-circle-aura,
   .board button.cell.suggest-1,
-  .stone-pick-layer {
+  .stone-pick-layer,
+  .board-frame--tilted .board button.cell .summon-seal,
+  .board-frame--tilted .board button.cell .summon-seal > i,
+  .board-frame--tilted .board button.cell.fx-stone-materialize .magic-stone {
     animation: none !important;
+  }
+  .board-frame--tilted .board button.cell .magic-stone {
+    transform: none;
   }
 }
 
@@ -7183,45 +7362,28 @@ button.battle-unit {
 }
 
 .board-frame--has-art .board.magic-circle {
-  background:
-    radial-gradient(circle at 50% 42%, #1a142828 0%, transparent 58%),
-    radial-gradient(circle at 50% 50%, #08061014 0%, #08061055 78%);
-  border-color: #c9a22733;
-  box-shadow:
-    inset 0 0 0 1px #f0e0a018,
-    inset 0 0 28px #0004,
-    0 0 0 1px #7b6cff22,
-    0 0 24px #5a4ec828;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   backdrop-filter: none;
 }
 
-.board-frame--has-art .board.magic-circle::before {
-  opacity: 0.18;
-  border-color: #c9a22722;
-  box-shadow: none;
-}
-
+.board-frame--has-art .board.magic-circle::before,
 .board-frame--has-art .board.magic-circle::after {
-  opacity: 0.22;
+  display: none;
 }
 
-/* Glass nodes so the stage circle reads as the same surface. */
-.board-frame--has-art .board button.cell {
-  background:
-    radial-gradient(circle at 50% 42%, #32274a38 0%, #110d1a42 72%);
-  box-shadow:
-    inset 0 0 0 1px #d8c58e1a,
-    inset 0 0 10px #0a071466;
+.board-frame--has-art .board-circle-aura,
+.board-frame--has-art .board-circle-ring {
+  display: none;
 }
 
+/* Intersection hits only — no glass plates on the map circle. */
+.board-frame--has-art .board button.cell,
 .board-frame--has-art .board button.cell.legal:not(:disabled),
 .board-frame--has-art .board button.cell.is-placeable {
-  background:
-    radial-gradient(circle at 50% 42%, #6b55a866 0%, #1a12306a 72%);
-  box-shadow:
-    inset 0 0 0 2px #b6a0ffaa,
-    0 0 12px #7b6cff66,
-    0 0 18px #c9a2271a;
+  background: transparent;
+  box-shadow: none;
 }
 
 @keyframes board-in {
@@ -7433,6 +7595,23 @@ button.battle-unit {
 }
 .board button.cell .magic-stone.el-dark.has-art:not(.art-failed) {
   filter: drop-shadow(0 0 6px #a070ff88);
+}
+
+.board-frame--tilted .board button.cell .magic-stone.has-art:not(.art-failed),
+.board-frame--tilted .board button.cell .magic-stone.el-fire.has-art:not(.art-failed),
+.board-frame--tilted .board button.cell .magic-stone.el-water.has-art:not(.art-failed),
+.board-frame--tilted .board button.cell .magic-stone.el-wind.has-art:not(.art-failed),
+.board-frame--tilted .board button.cell .magic-stone.el-light.has-art:not(.art-failed),
+.board-frame--tilted .board button.cell .magic-stone.el-dark.has-art:not(.art-failed) {
+  filter: drop-shadow(0 5px 6px #000b);
+}
+
+.board-frame--tilted .board button.cell .magic-stone.black.has-art:not(.art-failed) {
+  filter: drop-shadow(0 5px 6px #000b) drop-shadow(0 0 7px #c9a22777);
+}
+
+.board-frame--tilted .board button.cell .magic-stone.white.has-art:not(.art-failed) {
+  filter: drop-shadow(0 5px 6px #000b) drop-shadow(0 0 7px #8a70ff77);
 }
 
 .board button.cell .token-mark {
@@ -8501,6 +8680,10 @@ button.battle-unit {
   overflow: hidden;
   padding-top: calc(42px + env(safe-area-inset-top));
   padding-bottom: calc(2px + env(safe-area-inset-bottom) * 0.25);
+}
+
+#app.combat-mode .battle-layout--stage.is-stone-summoning {
+  overflow: visible;
 }
 
 #app.combat-mode .battle-layout--stage.is-skill-pick {
@@ -17655,9 +17838,42 @@ img.el-tint-dark {
 
 .summon-multi-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin: 10px 0 12px;
+}
+
+.summon-multi-result-sheet {
+  width: min(100%, 430px);
+  max-height: min(780px, calc(100dvh - 24px));
+  padding: 16px 12px 14px;
+  overflow: auto;
+  border: 1px solid #c9a22799;
+  background:
+    radial-gradient(circle at 50% -10%, #c9a22724, transparent 42%),
+    linear-gradient(165deg, #241848fa, #0d0a14fc);
+  box-shadow: inset 0 1px 0 #f5e6b833, 0 24px 60px #000d;
+}
+
+.summon-multi-result-kicker {
+  margin: 4px 0 2px;
+  color: #e8d9a8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-align: center;
+}
+
+.summon-multi-result-sheet .settings-title {
+  margin: 0 0 8px;
+  color: #f5e6b8;
+  font-size: 1.35rem;
+  text-align: center;
+}
+
+.summon-multi-grid--result {
+  gap: 8px;
+  margin: 12px 0 14px;
 }
 
 .summon-multi-cell {
@@ -17665,11 +17881,23 @@ img.el-tint-dark {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 8px 4px;
-  border-radius: 10px;
+  padding: 8px 3px 7px;
+  border-radius: 12px;
   border: 1px solid #5a4e7266;
-  background: linear-gradient(165deg, #1a1528f0, #120e1cf4);
+  background: linear-gradient(165deg, #2a2140f2, #120e1cf8);
   min-width: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.summon-multi-cell:hover,
+.summon-multi-cell:focus-visible {
+  transform: translateY(-2px);
+  border-color: #e8d9a8bb;
+  box-shadow: 0 6px 16px #0008;
+  outline: none;
 }
 
 .summon-multi-cell strong {
@@ -17686,6 +17914,46 @@ img.el-tint-dark {
   font-size: 0.55rem;
   color: #a89bb8;
   letter-spacing: 0.02em;
+}
+
+.summon-multi-cell .summon-multi-stars {
+  color: #e8d9a8;
+  font-size: 0.66rem;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.summon-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+}
+
+.summon-card-element,
+.summon-card-grade {
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  font-size: 0.48rem !important;
+  font-weight: 800;
+  letter-spacing: 0 !important;
+  line-height: 1;
+}
+
+.summon-card-element {
+  color: #c4b8d4 !important;
+  border: 1px solid #5a4e7288;
+  background: #0e0b16b8;
+}
+
+.summon-card-grade {
+  color: #f5e6b8 !important;
+  border: 1px solid #c9a22788;
+  background: #c9a22722;
 }
 
 .summon-multi-seal {
@@ -17725,10 +17993,66 @@ img.el-tint-dark {
 .summon-multi-cell.el-light { border-color: #e8d9a844; }
 .summon-multi-cell.el-dark { border-color: #9a70d044; }
 
-@media (max-width: 380px) {
-  .summon-multi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.summon-multi-cell.el-fire .summon-card-element { color: #f0a070 !important; border-color: #e0704077; }
+.summon-multi-cell.el-water .summon-card-element { color: #8ec8f0 !important; border-color: #4aa0d077; }
+.summon-multi-cell.el-wind .summon-card-element { color: #9ed8a8 !important; border-color: #6cbc7a77; }
+.summon-multi-cell.el-light .summon-card-element { color: #e8d9a8 !important; border-color: #e8d9a877; }
+.summon-multi-cell.el-dark .summon-card-element { color: #c4a0f0 !important; border-color: #9a70d077; }
+
+.summon-detail-sheet {
+  max-width: 360px;
+  text-align: center;
+}
+
+.summon-detail-sheet .settings-title {
+  margin: 4px 0;
+}
+
+.summon-detail-portrait {
+  width: 128px;
+  height: 128px;
+  margin: 2px auto 8px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid #c9a22788;
+  border-radius: 22px;
+  background: radial-gradient(circle at 35% 30%, #3a3018, #120e1c);
+  box-shadow: 0 0 24px #c9a22733;
+}
+
+.summon-detail-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 16%;
+}
+
+.summon-detail-skills {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 14px;
+  text-align: left;
+}
+
+.summon-detail-skills div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #5a4e7266;
+  border-radius: 10px;
+  background: #0e0b16aa;
+}
+
+.summon-detail-skills strong {
+  color: #e8d9a8;
+  font-size: 0.7rem;
+}
+
+.summon-detail-skills span {
+  color: #f2ebe0;
+  font-size: 0.78rem;
 }
 
 .summon-reveal-seal {
@@ -18988,14 +19312,21 @@ button.linkish {
   --mon-slot-size: var(--book-rail-slot);
 }
 
-/* Monster / summoner book: keep top HUD + bottom tabs reachable.
-   In-panel mon-topbar still handles title / codex. */
+#app.summoner-mode {
+  --book-chrome-bottom: 96px;
+}
+
+/* Monster / summoner book: keep top HUD + bottom tabs in the flex flow. */
 #app.monster-mode:not(.facility-modal-open) > .app-bar {
   flex: 0 0 auto;
   margin-bottom: 6px;
   padding-top: 0;
   position: relative;
-  z-index: 30;
+  z-index: 2;
+}
+
+#app.summoner-mode.monster-mode > .app-bar {
+  display: none !important;
 }
 
 #app.monster-mode:not(.facility-modal-open) > .app-bar .app-bar-hud {
@@ -19016,7 +19347,7 @@ button.linkish {
 
 #app.monster-mode:not(.facility-modal-open) > nav.tabs {
   display: grid !important;
-  z-index: 50;
+  z-index: var(--z-hud);
 }
 
 #app.monster-mode > main {
@@ -21681,7 +22012,6 @@ button.linkish {
 }
 
 #app.monster-mode .mon-topbar,
-#app.summoner-mode .mon-topbar,
 .facility-layer--enhance .mon-topbar {
   margin-bottom: var(--book-gap, 6px);
   padding: clamp(4px, calc(var(--design-h) * 0.007), 6px) clamp(6px, calc(var(--design-h) * 0.01), 8px);
@@ -21717,6 +22047,135 @@ button.linkish {
 #app.summoner-mode .codex-layer {
   position: fixed;
   inset: 0;
+}
+
+/* Summoner book: one connected sheet from back/title through the roster rail. */
+#app.summoner-mode .sum-screen.hub-screen {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid #c9a22755;
+  background: #100e0a;
+  box-shadow: inset 0 1px 0 #fff8e814, 0 10px 28px #0008;
+}
+
+#app.summoner-mode .sum-screen.enhance-screen {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
+#app.summoner-mode .sum-screen.enhance-screen .hub-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  gap: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#sum-modal-host:empty {
+  display: none;
+}
+
+#app.summoner-mode .sum-screen .hub-content > .mon-topbar,
+.sum-screen .hub-content > .mon-topbar {
+  flex: 0 0 auto;
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid #c9a22744;
+  background: linear-gradient(180deg, #221c14f8, #16120cf2);
+  box-shadow: none;
+  z-index: 2;
+}
+
+#app.summoner-mode .mon-topbar-heading,
+.sum-screen .mon-topbar-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#app.summoner-mode .mon-topbar-heading .mon-topbar-title,
+.sum-screen .mon-topbar-heading .mon-topbar-title {
+  justify-self: start;
+  flex: 0 1 auto;
+  text-align: left;
+}
+
+#app.summoner-mode .mon-topbar-heading .mon-topbar-codex,
+.sum-screen .mon-topbar-heading .mon-topbar-codex {
+  justify-self: start;
+  flex: 0 0 auto;
+}
+
+#app.summoner-mode .sum-screen .hub-content > .enhance-panel--desk {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 10px 10px;
+  gap: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+#app.summoner-mode .mon-inspect-hero {
+  flex: 0 0 auto;
+  max-height: none;
+  min-height: 0;
+  overflow: hidden;
+  align-items: start;
+}
+
+#app.summoner-mode .mon-inspect-preview {
+  min-height: var(--book-hero-h);
+  height: var(--book-hero-h);
+  max-height: var(--book-hero-h);
+}
+
+#app.summoner-mode .mon-inspect-hero-info {
+  min-height: 0;
+  height: auto;
+}
+
+#app.summoner-mode .mon-inspect-body--full {
+  overflow: hidden;
+  min-height: 0;
+}
+
+#app.summoner-mode .mon-inspect-shell .mon-inspect-panel {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+#app.summoner-mode .mon-inspect-shell .mon-pane,
+#app.summoner-mode .sum-info-panel,
+#app.summoner-mode .sum-awaken-card,
+#app.summoner-mode .sum-gear-panel {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+#app.summoner-mode .sum-roster-rail {
+  flex: 0 0 auto;
 }
 
 /* —— First-rite onboarding (gold/ink continuity) —— */

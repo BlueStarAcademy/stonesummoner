@@ -681,6 +681,11 @@ let lastScrollPremiumGain = 0;
 let lastScrollGain = 0;
 /** Most recently summoned monster uids (summon reveal card / multi). */
 let lastSummonUids: string[] = [];
+/** Summoned monster currently displayed in the soft detail modal. */
+let summonDetailUid: string | null = null;
+/** Ten-pull result overlay is visible while the result cards are inspected. */
+let summonMultiRevealOpen = false;
+let summonRiteAbort: AbortController | null = null;
 /** Empty/filled slot awaiting symbol pick (monster uid + slot 1-6). */
 let slotEquipPick: { uid: string; slot: number } | null = null;
 /** Symbol bag index open in detail modal (selected / candidate). */
@@ -1043,8 +1048,13 @@ let toast = "";
 let battleSpeed: 1 | 2 | 3 = 1;
 let autoMode = false;
 type BattleAutoOptions = { stone: boolean; combat: boolean };
-/** Categories driven while the master AUTO mode is enabled. */
+/** Pending AUTO categories shown in the settings sheet. */
 let battleAutoOptions: BattleAutoOptions = { stone: true, combat: true };
+/**
+ * Committed AUTO categories used by the current resolve cycle.
+ * Sheet edits stay pending until the next `scheduleAuto` tick.
+ */
+let battleAutoLive: BattleAutoOptions = { stone: true, combat: true };
 let battleAutoSettingsOpen = false;
 /** Blocks input while place/strike choreography plays. */
 let battleFxBusy = false;
@@ -1596,7 +1606,8 @@ function enterIslandBuilding(id: string): void {
     view = "dojo";
     renderPreservingIsland();
   } else if (id === "guild") {
-    openCommunityModalSoft();
+    view = "guild";
+    renderPreservingIsland();
   } else if (id === "fusion") {
     view = "fusion";
     renderPreservingIsland();
@@ -1607,9 +1618,10 @@ function enterIslandBuilding(id: string): void {
     enhanceSkillFeedAllowed = true;
     monDetailTab = "skills";
     view = "enhance";
-    render();
+    renderPreservingIsland();
   } else if (id === "shop") {
-    openShopModalSoft();
+    view = "shop";
+    renderPreservingIsland();
   } else if (id === "party") {
     openPartyHall();
   }
@@ -2376,6 +2388,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   lastScrollPremiumGain = 0;
   autoMode = false;
   battleAutoSettingsOpen = false;
+  battleAutoLive = { stone: battleAutoOptions.stone, combat: battleAutoOptions.combat };
   clearAutoTimer();
   dmgFloats = [];
   selectedTargetId = null;
@@ -3956,7 +3969,7 @@ function clearEnhanceSymbolUi(opts?: { keepDock?: boolean }): void {
 
 async function onCellClickAsync(x: number, y: number): Promise<void> {
   if (!battle || battle.phase !== "await_stone") return;
-  if ((autoMode && battleAutoOptions.stone) || battleFxBusy) return;
+  if ((autoMode && battleAutoLive.stone) || battleFxBusy || stoneSummonFx) return;
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
     : null;
@@ -3964,8 +3977,7 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
 
   battleFxBusy = true;
   try {
-    // Close the big flat pick grid first, then the summoner casts and the
-    // stone lands on the map circle with the usual drop FX.
+    // Close the pick grid, unfold a local seal on the map node, then the stone appears.
     stoneSummonFx = {
       element: battle.allySummoner.summonerElement ?? unit.element,
       x,
@@ -3978,11 +3990,12 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
       (u) => u.team === "ally" && u.kind === "summoner" && u.alive,
     );
     const castMs = fxDurationMs(420, battleSpeed);
+    const sealMs = fxDurationMs(360, battleSpeed);
     if (allySum) {
       pulseUnitClass(app, allySum.id, "fx-cast-place", castMs);
       playSpineClip(allySum.id, "cast");
     }
-    await waitFx(castMs);
+    await waitFx(Math.max(castMs, sealMs));
 
     if (!battle.playStone({ x, y })) {
       const reason = battle.log[battle.log.length - 1] ?? t("ui.b72f5a4752");
@@ -3991,13 +4004,12 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
       if (!refreshBattleView()) render();
       return;
     }
-    stoneSummonFx = null;
     const capBonus = battle.pendingCaptureDamageBonus.ally;
     refreshLegal();
     if (!refreshBattleView()) render();
     await waitPaintFrame();
-    const dropMs = fxDurationMs(280, battleSpeed);
-    pulseBoardCell(app, x, y, "fx-stone-drop", dropMs);
+    const appearMs = fxDurationMs(420, battleSpeed);
+    pulseBoardCell(app, x, y, "fx-stone-materialize", appearMs);
     if (capBonus > 0) {
       pulseBoardCell(app, x, y, "fx-capture", fxDurationMs(380, battleSpeed));
       app.querySelector(".board-frame")?.classList.add("fx-capture-flash");
@@ -4012,11 +4024,13 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     const shapeMs = pulseShapeBonusesAfterStone(x, y, "black");
     await waitFx(
       Math.max(
-        dropMs,
+        appearMs,
         capBonus > 0 ? fxDurationMs(380, battleSpeed) : 0,
         shapeMs,
       ),
     );
+    stoneSummonFx = null;
+    app.querySelector(".battle-layout")?.classList.remove("is-stone-summoning");
     await resolveCombatUntilAllyInput({ holdBusy: true });
     cueOnboardFirstSkills();
   } finally {
@@ -4164,8 +4178,8 @@ async function resolveCombatUntilAllyInput(opts?: {
 }): Promise<void> {
   if (!battle) return;
   const autoAlly = opts?.autoAlly ?? autoMode;
-  const autoStone = autoAlly && battleAutoOptions.stone;
-  const autoCombat = autoAlly && battleAutoOptions.combat;
+  const autoStone = autoAlly && battleAutoLive.stone;
+  const autoCombat = autoAlly && battleAutoLive.combat;
   const ownBusy = !opts?.holdBusy;
   if (ownBusy) {
     if (battleFxBusy) return;
@@ -4290,8 +4304,10 @@ async function resolveCombatUntilAllyInput(opts?: {
                   app,
                   x,
                   y,
-                  "fx-stone-drop",
-                  fxDurationMs(240, battleSpeed),
+                  color === "white"
+                    ? "fx-stone-materialize fx-stone-materialize--enemy"
+                    : "fx-stone-materialize",
+                  fxDurationMs(color === "white" ? 280 : 360, battleSpeed),
                 );
                 break outer;
               }
@@ -4300,7 +4316,10 @@ async function resolveCombatUntilAllyInput(opts?: {
           const shapeMs = placed
             ? pulseShapeBonusesAfterStone(placed.x, placed.y, placed.color)
             : 0;
-          await waitFx(Math.max(fxDurationMs(240, battleSpeed), shapeMs));
+          const appearMs = placed
+            ? fxDurationMs(placed.color === "white" ? 280 : 360, battleSpeed)
+            : fxDurationMs(240, battleSpeed);
+          await waitFx(Math.max(appearMs, shapeMs));
         }
       }
 
@@ -4418,10 +4437,19 @@ function startEnergyRegenTimer(): void {
   }
 }
 
+function commitBattleAutoLive(): void {
+  battleAutoLive = {
+    stone: battleAutoOptions.stone,
+    combat: battleAutoOptions.combat,
+  };
+}
+
 function scheduleAuto(): void {
   clearAutoTimer();
   if (!autoMode || !battle || battle.finishReason) return;
   autoTimer = setTimeout(() => {
+    // Apply sheet edits from this tick onward (not mid-action).
+    commitBattleAutoLive();
     void resolveCombatUntilAllyInput({ autoAlly: true });
   }, 420 / battlePace(battleSpeed));
 }
@@ -4501,7 +4529,7 @@ async function castSkillAsync(
   if (
     !battle ||
     battle.phase !== "await_skill" ||
-    (autoMode && battleAutoOptions.combat) ||
+    (autoMode && battleAutoLive.combat) ||
     battleFxBusy
   )
     return;
@@ -4702,7 +4730,7 @@ function renderSummonerSkillButtons(
 }
 
 function renderActiveUnitSkills(u: Unit): string {
-  if (!battle || (autoMode && battleAutoOptions.combat)) return "";
+  if (!battle || (autoMode && battleAutoLive.combat)) return "";
   if (battle.phase !== "await_skill" || battle.activeUnitId !== u.id)
     return "";
   if (u.team !== "ally" || !u.alive) return "";
@@ -4879,7 +4907,7 @@ function renderBoardCells(canClick: boolean): string {
         const stoneId = normalizeBattleStoneId(el);
         const src = battleStoneSrc(stoneId);
         const elClass = stoneId === "enemy" ? "el-enemy" : `el-${stoneId}`;
-        return `<span class="stone magic-stone ${color} ${elClass} has-art${extraClass}" aria-hidden="true"><img class="magic-stone-img" src="${src}" width="64" height="64" alt="" draggable="false" decoding="async" onerror="this.closest('.magic-stone')?.classList.add('art-failed');this.remove()"/><i class="magic-stone-core"></i><i class="magic-stone-flare"></i></span>`;
+        return `<span class="stone magic-stone ${color} ${elClass} has-art${extraClass}" aria-hidden="true"><img class="magic-stone-img" src="${src}" width="128" height="128" alt="" draggable="false" decoding="async" onerror="this.closest('.magic-stone')?.classList.add('art-failed');this.remove()"/><i class="magic-stone-core"></i><i class="magic-stone-flare"></i></span>`;
       };
       const stoneHtml = stone
         ? renderStoneSpan(
@@ -4887,8 +4915,8 @@ function renderBoardCells(canClick: boolean): string {
             stone === "black" ? allyStoneEl : enemyStoneEl,
           )
         : summoning
-          ? renderStoneSpan("black", stoneSummonFx?.element ?? allyStoneEl, " is-summon-preview")
-        : token
+          ? `<i class="summon-seal" aria-hidden="true"><i></i></i>`
+          : token
           ? `<span class="token-mark token-mark--${tokenResource}">
               <span class="token-resource-orbit" aria-hidden="true">
                 <img class="token-resource-img" src="/art/ui/res/${tokenResource}.svg" width="36" height="36" alt="" draggable="false" />
@@ -4896,15 +4924,15 @@ function renderBoardCells(canClick: boolean): string {
               <span class="token-glyph" aria-hidden="true">${tokenLabel}</span>
             </span>`
           : forbid
-            ? `<span class="forbid-mark">${Mark.forbid}</span>`
+            ? `<span class="forbid-mark" title="${escapeHtml(t("ui.boardMarkForbid"))}">${Mark.forbid}</span>`
             : bait
-              ? `<span class="bait-mark">${Mark.bait}</span>`
+              ? `<span class="bait-mark" title="${escapeHtml(t("ui.boardMarkBait"))}">${Mark.bait}</span>`
               : victory === key
-                ? `<span class="victory-mark">${Mark.victory}</span>`
+                ? `<span class="victory-mark" title="${escapeHtml(t("ui.boardMarkVictory"))}">${Mark.victory}</span>`
                 : starSet.has(key)
                   ? `<span class="star-mark">${Mark.starDot}</span>`
                   : `<span class="node-mark" aria-hidden="true"></span>`;
-      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${summoning ? " is-summoning" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
+      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${summoning ? " is-summoning fx-summon-seal" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
   seenBoardTokenKeys = activeTokenKeys;
@@ -4972,7 +5000,7 @@ function renderStonePickLayer(): string {
     battle.phase === "await_stone" &&
     !!battle.activeUnitId &&
     battle.getUnit(battle.activeUnitId)?.team === "ally" &&
-    (!autoMode || !battleAutoOptions.stone) &&
+    (!autoMode || !battleAutoLive.stone) &&
     !stoneSummonFx;
   return `<div class="stone-pick-layer" id="stone-pick-layer"${open ? "" : ' hidden aria-hidden="true"'}>
     <div class="stone-pick-card">
@@ -5209,12 +5237,15 @@ function renderAuth(): string {
 function isFacilityView(v: View = view): boolean {
   return (
     v === "summon" ||
+    v === "enhance" ||
+    v === "shop" ||
     v === "pond" ||
     v === "mine" ||
     v === "wish" ||
     v === "glory" ||
     v === "fusion" ||
     v === "party" ||
+    v === "guild" ||
     v === "dojo" ||
     v === "stages"
   );
@@ -5259,13 +5290,60 @@ function mainContent(manaPct: number): string {
   }
 }
 
-/** Island stays mounted under facility hubs; backdrop + X close return home. */
+function facilityTitle(v: View): string {
+  switch (v) {
+    case "summon":
+      return t("ui.0d242e234f");
+    case "enhance":
+      return t("nav.monster");
+    case "shop":
+      return t("nav.shop");
+    case "pond":
+      return t("ui.hubPond");
+    case "mine":
+      return t("ui.hubMine");
+    case "wish":
+      return t("ui.hubWish");
+    case "glory":
+      return t("ui.hubGlory");
+    case "fusion":
+      return t("ui.hubFusion");
+    case "party":
+      return t("ui.108f04ca6e");
+    case "guild":
+      return t("ui.hubGuild");
+    case "dojo":
+      return t("ui.hubDojo");
+    case "stages":
+      return t("nav.battle");
+    default:
+      return "";
+  }
+}
+
+/** Island stays mounted under facility hubs; backdrop + shared back header return home. */
 function renderFacilityLayerHtml(manaPct: number): string {
   const kind = view;
+  const title = facilityTitle(kind);
+  // Stages uses expedition chrome; skip the shared modal header.
+  const header =
+    kind === "stages"
+      ? ""
+      : `<header class="facility-modal-header">
+        <button type="button" class="facility-modal-back" data-nav="home" aria-label="${escapeHtml(t("ui.1a7f31cadb"))}">
+          <img src="/art/ui/back-arrow.svg" width="20" height="20" alt="" draggable="false" />
+        </button>
+        <h1 class="facility-modal-title" id="facility-modal-title">${escapeHtml(title)}</h1>
+        <span class="facility-modal-header-spacer" aria-hidden="true"></span>
+      </header>`;
+  const labelledBy =
+    kind === "stages"
+      ? ` aria-label="${escapeHtml(title || t("nav.battle"))}"`
+      : ` aria-labelledby="facility-modal-title"`;
   return `<div class="facility-layer facility-layer--${kind}" id="facility-layer">
     <button type="button" class="facility-backdrop" data-nav="home" aria-label="${escapeHtml(t("ui.d758337556"))}"></button>
-    <div class="facility-modal" role="dialog" aria-modal="true" aria-label="${escapeHtml(t("ui.d758337556"))}">
-      <button type="button" class="modal-x facility-modal-close" data-nav="home" aria-label="${escapeHtml(t("ui.d758337556"))}"></button>
+    <div class="facility-modal" role="dialog" aria-modal="true"${labelledBy}>
+      ${header}
       ${mainContent(manaPct)}
     </div>
   </div>`;
@@ -5521,7 +5599,7 @@ function applyResMoreOpen(): void {
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-sheet, .sum-magic-detail-sheet",
+    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -5540,10 +5618,15 @@ function softPatchHost(hostSelector: string, html: string): HTMLElement | null {
   return host;
 }
 
+/** Last-opened overlay sits above HUD / tabs / earlier sheets. */
+let overlayStackZ = 10000;
+
 /** Move a modal layer to `#app` so it escapes `main` / facility stacking contexts. */
 function promoteOverlayToAppRoot(el: Element | null | undefined): HTMLElement | null {
   if (!(el instanceof HTMLElement)) return null;
-  if (el.parentElement !== app) app.appendChild(el);
+  overlayStackZ += 1;
+  el.style.zIndex = String(overlayStackZ);
+  app.appendChild(el);
   return el;
 }
 
@@ -5565,12 +5648,15 @@ const APP_ROOT_OVERLAY_IDS = [
   "sum-magic-detail-layer",
   "sym-detail-layer",
   "sym-bag-expand-layer",
+  "summon-detail-layer",
+  "summon-multi-result-layer",
   "codex-layer",
   "stage-prep-info-layer",
   "stage-drop-info-layer",
 ] as const;
 
 function promoteKnownOverlays(): void {
+  overlayStackZ = 10000;
   for (const id of APP_ROOT_OVERLAY_IDS) {
     promoteOverlayToAppRoot(app.querySelector(`#${id}`));
   }
@@ -5615,6 +5701,90 @@ function applyPowerUpOpen(): void {
     promoteOverlayToAppRoot(layer);
     replayModalPop(layer);
   }
+}
+
+/** Toggle battle AUTO sheet without remounting combat. */
+function applyBattleAutoSettingsOpen(): void {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
+  let layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  if (!layer) {
+    // Prefer soft battle patch; never wipe combat just to open the sheet.
+    if (view === "battle") refreshBattleView();
+    layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  }
+  if (btn) {
+    btn.classList.toggle("is-open", battleAutoSettingsOpen);
+    btn.setAttribute("aria-expanded", battleAutoSettingsOpen ? "true" : "false");
+  }
+  if (!layer) return;
+  layer.classList.toggle("is-open", battleAutoSettingsOpen);
+  layer.hidden = !battleAutoSettingsOpen;
+  layer.setAttribute("aria-hidden", battleAutoSettingsOpen ? "false" : "true");
+  if (battleAutoSettingsOpen) {
+    // Lift above the soft-patched battle tree so combat ticks cannot remount it.
+    promoteOverlayToAppRoot(layer);
+    layer.classList.add("is-ported");
+    replayModalPop(layer);
+  } else {
+    layer.classList.remove("is-ported");
+  }
+}
+
+/** Sync AUTO category switches on the live sheet (no remount). */
+function applyBattleAutoOptionsUi(): void {
+  const allOn = battleAutoOptions.stone && battleAutoOptions.combat;
+  app.querySelectorAll<HTMLButtonElement>("[data-auto-option]").forEach((btn) => {
+    const id = btn.dataset.autoOption;
+    const on =
+      id === "all"
+        ? allOn
+        : id === "stone"
+          ? battleAutoOptions.stone
+          : id === "combat"
+            ? battleAutoOptions.combat
+            : false;
+    btn.classList.toggle("is-on", on);
+    btn.setAttribute("aria-checked", on ? "true" : "false");
+  });
+}
+
+function bindBattleAutoSettings(): void {
+  const trigger = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
+  trigger?.addEventListener("click", () => {
+    battleAutoSettingsOpen = !battleAutoSettingsOpen;
+    applyBattleAutoSettingsOpen();
+  });
+
+  const layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  if (!layer || layer.dataset.bound === "1") return;
+  layer.dataset.bound = "1";
+  layer.addEventListener("click", (ev) => {
+    const target = ev.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("[data-auto-settings-close]")) {
+      battleAutoSettingsOpen = false;
+      applyBattleAutoSettingsOpen();
+      return;
+    }
+    const opt = target.closest<HTMLButtonElement>("[data-auto-option]");
+    if (!opt || !layer.contains(opt)) return;
+    const option = opt.dataset.autoOption;
+    if (option === "stone") {
+      battleAutoOptions = { ...battleAutoOptions, stone: !battleAutoOptions.stone };
+    } else if (option === "combat") {
+      battleAutoOptions = {
+        ...battleAutoOptions,
+        combat: !battleAutoOptions.combat,
+      };
+    } else if (option === "all") {
+      const enabled = !(battleAutoOptions.stone && battleAutoOptions.combat);
+      battleAutoOptions = { stone: enabled, combat: enabled };
+    } else {
+      return;
+    }
+    // Keep the sheet mounted; commit on the next AUTO tick only.
+    applyBattleAutoOptionsUi();
+  });
 }
 
 /** Toggle settings modal without a full screen re-render. */
@@ -6967,6 +7137,18 @@ function navBackBtn(opts?: {
 }
 
 function hubShell(title: string, subtitle: string, body: string): string {
+  // Facility layer owns back + centered title; keep subtitle/meta only.
+  const underFacility = isFacilityView();
+  const chrome = underFacility
+    ? subtitle
+      ? `<header class="hub-hud hub-hud--meta-only"><p class="hub-meta">${subtitle}</p></header>`
+      : ""
+    : `${navBackBtn({ nav: "home", label: t("ui.1a7f31cadb") })}
+      <header class="hub-hud">
+        <p class="hub-title">${title}</p>
+        <div class="hub-title-rule" aria-hidden="true"></div>
+        <p class="hub-meta">${subtitle}</p>
+      </header>`;
   return `<div class="hub-screen">
     <div class="hub-sky" aria-hidden="true">
       <img
@@ -6982,12 +7164,7 @@ function hubShell(title: string, subtitle: string, body: string): string {
       <div class="hub-sky-veil"></div>
     </div>
     <div class="hub-content">
-      ${navBackBtn({ nav: "home", label: t('ui.1a7f31cadb') })}
-      <header class="hub-hud">
-        <p class="hub-title">${title}</p>
-        <div class="hub-title-rule" aria-hidden="true"></div>
-        <p class="hub-meta">${subtitle}</p>
-      </header>
+      ${chrome}
       ${body}
     </div>
   </div>`;
@@ -7409,7 +7586,7 @@ function renderParty(): string {
       }
       const def = getMonster(m.monsterId);
       const grade = invGradeFromStars(def?.naturalStars ?? 1);
-      return `<button type="button" class="stage-prep-slot inv-grade--${grade} el-${def?.element ?? "dark"}" data-party-info="monster" data-party-info-uid="${m.uid}" title="${escapeHtml(describeOwned(m))}">
+      return `<button type="button" class="stage-prep-slot inv-grade--${grade} el-${def?.element ?? "dark"}" data-party-toggle="${m.uid}" data-party-info="monster" data-party-info-uid="${m.uid}" title="${escapeHtml(describeOwned(m))}">
         <span class="stage-prep-slot-art">${monsterArtImg(m.monsterId, "stage-prep-slot-img", 56) || "?"}</span>
         <span class="stage-prep-slot-lv">Lv.${m.level}</span>
       </button>`;
@@ -7828,22 +8005,181 @@ function renderSummonRevealCell(uid: string): string {
   const def = getMonster(mon.monsterId);
   const el = def?.element ?? "dark";
   const stars = STAR.repeat(def?.naturalStars ?? 0);
-  return `<div class="summon-multi-cell el-${el}">
+  return `<button type="button" class="summon-multi-cell el-${el}" data-summon-detail="${mon.uid}" aria-label="${escapeHtml(def?.nameKo ?? mon.monsterId)}">
     <span class="summon-multi-seal" aria-hidden="true">${monsterArtImg(mon.monsterId, "summon-multi-img", 48) || monsterElementLabel(el).slice(0, 1)}</span>
     <strong>${def?.nameKo ?? mon.monsterId}</strong>
-    <small>${monsterElementLabel(el)} ${MIDDOT} ${stars}</small>
+    <small class="summon-multi-stars" aria-label="${def?.naturalStars ?? 0}">${stars}</small>
+    <span class="summon-card-meta">
+      <small class="summon-card-element">${monsterElementLabel(el)}</small>
+      <small class="summon-card-grade">${STAR}${def?.naturalStars ?? 0}</small>
+    </span>
+  </button>`;
+}
+
+function renderSummonDetailModal(): string {
+  const mon = summonDetailUid
+    ? save.roster.find((candidate) => candidate.uid === summonDetailUid)
+    : null;
+  if (!mon) return "";
+  const def = getMonster(mon.monsterId);
+  const el = def?.element ?? "dark";
+  const preview = previewOwnedCombatStats(save, mon.uid);
+  const stars = STAR.repeat(def?.naturalStars ?? 0);
+  const skills = def?.skills ?? [];
+  return `<div class="settings-layer summon-detail-layer" id="summon-detail-layer" role="presentation">
+    <button type="button" class="settings-backdrop" id="btn-summon-detail-close" aria-label="${escapeHtml(t("ui.468266d639"))}"></button>
+    <div class="settings-sheet summon-detail-sheet el-${el}" role="dialog" aria-modal="true" aria-labelledby="summon-detail-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.468266d639"), "btn-summon-detail-close")}
+      <div class="summon-detail-portrait" aria-hidden="true">
+        ${monsterArtImg(mon.monsterId, "summon-detail-img", 128) || `<span>${monsterElementLabel(el).slice(0, 1)}</span>`}
+      </div>
+      <p class="summon-reveal-stars" aria-label="${def?.naturalStars ?? 0}">${stars}</p>
+      <h2 class="settings-title" id="summon-detail-title">${escapeHtml(def?.nameKo ?? mon.monsterId)}</h2>
+      <p class="summon-reveal-meta">${monsterElementLabel(el)} ${MIDDOT} ${STAR}${def?.naturalStars ?? 0} ${MIDDOT} Lv.${mon.level}</p>
+      ${
+        preview
+          ? `<div class="summon-reveal-stats">
+              <span><small>HP</small><strong>${preview.final.hp}</strong></span>
+              <span><small>ATK</small><strong>${preview.final.atk}</strong></span>
+              <span><small>DEF</small><strong>${preview.final.def}</strong></span>
+            </div>`
+          : ""
+      }
+      <div class="summon-detail-skills">${skills
+        .map(
+          (skill, index) =>
+            `<div><strong>S${index + 1}</strong><span>${escapeHtml(skill.nameKo)}</span></div>`,
+        )
+        .join("")}</div>
+      <button type="button" class="auth-btn-primary full" id="btn-summon-detail-confirm">${t("ui.468266d639")}</button>
+    </div>
   </div>`;
 }
 
-function renderSummon(): string {
+function closeSummonDetailSoft(): void {
+  summonDetailUid = null;
+  softRemoveOverlay("summon-detail-layer");
+}
+
+function openSummonDetailSoft(uid: string): void {
+  if (!save.roster.some((mon) => mon.uid === uid)) return;
+  summonDetailUid = uid;
+  const layer = softMountOverlay("summon-detail-layer", renderSummonDetailModal());
+  const close = () => closeSummonDetailSoft();
+  layer?.querySelectorAll("#btn-summon-detail-close, #btn-summon-detail-confirm").forEach(
+    (btn) => btn.addEventListener("click", close),
+  );
+}
+
+function renderSummonMultiResultModal(): string {
+  if (!summonMultiRevealOpen || lastSummonUids.length < 2) return "";
+  return `<div class="settings-layer summon-multi-result-layer" id="summon-multi-result-layer" role="presentation">
+    <button type="button" class="settings-backdrop" id="btn-summon-multi-close" aria-label="${escapeHtml(t("ui.468266d639"))}"></button>
+    <div class="settings-sheet summon-multi-result-sheet" role="dialog" aria-modal="true" aria-labelledby="summon-multi-result-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.468266d639"), "btn-summon-multi-close")}
+      <p class="summon-multi-result-kicker">${t("ui.4150cda5a2")}</p>
+      <h2 class="settings-title" id="summon-multi-result-title">${SUMMON_MULTI_COUNT}${TIMES}</h2>
+      <div class="summon-multi-grid summon-multi-grid--result">
+        ${lastSummonUids.map((uid) => renderSummonRevealCell(uid)).join("")}
+      </div>
+      <button type="button" class="auth-btn-primary full" id="btn-summon-multi-confirm">${t("ui.468266d639")}</button>
+    </div>
+  </div>`;
+}
+
+function refreshSummonRiteSoft(): void {
+  const host = softPatchHost("#summon-rite-host", renderSummonRiteContent());
+  if (host) bindSummonRiteInteractions();
+  else render();
+}
+
+function closeSummonMultiResultSoft(): void {
+  summonMultiRevealOpen = false;
+  lastSummonUids = [];
+  softRemoveOverlay("summon-multi-result-layer");
+  refreshSummonRiteSoft();
+}
+
+function openSummonMultiResultSoft(): void {
+  const layer = softMountOverlay(
+    "summon-multi-result-layer",
+    renderSummonMultiResultModal(),
+  );
+  const close = () => closeSummonMultiResultSoft();
+  layer
+    ?.querySelectorAll("#btn-summon-multi-close, #btn-summon-multi-confirm")
+    .forEach((btn) => btn.addEventListener("click", close));
+  layer?.querySelectorAll<HTMLButtonElement>("[data-summon-detail]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.summonDetail;
+      if (uid) openSummonDetailSoft(uid);
+    });
+  });
+}
+
+function bindSummonRiteInteractions(): void {
+  summonRiteAbort?.abort();
+  const ac = new AbortController();
+  summonRiteAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+
+  app.querySelectorAll<HTMLButtonElement>("[data-summon-kind]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const kind = btn.dataset.summonKind as ScrollKind | undefined;
+        if (!kind || !(SCROLL_KINDS as readonly string[]).includes(kind)) return;
+        const count = Math.max(
+          1,
+          Math.floor(Number(btn.dataset.summonCount ?? "1") || 1),
+        );
+        const before = new Set(save.roster.map((m) => m.uid));
+        const r = runSummon(save, kind, Math.random, count);
+        save = r.save;
+        persist();
+        lastSummonUids = save.roster
+          .filter((m) => !before.has(m.uid))
+          .map((m) => m.uid);
+        summonMultiRevealOpen = lastSummonUids.length > 1;
+        if (lastSummonUids.length) patchOnboard({ summoned: true });
+        flash(r.message);
+        render();
+        if (summonMultiRevealOpen) openSummonMultiResultSoft();
+      },
+      opts,
+    );
+  });
+
+  app.querySelector("#btn-summon-dismiss")?.addEventListener(
+    "click",
+    () => {
+      lastSummonUids = [];
+      refreshSummonRiteSoft();
+    },
+    opts,
+  );
+
+  app.querySelectorAll<HTMLButtonElement>("[data-summon-detail]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const uid = btn.dataset.summonDetail;
+        if (uid) openSummonDetailSoft(uid);
+      },
+      opts,
+    );
+  });
+}
+
+function renderSummonRiteContent(): string {
   const revealedList = lastSummonUids
     .map((uid) => save.roster.find((m) => m.uid === uid))
     .filter((m): m is NonNullable<typeof m> => !!m);
   const isMulti = revealedList.length > 1;
   const revealed = revealedList.length === 1 ? revealedList[0]! : null;
   const revDef = revealed ? getMonster(revealed.monsterId) : null;
-  const inParty = revealed ? save.party.includes(revealed.uid) : false;
-  const partyFull = save.party.length >= 4;
   const anyReady = SCROLL_KINDS.some(
     (k) => scrollCount(save, k) >= SUMMON_SCROLL_COST,
   );
@@ -7855,13 +8191,7 @@ function renderSummon(): string {
   const hasReveal = revealedList.length > 0;
   const riteCore = isMulti
     ? `<div class="summon-reveal summon-reveal--multi" aria-live="polite">
-            <p class="equip-picker-title">${t('ui.d3d3707997')}</p>
-        <div class="summon-multi-grid">
-          ${lastSummonUids.map((uid) => renderSummonRevealCell(uid)).join("")}
-        </div>
-        <div class="summon-reveal-cta">
-          <button type="button" class="secondary" data-nav="enhance">${t('ui.91c120d564')}</button>
-        </div>
+        <p class="summon-reveal-kicker">${t("ui.4150cda5a2")}</p>
       </div>`
     : revealed
       ? `<div class="summon-reveal el-${revEl}" aria-live="polite">
@@ -7882,14 +8212,7 @@ function renderSummon(): string {
             : ""
         }
         <div class="summon-reveal-cta">
-          ${
-            inParty
-              ? ""
-              : `<button type="button" class="auth-btn-primary" id="btn-summon-party">${
-                  partyFull ? t('ui.f66f56e98f') : t('ui.6686a68a3f')
-                }</button>`
-          }
-          <button type="button" class="secondary" data-nav="enhance">${t('ui.91c120d564')}</button>
+          <button type="button" class="auth-btn-primary" id="btn-summon-dismiss">${t("ui.468266d639")}</button>
         </div>
       </div>`
       : `<div class="summon-idle">
@@ -7930,17 +8253,21 @@ function renderSummon(): string {
           </div>`;
         }).join("")}
       </div>`;
+  return `<div class="summon-rite${hasReveal ? " is-revealed" : ""}${anyReady && !hasReveal ? " is-ready" : ""} el-${hasReveal ? revEl : "idle"}">
+      <div class="summon-rite-glow" aria-hidden="true"></div>
+      <img class="summon-rite-circle" src="/art/hub/summon-circle.webp" width="320" height="320" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/summon-circle.svg'" />
+      <div class="summon-rite-core">${riteCore}</div>
+    </div>
+    ${castRow}`;
+}
+
+function renderSummon(): string {
   return `<div class="summon-screen${onboard.step === "summon" ? " is-onboard-rite" : ""}">
     ${hubShell(
       t('ui.0d242e234f'),
       "",
       `<div class="hub-panel summon-panel hub-panel--visual">
-        <div class="summon-rite${hasReveal ? " is-revealed" : ""}${anyReady && !hasReveal ? " is-ready" : ""} el-${hasReveal ? revEl : "idle"}">
-          <div class="summon-rite-glow" aria-hidden="true"></div>
-          <img class="summon-rite-circle" src="/art/hub/summon-circle.webp" width="320" height="320" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/summon-circle.svg'" />
-          <div class="summon-rite-core">${riteCore}</div>
-        </div>
-        ${castRow}
+        <div id="summon-rite-host">${renderSummonRiteContent()}</div>
       </div>`,
     )}
   </div>`;
@@ -10531,8 +10858,10 @@ function renderSummonerBook(): string {
     <div class="hub-content">
       <header class="mon-topbar">
         ${navBackBtn({ nav: "home", label: t("ui.1a7f31cadb") })}
-        <h1 class="mon-topbar-title">${escapeHtml(t("nav.summoner"))}</h1>
-        ${monTopbarCodexBtn()}
+        <div class="mon-topbar-heading">
+          <h1 class="mon-topbar-title">${escapeHtml(t("nav.summoner"))}</h1>
+          ${monTopbarCodexBtn()}
+        </div>
       </header>
       ${body}
     </div>
@@ -10933,9 +11262,7 @@ function renderEnhance(): string {
       <div class="hub-sky-veil"></div>
     </div>
     <div class="hub-content">
-      <header class="mon-topbar">
-        ${navBackBtn({ nav: "home", label: t("ui.1a7f31cadb") })}
-        <h1 class="mon-topbar-title">${escapeHtml(t("nav.monster"))}</h1>
+      <header class="mon-topbar mon-topbar--tools">
         ${monTopbarCodexBtn()}
       </header>
       ${body}
@@ -11110,7 +11437,7 @@ function renderCaptureShop(): string {
   if (
     !battle ||
     battle.phase !== "await_capture_shop" ||
-    (autoMode && battleAutoOptions.combat)
+    (autoMode && battleAutoLive.combat)
   )
     return "";
   const offers = captureShopOffers();
@@ -12072,11 +12399,11 @@ function renderBattle(manaPct: number): string {
   const awaitSkill =
     battle.phase === "await_skill" &&
     active?.team === "ally" &&
-    (!autoMode || !battleAutoOptions.combat);
+    (!autoMode || !battleAutoLive.combat);
   const canPlaceStone =
     battle.phase === "await_stone" &&
     active?.team === "ally" &&
-    (!autoMode || !battleAutoOptions.stone);
+    (!autoMode || !battleAutoLive.stone);
 
   const showBoardSwitch =
     battle.boards.length > 1 && canPlaceStone;
@@ -12185,6 +12512,10 @@ function refreshBattleView(): boolean {
   const manaPct = Math.round((allyMana.mana / allyMana.manaMax) * 100);
   const arts = captureBattleArtMap(screen);
   const sky = screen.querySelector<HTMLElement>(".battle-sky");
+  const autoSettings = app.querySelector<HTMLElement>("#battle-auto-settings");
+  const autoPorted =
+    !!autoSettings &&
+    (autoSettings.parentElement === app || autoSettings.classList.contains("is-ported"));
 
   const wrap = document.createElement("div");
   wrap.innerHTML = renderBattle(manaPct);
@@ -12198,11 +12529,22 @@ function refreshBattleView(): boolean {
   const nextSky = next.querySelector(".battle-sky");
   if (sky && nextSky) nextSky.replaceWith(sky);
 
+  const nextAuto = next.querySelector("#battle-auto-settings");
+  if (autoPorted) {
+    // Sheet lives on #app — drop the fresh duplicate so combat ticks never remount it.
+    nextAuto?.remove();
+  } else if (autoSettings) {
+    if (nextAuto) nextAuto.replaceWith(autoSettings);
+    else next.appendChild(autoSettings);
+  }
+
   screen.replaceChildren(...Array.from(next.childNodes));
   restoreBattleArt(screen, arts);
   bindBattleInteractive();
   mountUnitAnimHooks(screen);
   refreshDmgLayer();
+  if (battleAutoSettingsOpen) applyBattleAutoSettingsOpen();
+  else applyBattleAutoOptionsUi();
   return true;
 }
 
@@ -12212,10 +12554,13 @@ function bindStonePickTaps(): void {
   if (!hit) return;
   hit.addEventListener("pointerup", (ev) => {
     if (ev.button != null && ev.button !== 0) return;
+    const layer = hit.closest(".stone-pick-layer");
+    if (layer instanceof HTMLElement && layer.hidden) return;
     const target = ev.target;
     if (!(target instanceof Element)) return;
     const btn = target.closest<HTMLButtonElement>("button.cell.is-placeable");
     if (!btn || btn.disabled || !hit.contains(btn)) return;
+    ev.preventDefault();
     onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
   });
 }
@@ -12260,7 +12605,7 @@ function bindBattleInteractive(): void {
       onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
     });
   } else {
-    app.querySelectorAll<HTMLButtonElement>(".board .cell").forEach((btn) => {
+    app.querySelectorAll<HTMLButtonElement>(".board-frame .board .cell").forEach((btn) => {
       btn.addEventListener("click", () => {
         onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
       });
@@ -12282,7 +12627,7 @@ function bindBattleInteractive(): void {
       if (
         !battle ||
         battle.phase !== "await_skill" ||
-        (autoMode && battleAutoOptions.combat) ||
+        (autoMode && battleAutoLive.combat) ||
         battleFxBusy
       ) {
         render();
@@ -12314,7 +12659,7 @@ function bindBattleInteractive(): void {
       if (
         !battle ||
         battle.phase !== "await_skill" ||
-        (autoMode && battleAutoOptions.combat) ||
+        (autoMode && battleAutoLive.combat) ||
         battleFxBusy
       )
         return;
@@ -12334,7 +12679,7 @@ function bindBattleInteractive(): void {
         if (
           !battle ||
           battle.phase !== "await_skill" ||
-          (autoMode && battleAutoOptions.combat) ||
+          (autoMode && battleAutoLive.combat) ||
           battleFxBusy
         )
           return;
@@ -12359,42 +12704,14 @@ function bindBattleInteractive(): void {
     if (autoMode) scheduleAuto();
   });
 
-  app.querySelector("#btn-auto-settings")?.addEventListener("click", () => {
-    battleAutoSettingsOpen = !battleAutoSettingsOpen;
-    if (!refreshBattleView()) render();
-  });
-
-  app.querySelector("[data-auto-settings-close]")?.addEventListener("click", () => {
-    battleAutoSettingsOpen = false;
-    if (!refreshBattleView()) render();
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-auto-option]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const option = btn.dataset.autoOption;
-      if (option === "stone") {
-        battleAutoOptions = { ...battleAutoOptions, stone: !battleAutoOptions.stone };
-      } else if (option === "combat") {
-        battleAutoOptions = {
-          ...battleAutoOptions,
-          combat: !battleAutoOptions.combat,
-        };
-      } else if (option === "all") {
-        const enabled = !(battleAutoOptions.stone && battleAutoOptions.combat);
-        battleAutoOptions = { stone: enabled, combat: enabled };
-      } else {
-        return;
-      }
-      if (!refreshBattleView()) render();
-      if (autoMode) scheduleAuto();
-    });
-  });
+  bindBattleAutoSettings();
 
   app.querySelector("#btn-auto-toggle")?.addEventListener("click", () => {
     if (!battle || battle.finishReason) return;
     autoMode = !autoMode;
     if (autoMode) {
       clearBattleSkillSelection();
+      commitBattleAutoLive();
       scheduleAuto();
     } else clearAutoTimer();
     render();
@@ -13643,55 +13960,7 @@ function bind(): void {
   app.querySelector("#btn-building-unlock-close")?.addEventListener("click", closeBuildingUnlock);
   app.querySelector("#btn-building-unlock-ok")?.addEventListener("click", closeBuildingUnlock);
 
-  app.querySelectorAll<HTMLButtonElement>("[data-summon-kind]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const kind = btn.dataset.summonKind as ScrollKind | undefined;
-      if (!kind || !(SCROLL_KINDS as readonly string[]).includes(kind)) return;
-      const count = Math.max(
-        1,
-        Math.floor(Number(btn.dataset.summonCount ?? "1") || 1),
-      );
-      const before = new Set(save.roster.map((m) => m.uid));
-      const r = runSummon(save, kind, Math.random, count);
-      save = r.save;
-      persist();
-      lastSummonUids = save.roster
-        .filter((m) => !before.has(m.uid))
-        .map((m) => m.uid);
-      if (lastSummonUids.length) {
-        patchOnboard({ summoned: true });
-      }
-      flash(r.message);
-      render();
-    });
-  });
-
-  app.querySelector("#btn-summon-dismiss")?.addEventListener("click", () => {
-    lastSummonUids = [];
-    render();
-  });
-
-  app.querySelector("#btn-summon-party")?.addEventListener("click", () => {
-    const uid = lastSummonUids[0];
-    if (!uid) return;
-    if (save.party.includes(uid)) {
-      flash(t('ui.d02305abdb'));
-      render();
-      return;
-    }
-    const next =
-      save.party.length < 4
-        ? [...save.party, uid]
-        : [...save.party.slice(0, 3), uid];
-    const r = runSetParty(save, next);
-    save = r.save;
-    persist();
-    if (onboard.step === "party") {
-      patchOnboard({ partySet: true });
-    }
-    flash(r.message);
-    render();
-  });
+  bindSummonRiteInteractions();
 
   app.querySelectorAll<HTMLButtonElement>("[data-select-mon]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -13818,12 +14087,13 @@ function bind(): void {
     if (!confirm || !app.contains(confirm) || confirm.disabled) return;
     const target = selectedEnhanceUid;
     if (!target) return;
-    const beforeLevel = save.roster.find((monster) => monster.uid === target)?.level ?? 0;
+    const beforeCount = save.roster.length;
     const r = runPowerUpMonster(save, target, [...powerUpFodderUids]);
     save = r.save;
     persist();
-    const afterLevel = save.roster.find((monster) => monster.uid === target)?.level ?? 0;
-    if (afterLevel > beforeLevel) patchOnboard({ enhanced: true });
+    // Power-up spends fodder for EXP; early materials rarely grant a full level.
+    // Treat any successful consume as completing the enhance rite.
+    if (save.roster.length < beforeCount) patchOnboard({ enhanced: true });
     powerUpFodderUids = new Set();
     powerUpModalOpen = false;
     flash(r.message);
@@ -14369,6 +14639,8 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-party-info]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      // Filled monster slots also carry data-party-toggle for unequip on tap.
+      if (btn.hasAttribute("data-party-toggle")) return;
       const kind = btn.dataset.partyInfo;
       if (kind === "summoner") {
         const el = (save.activeSummoner ?? "light") as SummonerElement;
@@ -14512,7 +14784,7 @@ function bind(): void {
       onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
     });
   } else {
-    app.querySelectorAll<HTMLButtonElement>(".board .cell").forEach((btn) => {
+    app.querySelectorAll<HTMLButtonElement>(".board-frame .board .cell").forEach((btn) => {
       btn.addEventListener("click", () => {
         onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
       });
@@ -14533,7 +14805,7 @@ function bind(): void {
       if (
         !battle ||
         battle.phase !== "await_skill" ||
-        (autoMode && battleAutoOptions.combat) ||
+        (autoMode && battleAutoLive.combat) ||
         battleFxBusy
       ) {
         render();
@@ -14568,7 +14840,7 @@ function bind(): void {
       if (
         !battle ||
         battle.phase !== "await_skill" ||
-        (autoMode && battleAutoOptions.combat) ||
+        (autoMode && battleAutoLive.combat) ||
         battleFxBusy
       )
         return;
@@ -14588,7 +14860,7 @@ function bind(): void {
         if (
           !battle ||
           battle.phase !== "await_skill" ||
-          (autoMode && battleAutoOptions.combat) ||
+          (autoMode && battleAutoLive.combat) ||
           battleFxBusy
         )
           return;
@@ -14614,42 +14886,14 @@ function bind(): void {
     if (autoMode) scheduleAuto();
   });
 
-  app.querySelector("#btn-auto-settings")?.addEventListener("click", () => {
-    battleAutoSettingsOpen = !battleAutoSettingsOpen;
-    render();
-  });
-
-  app.querySelector("[data-auto-settings-close]")?.addEventListener("click", () => {
-    battleAutoSettingsOpen = false;
-    render();
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-auto-option]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const option = btn.dataset.autoOption;
-      if (option === "stone") {
-        battleAutoOptions = { ...battleAutoOptions, stone: !battleAutoOptions.stone };
-      } else if (option === "combat") {
-        battleAutoOptions = {
-          ...battleAutoOptions,
-          combat: !battleAutoOptions.combat,
-        };
-      } else if (option === "all") {
-        const enabled = !(battleAutoOptions.stone && battleAutoOptions.combat);
-        battleAutoOptions = { stone: enabled, combat: enabled };
-      } else {
-        return;
-      }
-      render();
-      if (autoMode) scheduleAuto();
-    });
-  });
+  bindBattleAutoSettings();
 
   app.querySelector("#btn-auto-toggle")?.addEventListener("click", () => {
     if (!battle || battle.finishReason) return;
     autoMode = !autoMode;
     if (autoMode) {
       clearBattleSkillSelection();
+      commitBattleAutoLive();
       scheduleAuto();
     } else {
       clearAutoTimer();

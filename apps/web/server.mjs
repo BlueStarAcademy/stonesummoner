@@ -49,7 +49,14 @@ app.set("trust proxy", 1);
 app.use(express.json({ limit: "1mb" }));
 mountApi(app, store);
 
-app.use(express.static(dist, { maxAge: "1h", index: false }));
+app.use(
+  express.static(dist, {
+    maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
+    etag: false,
+    lastModified: false,
+    index: false,
+  }),
+);
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) return next();
   res.sendFile(path.join(dist, "index.html"));

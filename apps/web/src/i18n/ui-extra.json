@@ -120,8 +120,8 @@
     "en": "Use a normal scroll to summon an ally."
   },
   "ui.onboard.enhanceTip": {
-    "ko": "상단의 강화 버튼으로 소환수 레벨을 올리세요.",
-    "en": "Use Enhance at the top to raise your summon's level."
+    "ko": "상단 강화에서 재료 소환수를 고른 뒤 강화하세요.",
+    "en": "Tap Enhance at the top, pick a material monster, then power up."
   },
   "ui.onboard.partyTip": {
     "ko": "출전할 네 명을 고른 뒤 저장하세요.",
@@ -230,6 +230,18 @@
   "ui.autoAll": {
     "ko": "모두",
     "en": "All"
+  },
+  "ui.boardMarkForbid": {
+    "ko": "착수 금지",
+    "en": "Cannot place"
+  },
+  "ui.boardMarkBait": {
+    "ko": "미끼",
+    "en": "Bait"
+  },
+  "ui.boardMarkVictory": {
+    "ko": "필승점",
+    "en": "Victory point"
   },
   "ui.b72f5a4752": {
     "ko": "이전 스테이지를 먼저 클리어하세요.",
