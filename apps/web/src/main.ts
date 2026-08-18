@@ -185,6 +185,7 @@ import {
   createSummonerRoster,
   describeOwned,
   displayedMonsterStars,
+  monsterGrade,
   enhanceManaCost,
   evolveCrystalCost,
   evolveManaCost,
@@ -733,6 +734,9 @@ let skillFeedModalOpen = false;
 let skillFeedFodderUid: string | null = null;
 /** Material-selection modal for monster EXP power-ups. */
 let powerUpModalOpen = false;
+/** Awaken / evolve detail sheet opened from the compact rite panel. */
+type MonRiteKind = "awaken" | "evolve";
+let monRiteModal: MonRiteKind | null = null;
 /** Selected material monster UIDs in the power-up modal. */
 let powerUpFodderUids = new Set<string>();
 /** Monster book / skill-feed inventory slot capacity (two-row rail). */
@@ -751,6 +755,170 @@ function applyMonDetailTabUi(): boolean {
     pane.hidden = pane.dataset.monPane !== monDetailTab;
   });
   return true;
+}
+
+let monInspectInteractAbort: AbortController | null = null;
+
+function syncMonRosterActiveSlot(): void {
+  app.querySelectorAll<HTMLButtonElement>("[data-select-mon]").forEach((btn) => {
+    const on = btn.dataset.selectMon === selectedEnhanceUid;
+    btn.classList.toggle("is-active", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+  });
+}
+
+/** Patch monster inspect + slot highlight without remounting the roster rail. */
+function refreshMonInspectSoft(): boolean {
+  const viewer = app.querySelector<HTMLElement>(
+    ".enhance-screen .mon-book-viewer",
+  );
+  if (!viewer) return false;
+  const rail = app.querySelector<HTMLElement>(
+    ".mon-roster-dock .mon-book-inv--rail",
+  );
+  const keepLeft = rail?.scrollLeft ?? 0;
+  viewer.innerHTML = renderMonBookDetailHtml();
+  dematteArtInTree(viewer);
+  bindMonPreviewTurntable(viewer);
+  syncMonRosterActiveSlot();
+  bindMonInspectInteractions();
+  bindSymbolInventoryInteractions();
+  applyMonDetailTabUi();
+  if (rail) rail.scrollLeft = keepLeft;
+  return true;
+}
+
+function bindMonInspectInteractions(): void {
+  monInspectInteractAbort?.abort();
+  const ac = new AbortController();
+  monInspectInteractAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+  const host = app.querySelector<HTMLElement>(".enhance-screen .mon-book-viewer");
+  if (!host) return;
+
+  host.querySelectorAll<HTMLButtonElement>("[data-enh]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const uid = btn.dataset.enh!;
+        if (!save.roster.some((monster) => monster.uid === uid)) return;
+        selectedEnhanceUid = uid;
+        powerUpFodderUids = new Set();
+        powerUpModalOpen = true;
+        refreshPowerUpModalDom();
+        applyPowerUpOpen();
+      },
+      opts,
+    );
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-skill-feed-open]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        if (!enhanceSkillFeedAllowed) return;
+        const uid = btn.dataset.skillFeedOpen;
+        if (!uid) return;
+        selectedEnhanceUid = uid;
+        skillFeedFodderUid = null;
+        skillFeedModalOpen = true;
+        monDetailTab = "skills";
+        applyMonDetailTabUi();
+        refreshSkillFeedModalDom();
+        applySkillFeedOpen();
+      },
+      opts,
+    );
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-mon-rite-open]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const kind = btn.dataset.monRiteOpen;
+        const uid = btn.dataset.monRiteUid;
+        if ((kind !== "awaken" && kind !== "evolve") || !uid) return;
+        if (!save.roster.some((monster) => monster.uid === uid)) return;
+        openMonRiteModal(kind, uid);
+      },
+      opts,
+    );
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-mon-detail-tab]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const raw = btn.dataset.monDetailTab;
+        if (raw === "info" || raw === "skills" || raw === "awaken" || raw === "symbols") {
+          if (monDetailTab === raw) return;
+          monDetailTab = raw;
+          if (raw !== "symbols") symbolInvFilterOpen = null;
+          enhanceTab = "monsters";
+          if (!applyMonDetailTabUi()) render();
+        }
+      },
+      opts,
+    );
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-mon-skill-pick]").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      () => {
+        const slot = Number(btn.dataset.monSkillPick ?? "0");
+        if (slot < 0 || slot > 2 || slot === monSkillPick) return;
+        monSkillPick = slot;
+        const owned = selectedEnhanceUid
+          ? save.roster.find((m) => m.uid === selectedEnhanceUid)
+          : null;
+        const ownedLv = owned?.skillLevels?.[slot] ?? 1;
+        monSkillPreviewLv = Math.max(1, Math.min(MAX_SKILL_LEVEL, ownedLv));
+        monDetailTab = "skills";
+        enhanceTab = "monsters";
+        applyMonDetailTabUi();
+        if (!applyMonSkillPickUi()) render();
+      },
+      opts,
+    );
+  });
+
+  host
+    .querySelector('.mon-pane[data-mon-pane="skills"]')
+    ?.addEventListener(
+      "click",
+      (ev) => {
+        const stepBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+          "[data-mon-skill-preview]",
+        );
+        if (stepBtn && host.contains(stepBtn) && !stepBtn.disabled) {
+          const step = Number(stepBtn.dataset.monSkillPreview ?? "0");
+          if (step === -1 || step === 1) {
+            const next = Math.max(
+              1,
+              Math.min(MAX_SKILL_LEVEL, monSkillPreviewLv + step),
+            );
+            if (next !== monSkillPreviewLv) {
+              monSkillPreviewLv = next;
+              if (!applyMonSkillPickUi()) render();
+            }
+            return;
+          }
+        }
+
+        const setBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+          "[data-mon-skill-preview-set]",
+        );
+        if (setBtn && host.contains(setBtn)) {
+          const lv = Number(setBtn.dataset.monSkillPreviewSet ?? "0");
+          if (!Number.isFinite(lv) || lv < 1 || lv > MAX_SKILL_LEVEL) return;
+          if (lv === monSkillPreviewLv) return;
+          monSkillPreviewLv = lv;
+          if (!applyMonSkillPickUi()) render();
+        }
+      },
+      opts,
+    );
 }
 
 /** Swap summoner-book inspect panes without full app re-render. */
@@ -877,18 +1045,18 @@ function bindSumMagicNodeClicks(): void {
 }
 
 function bindSumBookModalInteractions(): void {
-  const host = app.querySelector<HTMLElement>("#sum-modal-host");
-  if (!host) return;
+  const gearLayer = app.querySelector<HTMLElement>("#gear-detail-layer");
+  const magicLayer = app.querySelector<HTMLElement>("#sum-magic-detail-layer");
 
   const closeGearDetail = () => {
     gearDetailTarget = null;
     softRefreshSumBookUi({ modals: true });
   };
-  host.querySelectorAll("#btn-gear-detail-close").forEach((el) => {
+  gearLayer?.querySelectorAll("#btn-gear-detail-close").forEach((el) => {
     el.addEventListener("click", closeGearDetail);
   });
 
-  host.querySelectorAll<HTMLButtonElement>("[data-gear-detail-enhance]").forEach((btn) => {
+  gearLayer?.querySelectorAll<HTMLButtonElement>("[data-gear-detail-enhance]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const slot = parseGearSlot(btn.dataset.gearDetailEnhance);
       const r = runEnhanceGear(save, slot);
@@ -902,7 +1070,7 @@ function bindSumBookModalInteractions(): void {
     });
   });
 
-  host.querySelectorAll<HTMLButtonElement>("[data-gear-detail-set]").forEach((btn) => {
+  gearLayer?.querySelectorAll<HTMLButtonElement>("[data-gear-detail-set]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const slot = parseGearSlot(btn.dataset.gearDetailSet);
       const setRaw = btn.dataset.setId ?? "";
@@ -923,9 +1091,23 @@ function bindSumBookModalInteractions(): void {
     });
   });
 
-  host.querySelectorAll<HTMLButtonElement>("[data-gear-detail-equip]").forEach((btn) => {
+  gearLayer?.querySelectorAll<HTMLButtonElement>("[data-gear-detail-equip]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.gearDetailEquip ?? "-1");
+      const bagPiece = save.gearBag?.[idx];
+      if (bagPiece) {
+        const el = save.activeSummoner ?? "light";
+        const norm = normalizeGearPiece(bagPiece, bagPiece.slot);
+        if (!canEquipGearOnElement(norm, el)) {
+          flash(
+            t("ui.gearEquipBlockedElement", {
+              element: elementLabel(norm.element ?? "light"),
+            }),
+            "mid",
+          );
+          return;
+        }
+      }
       const bagLen = (save.gearBag ?? []).length;
       const r = runEquipGearBag(save, idx);
       save = r.save;
@@ -939,7 +1121,7 @@ function bindSumBookModalInteractions(): void {
     });
   });
 
-  host.querySelectorAll<HTMLButtonElement>("[data-gear-detail-sell]").forEach((btn) => {
+  gearLayer?.querySelectorAll<HTMLButtonElement>("[data-gear-detail-sell]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.gearDetailSell ?? "-1");
       const r = runSellGearBag(save, idx);
@@ -955,11 +1137,11 @@ function bindSumBookModalInteractions(): void {
     sumMagicDetailSlot = null;
     softRefreshSumBookUi({ modals: true });
   };
-  host.querySelectorAll("#btn-sum-magic-detail-close").forEach((el) => {
+  magicLayer?.querySelectorAll("#btn-sum-magic-detail-close").forEach((el) => {
     el.addEventListener("click", closeSumMagicDetail);
   });
 
-  host.querySelectorAll<HTMLButtonElement>("[data-magic-enhance]").forEach((btn) => {
+  magicLayer?.querySelectorAll<HTMLButtonElement>("[data-magic-enhance]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.magicEnhance ?? "";
       if (!id) return;
@@ -1045,6 +1227,7 @@ let wishReveal: string | null = null;
 /** Party editor draft (uid set); null means mirror save.party. */
 let partyDraft: Set<string> | null = null;
 let toast = "";
+let toastPlacement: "top" | "mid" = "top";
 let battleSpeed: 1 | 2 | 3 = 1;
 let autoMode = false;
 type BattleAutoOptions = { stone: boolean; combat: boolean };
@@ -2207,23 +2390,24 @@ async function logout(): Promise<void> {
   render();
 }
 
-function flash(msg: string): void {
+function flash(msg: string, placement: "top" | "mid" = "top"): void {
   toast = msg;
+  toastPlacement = placement;
   if (view === "auth" || app.classList.contains("auth-mode")) {
     showAuthToast(msg);
     return;
   }
-  const bar = app.querySelector("header.app-bar");
-  if (!bar) return;
-  bar.querySelector(".toast")?.remove();
+  app.querySelectorAll(":scope > .toast").forEach((el) => el.remove());
+  app.querySelector("header.app-bar .toast")?.remove();
   const p = document.createElement("p");
-  p.className = "toast";
+  p.className = placement === "mid" ? "toast toast--mid" : "toast";
+  p.setAttribute("role", "status");
   p.textContent = msg;
-  bar.appendChild(p);
+  app.appendChild(p);
   setTimeout(() => {
     if (toast === msg) toast = "";
     p.remove();
-  }, 2200);
+  }, placement === "mid" ? 2800 : 2200);
 }
 
 /** Small overlay toast above the auth panel — does not shift layout. */
@@ -5237,6 +5421,7 @@ function renderAuth(): string {
 function isFacilityView(v: View = view): boolean {
   return (
     v === "summon" ||
+    v === "summoner" ||
     v === "enhance" ||
     v === "shop" ||
     v === "pond" ||
@@ -5294,6 +5479,8 @@ function facilityTitle(v: View): string {
   switch (v) {
     case "summon":
       return t("ui.0d242e234f");
+    case "summoner":
+      return t("nav.summoner");
     case "enhance":
       return t("nav.monster");
     case "shop":
@@ -5325,16 +5512,21 @@ function facilityTitle(v: View): string {
 function renderFacilityLayerHtml(manaPct: number): string {
   const kind = view;
   const title = facilityTitle(kind);
+  const isBook = kind === "enhance" || kind === "summoner";
   // Stages uses expedition chrome; skip the shared modal header.
   const header =
     kind === "stages"
       ? ""
-      : `<header class="facility-modal-header">
+      : `<header class="facility-modal-header${isBook ? " facility-modal-header--book" : ""}">
         <button type="button" class="facility-modal-back" data-nav="home" aria-label="${escapeHtml(t("ui.1a7f31cadb"))}">
           <img src="/art/ui/back-arrow.svg" width="20" height="20" alt="" draggable="false" />
         </button>
         <h1 class="facility-modal-title" id="facility-modal-title">${escapeHtml(title)}</h1>
-        <span class="facility-modal-header-spacer" aria-hidden="true"></span>
+        ${
+          isBook
+            ? monTopbarCodexBtn()
+            : `<span class="facility-modal-header-spacer" aria-hidden="true"></span>`
+        }
       </header>`;
   const labelledBy =
     kind === "stages"
@@ -5496,24 +5688,9 @@ function renderInspectCombatStatsHtml(
     </div>`;
 
   return `<section class="mon-stats-panel" aria-label="${escapeHtml(t("ui.monStatsTitle"))}">
-    <header class="mon-stats-panel-head">
-      <span class="mon-stats-panel-ornament" aria-hidden="true"></span>
-      <strong class="mon-stats-panel-title">${escapeHtml(t("ui.monStatsTitle"))}</strong>
-      <span class="mon-stats-panel-ornament mon-stats-panel-ornament--flip" aria-hidden="true"></span>
-    </header>
-    <div class="mon-stats-panel-body">
-      <div class="mon-stats-band">
-        <p class="mon-stats-band-label">${escapeHtml(t("ui.monStatsCore"))}</p>
-        <div class="mon-stats-grid mon-stats-grid--core" role="list">
-          ${core.map((row) => tile(row, "core")).join("")}
-        </div>
-      </div>
-      <div class="mon-stats-band">
-        <p class="mon-stats-band-label">${escapeHtml(t("ui.monStatsCombat"))}</p>
-        <div class="mon-stats-grid mon-stats-grid--combat" role="list">
-          ${combat.map((row) => tile(row, "combat")).join("")}
-        </div>
-      </div>
+    <div class="mon-stats-grid mon-stats-grid--all" role="list">
+      ${core.map((row) => tile(row, "core")).join("")}
+      ${combat.map((row) => tile(row, "combat")).join("")}
     </div>
   </section>`;
 }
@@ -5625,6 +5802,9 @@ let overlayStackZ = 10000;
 function promoteOverlayToAppRoot(el: Element | null | undefined): HTMLElement | null {
   if (!(el instanceof HTMLElement)) return null;
   overlayStackZ += 1;
+  el.classList.add("is-ported");
+  el.style.position = "fixed";
+  el.style.inset = "0";
   el.style.zIndex = String(overlayStackZ);
   app.appendChild(el);
   return el;
@@ -5653,6 +5833,8 @@ const APP_ROOT_OVERLAY_IDS = [
   "codex-layer",
   "stage-prep-info-layer",
   "stage-drop-info-layer",
+  "forge-reveal-layer",
+  "mon-rite-layer",
 ] as const;
 
 function promoteKnownOverlays(): void {
@@ -6758,7 +6940,6 @@ function renderScreen(): void {
       </button>`
           : ""
       }
-      ${toast ? `<p class="toast">${toast}</p>` : ""}
     </header>
     <main class="${isFacilityView() ? "has-facility-modal" : ""}">${renderMainArea(manaPct)}</main>
     <div class="settings-layer" id="settings-layer" ${settingsOpen ? "" : "hidden"} aria-hidden="${settingsOpen ? "false" : "true"}">
@@ -6899,6 +7080,10 @@ function renderScreen(): void {
     }
     ${renderOnboardWelcome()}
     ${renderOnboardViewTip()}
+    ${renderSkillFeedModal()}
+    ${renderPowerUpModal()}
+    ${renderMonRiteModal()}
+    ${codexOpen ? renderCodexLayer() : ""}
     <nav class="tabs tabs--overlay" aria-label="${escapeHtml(t("nav.main"))}">
       <button type="button" data-nav="stages" class="${tabBattle ? "active" : ""}"><span class="seal-badge"><span class="tab-ico tab-ico--battle" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/battle.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.battle"))}</span></span></button>
       <button type="button" id="btn-nav-summoner" class="${tabSummoner ? "active" : ""}" title="${escapeHtml(t("nav.summoner"))}">
@@ -6920,6 +7105,7 @@ function renderScreen(): void {
       <button type="button" id="btn-community" class="${tabCommunity ? "active" : ""}" aria-expanded="${communityOpen ? "true" : "false"}" aria-controls="community-layer" title="${escapeHtml(t("nav.community"))}"><span class="seal-badge"><span class="tab-ico tab-ico--community" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/community.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.community"))}</span></span></button>
       <button type="button" id="btn-shop" class="${tabShop ? "active" : ""}" aria-expanded="${shopOpen ? "true" : "false"}" aria-controls="shop-layer" title="${escapeHtml(t("nav.shop"))}"><span class="seal-badge"><span class="tab-ico tab-ico--shop" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/shop.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.shop"))}</span></span></button>
     </nav>
+    ${toast ? `<p class="toast${toastPlacement === "mid" ? " toast--mid" : ""}" role="status">${escapeHtml(toast)}</p>` : ""}
   `;
 
   bind();
@@ -7174,15 +7360,19 @@ function renderForgeReveal(): string {
   if (!forgeReveal) return "";
   const title = forgeReveal.kind === "grind" ? t('ui.d8680bb7b3') : t('ui.27cf021299');
   const mark = forgeReveal.kind === "grind" ? Mark.grind : Mark.imprint;
-  return `<div class="forge-reveal forge-reveal--${forgeReveal.kind}" aria-live="polite">
-    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">${mark}</span>${title}</p>
-    <div class="forge-reveal-diff">
-      <p class="forge-before">${forgeReveal.before}</p>
-      <p class="forge-arrow" aria-hidden="true">${ARROW_DOWN}</p>
-      <p class="forge-after">${forgeReveal.after}</p>
+  return `<div class="settings-layer forge-reveal-layer" id="forge-reveal-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-forge-dismiss" aria-label="close"></button>
+    <div class="forge-reveal forge-reveal--${forgeReveal.kind}" role="dialog" aria-modal="true" aria-labelledby="forge-reveal-title">
+      ${modalCloseX("close", "btn-forge-dismiss")}
+      <p class="forge-reveal-kicker" id="forge-reveal-title"><span class="forge-reveal-mark" aria-hidden="true">${mark}</span>${title}</p>
+      <div class="forge-reveal-diff">
+        <p class="forge-before">${forgeReveal.before}</p>
+        <p class="forge-arrow" aria-hidden="true">${ARROW_DOWN}</p>
+        <p class="forge-after">${forgeReveal.after}</p>
+      </div>
+      <p class="forge-reveal-cost muted">${forgeReveal.cost}</p>
+      <button type="button" class="secondary full auth-btn-ghost" id="btn-forge-confirm">${t('ui.468266d639')}</button>
     </div>
-    <p class="forge-reveal-cost muted">${forgeReveal.cost}</p>
-    <button type="button" class="secondary full auth-btn-ghost" id="btn-forge-dismiss">${t('ui.468266d639')}</button>
   </div>`;
 }
 
@@ -7210,10 +7400,21 @@ function renderWishReveal(): string {
 }
 
 function bindForgeRevealDismiss(): void {
-  app.querySelector("#btn-forge-dismiss")?.addEventListener("click", () => {
+  const close = (): void => {
+    if (!forgeReveal) return;
     forgeReveal = null;
-    softRefreshOverlayReveals();
-  });
+    softRemoveOverlay("forge-reveal-layer");
+  };
+  app.querySelector("#btn-forge-dismiss")?.addEventListener("click", close);
+  app.querySelector("#btn-forge-confirm")?.addEventListener("click", close);
+}
+
+function mountForgeRevealOverlay(): void {
+  softRemoveOverlay("forge-reveal-layer");
+  if (!forgeReveal) return;
+  if (softMountOverlay("forge-reveal-layer", renderForgeReveal())) {
+    bindForgeRevealDismiss();
+  }
 }
 
 function bindFusionRevealDismiss(): void {
@@ -7232,11 +7433,6 @@ function bindWishRevealDismiss(): void {
 
 function softRefreshOverlayReveals(): boolean {
   let ok = false;
-  const forgeHost = softPatchHost("#forge-reveal-host", renderForgeReveal());
-  if (forgeHost) {
-    bindForgeRevealDismiss();
-    ok = true;
-  }
   const fusionHost = softPatchHost("#fusion-reveal-host", renderFusionReveal());
   if (fusionHost) {
     bindFusionRevealDismiss();
@@ -7247,21 +7443,31 @@ function softRefreshOverlayReveals(): boolean {
     bindWishRevealDismiss();
     ok = true;
   }
-  const enhanceHost = softPatchHost("#enhance-modal-host", renderForgeReveal());
+  const enhanceHost = app.querySelector<HTMLElement>("#enhance-modal-host");
   if (enhanceHost) {
-    bindForgeRevealDismiss();
+    enhanceHost.innerHTML = "";
     ok = true;
   }
+  const forgeInlineHost = app.querySelector<HTMLElement>("#forge-reveal-host");
+  if (forgeInlineHost) {
+    forgeInlineHost.innerHTML = "";
+    ok = true;
+  }
+  mountForgeRevealOverlay();
+  if (forgeReveal) ok = true;
   softRemoveOverlay("sym-detail-layer");
   softRemoveOverlay("sym-bag-expand-layer");
   const symDetail = renderSymbolDetailModal();
   const symBag = renderSymbolBagExpandModal();
   if (symDetail) softMountOverlay("sym-detail-layer", symDetail);
   if (symBag) softMountOverlay("sym-bag-expand-layer", symBag);
-  if (enhanceHost || symDetail || symBag) {
+  if (symDetail || symBag) {
     bindEnhanceTransientModals();
     bindSymbolInventoryInteractions();
     ok = true;
+  }
+  if (forgeReveal) {
+    promoteOverlayToAppRoot(app.querySelector("#forge-reveal-layer"));
   }
   return ok;
 }
@@ -9736,17 +9942,15 @@ function renderSymbolInventoryGrid(): string {
     <div class="mon-sym-inv-head">
       <div class="mon-sym-inv-head-title">
         <strong>${t("ui.60fbf51b13")}</strong>
-        <button type="button" class="mon-sym-inv-expand" data-expand-sym-bag ${atMax ? "disabled" : ""} title="${escapeHtml(expandTitle)}" aria-label="${escapeHtml(expandTitle)}">+</button>
+        <span class="mon-sym-inv-count">${visible.length}/${cap}</span>
       </div>
       <div class="mon-sym-inv-head-meta">
         ${renderSymFilterDropdown("set", symbolInvFilterSetLabel(), "ui.symFilter", setFilterRows)}
         ${renderSymFilterDropdown("slot", symbolInvFilterSlotLabel(), "ui.symFilterSlot", slotFilterRows)}
+        <button type="button" class="mon-sym-inv-expand" data-expand-sym-bag ${atMax ? "disabled" : ""} title="${escapeHtml(expandTitle)}" aria-label="${escapeHtml(expandTitle)}">+</button>
       </div>
     </div>
     <div class="mon-sym-inv-grid mon-sym-inv-grid--rail">${gridBody}</div>
-    <div class="mon-sym-inv-foot">
-      <span class="mon-sym-inv-count">${visible.length}/${cap}</span>
-    </div>
   </div>`;
 }
 
@@ -9762,7 +9966,21 @@ function sortRosterForSlots(
     dark: 4,
   };
   const list = roster.slice();
-  if (mode === "default") return list;
+  const compareGrade = (a: (typeof roster)[number], b: (typeof roster)[number]): number => {
+    const da = getMonster(a.monsterId);
+    const db = getMonster(b.monsterId);
+    const ga = monsterGrade(a);
+    const gb = monsterGrade(b);
+    if (gb !== ga) return gb - ga;
+    const sa = displayedMonsterStars(da?.naturalStars ?? 1, a.awaken ?? 0);
+    const sb = displayedMonsterStars(db?.naturalStars ?? 1, b.awaken ?? 0);
+    if (sb !== sa) return sb - sa;
+    return b.level - a.level;
+  };
+  if (mode === "default") {
+    list.sort(compareGrade);
+    return list;
+  }
   list.sort((a, b) => {
     const da = getMonster(a.monsterId);
     const db = getMonster(b.monsterId);
@@ -9999,7 +10217,7 @@ function renderGearDetailModal(activeEl: SummonerElement): string {
   const canEquip = canEquipGearOnElement(piece, activeEl);
   const action = equipped
     ? `<button type="button" class="auth-btn-primary" data-gear-detail-enhance="${piece.slot}" ${piece.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>${escapeHtml(t("ui.sumBookEnhance"))} +1</button>`
-    : `<button type="button" class="auth-btn-primary" data-gear-detail-equip="${gearDetailTarget.index}" ${canEquip ? "" : "disabled"}>${escapeHtml(t("ui.sumBookEquip"))}</button>
+    : `<button type="button" class="auth-btn-primary${canEquip ? "" : " is-locked"}" data-gear-detail-equip="${gearDetailTarget.index}">${escapeHtml(t("ui.sumBookEquip"))}</button>
        <button type="button" class="secondary" data-gear-detail-sell="${gearDetailTarget.index}">+${gearSellMana(piece)}${gearSellCrystal(piece) > 0 ? ` / +${gearSellCrystal(piece)}` : ""}</button>`;
   const setChoices = equipped
     ? `<div class="gear-detail-set-choices">${GEAR_SETS.map(
@@ -10661,22 +10879,6 @@ function renderSummonerBook(): string {
 
   const leaderBuffs = renderLeaderBuffChips(leader, activeEl);
   const infoPanel = `<div class="mon-pane mon-pane--info sum-info-panel" data-sum-pane="info"${sumDetailTab === "info" ? "" : " hidden"}>
-    <section class="sum-info-profile" aria-label="${escapeHtml(t("ui.sumInfoProfile"))}">
-      <div class="sum-info-profile-el el-${activeEl}">
-        <img src="${monsterElementArtSrc(activeEl) ?? ""}" width="34" height="34" alt="" draggable="false" />
-      </div>
-      <div class="sum-info-profile-main">
-        <span>${escapeHtml(t("ui.sumInfoProfile"))}</span>
-        <strong>${escapeHtml(elementLabel(activeEl))} ${escapeHtml(t("nav.summoner"))}</strong>
-        <div class="sum-info-level-track" aria-label="level progress">
-          <span style="width:${levelPct}%"></span>
-        </div>
-      </div>
-      <div class="sum-info-profile-level">
-        <strong>Lv.${active.level}</strong>
-        <small>+${awaken}</small>
-      </div>
-    </section>
     <section class="sum-leader-card">
       <div class="sum-leader-head">
         <div class="sum-leader-art">
@@ -10828,7 +11030,7 @@ function renderSummonerBook(): string {
     }).join("")}
   </div>`;
 
-  const body = `<div class="hub-panel enhance-panel enhance-panel--desk">
+  const body = `<div class="sum-sheet-body enhance-panel enhance-panel--desk">
     <div id="sum-modal-host"></div>
     <div class="mon-book sum-book">
       <div class="mon-book-viewer">${detail}</div>
@@ -10856,24 +11058,12 @@ function renderSummonerBook(): string {
       <div class="hub-sky-veil"></div>
     </div>
     <div class="hub-content">
-      <header class="mon-topbar">
-        ${navBackBtn({ nav: "home", label: t("ui.1a7f31cadb") })}
-        <div class="mon-topbar-heading">
-          <h1 class="mon-topbar-title">${escapeHtml(t("nav.summoner"))}</h1>
-          ${monTopbarCodexBtn()}
-        </div>
-      </header>
       ${body}
     </div>
-    ${renderCodexLayer()}
   </div>`;
 }
 
-function renderEnhance(): string {
-  enhanceTab = "monsters";
-  const dock: "roster" | "symbols" =
-    monBookDock === "symbols" ? "symbols" : "roster";
-
+function ensureSelectedEnhanceUid(): void {
   if (
     !selectedEnhanceUid ||
     !save.roster.some((m) => m.uid === selectedEnhanceUid)
@@ -10882,29 +11072,310 @@ function renderEnhance(): string {
     if (nextUid !== selectedEnhanceUid) clearEnhanceSymbolUi();
     selectedEnhanceUid = nextUid;
   }
+}
+
+function monRiteCostChip(src: string, need: number, have: number): string {
+  return `<div class="mon-rite-cost${have < need ? " is-short" : ""}">
+    <img src="${src}" width="22" height="22" alt="" draggable="false" />
+    <span>${fmtRes(need)}</span>
+    <small>${fmtRes(have)}</small>
+  </div>`;
+}
+
+function monRiteState(m: (typeof save.roster)[number]) {
+  const def = getMonster(m.monsterId);
+  const el = def?.element ?? "dark";
+  const awaken = m.awaken ?? 0;
+  const evo = m.evolve ?? 0;
+  const awakenMax = awaken >= MAX_MONSTER_AWAKEN;
+  const awakenNeedLv = monsterAwakenMinLevel(def?.naturalStars ?? 1);
+  const awakenLocked = m.level < awakenNeedLv;
+  const awakenMana = monsterAwakenManaCost(awaken);
+  const awakenCrystal = monsterAwakenCrystalCost(awaken);
+  const awakenMatNeed = monsterAwakenMatCost(awaken);
+  const awakenMatHave = (save.awakenMats ?? {})[el] ?? 0;
+  const evoMax = evo >= MAX_EVOLVE;
+  const evoNeedLv = evolveMinLevel(evo);
+  const evoLocked = m.level < evoNeedLv;
+  const evoMana = evolveManaCost(evo);
+  const evoCrystal = evolveCrystalCost(evo);
+  const awakenNext = Math.min(MAX_MONSTER_AWAKEN, awaken + 1);
+  const evoNext = Math.min(MAX_EVOLVE, evo + 1);
+  const starsNow = displayedMonsterStars(def?.naturalStars ?? 1, awaken);
+  const starsNext = displayedMonsterStars(def?.naturalStars ?? 1, awakenNext);
+  const maxLvNow = monsterMaxLevel(m);
+  const maxLvNext = monsterMaxLevel({ ...m, evolve: evoNext });
+  const awakenPerkPct = 8;
+  const canAffordAwaken =
+    save.island.mana >= awakenMana &&
+    save.island.crystal >= awakenCrystal &&
+    awakenMatHave >= awakenMatNeed;
+  const canAffordEvo =
+    save.island.mana >= evoMana && save.island.crystal >= evoCrystal;
+  return {
+    def,
+    el,
+    awaken,
+    evo,
+    awakenMax,
+    awakenNeedLv,
+    awakenLocked,
+    awakenMana,
+    awakenCrystal,
+    awakenMatNeed,
+    awakenMatHave,
+    evoMax,
+    evoNeedLv,
+    evoLocked,
+    evoMana,
+    evoCrystal,
+    awakenNext,
+    evoNext,
+    starsNow,
+    starsNext,
+    maxLvNow,
+    maxLvNext,
+    awakenPerkPct,
+    canAffordAwaken,
+    canAffordEvo,
+  };
+}
+
+function renderMonRiteCostsHtml(
+  kind: MonRiteKind,
+  rite: ReturnType<typeof monRiteState>,
+): string {
+  if (kind === "awaken") {
+    if (rite.awakenMax) return "";
+    return `<div class="mon-rite-costs" aria-label="${escapeHtml(t("ui.monRiteMats"))}">
+      ${monRiteCostChip("/art/ui/res/gold.svg", rite.awakenMana, save.island.mana)}
+      ${monRiteCostChip("/art/ui/res/crystal.svg", rite.awakenCrystal, save.island.crystal)}
+      ${monRiteCostChip(monsterElementArtSrc(rite.el) ?? "", rite.awakenMatNeed, rite.awakenMatHave)}
+    </div>`;
+  }
+  if (rite.evoMax) return "";
+  return `<div class="mon-rite-costs mon-rite-costs--2" aria-label="${escapeHtml(t("ui.monRiteMats"))}">
+    ${monRiteCostChip("/art/ui/res/gold.svg", rite.evoMana, save.island.mana)}
+    ${monRiteCostChip("/art/ui/res/crystal.svg", rite.evoCrystal, save.island.crystal)}
+  </div>`;
+}
+
+function renderMonRiteConditionHtml(
+  kind: MonRiteKind,
+  rite: ReturnType<typeof monRiteState>,
+): string {
+  const maxed = kind === "awaken" ? rite.awakenMax : rite.evoMax;
+  const locked = kind === "awaken" ? rite.awakenLocked : rite.evoLocked;
+  const needLv = kind === "awaken" ? rite.awakenNeedLv : rite.evoNeedLv;
+  const text = maxed
+    ? kind === "awaken"
+      ? t("ui.monBookAwakenMax")
+      : t("ui.monBookEvolveMax")
+    : locked
+      ? kind === "awaken"
+        ? t("ui.monBookAwakenNeedLv", { n: needLv })
+        : t("ui.monBookEvolveNeedLv", { n: needLv })
+      : t("ui.monRiteConditionOk", { n: needLv });
+  const tone = maxed ? "" : locked ? " is-short" : " is-ok";
+  return `<p class="mon-rite-req${tone}">
+    <span>${escapeHtml(t("ui.monRiteCondition"))}</span>
+    <strong>${escapeHtml(text)}</strong>
+  </p>`;
+}
+
+function renderMonRitePerksHtml(
+  kind: MonRiteKind,
+  rite: ReturnType<typeof monRiteState>,
+): string {
+  if (kind === "awaken") {
+    const rows = [
+      t("ui.monBookAwakenPerkStat", { stat: t("ui.statHp"), pct: rite.awakenPerkPct }),
+      t("ui.monBookAwakenPerkStat", { stat: t("ui.statAtk"), pct: rite.awakenPerkPct }),
+    ];
+    if (!rite.awakenMax) {
+      rows.push(
+        t("ui.monBookAwakenPerkStars", { from: rite.starsNow, to: rite.starsNext }),
+      );
+    }
+    return `<ul class="mon-rite-perks">${rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul>`;
+  }
+  return `<ul class="mon-rite-perks">
+    <li>${escapeHtml(
+      t("ui.monBookEvolvePerkCap", {
+        from: rite.maxLvNow,
+        to: rite.evoMax ? rite.maxLvNow : rite.maxLvNext,
+      }),
+    )}</li>
+  </ul>`;
+}
+
+function renderMonRiteCompactCard(
+  kind: MonRiteKind,
+  m: (typeof save.roster)[number],
+  rite: ReturnType<typeof monRiteState>,
+): string {
+  const maxed = kind === "awaken" ? rite.awakenMax : rite.evoMax;
+  const title =
+    kind === "awaken" ? t("ui.a2d1ab7b28") : t("ui.monEvolveRite");
+  const step =
+    kind === "awaken"
+      ? `+${rite.awaken} ${ARROW_RIGHT} +${rite.awakenNext}`
+      : `E${rite.evo} ${ARROW_RIGHT} E${rite.evoNext}`;
+  const openLabel = maxed
+    ? kind === "awaken"
+      ? t("ui.monBookAwakenMax")
+      : t("ui.monBookEvolveMax")
+    : t("ui.monRiteOpen");
+  return `<article class="mon-rite mon-rite--compact mon-rite--${kind}${maxed ? " is-max" : ""}">
+    <header class="mon-rite-head">
+      <span>${escapeHtml(title)}</span>
+      <strong>${step}</strong>
+    </header>
+    ${renderMonRiteConditionHtml(kind, rite)}
+    ${
+      maxed
+        ? ""
+        : `<p class="mon-rite-mats-k">${escapeHtml(t("ui.monRiteMats"))}</p>
+          ${renderMonRiteCostsHtml(kind, rite)}`
+    }
+    <button type="button" class="auth-btn-primary mon-rite-confirm" data-mon-rite-open="${kind}" data-mon-rite-uid="${m.uid}" ${maxed ? "disabled" : ""}>${escapeHtml(openLabel)}</button>
+  </article>`;
+}
+
+function renderMonRiteModal(): string {
+  const open = Boolean(monRiteModal);
+  const m = selectedEnhanceUid
+    ? save.roster.find((row) => row.uid === selectedEnhanceUid) ?? null
+    : null;
+  if (!open || !m || !monRiteModal) {
+    return `<div class="settings-layer mon-rite-layer" id="mon-rite-layer" hidden aria-hidden="true"></div>`;
+  }
+  const kind = monRiteModal;
+  const rite = monRiteState(m);
+  const title = kind === "awaken" ? t("ui.a2d1ab7b28") : t("ui.monEvolveRite");
+  const closeLabel = t("ui.monRiteClose");
+  const maxed = kind === "awaken" ? rite.awakenMax : rite.evoMax;
+  const locked = kind === "awaken" ? rite.awakenLocked : rite.evoLocked;
+  const canPay = kind === "awaken" ? rite.canAffordAwaken : rite.canAffordEvo;
+  const confirmLabel =
+    kind === "awaken"
+      ? maxed
+        ? t("ui.monBookAwakenMax")
+        : locked
+          ? t("ui.monBookAwakenNeedLv", { n: rite.awakenNeedLv })
+          : t("ui.monBookAwakenBtn")
+      : maxed
+        ? t("ui.monBookEvolveMax")
+        : locked
+          ? t("ui.monBookEvolveNeedLv", { n: rite.evoNeedLv })
+          : t("ui.monBookEvolveBtn", { n: rite.evo + 1 });
+  const badge =
+    kind === "awaken"
+      ? { now: `+${rite.awaken}`, next: `+${rite.awakenNext}` }
+      : { now: `E${rite.evo}`, next: `E${rite.evoNext}` };
+  const art = monsterArtImg(m.monsterId, "mon-rite-art", 56);
+  const bonus =
+    kind === "awaken" ? t("ui.monBookAwakenBonus") : t("ui.monEvolveBonus");
+  return `<div class="settings-layer mon-rite-layer" id="mon-rite-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-mon-rite-close" aria-label="${escapeHtml(closeLabel)}"></button>
+    <div class="settings-sheet mon-rite-sheet" role="dialog" aria-modal="true" aria-labelledby="mon-rite-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(closeLabel, "btn-mon-rite-close")}
+      <h2 class="settings-title" id="mon-rite-title">${escapeHtml(title)}</h2>
+      <div class="mon-rite-forms">
+        <div class="mon-rite-form">
+          <span>${escapeHtml(t("ui.sumAwakenCurrent"))}</span>
+          <div class="mon-rite-portrait">${art}<strong>${badge.now}</strong></div>
+        </div>
+        <span class="mon-rite-arrow" aria-hidden="true">${ARROW_RIGHT}</span>
+        <div class="mon-rite-form mon-rite-form--next">
+          <span>${escapeHtml(t("ui.sumAwakenNext"))}</span>
+          <div class="mon-rite-portrait">${art}<strong>${badge.next}</strong></div>
+        </div>
+      </div>
+      <p class="mon-rite-bonus">${escapeHtml(bonus)}</p>
+      <p class="mon-rite-mats-k">${escapeHtml(t("ui.monRiteEffects"))}</p>
+      ${renderMonRitePerksHtml(kind, rite)}
+      ${renderMonRiteConditionHtml(kind, rite)}
+      ${
+        maxed
+          ? ""
+          : `<p class="mon-rite-mats-k">${escapeHtml(t("ui.monRiteMats"))}</p>
+            ${renderMonRiteCostsHtml(kind, rite)}`
+      }
+      <button type="button" class="auth-btn-primary mon-rite-confirm" id="btn-mon-rite-confirm" data-mon-rite-confirm="${kind}" data-mon-rite-uid="${m.uid}" ${maxed || locked || !canPay ? "disabled" : ""}>${escapeHtml(confirmLabel)}</button>
+    </div>
+  </div>`;
+}
+
+function closeMonRiteModal(): void {
+  if (!monRiteModal) return;
+  monRiteModal = null;
+  softRemoveOverlay("mon-rite-layer");
+}
+
+function openMonRiteModal(kind: MonRiteKind, uid: string): void {
+  selectedEnhanceUid = uid;
+  monRiteModal = kind;
+  skillFeedModalOpen = false;
+  skillFeedFodderUid = null;
+  powerUpModalOpen = false;
+  powerUpFodderUids = new Set();
+  applySkillFeedOpen();
+  applyPowerUpOpen();
+  const layer = softMountOverlay("mon-rite-layer", renderMonRiteModal());
+  if (layer) bindMonRiteModal();
+}
+
+let monRiteModalAbort: AbortController | null = null;
+
+function bindMonRiteModal(): void {
+  const layer = app.querySelector<HTMLElement>("#mon-rite-layer");
+  if (!layer) return;
+  monRiteModalAbort?.abort();
+  const ac = new AbortController();
+  monRiteModalAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+  const close = (): void => {
+    closeMonRiteModal();
+  };
+  layer.querySelector("#btn-mon-rite-close")?.addEventListener("click", close, opts);
+  layer.querySelector(".settings-backdrop")?.addEventListener("click", close, opts);
+  layer
+    .querySelector<HTMLButtonElement>("#btn-mon-rite-confirm")
+    ?.addEventListener(
+      "click",
+      () => {
+        const btn = layer.querySelector<HTMLButtonElement>("#btn-mon-rite-confirm");
+        if (!btn || btn.disabled) return;
+        const kind = btn.dataset.monRiteConfirm;
+        const uid = btn.dataset.monRiteUid;
+        if ((kind !== "awaken" && kind !== "evolve") || !uid) return;
+        const r =
+          kind === "awaken" ? runAwakenMonster(save, uid) : runEvolve(save, uid);
+        save = r.save;
+        persist();
+        flash(r.message);
+        monRiteModal = null;
+        render();
+      },
+      opts,
+    );
+}
+
+function renderMonBookDetailHtml(): string {
+  ensureSelectedEnhanceUid();
   const selectedMon = selectedEnhanceUid
     ? save.roster.find((m) => m.uid === selectedEnhanceUid) ?? null
     : null;
-  const selectedDef = selectedMon ? getMonster(selectedMon.monsterId) : null;
+  if (!selectedMon) {
+    return `<div class="mon-book-empty muted">${t("ui.079b50d844")}</div>`;
+  }
+  const selectedDef = getMonster(selectedMon.monsterId);
   const selectedEl = selectedDef?.element ?? "dark";
-  const selectedPreview = selectedMon
-    ? previewOwnedCombatStats(save, selectedMon.uid)
-    : null;
-  const selectedEvo = selectedMon?.evolve ?? 0;
-
-  if (slotEquipPick) monDetailTab = "symbols";
-
-  const rosterSlotCap = ROSTER_SLOT_CAP;
-  const sortedRoster = sortRosterForSlots(save.roster, rosterSortMode);
-  const rosterFilled = Math.min(sortedRoster.length, rosterSlotCap);
-  const rosterSlots = Array.from(
-    { length: rosterSlotCap },
-    (_, i) => sortedRoster[i] ?? null,
-  );
-
-  const monBookDetail = selectedMon
-    ? (() => {
-        const m = selectedMon;
+  const selectedPreview = previewOwnedCombatStats(save, selectedMon.uid);
+  const selectedEvo = selectedMon.evolve ?? 0;
+  const m = selectedMon;
         const levels = (m.skillLevels ?? [1, 1, 1]) as [number, number, number];
         const def = selectedDef;
         const elLabel = monsterElementLabel(selectedEl);
@@ -10953,76 +11424,10 @@ function renderEnhance(): string {
         </div>
       </div>`;
 
-        const monAwaken = m.awaken ?? 0;
-        const awakenMax = monAwaken >= MAX_MONSTER_AWAKEN;
-        const awakenNeedLv = monsterAwakenMinLevel(def?.naturalStars ?? 1);
-        const awakenLocked = m.level < awakenNeedLv;
-        const awakenMana = monsterAwakenManaCost(monAwaken);
-        const awakenCrystal = monsterAwakenCrystalCost(monAwaken);
-        const awakenMatNeed = monsterAwakenMatCost(monAwaken);
-        const awakenMatHave = (save.awakenMats ?? {})[selectedEl] ?? 0;
-        const awakenLabel = awakenMax
-          ? t("ui.monBookAwakenMax")
-          : awakenLocked
-            ? t("ui.monBookAwakenNeedLv", { n: awakenNeedLv })
-            : t("ui.monBookAwakenBtn");
-        const evo = selectedEvo;
-        const evoMax = evo >= MAX_EVOLVE;
-        const evoNeedLv = evolveMinLevel(evo);
-        const evoLocked = m.level < evoNeedLv;
-        const evoMana = evolveManaCost(evo);
-        const evoCrystal = evolveCrystalCost(evo);
-        const evoLabel = evoMax
-          ? t("ui.monBookEvolveMax")
-          : evoLocked
-            ? t("ui.monBookEvolveNeedLv", { n: evoNeedLv })
-            : t("ui.monBookEvolveBtn", { n: evo + 1 });
-        const evoCrystalNote =
-          evoCrystal > 0
-            ? ` · ${t("ui.5d0bf3b101")} ${evoCrystal}`
-            : "";
-        const awakenPanel = `<div class="mon-pane mon-pane--awaken">
-        <div class="sum-awaken-card">
-          <strong>+${monAwaken} / ${MAX_MONSTER_AWAKEN}</strong>
-          <p class="muted">${escapeHtml(t("ui.monBookAwakenBonus"))}</p>
-          <p class="muted">${escapeHtml(
-            t("ui.monBookAwakenMats", {
-              el: elLabel,
-              have: awakenMatHave,
-              need: awakenMatNeed,
-            }),
-          )}</p>
-          ${
-            awakenMax
-              ? ""
-              : `<p class="muted">${escapeHtml(
-                  t("ui.monBookAwakenCost", {
-                    mana: awakenMana,
-                    crystal: awakenCrystal,
-                    mat: awakenMatNeed,
-                  }),
-                )}</p>`
-          }
-          <button type="button" class="auth-btn-primary" data-mon-awaken="${m.uid}" ${
-            awakenMax || awakenLocked ? "disabled" : ""
-          }>${escapeHtml(awakenLabel)}</button>
-        </div>
-        <div class="sum-awaken-card" style="margin-top:0.75rem">
-          <strong>E${evo} / ${MAX_EVOLVE}</strong>
-          ${
-            evoMax
-              ? ""
-              : `<p class="muted">${escapeHtml(
-                  t("ui.monBookEvolveCost", {
-                    mana: evoMana,
-                    crystal: evoCrystalNote,
-                  }),
-                )}</p>`
-          }
-          <button type="button" class="auth-btn-primary" data-evo="${m.uid}" ${
-            evoMax || evoLocked ? "disabled" : ""
-          }>${escapeHtml(evoLabel)}</button>
-        </div>
+        const rite = monRiteState(m);
+        const awakenPanel = `<div class="mon-pane mon-pane--awaken" data-mon-pane="awaken"${monDetailTab === "awaken" ? "" : " hidden"}>
+        ${renderMonRiteCompactCard("awaken", m, rite)}
+        ${renderMonRiteCompactCard("evolve", m, rite)}
       </div>`;
 
         const symbolsPanel = `<div class="mon-pane mon-pane--symbols">
@@ -11128,8 +11533,24 @@ function renderEnhance(): string {
         </div>
       </div>
     </div>`;
-      })()
-    : `<div class="mon-book-empty muted">${t("ui.079b50d844")}</div>`;
+}
+
+function renderEnhance(): string {
+  enhanceTab = "monsters";
+  const dock: "roster" | "symbols" =
+    monBookDock === "symbols" ? "symbols" : "roster";
+  ensureSelectedEnhanceUid();
+  if (slotEquipPick) monDetailTab = "symbols";
+
+  const rosterSlotCap = ROSTER_SLOT_CAP;
+  const sortedRoster = sortRosterForSlots(save.roster, rosterSortMode);
+  const rosterFilled = Math.min(sortedRoster.length, rosterSlotCap);
+  const rosterSlots = Array.from(
+    { length: rosterSlotCap },
+    (_, i) => sortedRoster[i] ?? null,
+  );
+
+  const monBookDetail = renderMonBookDetailHtml();
 
   const symbolsDock = `<div class="mon-sym-grid">
       ${save.symbols.length
@@ -11230,20 +11651,11 @@ function renderEnhance(): string {
   </div>`;
 
   const body = `<div class="hub-panel enhance-panel enhance-panel--desk">
-    <div id="enhance-modal-host">${renderForgeReveal()}</div>
-    ${renderSkillFeedModal()}
-    ${renderPowerUpModal()}
+    <div id="enhance-modal-host"></div>
     ${monstersPanel}
   </div>`;
   queueMicrotask(() => {
     enhanceFx = null;
-    const slot = app.querySelector<HTMLElement>(".mon-roster-dock .mon-slot.is-active");
-    const rail = app.querySelector<HTMLElement>(".mon-roster-dock .mon-book-inv--rail");
-    if (slot && rail) {
-      const slotCenter = slot.offsetLeft + slot.offsetWidth / 2;
-      const nextLeft = Math.max(0, slotCenter - rail.clientWidth / 2);
-      rail.scrollTo({ left: nextLeft, behavior: "smooth" });
-    }
   });
   return `<div class="hub-screen enhance-screen${
     onboard.step === "enhance" || onboard.step === "equip" ? " is-onboard-rite" : ""
@@ -11262,12 +11674,8 @@ function renderEnhance(): string {
       <div class="hub-sky-veil"></div>
     </div>
     <div class="hub-content">
-      <header class="mon-topbar mon-topbar--tools">
-        ${monTopbarCodexBtn()}
-      </header>
       ${body}
     </div>
-    ${renderCodexLayer()}
   </div>`;
 }
 
@@ -11322,7 +11730,7 @@ function renderShopBody(): string {
       .join("") ||
     `<p class="muted">${t('ui.b9c0de06ae')} (${t('ui.imprintSlotsHint')} ${t('ui.a05d718889')})</p>`;
   return `<div class="hub-panel shop-body">
-    <div id="forge-reveal-host">${renderForgeReveal()}</div>
+    <div id="forge-reveal-host"></div>
     <p class="section-label">${t("ui.shop.dailyOffers")}</p>
     <div class="stage-list">${dailyRows}</div>
       <p class="section-label">${t('ui.079b50d844')}</p>
@@ -13834,6 +14242,7 @@ function bind(): void {
         enhanceSkillFeedAllowed = false;
         skillFeedModalOpen = false;
         skillFeedFodderUid = null;
+        closeMonRiteModal();
       }
       if (nav === "enhance" || nav === "home" || nav === "summoner") {
         codexOpen = false;
@@ -13963,12 +14372,14 @@ function bind(): void {
   bindSummonRiteInteractions();
 
   app.querySelectorAll<HTMLButtonElement>("[data-select-mon]").forEach((btn) => {
+    btn.addEventListener("pointerdown", () => {
+      btn.focus({ preventScroll: true });
+    });
     btn.addEventListener("click", () => {
       const uid = btn.dataset.selectMon;
       if (!uid) return;
-      if (uid !== selectedEnhanceUid) {
-        clearEnhanceSymbolUi();
-      }
+      if (uid === selectedEnhanceUid) return;
+      clearEnhanceSymbolUi();
       selectedEnhanceUid = uid;
       monSkillPick = 0;
       {
@@ -13981,7 +14392,9 @@ function bind(): void {
       enhanceTab = "monsters";
       skillFeedModalOpen = false;
       skillFeedFodderUid = null;
-      render();
+      applySkillFeedOpen();
+      closeMonRiteModal();
+      if (!refreshMonInspectSoft()) render();
     });
   });
 
@@ -13993,18 +14406,8 @@ function bind(): void {
     render();
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-mon-detail-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const raw = btn.dataset.monDetailTab;
-      if (raw === "info" || raw === "skills" || raw === "awaken" || raw === "symbols") {
-        if (monDetailTab === raw) return;
-        monDetailTab = raw;
-        if (raw !== "symbols") symbolInvFilterOpen = null;
-        enhanceTab = "monsters";
-        if (!applyMonDetailTabUi()) render();
-      }
-    });
-  });
+  bindMonInspectInteractions();
+  bindMonRiteModal();
 
   app.querySelectorAll<HTMLButtonElement>("[data-sum-detail-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -14043,18 +14446,6 @@ function bind(): void {
         enhanceTab = "monsters";
         render();
       }
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-enh]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const uid = btn.dataset.enh!;
-      if (!save.roster.some((monster) => monster.uid === uid)) return;
-      selectedEnhanceUid = uid;
-      powerUpFodderUids = new Set();
-      powerUpModalOpen = true;
-      refreshPowerUpModalDom();
-      applyPowerUpOpen();
     });
   });
 
@@ -14098,21 +14489,6 @@ function bind(): void {
     powerUpModalOpen = false;
     flash(r.message);
     render();
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-skill-feed-open]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (!enhanceSkillFeedAllowed) return;
-      const uid = btn.dataset.skillFeedOpen;
-      if (!uid) return;
-      selectedEnhanceUid = uid;
-      skillFeedFodderUid = null;
-      skillFeedModalOpen = true;
-      monDetailTab = "skills";
-      applyMonDetailTabUi();
-      refreshSkillFeedModalDom();
-      applySkillFeedOpen();
-    });
   });
 
   const closeSkillFeed = (): void => {
@@ -14163,78 +14539,6 @@ function bind(): void {
     }
     render();
   });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-evo]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const uid = btn.dataset.evo!;
-      const r = runEvolve(save, uid);
-      save = r.save;
-      persist();
-      flash(r.message);
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-mon-awaken]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const uid = btn.dataset.monAwaken!;
-      const r = runAwakenMonster(save, uid);
-      save = r.save;
-      persist();
-      flash(r.message);
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-mon-skill-pick]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const slot = Number(btn.dataset.monSkillPick ?? "0");
-      if (slot < 0 || slot > 2 || slot === monSkillPick) return;
-      monSkillPick = slot;
-      const owned = selectedEnhanceUid
-        ? save.roster.find((m) => m.uid === selectedEnhanceUid)
-        : null;
-      const ownedLv = owned?.skillLevels?.[slot] ?? 1;
-      monSkillPreviewLv = Math.max(1, Math.min(MAX_SKILL_LEVEL, ownedLv));
-      monDetailTab = "skills";
-      enhanceTab = "monsters";
-      applyMonDetailTabUi();
-      if (!applyMonSkillPickUi()) render();
-    });
-  });
-
-  app
-    .querySelector('.mon-pane[data-mon-pane="skills"]')
-    ?.addEventListener("click", (ev) => {
-      const stepBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
-        "[data-mon-skill-preview]",
-      );
-      if (stepBtn && app.contains(stepBtn) && !stepBtn.disabled) {
-        const step = Number(stepBtn.dataset.monSkillPreview ?? "0");
-        if (step === -1 || step === 1) {
-          const next = Math.max(
-            1,
-            Math.min(MAX_SKILL_LEVEL, monSkillPreviewLv + step),
-          );
-          if (next !== monSkillPreviewLv) {
-            monSkillPreviewLv = next;
-            if (!applyMonSkillPickUi()) render();
-          }
-          return;
-        }
-      }
-
-      const setBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
-        "[data-mon-skill-preview-set]",
-      );
-      if (setBtn && app.contains(setBtn)) {
-        const lv = Number(setBtn.dataset.monSkillPreviewSet ?? "0");
-        if (!Number.isFinite(lv) || lv < 1 || lv > MAX_SKILL_LEVEL) return;
-        if (lv === monSkillPreviewLv) return;
-        monSkillPreviewLv = lv;
-        if (!applyMonSkillPickUi()) render();
-      }
-    });
 
   app.querySelectorAll<HTMLButtonElement>("[data-enhance-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -14330,7 +14634,7 @@ function bind(): void {
     });
   });
 
-  bindForgeRevealDismiss();
+  mountForgeRevealOverlay();
   bindFusionRevealDismiss();
   bindWishRevealDismiss();
   bindEnhanceTransientModals();

@@ -2615,6 +2615,10 @@
     "ko": "{element} 소환사 전용 무기",
     "en": "{element}-only weapon"
   },
+  "ui.gearEquipBlockedElement": {
+    "ko": "장착할 수 없습니다. {element} 소환사 전용 무기입니다.",
+    "en": "Cannot equip. This weapon is for the {element} summoner only."
+  },
   "ui.gearPerSummonerHint": {
     "ko": "장비는 소환사(속성)마다 따로 장착됩니다",
     "en": "Gear is equipped separately per summoner element"
@@ -2716,8 +2720,20 @@
     "en": "Evolve mats ({el}) {have}/{need}"
   },
   "ui.monBookAwakenBonus": {
-    "ko": "각성 시 ATK/HP +8% · 표시 별 +1",
-    "en": "Awaken: ATK/HP +8% · display stars +1"
+    "ko": "각성 시 전투력이 오릅니다.",
+    "en": "Awakening raises combat power."
+  },
+  "ui.monBookAwakenPerkStat": {
+    "ko": "{stat} +{pct}%",
+    "en": "{stat} +{pct}%"
+  },
+  "ui.monBookAwakenPerkStars": {
+    "ko": "별 {from} → {to}",
+    "en": "Stars {from} → {to}"
+  },
+  "ui.monBookEvolvePerkCap": {
+    "ko": "최대 레벨 {from} → {to}",
+    "en": "Max Lv. {from} → {to}"
   },
   "ui.monBookEvolveBtn": {
     "ko": "진화 +{n}",
@@ -2734,6 +2750,38 @@
   "ui.monBookEvolveCost": {
     "ko": "골드 {mana}{crystal}",
     "en": "Gold {mana}{crystal}"
+  },
+  "ui.monEvolveRite": {
+    "ko": "진화",
+    "en": "Evolve"
+  },
+  "ui.monEvolveBonus": {
+    "ko": "진화 시 성장 한계가 올라갑니다.",
+    "en": "Evolve raises this monster's growth cap."
+  },
+  "ui.monRiteCondition": {
+    "ko": "조건",
+    "en": "Requirement"
+  },
+  "ui.monRiteMats": {
+    "ko": "필요 재료",
+    "en": "Materials"
+  },
+  "ui.monRiteConditionOk": {
+    "ko": "Lv.{n}+ 달성",
+    "en": "Lv.{n}+ met"
+  },
+  "ui.monRiteEffects": {
+    "ko": "효과",
+    "en": "Effects"
+  },
+  "ui.monRiteClose": {
+    "ko": "닫기",
+    "en": "Close"
+  },
+  "ui.monRiteOpen": {
+    "ko": "상세 보기",
+    "en": "View details"
   },
   "ui.sumBookAwakenBtn": {
     "ko": "각성 +{n}",
