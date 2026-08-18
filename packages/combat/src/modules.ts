@@ -56,7 +56,7 @@ export function modulesForStage(stage: StageDef): BattleModules {
     case "scenario":
     default:
       return {
-        moduleB: stage.boardSize >= 9,
+        moduleB: stage.boardSize >= 7,
         moduleG: stage.stage >= 3 || stage.boardSize >= 7,
       };
   }

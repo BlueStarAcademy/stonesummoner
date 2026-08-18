@@ -2,6 +2,7 @@ import {
   emptyMagicProgress,
   normalizeGearPiece,
   normalizeSummonerGear,
+  stripUnenhancedStarterGear,
   resolveMonsterId,
 } from "stonesummoner-data";
 import { energyMaxForLevel, tickProduction } from "stonesummoner-home";
@@ -82,6 +83,24 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     ? (p.activeSummoner as SummonerElement)
     : "light";
   const party = p.party?.length ? p.party : base.party;
+  const summonersRaw =
+    p.summoners && typeof p.summoners === "object"
+      ? { ...createSummonerRoster(), ...p.summoners }
+      : createSummonerRoster({
+          level: island.summonerLevel ?? 1,
+          exp: island.summonerExp ?? 0,
+          awaken: typeof p.summonerAwaken === "number" ? p.summonerAwaken : 0,
+        });
+  const summoners = { ...summonersRaw };
+  for (const el of ["fire", "water", "wind", "light", "dark"] as const) {
+    const cur = summoners[el] ?? { level: 1, exp: 0, awaken: 0 };
+    const seedGear =
+      cur.gear ?? (el === activeSummoner ? p.gear : undefined);
+    summoners[el] = {
+      ...cur,
+      gear: stripUnenhancedStarterGear(normalizeSummonerGear(seedGear, el)),
+    };
+  }
   const mid: PlayerSave = {
     ...base,
     island,
@@ -104,7 +123,12 @@ export function migrateSave(raw: unknown): PlayerSave | null {
       typeof p.scrollsMystic === "number"
         ? Math.max(0, Math.floor(p.scrollsMystic))
         : base.scrollsMystic,
-    gear: normalizeSummonerGear(p.gear ?? base.gear),
+    gear: stripUnenhancedStarterGear(
+      normalizeSummonerGear(
+        summoners[activeSummoner]?.gear ?? p.gear ?? base.gear,
+        activeSummoner,
+      ),
+    ),
     gearBag: Array.isArray(p.gearBag)
       ? p.gearBag.map((g) => normalizeGearPiece(g, g.slot)).slice(0, 40)
       : [],
@@ -270,16 +294,14 @@ export function migrateSave(raw: unknown): PlayerSave | null {
           (id): id is string => typeof id === "string",
         )
       : [],
+    claimedMainQuestIds: Array.isArray(p.claimedMainQuestIds)
+      ? p.claimedMainQuestIds.filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [],
     onboardRite: normalizeOnboardRite(p.onboardRite),
     activeSummoner,
-    summoners:
-      p.summoners && typeof p.summoners === "object"
-        ? { ...createSummonerRoster(), ...p.summoners }
-        : createSummonerRoster({
-            level: island.summonerLevel ?? 1,
-            exp: island.summonerExp ?? 0,
-            awaken: typeof p.summonerAwaken === "number" ? p.summonerAwaken : 0,
-          }),
+    summoners,
   };
   const presets = normalizePartyPresets(mid, p.partyPresets);
   const activePartyPreset =

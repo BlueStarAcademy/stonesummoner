@@ -10,12 +10,10 @@ import {
 } from "./progression.js";
 
 describe("Board sizes", () => {
-  it("supports 5, 7, 9, 13", () => {
-    assert.deepEqual([...COMBAT_BOARD_SIZES], [5, 7, 9, 13]);
+  it("supports 5 and 7", () => {
+    assert.deepEqual([...COMBAT_BOARD_SIZES], [5, 7]);
     assert.equal(new Board(5).emptyPoints().length, 25);
     assert.equal(new Board(7).emptyPoints().length, 49);
-    assert.equal(new Board(9).emptyPoints().length, 81);
-    assert.equal(new Board(13).emptyPoints().length, 169);
   });
 });
 
@@ -31,8 +29,8 @@ describe("Empowered circle progression", () => {
     assert.equal(state.stoneSummonCount, 60);
   });
 
-  it("resets 9x9 after 50 summons and raises phase", () => {
-    let state = createCirclePhaseState(9);
+  it("resets 7x7 after 50 summons and raises phase", () => {
+    let state = createCirclePhaseState(7);
     for (let i = 0; i < 49; i++) {
       const r = registerStoneSummon(state);
       state = r.state;
@@ -46,11 +44,11 @@ describe("Empowered circle progression", () => {
   });
 
   it("clear empties the board for empowered reset", () => {
-    const b = new Board(9);
-    b.play("black", { x: 4, y: 4 });
-    b.play("white", { x: 3, y: 3 });
+    const b = new Board(7);
+    b.play("black", { x: 3, y: 3 });
+    b.play("white", { x: 2, y: 2 });
     resetBoardInPlace(b);
-    assert.equal(b.emptyPoints().length, 81);
+    assert.equal(b.emptyPoints().length, 49);
     assert.equal(b.getKoPoint(), null);
   });
 });

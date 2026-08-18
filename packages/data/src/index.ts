@@ -90,7 +90,9 @@ export type {
 } from "./symbolStats.js";
 export {
   bumpGearEnhance,
+  createEmptyGear,
   createStarterGear,
+  stripUnenhancedStarterGear,
   describeGear,
   canEquipGearOnElement,
   gearEnhanceManaCost,
@@ -157,6 +159,8 @@ export {
   isWeekdayStageOpenToday,
   WEEKDAY_EVOLVE_MAT_DROP,
   WEEKDAY_SKILL_MAT_DROP,
+  SCENARIO_NORMAL_STAR_WEIGHTS,
+  scenarioSymbolDropTable,
 } from "./scenario.js";
 export type { ContentMode, CairosDungeon, MainQuestPinId, StageDef } from "./scenario.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";

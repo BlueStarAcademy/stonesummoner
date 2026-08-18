@@ -30,6 +30,8 @@ import {
   battleCircleIdForStage,
   battleCircleSrc,
   battleStoneSrc,
+  battleBoardMarkSrc,
+  BATTLE_BOARD_MARK_IDS,
   normalizeBattleStoneId,
 } from "./battle/battleCircle";
 import { dematteArtInTree } from "./ui/dematteArt";
@@ -191,6 +193,7 @@ import {
   evolveManaCost,
   evolveMinLevel,
   isStageUnlocked,
+  nextStageInProgression,
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
   MAX_SKILL_LEVEL,
@@ -209,6 +212,7 @@ import {
   runEquipGearBag,
   runSellGearBag,
   runBuyEnergy,
+  runBuyGrindstone,
   runExpandSymbolBag,
   symbolBagCapacity,
   symbolBagExpandCost,
@@ -217,16 +221,11 @@ import {
   SYMBOL_BAG_MAX_SLOTS,
   runBuyGlory,
   runBuyScroll,
-  runBuyShopOffer,
-  getDailyShopOffers,
-  syncShopDay,
   runCraftEssence,
-  runCraftScroll,
   runDailyWish,
   ENERGY_CRYSTAL_COST,
   ENERGY_BUY_AMOUNT,
-  CRAFT_SCROLL_JINMUN,
-  CRAFT_SCROLL_MANA,
+  GRINDSTONE_BUY_MANA_COST,
   ESSENCE_JINMUN_COST,
   ESSENCE_CRYSTAL_GAIN,
   monsterPowerUpExp,
@@ -250,9 +249,18 @@ import {
   DAILY_MISSION_DOJO,
   DAILY_MISSION_COLLECT,
   DAILY_MISSION_SORTIE,
+  DAILY_MISSION_REWARDS,
   claimableDailyMissionCount,
   isDailyMissionClaimed,
   runClaimDailyMission,
+  MAIN_QUESTS,
+  claimableMainQuestCount,
+  isMainQuestClaimed,
+  isMainQuestComplete,
+  isMainQuestUnlocked,
+  runClaimMainQuest,
+  type MainQuestId,
+  type MissionReward,
   homeCollectCrystal,
   homeCollect,
   FUSION_MANA_COST,
@@ -289,6 +297,7 @@ import {
   runUpgradeBuilding,
   setActiveSummoner,
   SCROLL_BUY_MANA_COST,
+  SCROLL_PREMIUM_BUY_MANA_COST,
   SCROLL_KIND_BLURB,
   SCROLL_KIND_LABEL,
   SCROLL_KINDS,
@@ -1297,8 +1306,8 @@ let chatLineText: string | null = null;
 /** True while the one-line dock has unseen messages. */
 let chatLineUnread = false;
 let chatSimTimer: ReturnType<typeof setInterval> | null = null;
-type MissionTab = "daily" | "achievements";
-let missionTab: MissionTab = "daily";
+type MissionTab = "main" | "daily" | "achievements";
+let missionTab: MissionTab = "main";
 
 type StagesRegionId =
   | MainQuestPinId
@@ -2623,6 +2632,7 @@ function prefetchBattleBoardArt(stage: StageDef): void {
       ?.element;
   urls.add(battleStoneSrc(normalizeBattleStoneId(allyEl)));
   urls.add(battleStoneSrc(normalizeBattleStoneId(enemyEl)));
+  for (const id of BATTLE_BOARD_MARK_IDS) urls.add(battleBoardMarkSrc(id));
   for (const src of urls) {
     const img = new Image();
     img.decoding = "async";
@@ -3787,10 +3797,7 @@ function resultExpCard(track: ExpTrackGain | null, kind: ExpTrackGain["kind"]): 
 }
 
 function nextCampaignStage(stage: StageDef): StageDef | null {
-  const index = MAIN_QUEST_STAGES.findIndex((candidate) => candidate.id === stage.id);
-  if (index < 0) return null;
-  const next = MAIN_QUEST_STAGES[index + 1] ?? null;
-  return next && isStageUnlocked(save, next.id) ? next : null;
+  return nextStageInProgression(save, stage);
 }
 
 function resultBattleAction(
@@ -5027,6 +5034,17 @@ function renderBoardCells(canClick: boolean): string {
       (token) => `${battle.activeBoardIndex}:${token.id}:${token.x}:${token.y}`,
     ),
   );
+  const hintEnemyLast =
+    battle.phase === "await_stone" &&
+    !!battle.activeUnitId &&
+    battle.getUnit(battle.activeUnitId)?.team === "ally" &&
+    (!autoMode || !battleAutoLive.stone) &&
+    !!battle.lastEnemyStone &&
+    battle.lastEnemyStone.boardIndex === battle.activeBoardIndex &&
+    grid[battle.lastEnemyStone.y]?.[battle.lastEnemyStone.x] === "white";
+  const enemyLastKey = hintEnemyLast
+    ? `${battle.lastEnemyStone!.x},${battle.lastEnemyStone!.y}`
+    : null;
 
   let cells = "";
   for (let y = 0; y < size; y++) {
@@ -5053,24 +5071,14 @@ function renderBoardCells(canClick: boolean): string {
       const forbidClass = forbid && !stone ? " forbid" : "";
       const starClass = starSet.has(key) && !stone ? " star" : "";
       const victoryClass = victory === key && !stone ? " victory" : "";
-      const tokenLabel =
-        token?.id === "crit_charm"
-          ? Mark.crit
-          : token?.id === "shield_core"
-            ? Mark.shieldCore
-            : token?.id === "capture_magnet"
-              ? Mark.magnet
-              : token?.id === "stride_sand"
-                ? Mark.stride
-                : token?.id === "seal_nail"
-                  ? Mark.seal
-                  : token?.id === "element_ward"
-                    ? Mark.ward
-                    : token?.id === "bait_stone"
-                      ? Mark.lure
-                      : token?.id === "transform_dust"
-                        ? Mark.transform
-                        : "";
+      const boardMarkHtml = (
+        id: string,
+        cls: string,
+        title?: string,
+      ): string => {
+        const titleAttr = title ? ` title="${title}"` : "";
+        return `<span class="board-mark ${cls}"${titleAttr} aria-hidden="true"><img class="board-mark-img" src="${battleBoardMarkSrc(id)}" width="64" height="64" alt="" draggable="false" decoding="async" onerror="this.closest('.board-mark')?.classList.add('art-failed')"/></span>`;
+      };
       const bait =
         battle.baitLure &&
         battle.baitLure.x === x &&
@@ -5083,6 +5091,7 @@ function renderBoardCells(canClick: boolean): string {
         stoneSummonFx.x === x &&
         stoneSummonFx.y === y &&
         !stone;
+      const rivalLast = enemyLastKey === key;
       const renderStoneSpan = (
         color: "black" | "white",
         el: string | undefined,
@@ -5091,32 +5100,45 @@ function renderBoardCells(canClick: boolean): string {
         const stoneId = normalizeBattleStoneId(el);
         const src = battleStoneSrc(stoneId);
         const elClass = stoneId === "enemy" ? "el-enemy" : `el-${stoneId}`;
-        return `<span class="stone magic-stone ${color} ${elClass} has-art${extraClass}" aria-hidden="true"><img class="magic-stone-img" src="${src}" width="128" height="128" alt="" draggable="false" decoding="async" onerror="this.closest('.magic-stone')?.classList.add('art-failed');this.remove()"/><i class="magic-stone-core"></i><i class="magic-stone-flare"></i></span>`;
+        return `<span class="stone magic-stone ${color} ${elClass} has-art${extraClass}" aria-hidden="true"><i class="magic-stone-ground"></i><img class="magic-stone-img" src="${src}" width="256" height="256" alt="" draggable="false" decoding="async" onerror="this.closest('.magic-stone')?.classList.add('art-failed');this.remove()"/><i class="magic-stone-spark"></i></span>`;
       };
       const stoneHtml = stone
         ? renderStoneSpan(
             stone,
             stone === "black" ? allyStoneEl : enemyStoneEl,
+            rivalLast ? " is-rival-last" : "",
           )
         : summoning
           ? `<i class="summon-seal" aria-hidden="true"><i></i></i>`
           : token
           ? `<span class="token-mark token-mark--${tokenResource}">
+              <img class="token-item-img" src="${battleBoardMarkSrc(token.id)}" width="64" height="64" alt="" draggable="false" decoding="async" />
               <span class="token-resource-orbit" aria-hidden="true">
                 <img class="token-resource-img" src="/art/ui/res/${tokenResource}.svg" width="36" height="36" alt="" draggable="false" />
               </span>
-              <span class="token-glyph" aria-hidden="true">${tokenLabel}</span>
             </span>`
           : forbid
-            ? `<span class="forbid-mark" title="${escapeHtml(t("ui.boardMarkForbid"))}">${Mark.forbid}</span>`
+            ? boardMarkHtml(
+                "forbid",
+                "forbid-mark",
+                escapeHtml(t("ui.boardMarkForbid")),
+              )
             : bait
-              ? `<span class="bait-mark" title="${escapeHtml(t("ui.boardMarkBait"))}">${Mark.bait}</span>`
+              ? boardMarkHtml(
+                  "bait",
+                  "bait-mark",
+                  escapeHtml(t("ui.boardMarkBait")),
+                )
               : victory === key
-                ? `<span class="victory-mark" title="${escapeHtml(t("ui.boardMarkVictory"))}">${Mark.victory}</span>`
+                ? boardMarkHtml(
+                    "victory",
+                    "victory-mark",
+                    escapeHtml(t("ui.boardMarkVictory")),
+                  )
                 : starSet.has(key)
-                  ? `<span class="star-mark">${Mark.starDot}</span>`
+                  ? boardMarkHtml("star", "star-mark")
                   : `<span class="node-mark" aria-hidden="true"></span>`;
-      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${summoning ? " is-summoning fx-summon-seal" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
+      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${summoning ? " is-summoning fx-summon-seal" : ""}${rivalLast ? " is-rival-last" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
   seenBoardTokenKeys = activeTokenKeys;
@@ -6042,6 +6064,92 @@ function applyMissionOpen(): void {
   }
 }
 
+function bindMissionListControls(): void {
+  const list = app.querySelector("#mission-list");
+  if (!list) return;
+  list.querySelectorAll<HTMLButtonElement>("[data-mission-claim]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.missionClaim;
+      if (!id) return;
+      const r = id.startsWith("mq:")
+        ? runClaimMainQuest(save, id.slice(3))
+        : runClaimDailyMission(save, id);
+      save = r.save;
+      persist();
+      flash(r.message);
+      renderPreservingIsland();
+      missionOpen = true;
+      applyMissionOpen();
+    });
+  });
+  list.querySelectorAll<HTMLButtonElement>("[data-mission-go]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const nav = btn.dataset.missionGo;
+      if (!nav) return;
+      goFromMission(nav);
+    });
+  });
+}
+
+function patchMissionModalBody(): boolean {
+  const layer = app.querySelector<HTMLElement>("#mission-layer");
+  const list = app.querySelector<HTMLElement>("#mission-list");
+  if (!layer || !list) return false;
+  const mainN = claimableMainQuestCount(save);
+  const dailyN = claimableDailyMissionCount(save);
+  layer.querySelectorAll<HTMLButtonElement>("[data-mission-tab]").forEach((btn) => {
+    const tab = btn.dataset.missionTab;
+    const on = tab === missionTab;
+    btn.classList.toggle("is-active", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+    btn.querySelector(".mission-tab-badge")?.remove();
+    const n = tab === "main" ? mainN : tab === "daily" ? dailyN : 0;
+    if (n > 0) btn.insertAdjacentHTML("beforeend", missionTabBadge(n));
+  });
+  list.innerHTML = renderMissionListBody();
+  bindMissionListControls();
+  return true;
+}
+
+function goFromMission(nav: string): void {
+  missionOpen = false;
+  applyMissionOpen();
+  if (nav === "guild") {
+    openCommunityModalSoft();
+    return;
+  }
+  if (nav === "shop") {
+    openShopModalSoft();
+    return;
+  }
+  communityOpen = false;
+  shopOpen = false;
+  applyCommunityOpen();
+  applyShopOpen();
+  if (nav.startsWith("stages:")) {
+    const region = nav.slice("stages:".length) as StagesRegionId;
+    const stay = view === "stages";
+    view = "stages";
+    stagesRegion = region;
+    stageEntryId = null;
+    if (stay) {
+      applyStagesRegionOpen();
+      focusStagesRegion(region);
+      return;
+    }
+    render();
+    return;
+  }
+  const next = nav as View;
+  const stayOnIsland =
+    (view === "home" || isFacilityView(view)) &&
+    (next === "home" || isFacilityView(next)) &&
+    Boolean(app.querySelector(".home-island"));
+  view = next;
+  if (stayOnIsland) renderPreservingIsland();
+  else render();
+}
+
 /** Toggle community (guild) modal without a full screen re-render. */
 function applyCommunityOpen(): void {
   const btn = app.querySelector<HTMLButtonElement>("#btn-community");
@@ -6505,33 +6613,155 @@ function missionItemHtml(opts: {
   goNav?: string;
   claimId?: string;
   claimed?: boolean;
+  locked?: boolean;
+  featured?: boolean;
+  once?: boolean;
+  index?: number;
+  rewards?: MissionReward;
 }): string {
-  const done = opts.cur >= opts.max;
+  const done = !opts.locked && opts.cur >= opts.max;
   const pct = opts.max > 0 ? Math.min(100, Math.round((opts.cur / opts.max) * 100)) : 0;
   let action = "";
-  if (opts.claimId && done && !opts.claimed) {
-    action = `<button type="button" class="mission-item-go mission-item-claim" data-mission-claim="${opts.claimId}">${t("mission.claim")}</button>`;
+  if (opts.locked) {
+    action = `<span class="mission-item-claimed">${escapeHtml(t("mission.locked"))}</span>`;
+  } else if (opts.claimId && done && !opts.claimed) {
+    action = `<button type="button" class="mission-item-go mission-item-claim" data-mission-claim="${opts.claimId}">${escapeHtml(t("mission.claim"))}</button>`;
   } else if (opts.claimId && opts.claimed) {
-    action = `<span class="mission-item-claimed">${t("mission.claimed")}</span>`;
+    action = `<span class="mission-item-claimed">${escapeHtml(t("mission.claimed"))}</span>`;
   } else if (opts.goNav) {
-    action = `<button type="button" class="mission-item-go" data-mission-go="${opts.goNav}">${t("mission.go")}</button>`;
+    action = `<button type="button" class="mission-item-go" data-mission-go="${opts.goNav}">${escapeHtml(t("mission.go"))}</button>`;
   }
-  return `<article class="mission-item${done ? " is-done" : ""}${opts.claimed ? " is-claimed" : ""}">
-    <div class="mission-item-top">
-      <div class="mission-item-copy">
-        <strong class="mission-item-title">${opts.title}</strong>
-        <p class="mission-item-desc">${opts.desc}</p>
+  const status = opts.locked
+    ? t("mission.locked")
+    : opts.claimed
+      ? t("mission.claimed")
+      : done
+        ? t("mission.done")
+        : opts.featured
+          ? t("mission.current")
+          : t("mission.inProgress");
+  const cls = [
+    "mission-item",
+    opts.featured ? "mission-item--hero" : "",
+    opts.once ? "mission-item--once" : "",
+    done ? "is-done" : "",
+    opts.claimed ? "is-claimed" : "",
+    opts.locked ? "is-locked" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const seal =
+    typeof opts.index === "number"
+      ? `<span class="mission-seal" aria-hidden="true">${String(opts.index).padStart(2, "0")}</span>`
+      : "";
+  const once = opts.once
+    ? `<span class="mission-once">${escapeHtml(t("mission.once"))}</span>`
+    : "";
+  return `<article class="${cls}">
+    ${seal}
+    <div class="mission-item-body">
+      <div class="mission-item-top">
+        <div class="mission-item-copy">
+          <strong class="mission-item-title">${escapeHtml(opts.title)}${once}</strong>
+          <p class="mission-item-desc">${escapeHtml(opts.desc)}</p>
+        </div>
+        <span class="mission-item-status">${escapeHtml(status)}</span>
       </div>
-      <span class="mission-item-status">${opts.claimed ? t("mission.claimed") : done ? t("mission.done") : t("mission.inProgress")}</span>
-    </div>
-    <div class="mission-item-bar" role="progressbar" aria-valuenow="${opts.cur}" aria-valuemin="0" aria-valuemax="${opts.max}">
-      <i style="width:${pct}%"></i>
-    </div>
-    <div class="mission-item-foot">
-      <span class="mission-item-prog">${t("mission.progress", { cur: Math.min(opts.cur, opts.max), max: opts.max })}</span>
-      ${action}
+      <div class="mission-item-bar" role="progressbar" aria-valuenow="${opts.cur}" aria-valuemin="0" aria-valuemax="${opts.max}">
+        <i style="width:${pct}%"></i>
+      </div>
+      <div class="mission-item-foot">
+        <span class="mission-item-prog">${t("mission.progress", { cur: Math.min(opts.cur, opts.max), max: opts.max })}</span>
+        ${missionRewardChips(opts.rewards)}
+        ${action}
+      </div>
     </div>
   </article>`;
+}
+
+function missionRewardChips(reward?: MissionReward): string {
+  if (!reward) return "";
+  const chips: { src: string; n: number }[] = [];
+  if (reward.mana) chips.push({ src: "/art/ui/res/gold.svg", n: reward.mana });
+  if (reward.crystal) chips.push({ src: "/art/ui/res/crystal.svg", n: reward.crystal });
+  if (reward.energy) chips.push({ src: "/art/ui/res/energy.svg", n: reward.energy });
+  if (reward.jinmun) chips.push({ src: "/art/ui/res/jinmun.svg", n: reward.jinmun });
+  if (reward.grindstones) chips.push({ src: "/art/ui/res/jinmun.svg", n: reward.grindstones });
+  if (reward.scrolls) chips.push({ src: "/art/ui/res/scroll.svg", n: reward.scrolls });
+  if (reward.scrollsPremium) chips.push({ src: "/art/ui/res/scroll-premium.webp", n: reward.scrollsPremium });
+  if (reward.scrollsMystic) chips.push({ src: "/art/ui/res/scroll-mystic.webp", n: reward.scrollsMystic });
+  if (!chips.length) return "";
+  return `<span class="mission-rewards">${chips
+    .map(
+      (c) =>
+        `<span class="mission-reward"><img src="${c.src}" width="14" height="14" alt="" draggable="false" /><b>${fmtRes(c.n)}</b></span>`,
+    )
+    .join("")}</span>`;
+}
+
+function mainQuestCopy(id: MainQuestId): { title: string; desc: string } {
+  switch (id) {
+    case "forest1":
+      return { title: t("mission.mq.forest1.title"), desc: t("mission.mq.forest1.desc") };
+    case "forest3":
+      return { title: t("mission.mq.forest3.title"), desc: t("mission.mq.forest3.desc") };
+    case "forest5":
+      return { title: t("mission.mq.forest5.title"), desc: t("mission.mq.forest5.desc") };
+    case "giantB1":
+      return { title: t("mission.mq.giantB1.title"), desc: t("mission.mq.giantB1.desc") };
+    case "forestBoss":
+      return { title: t("mission.mq.forestBoss.title"), desc: t("mission.mq.forestBoss.desc") };
+    case "towerBoss":
+      return { title: t("mission.mq.towerBoss.title"), desc: t("mission.mq.towerBoss.desc") };
+    case "giantB5":
+      return { title: t("mission.mq.giantB5.title"), desc: t("mission.mq.giantB5.desc") };
+    case "ruinsBoss":
+      return { title: t("mission.mq.ruinsBoss.title"), desc: t("mission.mq.ruinsBoss.desc") };
+    case "dragonB1":
+      return { title: t("mission.mq.dragonB1.title"), desc: t("mission.mq.dragonB1.desc") };
+    case "flameBoss":
+      return { title: t("mission.mq.flameBoss.title"), desc: t("mission.mq.flameBoss.desc") };
+    case "necroB1":
+      return { title: t("mission.mq.necroB1.title"), desc: t("mission.mq.necroB1.desc") };
+    case "giantB10":
+      return { title: t("mission.mq.giantB10.title"), desc: t("mission.mq.giantB10.desc") };
+    case "endBoss":
+      return { title: t("mission.mq.endBoss.title"), desc: t("mission.mq.endBoss.desc") };
+  }
+}
+
+function renderMissionMainList(): string {
+  const featuredId =
+    MAIN_QUESTS.find(
+      (q) =>
+        isMainQuestUnlocked(save, q.id) &&
+        isMainQuestComplete(save, q.id) &&
+        !isMainQuestClaimed(save, q.id),
+    )?.id ??
+    MAIN_QUESTS.find(
+      (q) => isMainQuestUnlocked(save, q.id) && !isMainQuestClaimed(save, q.id),
+    )?.id ??
+    null;
+  return MAIN_QUESTS.map((q, i) => {
+    const copy = mainQuestCopy(q.id);
+    const unlocked = isMainQuestUnlocked(save, q.id);
+    const complete = isMainQuestComplete(save, q.id);
+    const claimed = isMainQuestClaimed(save, q.id);
+    return missionItemHtml({
+      title: copy.title,
+      desc: copy.desc,
+      cur: complete ? 1 : 0,
+      max: 1,
+      goNav: unlocked && !complete ? `stages:${q.goRegion}` : undefined,
+      claimId: unlocked ? `mq:${q.id}` : undefined,
+      claimed,
+      locked: !unlocked,
+      featured: q.id === featuredId,
+      once: true,
+      index: i + 1,
+      rewards: q.reward,
+    });
+  }).join("");
 }
 
 function renderMissionDailyList(): string {
@@ -6561,6 +6791,8 @@ function renderMissionDailyList(): string {
       goNav: wishDone ? undefined : "wish",
       claimId: DAILY_MISSION_WISH,
       claimed: wishClaimed,
+      rewards: DAILY_MISSION_REWARDS.wish,
+      index: 1,
     }),
     missionItemHtml({
       title: t("mission.daily.dojo.title"),
@@ -6570,6 +6802,8 @@ function renderMissionDailyList(): string {
       goNav: dojoProg >= 3 ? undefined : "dojo",
       claimId: DAILY_MISSION_DOJO,
       claimed: dojoClaimed,
+      rewards: DAILY_MISSION_REWARDS.dojo,
+      index: 2,
     }),
     missionItemHtml({
       title: t("mission.daily.collect.title"),
@@ -6579,6 +6813,8 @@ function renderMissionDailyList(): string {
       goNav: collectDone ? undefined : "home",
       claimId: DAILY_MISSION_COLLECT,
       claimed: collectClaimed,
+      rewards: DAILY_MISSION_REWARDS.collect,
+      index: 3,
     }),
     missionItemHtml({
       title: t("mission.daily.sortie.title"),
@@ -6588,6 +6824,8 @@ function renderMissionDailyList(): string {
       goNav: sortieDone ? undefined : "stages",
       claimId: DAILY_MISSION_SORTIE,
       claimed: sortieClaimed,
+      rewards: DAILY_MISSION_REWARDS.sortie,
+      index: 4,
     }),
   ].join("");
 }
@@ -6607,12 +6845,14 @@ function renderMissionAchieveList(): string {
       desc: t("mission.ach.lv5.desc"),
       cur: lv,
       max: 5,
+      index: 1,
     }),
     missionItemHtml({
       title: t("mission.ach.lv10.title"),
       desc: t("mission.ach.lv10.desc"),
       cur: lv,
       max: 10,
+      index: 2,
     }),
     missionItemHtml({
       title: t("mission.ach.clear5.title"),
@@ -6620,6 +6860,7 @@ function renderMissionAchieveList(): string {
       cur: cleared,
       max: 5,
       goNav: "stages",
+      index: 3,
     }),
     missionItemHtml({
       title: t("mission.ach.clear15.title"),
@@ -6627,6 +6868,7 @@ function renderMissionAchieveList(): string {
       cur: cleared,
       max: 15,
       goNav: "stages",
+      index: 4,
     }),
     missionItemHtml({
       title: t("mission.ach.roster4.title"),
@@ -6634,6 +6876,7 @@ function renderMissionAchieveList(): string {
       cur: roster,
       max: 4,
       goNav: "summon",
+      index: 5,
     }),
     missionItemHtml({
       title: t("mission.ach.glory.title"),
@@ -6641,6 +6884,7 @@ function renderMissionAchieveList(): string {
       cur: gloryLv > 0 ? 1 : 0,
       max: 1,
       goNav: "glory",
+      index: 6,
     }),
     missionItemHtml({
       title: t("mission.ach.guild.title"),
@@ -6648,24 +6892,41 @@ function renderMissionAchieveList(): string {
       cur: guildOk ? 1 : 0,
       max: 1,
       goNav: "guild",
+      index: 7,
     }),
   ].join("");
 }
 
+function missionTabBadge(n: number): string {
+  if (n <= 0) return "";
+  return `<span class="mission-tab-badge">${n}</span>`;
+}
+
+function renderMissionListBody(): string {
+  if (missionTab === "main") return renderMissionMainList();
+  if (missionTab === "daily") return renderMissionDailyList();
+  return renderMissionAchieveList();
+}
+
 function renderMissionModal(): string {
-  const daily = missionTab === "daily";
+  const mainN = claimableMainQuestCount(save);
+  const dailyN = claimableDailyMissionCount(save);
   return `<div class="settings-layer mission-layer" id="mission-layer" ${missionOpen ? "" : "hidden"} aria-hidden="${missionOpen ? "false" : "true"}">
   <button type="button" class="settings-backdrop" id="btn-mission-close" aria-label="${escapeHtml(t("mission.close"))}"></button>
   <div class="settings-sheet mission-sheet" role="dialog" aria-modal="true" aria-labelledby="mission-title">
     <div class="settings-sheet-handle" aria-hidden="true"></div>
     ${modalCloseX(t("mission.close"), "btn-mission-close")}
-    <h2 class="settings-title" id="mission-title">${escapeHtml(t("mission.title"))}</h2>
+    <header class="mission-head">
+      <p class="mission-kicker">${escapeHtml(t("mission.kicker"))}</p>
+      <h2 class="settings-title" id="mission-title">${escapeHtml(t("mission.title"))}</h2>
+    </header>
     <div class="mission-tabs" role="tablist" aria-label="${escapeHtml(t("mission.title"))}">
-      <button type="button" class="mission-tab${daily ? " is-active" : ""}" role="tab" aria-selected="${daily ? "true" : "false"}" data-mission-tab="daily">${escapeHtml(t("mission.tabDaily"))}</button>
-      <button type="button" class="mission-tab${!daily ? " is-active" : ""}" role="tab" aria-selected="${!daily ? "true" : "false"}" data-mission-tab="achievements">${escapeHtml(t("mission.tabAchieve"))}</button>
+      <button type="button" class="mission-tab${missionTab === "main" ? " is-active" : ""}" role="tab" aria-selected="${missionTab === "main" ? "true" : "false"}" data-mission-tab="main">${escapeHtml(t("mission.tabMain"))}${missionTabBadge(mainN)}</button>
+      <button type="button" class="mission-tab${missionTab === "daily" ? " is-active" : ""}" role="tab" aria-selected="${missionTab === "daily" ? "true" : "false"}" data-mission-tab="daily">${escapeHtml(t("mission.tabDaily"))}${missionTabBadge(dailyN)}</button>
+      <button type="button" class="mission-tab${missionTab === "achievements" ? " is-active" : ""}" role="tab" aria-selected="${missionTab === "achievements" ? "true" : "false"}" data-mission-tab="achievements">${escapeHtml(t("mission.tabAchieve"))}</button>
     </div>
-    <div class="mission-list" role="tabpanel">
-      ${daily ? renderMissionDailyList() : renderMissionAchieveList()}
+    <div class="mission-list" id="mission-list" role="tabpanel">
+      ${renderMissionListBody()}
     </div>
   </div>
 </div>`;
@@ -6732,7 +6993,7 @@ function renderScreen(): void {
   const demoTag = sessionUser?.kind === "demo" ? `<span class="demo-tag">DEMO</span>` : "";
   const mailPending = unclaimedMailIds(save);
   const mailUnread = mailPending.length;
-  const missionClaimable = claimableDailyMissionCount(save);
+  const missionClaimable = claimableDailyMissionCount(save) + claimableMainQuestCount(save);
   const mailItems = mailPending.map((id) => {
     if (id === "welcome_gift") {
       return {
@@ -9284,12 +9545,16 @@ function renderSymbolSetBonusHtml(uid: string): string {
   return `<div class="loadout-sets loadout-sets--lines">${preview.sets
     .map((set) => {
       const accent = symbolSetAccent(set.setId);
-      return `<span class="set-chip set-chip--line${set.active ? " active" : ""}" style="--sym-accent:${accent}" title="${escapeHtml(set.nameKo)} ${set.count}/${set.pieces}">
+      // Set effect only when count meets pieces (2 or 4); incomplete shows progress only.
+      const fx = set.active
+        ? escapeHtml(set.effectKo)
+        : `${escapeHtml(set.nameKo)} ${set.count}/${set.pieces}`;
+      return `<span class="set-chip set-chip--line${set.active ? " active" : ""}" style="--sym-accent:${accent}" title="${escapeHtml(set.nameKo)} ${set.count}/${set.pieces}${set.active ? ` · ${escapeHtml(set.effectKo)}` : ""}">
         <span class="set-chip-ico-wrap">
           <img class="set-chip-ico" src="${symbolSetArtSrc(set.setId)}" width="22" height="22" alt="" draggable="false" onerror="this.onerror=null;this.src='${symbolSetArtFallbackSrc(set.setId)}'" />
           <span class="set-chip-count">${set.count}</span>
         </span>
-        <span class="set-chip-fx">${set.effectKo}</span>
+        <span class="set-chip-fx">${fx}</span>
       </span>`;
     })
     .join("")}</div>`;
@@ -10346,7 +10611,12 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
   const gear = getActiveGear(save);
   const fxGear = enhanceFx?.kind === "gear" ? enhanceFx.slot : null;
   const slots: GearSlot[] = [...GEAR_SLOTS];
-  const slotBtn = (slot: GearSlot, piece: GearPiece): string => {
+  const slotBtn = (slot: GearSlot, piece: GearPiece | null): string => {
+    if (!piece) {
+      return `<span class="gear-slot gear-slot--image gear-slot--empty" title="${escapeHtml(t("ui.43d54a7358"))}" aria-label="${escapeHtml(gearSlotLabel(slot))}">
+        <span class="gear-slot-empty-mark" aria-hidden="true">+</span>
+      </span>`;
+    }
     const grade = gearStarsToInvGrade(piece.stars);
     const art = gearSlotArtSrc(slot, piece.element ?? activeEl, piece.setId);
     const artFb = gearSlotArtFallbackSrc(slot, piece.element ?? activeEl, piece.setId);
@@ -11679,112 +11949,129 @@ function renderEnhance(): string {
   </div>`;
 }
 
+function renderShopProductCard(opts: {
+  id?: string;
+  dataAttr?: string;
+  tone: string;
+  art: string;
+  title: string;
+  desc: string;
+  priceHtml: string;
+}): string {
+  const idAttr = opts.id ? ` id="${opts.id}"` : "";
+  const data = opts.dataAttr ?? "";
+  return `<button type="button" class="shop-product shop-product--${opts.tone}"${idAttr} ${data}>
+    <span class="shop-product-seal" aria-hidden="true">${opts.art}</span>
+    <span class="shop-product-meta">
+      <strong class="shop-product-title">${opts.title}</strong>
+      <small class="shop-product-desc">${opts.desc}</small>
+    </span>
+    <span class="shop-product-price">${opts.priceHtml}</span>
+  </button>`;
+}
+
+function shopPriceMana(n: number): string {
+  return `<span class="shop-price-chip"><img src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(n)}</strong></span>`;
+}
+
+function shopPriceCrystal(n: number): string {
+  return `<span class="shop-price-chip shop-price-chip--crystal"><img src="/art/ui/res/crystal.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(n)}</strong></span>`;
+}
+
+function shopPriceJinmun(n: number): string {
+  return `<span class="shop-price-chip shop-price-chip--jinmun"><img src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(n)}</strong></span>`;
+}
+
 function renderShopBody(): string {
-  const shopSave = syncShopDay(save);
-  const day = shopSave.shopDayKey ?? todayKey();
-  const sold = new Set(shopSave.shopSoldIds ?? []);
-  const dailyOffers = getDailyShopOffers(day);
-  const dailyRows =
-    dailyOffers
-      .map((o) => {
-        const gone = sold.has(o.id);
-        const cost =
-          o.costCrystal > 0
-            ? `${MINUS}${t("ui.5d0bf3b101")} ${o.costCrystal}`
-            : `${MINUS}${t("ui.dc78e6a251")} ${o.costMana}`;
-        return `<button type="button" class="stage-card shop-offer${gone ? " is-maxed" : ""}" data-shop-offer="${o.id}" ${gone ? "disabled" : ""}>
-          <span class="stage-card-mark" aria-hidden="true">${gone ? Mark.checkIn : Mark.summon}</span>
-          <span class="stage-card-body">
-            <strong>${o.labelKo} x${o.qty}</strong>
-            <small>${gone ? t("ui.shop.soldOut") : cost}</small>
-          </span>
-        </button>`;
-      })
-      .join("") || `<p class="muted">${t("ui.shop.dailyOffers")}</p>`;
-  const grindRows =
-    save.symbols
-      .map((s, i) => {
-        if (!canGrindSymbol(s)) return "";
-        const afford = canAffordGrind();
-        return `<button type="button" class="stage-card" data-grind="${i}" ${afford ? "" : "disabled"}>
-          <span class="stage-card-mark" aria-hidden="true">${Mark.grind}</span>
-          <span class="stage-card-body">
-            <strong>${describeSymbol(s)}</strong>
-            <small>${t("ui.956df04e9a")} ${MIDDOT} ${grindCostLabel()} ${MIDDOT} ${t("ui.grindstoneHeld", { n: grindstoneCount(save) })}</small>
-          </span>
-        </button>`;
-      })
-      .join("") || `<p class="muted">${t('ui.1d689ebc57')}</p>`;
-  const imprintRows =
-    save.symbols
-      .map((s, i) => {
-        if (!canImprintSymbol(s)) return "";
-        return `<button type="button" class="stage-card" data-imprint="${i}">
-          <span class="stage-card-mark" aria-hidden="true">${Mark.imprint}</span>
-          <span class="stage-card-body">
-            <strong>${describeSymbol(s)}</strong>
-            <small>${t('ui.285324164a')} ${MIDDOT} ${MINUS}${t('ui.5d0bf3b101')} ${SYMBOL_IMPRINT_CRYSTAL_COST}</small>
-          </span>
-        </button>`;
-      })
-      .join("") ||
-    `<p class="muted">${t('ui.b9c0de06ae')} (${t('ui.imprintSlotsHint')} ${t('ui.a05d718889')})</p>`;
+  const scrollArt = (kind: "normal" | "premium") =>
+    `<img class="shop-product-art" src="${scrollArtSrc(kind)}" width="56" height="56" alt="" draggable="false" />`;
+  const energyArt = `<img class="shop-product-art" src="/art/ui/res/energy.svg" width="48" height="48" alt="" draggable="false" />`;
+  const grindArt = `<span class="shop-product-mark">${Mark.grind}</span>`;
+  const essenceArt = `<img class="shop-product-art" src="/art/ui/res/crystal.svg" width="48" height="48" alt="" draggable="false" />`;
+
   return `<div class="hub-panel shop-body">
     <div id="forge-reveal-host"></div>
-    <p class="section-label">${t("ui.shop.dailyOffers")}</p>
-    <div class="stage-list">${dailyRows}</div>
-      <p class="section-label">${t('ui.079b50d844')}</p>
-    <div class="stage-list">
-      <button type="button" class="stage-card shop-offer shop-scroll" id="btn-buy-scroll-1">
-        <span class="stage-card-mark" aria-hidden="true">1</span>
-        <span class="stage-card-body">
-          <strong>${t('ui.58c8d4982d')}</strong>
-          <small>${MINUS}${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST} ${MIDDOT} ${t('ui.e41479e637')} ${save.scrolls}</small>
-        </span>
-      </button>
-      <button type="button" class="stage-card shop-offer shop-scroll" id="btn-buy-scroll-5">
-        <span class="stage-card-mark" aria-hidden="true">5</span>
-        <span class="stage-card-body">
-          <strong>${t('ui.544ebe1d37')}</strong>
-          <small>${MINUS}${t('ui.dc78e6a251')} ${SCROLL_BUY_MANA_COST * 5}</small>
-        </span>
-      </button>
-    </div>
-    <p class="section-label">${t('ui.5515ca646d')}</p>
-    <div class="stage-list">
-      <button type="button" class="stage-card shop-offer" id="btn-buy-energy">
-        <span class="stage-card-mark" aria-hidden="true">${Mark.energy}</span>
-        <span class="stage-card-body">
-          <strong>${t('ui.7154da110a')} +${ENERGY_BUY_AMOUNT}</strong>
-          <small>${MINUS}${t('ui.5d0bf3b101')} ${ENERGY_CRYSTAL_COST}</small>
-        </span>
-      </button>
-      <button type="button" class="stage-card shop-offer" id="btn-craft-essence">
-        <span class="stage-card-mark" aria-hidden="true">${Mark.crystal}</span>
-        <span class="stage-card-body">
-            <strong>${t('ui.6623b135fa')}</strong>
-          <small>${t('ui.4b482b3675')} ${ESSENCE_JINMUN_COST} ${MIDDOT} ${t('ui.5d0bf3b101')} ${ESSENCE_CRYSTAL_GAIN} (Lv.12)</small>
-        </span>
-      </button>
-      <button type="button" class="stage-card shop-offer" id="btn-craft-scroll">
-        <span class="stage-card-mark" aria-hidden="true">${Mark.summon}</span>
-        <span class="stage-card-body">
-            <strong>${t('ui.6623b135fa')}</strong>
-          <small>${t('ui.4b482b3675')} ${CRAFT_SCROLL_JINMUN} + ${t('ui.dc78e6a251')} ${CRAFT_SCROLL_MANA} (Lv.19)</small>
-        </span>
-      </button>
-    </div>
-    <p class="section-label">${t('ui.d3a3c215c8')} (${t('ui.49758b94ae')}) · ${escapeHtml(t("ui.shop.grindstoneStock", { n: grindstoneCount(save) }))}</p>
-    <div class="stage-list">${grindRows}</div>
-    <p class="section-label">${t('ui.515ca5f235')} (${t('ui.imprintSlotsHint')})</p>
-    <div class="stage-list">${imprintRows}</div>
+    <section class="shop-section" aria-label="${escapeHtml(t("ui.shop.sectionSummon"))}">
+      <header class="shop-section-head">
+        <p class="shop-section-kicker">${escapeHtml(t("ui.shop.sectionSummon"))}</p>
+      </header>
+      <div class="shop-grid">
+        ${renderShopProductCard({
+          id: "btn-buy-scroll-1",
+          tone: "scroll",
+          art: scrollArt("normal"),
+          title: escapeHtml(t("ui.58c8d4982d")),
+          desc: escapeHtml(t("ui.shop.scrollNormalDesc")),
+          priceHtml: shopPriceMana(SCROLL_BUY_MANA_COST),
+        })}
+        ${renderShopProductCard({
+          id: "btn-buy-scroll-5",
+          tone: "scroll",
+          art: scrollArt("normal"),
+          title: escapeHtml(t("ui.544ebe1d37")),
+          desc: escapeHtml(t("ui.shop.scrollBundleDesc")),
+          priceHtml: shopPriceMana(SCROLL_BUY_MANA_COST * 5),
+        })}
+        ${renderShopProductCard({
+          id: "btn-buy-scroll-premium",
+          tone: "premium",
+          art: scrollArt("premium"),
+          title: escapeHtml(t("ui.shop.premiumScroll")),
+          desc: escapeHtml(t("ui.shop.scrollPremiumDesc")),
+          priceHtml: shopPriceMana(SCROLL_PREMIUM_BUY_MANA_COST),
+        })}
+      </div>
+    </section>
+    <section class="shop-section" aria-label="${escapeHtml(t("ui.shop.sectionSupply"))}">
+      <header class="shop-section-head">
+        <p class="shop-section-kicker">${escapeHtml(t("ui.shop.sectionSupply"))}</p>
+      </header>
+      <div class="shop-grid">
+        ${renderShopProductCard({
+          id: "btn-buy-energy",
+          tone: "energy",
+          art: energyArt,
+          title: escapeHtml(t("ui.7154da110a") + ` +${ENERGY_BUY_AMOUNT}`),
+          desc: escapeHtml(t("ui.shop.energyDesc")),
+          priceHtml: shopPriceCrystal(ENERGY_CRYSTAL_COST),
+        })}
+        ${renderShopProductCard({
+          id: "btn-buy-grindstone",
+          tone: "grind",
+          art: grindArt,
+          title: escapeHtml(t("ui.shop.grindstone")),
+          desc: escapeHtml(t("ui.shop.grindstoneDesc")),
+          priceHtml: shopPriceMana(GRINDSTONE_BUY_MANA_COST),
+        })}
+      </div>
+    </section>
+    <section class="shop-section" aria-label="${escapeHtml(t("ui.shop.sectionExchange"))}">
+      <header class="shop-section-head">
+        <p class="shop-section-kicker">${escapeHtml(t("ui.shop.sectionExchange"))}</p>
+      </header>
+      <div class="shop-grid shop-grid--single">
+        ${renderShopProductCard({
+          id: "btn-craft-essence",
+          tone: "essence",
+          art: essenceArt,
+          title: escapeHtml(t("ui.shop.essenceTitle")),
+          desc: escapeHtml(
+            t("ui.shop.essenceDesc", {
+              jinmun: ESSENCE_JINMUN_COST,
+              crystal: ESSENCE_CRYSTAL_GAIN,
+            }),
+          ),
+          priceHtml: shopPriceJinmun(ESSENCE_JINMUN_COST),
+        })}
+      </div>
+    </section>
   </div>`;
 }
 
 function renderShop(): string {
   return hubShell(
     t("nav.shop"),
-    `${t('ui.fa73f3a42f')} ${save.scrolls} ${MIDDOT} ${t('ui.dc78e6a251')} ${Math.floor(save.island.mana)} ${MIDDOT} ${t('ui.5d0bf3b101')} ${save.island.crystal}`,
+    `${t("ui.dc78e6a251")} ${fmtRes(Math.floor(save.island.mana))} ${MIDDOT} ${t("ui.5d0bf3b101")} ${fmtRes(save.island.crystal)} ${MIDDOT} ${t("ui.fa73f3a42f")} ${totalScrollCount(save)}`,
     renderShopBody(),
   );
 }
@@ -11796,7 +12083,6 @@ function renderShopModal(): string {
     <div class="settings-sheet-handle" aria-hidden="true"></div>
     ${modalCloseX(t("shop.close"), "btn-shop-close")}
     <h2 class="settings-title" id="shop-title">${escapeHtml(t("nav.shop"))}</h2>
-    <p class="settings-account">${escapeHtml(`${t("ui.fa73f3a42f")} ${save.scrolls} ${MIDDOT} ${t("ui.dc78e6a251")} ${Math.floor(save.island.mana)} ${MIDDOT} ${t("ui.5d0bf3b101")} ${save.island.crystal}`)}</p>
     ${renderShopBody()}
   </div>
 </div>`;
@@ -13938,12 +14224,10 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-mission-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const tab = btn.dataset.missionTab;
-      if (tab !== "daily" && tab !== "achievements") return;
+      if (tab !== "main" && tab !== "daily" && tab !== "achievements") return;
+      if (missionTab === tab) return;
       missionTab = tab;
-      const layer = app.querySelector("#mission-layer");
-      if (layer && (view === "home" || isFacilityView())) {
-        // Soft-refresh mission body only — keep island mounted.
-        renderPreservingIsland();
+      if (patchMissionModalBody()) {
         missionOpen = true;
         applyMissionOpen();
         return;
@@ -13951,19 +14235,7 @@ function bind(): void {
       render();
     });
   });
-  app.querySelectorAll<HTMLButtonElement>("[data-mission-claim]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.missionClaim;
-      if (!id) return;
-      const r = runClaimDailyMission(save, id);
-      save = r.save;
-      persist();
-      flash(r.message);
-      renderPreservingIsland();
-      missionOpen = true;
-      applyMissionOpen();
-    });
-  });
+  bindMissionListControls();
   app.querySelectorAll<HTMLButtonElement>("[data-mail-claim]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.mailClaim;
@@ -13975,34 +14247,6 @@ function bind(): void {
       renderPreservingIsland();
       mailboxOpen = true;
       applyMailboxOpen();
-    });
-  });
-  app.querySelectorAll<HTMLButtonElement>("[data-mission-go]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const nav = btn.dataset.missionGo;
-      if (!nav) return;
-      missionOpen = false;
-      applyMissionOpen();
-      if (nav === "guild") {
-        openCommunityModalSoft();
-        return;
-      }
-      if (nav === "shop") {
-        openShopModalSoft();
-        return;
-      }
-      communityOpen = false;
-      shopOpen = false;
-      applyCommunityOpen();
-      applyShopOpen();
-      const next = nav as View;
-      const stayOnIsland =
-        (view === "home" || isFacilityView(view)) &&
-        (next === "home" || isFacilityView(next)) &&
-        Boolean(app.querySelector(".home-island"));
-      view = next;
-      if (stayOnIsland) renderPreservingIsland();
-      else render();
     });
   });
 
@@ -14650,14 +14894,21 @@ function bind(): void {
   });
 
   app.querySelector("#btn-buy-scroll-1")?.addEventListener("click", () => {
-    const r = runBuyScroll(save, 1);
+    const r = runBuyScroll(save, 1, "normal");
     save = r.save;
     persist();
     flash(r.message);
     render();
   });
   app.querySelector("#btn-buy-scroll-5")?.addEventListener("click", () => {
-    const r = runBuyScroll(save, 5);
+    const r = runBuyScroll(save, 5, "normal");
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
+  });
+  app.querySelector("#btn-buy-scroll-premium")?.addEventListener("click", () => {
+    const r = runBuyScroll(save, 1, "premium");
     save = r.save;
     persist();
     flash(r.message);
@@ -14670,14 +14921,12 @@ function bind(): void {
     flash(r.message);
     render();
   });
-  app.querySelectorAll<HTMLButtonElement>("[data-shop-offer]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const r = runBuyShopOffer(save, btn.dataset.shopOffer!);
-      save = r.save;
-      persist();
-      flash(r.message);
-      render();
-    });
+  app.querySelector("#btn-buy-grindstone")?.addEventListener("click", () => {
+    const r = runBuyGrindstone(save, 1);
+    save = r.save;
+    persist();
+    flash(r.message);
+    render();
   });
   app.querySelector("#btn-arena-defense")?.addEventListener("click", () => {
     const r = runSetArenaDefense(save);
@@ -14688,13 +14937,6 @@ function bind(): void {
   });
   app.querySelector("#btn-craft-essence")?.addEventListener("click", () => {
     const r = runCraftEssence(save);
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
-  });
-  app.querySelector("#btn-craft-scroll")?.addEventListener("click", () => {
-    const r = runCraftScroll(save);
     save = r.save;
     persist();
     flash(r.message);

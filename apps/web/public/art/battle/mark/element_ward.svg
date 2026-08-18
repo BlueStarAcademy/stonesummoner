@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <radialGradient id="ewGlow" cx="32" cy="34" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#70E0C0" stop-opacity=".46"/>
+      <stop offset=".5" stop-color="#308070" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ewPlate" cx="24" cy="20" r="26" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#184038"/>
+      <stop offset=".5" stop-color="#102018"/>
+      <stop offset="1" stop-color="#08100C"/>
+    </radialGradient>
+    <linearGradient id="ewRim" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8FFF0"/>
+      <stop offset=".4" stop-color="#50C8A0"/>
+      <stop offset="1" stop-color="#186050"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="33" r="27" fill="url(#ewGlow)"/>
+  <circle cx="32" cy="32" r="22.4" fill="none" stroke="url(#ewRim)" stroke-width="3.1"/>
+  <circle cx="32" cy="32" r="19.6" fill="url(#ewPlate)" stroke="#C8F8E8" stroke-width="1.1"/>
+  <polygon points="32,14 46,24.5 40.6,41.5 23.4,41.5 18,24.5" fill="#163028" stroke="#E8FFF6" stroke-width="1.15" stroke-linejoin="round"/>
+  <circle cx="32" cy="21.2" r="3.15" fill="#F06040" stroke="#FFD0B0" stroke-width=".7"/>
+  <circle cx="42.4" cy="28.6" r="3.15" fill="#40A8F0" stroke="#C8ECFF" stroke-width=".7"/>
+  <circle cx="38.4" cy="39.6" r="3.15" fill="#70D050" stroke="#D8FFC8" stroke-width=".7"/>
+  <circle cx="25.6" cy="39.6" r="3.15" fill="#F0D050" stroke="#FFF4C8" stroke-width=".7"/>
+  <circle cx="21.6" cy="28.6" r="3.15" fill="#9060E0" stroke="#E0D0FF" stroke-width=".7"/>
+  <circle cx="32" cy="30.4" r="3.6" fill="#F8F4E8" stroke="#FFF" stroke-width=".8"/>
+  <ellipse cx="23" cy="22" rx="6.5" ry="3.2" fill="#fff" fill-opacity=".18" transform="rotate(-32 23 22)"/>
+</svg>

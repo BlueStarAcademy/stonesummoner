@@ -17,6 +17,7 @@ import {
   teamStoneColor,
   type StoneSuggestion,
 } from "./ai.js";
+import { pickExpertStone } from "./stoneTactic.js";
 import { classifyCapture, gainsForBoardEvent } from "./boardEvents.js";
 import { composeSummonerUlt } from "./summonerUlt.js";
 import { detectShapeBonuses } from "./shapes.js";
@@ -112,7 +113,7 @@ export interface BattleConfig {
   /** Optional power-gap amplify cap (default 1.25). */
   powerGapAmplifyCap?: number;
   rng?: () => number;
-  /** Override empowered reset threshold (default 50 on 9×9). */
+  /** Override empowered reset threshold (default 50 on 7×7). */
   resetThreshold?: number;
   /** Total waves (default 1). When enemy summons wipe mid-battle, next wave spawns. */
   totalWaves?: number;
@@ -141,6 +142,11 @@ export class Battle {
    * acts again (SPD / violent), skip stone and go straight to skill.
    */
   lastStoneTeam: TeamId | null = null;
+  /**
+   * Last enemy stone still on its board (manual place hint). Cleared on
+   * circle rebuild or when that stone is captured / overwritten.
+   */
+  lastEnemyStone: { x: number; y: number; boardIndex: number } | null = null;
   /** One or two boards (쌍국). Prefer `board` getter for the active one. */
   readonly boards: Board[];
   activeBoardIndex = 0;
@@ -185,7 +191,7 @@ export class Battle {
   /** Active AI lure from 미끼돌 (shared; cleared on empowered reset). */
   baitLure: BaitLure | null = null;
   /**
-   * After empowered 9×9 reset: next stone play gets center-biased suggest
+   * After empowered 7×7 reset: next stone play gets center-biased suggest
    * and a small Amp/mana 포석 보너스.
    */
   openingBonusPending = false;
@@ -463,16 +469,27 @@ export class Battle {
 
   /** Estimate captures if color played at p (trial board). */
   private previewCapture(color: "black" | "white", p: Point): number {
-    const trial = Board.fromGrid(this.board.getBoard());
-    const ko = this.board.getKoPoint();
-    void ko;
+    const trial = this.board.clone();
     const r = trial.play(color, p);
     return r.ok ? r.capturedCount : -1;
   }
 
   autoPickStone(unit: Unit): Point | null {
-    const suggestions = this.suggestStones(unit);
-    return suggestions[0]?.point ?? null;
+    const color = teamStoneColor(unit.team);
+    const legal = this.board
+      .legalMoves(color)
+      .filter((p) => !this.isForbidden(p));
+    if (legal.length === 0) return null;
+    if (unit.team === "enemy") {
+      return (
+        pickExpertStone(this.board, color, legal, {
+          hasToken: (p) => !!this.tokenAt(p.x, p.y),
+          baitLure: (p) => this.isBaitLureFor(unit.team, p),
+          openingBias: this.openingBonusPending,
+        }) ?? legal[0]!
+      );
+    }
+    return this.suggestStones(unit)[0]?.point ?? null;
   }
 
   /**
@@ -989,11 +1006,13 @@ export class Battle {
 
     const prog = registerStoneSummon(this.circle);
     this.circle = prog.state;
+    const placedBoardIndex = this.activeBoardIndex;
     if (prog.shouldReset) {
       for (const b of this.boards) resetBoardInPlace(b);
       this.tokensByBoard = this.boards.map(() => []);
       this.sealsByBoard = this.boards.map(() => []);
       this.baitLure = null;
+      this.lastEnemyStone = null;
       this.openingBonusPending = true;
       this.log.push(
         `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${amplifyCapForPhase(this.circle.boardPhase)})`,
@@ -1028,6 +1047,25 @@ export class Battle {
       `${unit.name} stone (${point.x},${point.y}) cap=${result.capturedCount} amp=${this.currentAmplify().toFixed(2)}`,
     );
     this.lastStoneTeam = unit.team;
+    if (!prog.shouldReset) {
+      if (unit.team === "enemy") {
+        this.lastEnemyStone = {
+          x: point.x,
+          y: point.y,
+          boardIndex: placedBoardIndex,
+        };
+      } else if (
+        this.lastEnemyStone &&
+        this.lastEnemyStone.boardIndex === placedBoardIndex
+      ) {
+        const grid = this.boards[placedBoardIndex]!.getBoard();
+        if (
+          grid[this.lastEnemyStone.y]?.[this.lastEnemyStone.x] !== "white"
+        ) {
+          this.lastEnemyStone = null;
+        }
+      }
+    }
     if (this.pendingCaptureShop) {
       this.phase = "await_capture_shop";
       this.log.push(`사석상점: 보상을 선택하세요`);

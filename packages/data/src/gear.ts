@@ -79,12 +79,12 @@ export interface GearPiece {
 }
 
 export interface SummonerGear {
-  weapon: GearPiece;
-  top: GearPiece;
-  bottom: GearPiece;
-  shoes: GearPiece;
-  ring: GearPiece;
-  necklace: GearPiece;
+  weapon: GearPiece | null;
+  top: GearPiece | null;
+  bottom: GearPiece | null;
+  shoes: GearPiece | null;
+  ring: GearPiece | null;
+  necklace: GearPiece | null;
 }
 
 export const MAX_GEAR_ENHANCE = 15;
@@ -411,6 +411,31 @@ function basePiece(
   };
 }
 
+export function createEmptyGear(): SummonerGear {
+  return {
+    weapon: null,
+    top: null,
+    bottom: null,
+    shoes: null,
+    ring: null,
+    necklace: null,
+  };
+}
+
+/** Unupgraded default loadout from older saves — not a real drop. */
+export function isDefaultStarterGear(piece: GearPiece | null | undefined): boolean {
+  if (!piece || (piece.enhance ?? 0) > 0) return false;
+  const id = piece.id ?? "";
+  return (
+    /^wpn_starter_(fire|water|wind|light|dark)$/.test(id) ||
+    id === "top_guardian" ||
+    id === "bottom_command" ||
+    id === "shoes_mana" ||
+    id === "ring_bond" ||
+    id === "necklace_sense"
+  );
+}
+
 export function createStarterGear(element: Element = "light"): SummonerGear {
   const weaponNames = WEAPON_NAMES[element];
   return {
@@ -524,36 +549,57 @@ type LegacySummonerGear = Partial<SummonerGear> & {
   helm?: GearPiece;
 };
 
-/** Fill missing slots; migrate robe/cloak/accessory/orb legacy fields. */
+/** Keep equipped pieces; do not invent a default loadout. */
 export function normalizeSummonerGear(
   gear: LegacySummonerGear | null | undefined,
   element: Element = "light",
 ): SummonerGear {
-  const starter = createStarterGear(element);
-  if (!gear) return starter;
-  const weaponSrc = gear.weapon ?? starter.weapon;
-  const topSrc = gear.top ?? gear.robe ?? gear.armor ?? starter.top;
-  const bottomSrc = gear.bottom ?? gear.cloak ?? starter.bottom;
-  const shoesSrc = gear.shoes ?? gear.accessory ?? starter.shoes;
-  const ringSrc = gear.ring ?? starter.ring;
-  const necklaceSrc = gear.necklace ?? gear.orb ?? gear.helm ?? starter.necklace;
-  const weapon = normalizeGearPiece(
-    { ...weaponSrc, element: weaponSrc.element ?? element },
-    "weapon",
-  );
+  if (!gear) return createEmptyGear();
+  const slotOf = (
+    src: GearPiece | undefined,
+    slot: GearSlot,
+    weaponElement?: Element,
+  ): GearPiece | null => {
+    if (!src) return null;
+    const piece =
+      slot === "weapon"
+        ? normalizeGearPiece(
+            { ...src, element: src.element ?? weaponElement ?? element },
+            "weapon",
+          )
+        : normalizeGearPiece(src, slot);
+    return slot === "weapon"
+      ? { ...piece, element: piece.element ?? weaponElement ?? element }
+      : piece;
+  };
   return {
-    weapon: { ...weapon, element: weapon.element ?? element },
-    top: normalizeGearPiece(topSrc, "top"),
-    bottom: normalizeGearPiece(bottomSrc, "bottom"),
-    shoes: normalizeGearPiece(shoesSrc, "shoes"),
-    ring: normalizeGearPiece(ringSrc, "ring"),
-    necklace: normalizeGearPiece(necklaceSrc, "necklace"),
+    weapon: slotOf(gear.weapon, "weapon", element),
+    top: slotOf(gear.top ?? gear.robe ?? gear.armor, "top"),
+    bottom: slotOf(gear.bottom ?? gear.cloak, "bottom"),
+    shoes: slotOf(gear.shoes ?? gear.accessory, "shoes"),
+    ring: slotOf(gear.ring, "ring"),
+    necklace: slotOf(gear.necklace ?? gear.orb ?? gear.helm, "necklace"),
   };
 }
 
 export function gearPieces(gear: SummonerGear): GearPiece[] {
   const g = normalizeSummonerGear(gear);
-  return [g.weapon, g.top, g.bottom, g.shoes, g.ring, g.necklace];
+  return [g.weapon, g.top, g.bottom, g.shoes, g.ring, g.necklace].filter(
+    (p): p is GearPiece => p != null,
+  );
+}
+
+/** Drop unenhanced default loadout pieces from older saves. */
+export function stripUnenhancedStarterGear(gear: SummonerGear): SummonerGear {
+  const g = normalizeSummonerGear(gear);
+  return {
+    weapon: isDefaultStarterGear(g.weapon) ? null : g.weapon,
+    top: isDefaultStarterGear(g.top) ? null : g.top,
+    bottom: isDefaultStarterGear(g.bottom) ? null : g.bottom,
+    shoes: isDefaultStarterGear(g.shoes) ? null : g.shoes,
+    ring: isDefaultStarterGear(g.ring) ? null : g.ring,
+    necklace: isDefaultStarterGear(g.necklace) ? null : g.necklace,
+  };
 }
 
 export function summarizeGearSets(gear: SummonerGear): GearSetProgress[] {

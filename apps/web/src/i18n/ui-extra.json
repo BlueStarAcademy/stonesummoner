@@ -1787,9 +1787,33 @@
     "ko": "일일미션",
     "en": "Daily"
   },
+  "mission.tabMain": {
+    "ko": "메인 퀘스트",
+    "en": "Main"
+  },
   "mission.tabAchieve": {
     "ko": "업적",
     "en": "Achievements"
+  },
+  "mission.kicker": {
+    "ko": "소환사의 길",
+    "en": "The summoner's path"
+  },
+  "mission.once": {
+    "ko": "1회성",
+    "en": "Once"
+  },
+  "mission.locked": {
+    "ko": "잠김",
+    "en": "Locked"
+  },
+  "mission.current": {
+    "ko": "현재 목표",
+    "en": "Current"
+  },
+  "mission.chapter": {
+    "ko": "{n}",
+    "en": "{n}"
   },
   "mission.progress": {
     "ko": "{cur}/{max}",
@@ -1926,6 +1950,110 @@
   "mission.ach.guild.desc": {
     "ko": "길드에 소속되기",
     "en": "Belong to a guild"
+  },
+  "mission.mq.forest1.title": {
+    "ko": "첫 출정",
+    "en": "First sortie"
+  },
+  "mission.mq.forest1.desc": {
+    "ko": "월영숲 1-1을 클리어하세요",
+    "en": "Clear Moonveil Forest 1-1"
+  },
+  "mission.mq.forest3.title": {
+    "ko": "숲의 중반",
+    "en": "Deeper woods"
+  },
+  "mission.mq.forest3.desc": {
+    "ko": "월영숲 1-3을 클리어하세요",
+    "en": "Clear Moonveil Forest 1-3"
+  },
+  "mission.mq.forest5.title": {
+    "ko": "심층으로 가는 문",
+    "en": "Gate to the depths"
+  },
+  "mission.mq.forest5.desc": {
+    "ko": "월영숲 1-5를 클리어해 상징 던전을 여세요",
+    "en": "Clear Moonveil Forest 1-5 to open the symbol dungeon"
+  },
+  "mission.mq.giantB1.title": {
+    "ko": "상징의 탑",
+    "en": "Tower of symbols"
+  },
+  "mission.mq.giantB1.desc": {
+    "ko": "거인의 탑 B1을 클리어하세요",
+    "en": "Clear Giant's Keep B1"
+  },
+  "mission.mq.forestBoss.title": {
+    "ko": "월영숲 시련",
+    "en": "Moonveil trial"
+  },
+  "mission.mq.forestBoss.desc": {
+    "ko": "월영숲 1-7 시련을 클리어하세요",
+    "en": "Clear the Moonveil Forest 1-7 trial"
+  },
+  "mission.mq.towerBoss.title": {
+    "ko": "용맹의 탑",
+    "en": "Tower of Valor"
+  },
+  "mission.mq.towerBoss.desc": {
+    "ko": "용맹의 탑 시련을 클리어하세요",
+    "en": "Clear the Tower of Valor trial"
+  },
+  "mission.mq.giantB5.title": {
+    "ko": "거인의 중층",
+    "en": "Giant's mid floors"
+  },
+  "mission.mq.giantB5.desc": {
+    "ko": "거인의 탑 B5를 클리어하세요",
+    "en": "Clear Giant's Keep B5"
+  },
+  "mission.mq.ruinsBoss.title": {
+    "ko": "고대 유적",
+    "en": "Ancient ruins"
+  },
+  "mission.mq.ruinsBoss.desc": {
+    "ko": "고대 유적 시련을 클리어하세요",
+    "en": "Clear the Ancient Ruins trial"
+  },
+  "mission.mq.dragonB1.title": {
+    "ko": "용의 둥지",
+    "en": "Dragon's Nest"
+  },
+  "mission.mq.dragonB1.desc": {
+    "ko": "용의 둥지 B1을 클리어하세요",
+    "en": "Clear Dragon's Nest B1"
+  },
+  "mission.mq.flameBoss.title": {
+    "ko": "화염 협곡",
+    "en": "Flame Gorge"
+  },
+  "mission.mq.flameBoss.desc": {
+    "ko": "화염 협곡 시련을 클리어하세요",
+    "en": "Clear the Flame Gorge trial"
+  },
+  "mission.mq.necroB1.title": {
+    "ko": "네크로폴리스",
+    "en": "Necropolis"
+  },
+  "mission.mq.necroB1.desc": {
+    "ko": "네크로폴리스 B1을 클리어하세요",
+    "en": "Clear Necropolis B1"
+  },
+  "mission.mq.giantB10.title": {
+    "ko": "거인의 정상",
+    "en": "Giant's summit"
+  },
+  "mission.mq.giantB10.desc": {
+    "ko": "거인의 탑 B10을 클리어하세요",
+    "en": "Clear Giant's Keep B10"
+  },
+  "mission.mq.endBoss.title": {
+    "ko": "종언의 신전",
+    "en": "Temple of Ending"
+  },
+  "mission.mq.endBoss.desc": {
+    "ko": "종언의 신전 시련을 클리어하세요",
+    "en": "Clear the Temple of Ending trial"
   },
   "ui.statAcc": {
     "ko": "효과 적중",
@@ -3035,6 +3163,70 @@
     "ko": "품절",
     "en": "Sold out"
   },
+  "ui.shop.sectionSummon": {
+    "ko": "소환",
+    "en": "Summon"
+  },
+  "ui.shop.sectionSupply": {
+    "ko": "보급",
+    "en": "Supplies"
+  },
+  "ui.shop.sectionExchange": {
+    "ko": "교환",
+    "en": "Exchange"
+  },
+  "ui.shop.premiumScroll": {
+    "ko": "고급 소환서 1장",
+    "en": "Premium scroll ×1"
+  },
+  "ui.shop.scrollNormalDesc": {
+    "ko": "일반 소환에 사용합니다.",
+    "en": "Used for normal summons."
+  },
+  "ui.shop.scrollBundleDesc": {
+    "ko": "일반 소환서 묶음 구매.",
+    "en": "Bundle of normal summon scrolls."
+  },
+  "ui.shop.scrollPremiumDesc": {
+    "ko": "고급 소환에 사용합니다.",
+    "en": "Used for premium summons."
+  },
+  "ui.shop.energyDesc": {
+    "ko": "출정·스테이지에 필요한 에너지.",
+    "en": "Energy for sorties and stages."
+  },
+  "ui.shop.grindstone": {
+    "ko": "연마석 1개",
+    "en": "Grindstone ×1"
+  },
+  "ui.shop.grindstoneDesc": {
+    "ko": "상징 연마·강화에 소모합니다.",
+    "en": "Spent to grind and enhance symbols."
+  },
+  "ui.shop.essenceTitle": {
+    "ko": "정수 교환",
+    "en": "Essence exchange"
+  },
+  "ui.shop.essenceDesc": {
+    "ko": "진문석 {jinmun}개로 크리스탈 {crystal}개.",
+    "en": "{jinmun} Jinmun → {crystal} Crystal."
+  },
+  "ui.shop.owned": {
+    "ko": "보유 {n}",
+    "en": "Owned {n}"
+  },
+  "ui.shop.energyHeld": {
+    "ko": "에너지 {n}/{max}",
+    "en": "Energy {n}/{max}"
+  },
+  "ui.shop.jinmunHeld": {
+    "ko": "진문석 {n}",
+    "en": "Jinmun {n}"
+  },
+  "ui.shop.grindstoneStock": {
+    "ko": "연마석 보유 {n}",
+    "en": "Grindstones {n}"
+  },
   "ui.glory.buffSummary": {
     "ko": "버프 합산",
     "en": "Buff summary"
@@ -3074,10 +3266,6 @@
   "ui.trial.titleOn": {
     "ko": "시련 칭호 해금",
     "en": "Trial title unlocked"
-  },
-  "ui.shop.grindstoneStock": {
-    "ko": "연마석 보유 {n}",
-    "en": "Grindstones {n}"
   },
   "ui.gearBonusManaRegen": {
     "ko": "마나 재생 +{n}",

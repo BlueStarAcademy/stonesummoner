@@ -1,10 +1,12 @@
 import {
   ALL_STAGES,
+  ARENA_STAGES,
   CAIROS_DRAGON_STAGES,
   CAIROS_GIANT_STAGES,
   CAIROS_NECRO_STAGES,
   EQUIP_STAGES,
   MAIN_QUEST_AREA_COUNT,
+  MAIN_QUEST_STAGES,
   TRIAL_STAGES,
   WORLD_ARENA_STAGES,
   getStage,
@@ -42,6 +44,39 @@ function cairosChainFor(stageId: string): StageDef[] | null {
   if (stageId.startsWith("dragon_")) return CAIROS_DRAGON_STAGES;
   if (stageId.startsWith("necro_")) return CAIROS_NECRO_STAGES;
   return null;
+}
+
+/** Linear floor/stage list used by the result-screen "next" button. */
+export function stageProgressionChain(stage: StageDef): StageDef[] | null {
+  switch (stage.mode) {
+    case "scenario":
+      return MAIN_QUEST_STAGES;
+    case "depth":
+      return cairosChainFor(stage.id);
+    case "trial":
+      return TRIAL_STAGES;
+    case "equip":
+      return EQUIP_STAGES;
+    case "world_arena":
+      return WORLD_ARENA_STAGES;
+    case "arena":
+      return ARENA_STAGES;
+    default:
+      return null;
+  }
+}
+
+/** Next unlocked stage in the same chain, or null at the end / if still locked. */
+export function nextStageInProgression(
+  save: PlayerSave,
+  stage: StageDef,
+): StageDef | null {
+  const chain = stageProgressionChain(stage);
+  if (!chain) return null;
+  const index = chain.findIndex((candidate) => candidate.id === stage.id);
+  if (index < 0) return null;
+  const next = chain[index + 1] ?? null;
+  return next && isStageUnlocked(save, next.id) ? next : null;
 }
 
 /** Content unlock rules (Phase 1–2+). */

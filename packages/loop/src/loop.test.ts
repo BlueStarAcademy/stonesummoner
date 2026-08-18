@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createSymbol, getStage } from "stonesummoner-data";
+import { createStarterGear, createSymbol, getStage } from "stonesummoner-data";
 import {
   createNewSave,
   createStageBattle,
@@ -8,10 +8,13 @@ import {
   homeCollect,
   isoWeekKey,
   isStageUnlocked,
+  nextStageInProgression,
   listGear,
   listRoster,
   listSymbols,
   runBuyEnergy,
+  runBuyGrindstone,
+  GRINDSTONE_BUY_MANA_COST,
   runExpandSymbolBag,
   symbolBagCapacity,
   symbolBagExpandCost,
@@ -77,6 +80,12 @@ import {
   monsterMaxLevel,
   addOwnedMonsterExp,
 } from "./loop.js";
+import {
+  claimableMainQuestCount,
+  isMainQuestComplete,
+  isMainQuestUnlocked,
+  runClaimMainQuest,
+} from "./mainQuest.js";
 import { migrateSave } from "./migrateSave.js";
 import { expForStage } from "./progress.js";
 import { FUSION_RECIPES } from "stonesummoner-data";
@@ -137,8 +146,24 @@ describe("game loop", () => {
       gloryPoints: 100,
     };
     assert.equal(isStageUnlocked(save, "giant_b1"), true);
+    assert.equal(isStageUnlocked(save, "giant_b2"), false);
     assert.equal(isStageUnlocked(save, "tower_2_1"), true);
     assert.equal(isStageUnlocked(save, "arena_rookie"), true);
+    assert.equal(nextStageInProgression(save, getStage("giant_b1")!), null);
+
+    const giantClear = {
+      ...save,
+      clearedStages: [...save.clearedStages, "giant_b1"],
+    };
+    assert.equal(isStageUnlocked(giantClear, "giant_b2"), true);
+    assert.equal(nextStageInProgression(giantClear, getStage("giant_b1")!)?.id, "giant_b2");
+    assert.equal(
+      nextStageInProgression(
+        { ...giantClear, clearedStages: [...giantClear.clearedStages, "giant_b10"] },
+        getStage("giant_b10")!,
+      ),
+      null,
+    );
 
     const arena = runSortie(save, "arena_rookie", { rng: () => 0.1 });
     if (arena.reward?.victory) {
@@ -184,10 +209,7 @@ describe("game loop", () => {
       save = r.save;
       const eq = runEquipGearBag(save, 0);
       assert.match(eq.message, /장착/);
-      assert.equal(eq.save.gear[r.reward.gear.slot].id, r.reward.gear.id);
-      const sell = runSellGearBag(eq.save, 0);
-      assert.match(sell.message, /판매/);
-      assert.ok(sell.save.island.mana > eq.save.island.mana);
+      assert.equal(eq.save.gear[r.reward.gear.slot]?.id, r.reward.gear.id);
     }
   });
 
@@ -239,7 +261,7 @@ describe("game loop", () => {
     assert.equal(isStageUnlocked(save, "ruins_3_2"), false);
   });
 
-  it("fuses same-species and unlocks guild raid 13x13", () => {
+  it("fuses same-species and unlocks guild raid", () => {
     let save = createNewSave(0);
     const id = save.roster[0]!.monsterId;
     save = {
@@ -788,6 +810,38 @@ describe("game loop", () => {
     assert.equal(dojo.save.island.mana, 250);
   });
 
+  it("claims one-time main quest rewards from stages and cairos", () => {
+    let save = createNewSave(0);
+    assert.equal(claimableMainQuestCount(save), 0);
+    assert.equal(isMainQuestUnlocked(save, "forest1"), true);
+    assert.equal(isMainQuestUnlocked(save, "forest3"), false);
+
+    const blocked = runClaimMainQuest(save, "forest1");
+    assert.match(blocked.message, /완료되지 않았습니다/);
+
+    save = { ...save, clearedStages: ["garen_1_1"] };
+    assert.equal(isMainQuestComplete(save, "forest1"), true);
+    assert.equal(isMainQuestUnlocked(save, "forest3"), true);
+    assert.equal(claimableMainQuestCount(save), 1);
+
+    const claimed = runClaimMainQuest(save, "forest1");
+    assert.match(claimed.message, /메인 퀘스트/);
+    assert.equal(claimed.save.island.mana, save.island.mana + 300);
+    assert.ok(claimed.save.claimedMainQuestIds.includes("forest1"));
+    const again = runClaimMainQuest(claimed.save, "forest1");
+    assert.match(again.message, /이미/);
+
+    save = {
+      ...claimed.save,
+      clearedStages: ["garen_1_1", "garen_1_3", "garen_1_5", "giant_b1"],
+      grindstones: 1,
+    };
+    assert.equal(isMainQuestUnlocked(save, "giantB1"), true);
+    const giant = runClaimMainQuest(save, "giantB1");
+    assert.match(giant.message, /연마석/);
+    assert.equal(giant.save.grindstones, 4);
+  });
+
   it("raises energy max and unlocks buildings on account level-up", () => {
     let save = createNewSave(0);
     assert.equal(save.island.energyMax, 100);
@@ -873,6 +927,50 @@ describe("game loop", () => {
     assert.ok((hardClear.reward.summonerExp ?? 0) > (hardLocked.reward.summonerExp ?? 0));
   });
 
+  it("scenario normal drops almost only ★1 symbols (rare ★2)", () => {
+    const stage = getStage("garen_1_1")!;
+    let ones = 0;
+    let twos = 0;
+    let threes = 0;
+    let high = 0;
+    for (let seed = 0; seed < 60; seed++) {
+      let n = 0;
+      const rng = () => {
+        n += 1;
+        if (n === 1) return 0;
+        return ((seed * 13 + n * 97) % 1000) / 1000;
+      };
+      const save = createNewSave(0);
+      const { reward } = applyRewards(
+        { ...save, island: { ...save.island, energy: 50 }, symbols: [] },
+        stage,
+        true,
+        rng,
+        "normal",
+      );
+      const stars = reward.symbol?.stars;
+      if (stars == null) continue;
+      if (stars === 1) ones += 1;
+      else if (stars === 2) twos += 1;
+      else if (stars === 3) threes += 1;
+      else high += 1;
+      const gearStars = reward.gear?.stars;
+      if (gearStars != null) {
+        assert.ok(gearStars >= 1 && gearStars <= 3);
+      }
+      if (reward.symbol) {
+        assert.ok(
+          reward.symbol.quality === "normal" ||
+            reward.symbol.quality === "advanced" ||
+            reward.symbol.quality === "rare",
+        );
+      }
+    }
+    assert.equal(high, 0);
+    assert.ok(ones + twos + threes >= 50);
+    assert.ok(ones > twos + threes);
+  });
+
   it("summons and enhances monsters", () => {
     let save = createNewSave(0);
     assert.equal(save.roster.length, 4);
@@ -910,42 +1008,57 @@ describe("game loop", () => {
     assert.equal(short.save.scrolls, 2);
   });
 
+  it("starts with no summoner gear equipped", () => {
+    const save = createNewSave(0);
+    assert.equal(save.gear.weapon, null);
+    assert.equal(save.gear.top, null);
+    assert.equal(save.gear.bottom, null);
+    assert.equal(save.gear.shoes, null);
+    assert.equal(save.gear.ring, null);
+    assert.equal(save.gear.necklace, null);
+    assert.equal(save.summoners.fire.gear?.weapon, null);
+    assert.equal(listGear(save).length, 9);
+    assert.match(listGear(save)[0]!, /미장착/);
+  });
+
   it("enhances gear and symbols, equips drops", () => {
-    let save = createNewSave(0);
+    let save = withActiveGear(createNewSave(0), createStarterGear("light"));
     assert.ok(save.gear.weapon);
     assert.ok(save.gear.top);
     assert.ok(save.gear.shoes);
     assert.equal(save.gear.weapon.element, "light");
-    assert.ok(save.summoners.fire.gear?.weapon.element === "fire");
     assert.equal(listGear(save).length, 9);
     assert.ok(listSymbols(save).length >= 2);
 
     const g = runEnhanceGear(save, "necklace");
     assert.match(g.message, /장비 강화/);
-    assert.equal(g.save.gear.necklace.enhance, 1);
+    assert.equal(g.save.gear.necklace?.enhance, 1);
     save = g.save;
 
     const w = runEnhanceGear(save, "weapon");
     assert.match(w.message, /장비 강화/);
-    assert.equal(w.save.gear.weapon.enhance, 1);
+    assert.equal(w.save.gear.weapon?.enhance, 1);
     assert.ok(
-      w.save.gear.weapon.skillPowerBonus > save.gear.weapon.skillPowerBonus,
+      (w.save.gear.weapon?.skillPowerBonus ?? 0) >
+        (save.gear.weapon?.skillPowerBonus ?? 0),
     );
     save = w.save;
 
     const bottom = runEnhanceGear(save, "bottom");
     assert.match(bottom.message, /장비 강화/);
-    assert.equal(bottom.save.gear.bottom.enhance, 1);
+    assert.equal(bottom.save.gear.bottom?.enhance, 1);
     assert.ok(
-      bottom.save.gear.bottom.leaderAtkBonus > save.gear.bottom.leaderAtkBonus,
+      (bottom.save.gear.bottom?.leaderAtkBonus ?? 0) >
+        (save.gear.bottom?.leaderAtkBonus ?? 0),
     );
     save = bottom.save;
 
     const ring = runEnhanceGear(save, "ring");
     assert.match(ring.message, /장비 강화/);
-    assert.equal(ring.save.gear.ring.enhance, 1);
+    assert.equal(ring.save.gear.ring?.enhance, 1);
     assert.ok(
-      ring.save.gear.ring.leaderAtkBonus > save.gear.ring.leaderAtkBonus,
+      (ring.save.gear.ring?.leaderAtkBonus ?? 0) >
+        (save.gear.ring?.leaderAtkBonus ?? 0),
     );
     save = ring.save;
 
@@ -954,7 +1067,7 @@ describe("game loop", () => {
       { ...save, island: { ...save.island, mana: 50_000, crystal: 0 } },
       {
         ...getActiveGear(save),
-        weapon: { ...getActiveGear(save).weapon, enhance: 12 },
+        weapon: { ...getActiveGear(save).weapon!, enhance: 12 },
       },
     );
     const needCrystal = runEnhanceGear(save, "weapon");
@@ -965,13 +1078,13 @@ describe("game loop", () => {
     };
     const late = runEnhanceGear(save, "weapon");
     assert.match(late.message, /크리스탈/);
-    assert.equal(late.save.gear.weapon.enhance, 13);
+    assert.equal(late.save.gear.weapon?.enhance, 13);
     assert.equal(late.save.island.crystal, 4);
     save = late.save;
 
     save = {
       ...save,
-      gearBag: [{ ...save.gear.weapon, enhance: 15, id: "sell_hi" }],
+      gearBag: [{ ...save.gear.weapon!, enhance: 15, id: "sell_hi" }],
       island: { ...save.island, crystal: 0 },
     };
     const sold = runSellGearBag(save, 0);
@@ -982,7 +1095,7 @@ describe("game loop", () => {
 
     const affix = runAffixGearSet(save, "necklace", "mana");
     assert.match(affix.message, /세트 부여/);
-    assert.equal(affix.save.gear.necklace.setId, "mana");
+    assert.equal(affix.save.gear.necklace?.setId, "mana");
     assert.ok(affix.save.island.mana < save.island.mana);
     save = affix.save;
 
@@ -1177,10 +1290,10 @@ describe("game loop", () => {
   });
 
   it("rejects equipping a weapon for the wrong summoner element", () => {
-    let save = createNewSave(0);
+    let save = withActiveGear(createNewSave(0), createStarterGear("light"));
     assert.equal(save.activeSummoner, "light");
     const fireWeapon = {
-      ...save.summoners.fire.gear!.weapon,
+      ...createStarterGear("fire").weapon!,
       id: "bag_fire_wpn",
       enhance: 0,
     };
@@ -1188,33 +1301,36 @@ describe("game loop", () => {
     const blocked = runEquipGearBag(save, 0);
     assert.match(blocked.message, /전용/);
     assert.equal(blocked.save.gearBag?.length, 1);
-    assert.equal(blocked.save.gear.weapon.id, save.gear.weapon.id);
+    assert.equal(blocked.save.gear.weapon?.id, save.gear.weapon?.id);
 
     save = setActiveSummoner(blocked.save, "fire");
     const ok = runEquipGearBag(save, 0);
     assert.match(ok.message, /장착/);
-    assert.equal(ok.save.gear.weapon.id, "bag_fire_wpn");
-    assert.equal(ok.save.gear.weapon.element, "fire");
+    assert.equal(ok.save.gear.weapon?.id, "bag_fire_wpn");
+    assert.equal(ok.save.gear.weapon?.element, "fire");
   });
 
   it("keeps separate gear sets per summoner element", () => {
-    let save = createNewSave(0);
-    const lightWpn = save.gear.weapon.id;
+    let save = withActiveGear(createNewSave(0), createStarterGear("light"));
+    const lightWpn = save.gear.weapon!.id;
     save = withActiveGear(save, {
       ...getActiveGear(save),
-      weapon: { ...getActiveGear(save).weapon, enhance: 3 },
+      weapon: { ...getActiveGear(save).weapon!, enhance: 3 },
     });
-    assert.equal(save.gear.weapon.enhance, 3);
+    assert.equal(save.gear.weapon?.enhance, 3);
 
     save = setActiveSummoner(save, "water");
     assert.equal(save.activeSummoner, "water");
-    assert.equal(save.gear.weapon.element, "water");
-    assert.equal(save.gear.weapon.enhance, 0);
-    assert.notEqual(save.gear.weapon.id, lightWpn);
+    assert.equal(save.gear.weapon, null);
+
+    save = withActiveGear(save, createStarterGear("water"));
+    assert.equal(save.gear.weapon?.element, "water");
+    assert.equal(save.gear.weapon?.enhance, 0);
+    assert.notEqual(save.gear.weapon?.id, lightWpn);
 
     save = setActiveSummoner(save, "light");
-    assert.equal(save.gear.weapon.enhance, 3);
-    assert.equal(save.gear.weapon.id, lightWpn);
+    assert.equal(save.gear.weapon?.enhance, 3);
+    assert.equal(save.gear.weapon?.id, lightWpn);
   });
 
   it("sets arena defense and caps daily arena attacks", () => {
@@ -1250,6 +1366,16 @@ describe("game loop", () => {
       () => 0.2,
     );
     assert.match(again.message, /이미 구매/);
+  });
+
+  it("buys grindstones from the shop for mana", () => {
+    let save = createNewSave(0);
+    const before = save.grindstones ?? 0;
+    save = { ...save, island: { ...save.island, mana: 10_000 } };
+    const bought = runBuyGrindstone(save, 2);
+    assert.match(bought.message, /연마석/);
+    assert.equal(bought.save.grindstones, before + 2);
+    assert.equal(bought.save.island.mana, 10_000 - GRINDSTONE_BUY_MANA_COST * 2);
   });
 
   it("chains trial floors and grants B3 token", () => {
@@ -1388,7 +1514,44 @@ describe("game loop", () => {
     assert.equal(round!.grindstones, base.grindstones);
     assert.deepEqual(round!.claimedMailIds, []);
     assert.deepEqual(round!.claimedMissionKeys, []);
+    assert.deepEqual(round!.claimedMainQuestIds, []);
     assert.equal(round!.onboardRite, null);
+  });
+
+  it("migrateSave strips unenhanced default starter gear", () => {
+    const base = createNewSave(0);
+    const raw = {
+      ...base,
+      gear: createStarterGear("light"),
+      summoners: {
+        ...base.summoners,
+        light: { ...base.summoners.light, gear: createStarterGear("light") },
+        fire: { ...base.summoners.fire, gear: createStarterGear("fire") },
+      },
+    };
+    const round = migrateSave(JSON.parse(JSON.stringify(raw)));
+    assert.ok(round);
+    assert.equal(round!.gear.weapon, null);
+    assert.equal(round!.summoners.light.gear?.weapon, null);
+    assert.equal(round!.summoners.fire.gear?.top, null);
+    const enhanced = {
+      ...createStarterGear("light"),
+      weapon: { ...createStarterGear("light").weapon!, enhance: 2 },
+    };
+    const kept = migrateSave(
+      JSON.parse(
+        JSON.stringify({
+          ...base,
+          gear: enhanced,
+          summoners: {
+            ...base.summoners,
+            light: { ...base.summoners.light, gear: enhanced },
+          },
+        }),
+      ),
+    );
+    assert.equal(kept?.gear.weapon?.enhance, 2);
+    assert.equal(kept?.gear.top, null);
   });
 
   it("migrateSave preserves onboardRite checkpoint", () => {

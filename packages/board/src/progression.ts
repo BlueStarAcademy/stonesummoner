@@ -1,7 +1,7 @@
 import type { Board } from "./board.js";
 
-/** Progressive combat board sizes (13 = guild raid / world boss). */
-export const COMBAT_BOARD_SIZES = [5, 7, 9, 13] as const;
+/** Progressive combat board sizes. 7×7 is the largest magic circle. */
+export const COMBAT_BOARD_SIZES = [5, 7] as const;
 export type CombatBoardSize = (typeof COMBAT_BOARD_SIZES)[number];
 
 export const EMPOWERED_RESET_THRESHOLD = 50;
@@ -48,7 +48,7 @@ export function itemSpawnBonusForPhase(boardPhase: number): number {
 
 /**
  * Call after every successful stone summon.
- * When size is 9 and count hits threshold, signals a board wipe + phase up.
+ * When size is 7 and count hits threshold, signals a board wipe + phase up.
  */
 export function registerStoneSummon(
   state: CirclePhaseState,
@@ -59,7 +59,7 @@ export function registerStoneSummon(
   };
 
   if (
-    (next.size === 9 || next.size === 13) &&
+    next.size === 7 &&
     next.stoneSummonCount >= next.resetThreshold
   ) {
     return {

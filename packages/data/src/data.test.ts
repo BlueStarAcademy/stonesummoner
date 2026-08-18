@@ -14,6 +14,7 @@ import {
   MAIN_QUEST_STAGES,
   STAGES_PER_AREA,
   canEquipGearOnElement,
+  createEmptyGear,
   createStarterGear,
   createStarterHwalro,
   createSymbol,
@@ -35,8 +36,11 @@ import {
   normalizeSummonerGear,
   rollGearDrop,
   rollSymbolDrop,
+  SCENARIO_NORMAL_STAR_WEIGHTS,
+  scenarioSymbolDropTable,
   skillTreeBonuses,
   SKILL_TREE_NODES,
+  stripUnenhancedStarterGear,
   summarizeGearSets,
   SYMBOL_SETS,
   summarizeSymbolSets,
@@ -81,15 +85,15 @@ describe("phase1 data", () => {
     }
   });
 
-  it("chapter1 boards progress 5 → 7 → 9", () => {
+  it("chapter1 boards progress 5 → 7", () => {
     assert.equal(CHAPTER1_STAGES.length, 7);
     assert.equal(getStage("garen_1_1")?.boardSize, 5);
     assert.equal(getStage("garen_1_4")?.boardSize, 7);
-    assert.equal(getStage("garen_1_5")?.boardSize, 9);
-    assert.equal(getStage("garen_1_7")?.boardSize, 9);
+    assert.equal(getStage("garen_1_5")?.boardSize, 7);
+    assert.equal(getStage("garen_1_7")?.boardSize, 7);
     assert.equal(getStage("giant_b1")?.mode, "depth");
     assert.equal(getStage("arena_rookie")?.mode, "arena");
-    assert.equal(getStage("guild_raid_boss")?.boardSize, 13);
+    assert.equal(getStage("guild_raid_boss")?.boardSize, 7);
     assert.equal(getStage("warena_qual")?.mode, "world_arena");
     assert.equal(getStage("equip_vault_1")?.mode, "equip");
     assert.equal(getStage("equip_vault_boss")?.gearDropChance, 1);
@@ -170,21 +174,37 @@ describe("phase1 data", () => {
     assert.equal(g.weapon.quality, "normal");
   });
 
+  it("creates empty gear and strips unenhanced starter ids", () => {
+    const empty = createEmptyGear();
+    assert.equal(empty.weapon, null);
+    assert.equal(empty.top, null);
+    const stripped = stripUnenhancedStarterGear(createStarterGear("fire"));
+    assert.equal(stripped.weapon, null);
+    assert.equal(stripped.necklace, null);
+    const kept = stripUnenhancedStarterGear({
+      ...createStarterGear("fire"),
+      weapon: { ...createStarterGear("fire").weapon!, enhance: 1 },
+    });
+    assert.equal(kept.weapon?.enhance, 1);
+    assert.equal(kept.top, null);
+  });
+
   it("migrates legacy robe/orb slots", () => {
+    const starter = createStarterGear("light");
     const g = normalizeSummonerGear({
-      weapon: createStarterGear("light").weapon,
-      robe: { ...createStarterGear("light").top, slot: "robe" as never },
-      orb: { ...createStarterGear("light").necklace, slot: "orb" as never },
+      weapon: { ...starter.weapon!, id: "legacy_wpn" },
+      robe: { ...starter.top!, id: "legacy_robe", slot: "robe" as never },
+      orb: { ...starter.necklace!, id: "legacy_orb", slot: "orb" as never },
     } as never);
-    assert.equal(g.top.slot, "top");
-    assert.equal(g.necklace.slot, "necklace");
+    assert.equal(g.top?.slot, "top");
+    assert.equal(g.necklace?.slot, "necklace");
   });
 
   it("locks weapons to summoner element and maps stars to inv grade", () => {
-    const fire = createStarterGear("fire").weapon;
+    const fire = createStarterGear("fire").weapon!;
     assert.equal(canEquipGearOnElement(fire, "fire"), true);
     assert.equal(canEquipGearOnElement(fire, "water"), false);
-    assert.equal(canEquipGearOnElement(createStarterGear("fire").top, "water"), true);
+    assert.equal(canEquipGearOnElement(createStarterGear("fire").top!, "water"), true);
     assert.equal(gearStarsToInvGrade(1), "gray");
     assert.equal(gearStarsToInvGrade(5), "red");
     const drop = rollGearDrop(() => 0.01, "t", { preferredSlot: "weapon", preferredElement: "dark" });
@@ -384,5 +404,42 @@ describe("phase1 data", () => {
     assert.equal(drop.stars, 5);
     assert.equal(drop.quality, "epic");
     assert.equal(drop.substats.length, 3);
+  });
+
+  it("scenario normal star table is almost only ★1 with rare ★2", () => {
+    assert.deepEqual(
+      SCENARIO_NORMAL_STAR_WEIGHTS.map((r) => r.value),
+      [1, 2, 3],
+    );
+    const total = SCENARIO_NORMAL_STAR_WEIGHTS.reduce((n, r) => n + r.w, 0);
+    const one = SCENARIO_NORMAL_STAR_WEIGHTS.find((r) => r.value === 1)!.w;
+    assert.ok(one / total >= 0.75);
+    const drop = rollSymbolDrop(() => 0.01, "n0", {
+      preferredSet: "hwalro",
+      setPool: ["hwalro"],
+      starWeights: SCENARIO_NORMAL_STAR_WEIGHTS,
+    });
+    assert.ok(drop.stars >= 1 && drop.stars <= 3);
+  });
+
+  it("aligns scenario and Cairos drops to SW-like tables (slightly better)", () => {
+    const normal = scenarioSymbolDropTable("normal", 1);
+    const hard = scenarioSymbolDropTable("hard", 1);
+    const hell = scenarioSymbolDropTable("hell", 7);
+    assert.ok(normal.dropChance >= 0.4 && normal.dropChance < 0.5);
+    assert.ok(hard.starWeights.every((r) => r.value >= 2 && r.value <= 4));
+    assert.ok(hell.starWeights.some((r) => r.value === 5));
+    assert.ok(hell.qualityWeights.some((r) => r.value === "legend"));
+
+    const b1 = getStage("giant_b1")!;
+    const b10 = getStage("giant_b10")!;
+    assert.ok(b1.starWeights!.every((r) => r.value <= 4));
+    const b10Five = b10.starWeights!.find((r) => r.value === 5)!.w;
+    const b10Six = b10.starWeights!.find((r) => r.value === 6)!.w;
+    assert.ok(b10Five > b10Six, "B10 should still be mostly ★5 like SW");
+    assert.ok(b10.qualityWeights!.every((r) => r.value !== "normal"));
+    assert.ok(
+      (b10.qualityWeights!.find((r) => r.value === "rare")?.w ?? 0) >= 55,
+    );
   });
 });

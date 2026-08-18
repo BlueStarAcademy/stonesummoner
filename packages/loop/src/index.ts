@@ -11,6 +11,7 @@ export {
   homeCollect,
   homeCollectCrystal,
   isStageUnlocked,
+  nextStageInProgression,
   listGear,
   listGearBag,
   listRoster,
@@ -72,6 +73,7 @@ export {
   runEquipGearBag,
   runSellGearBag,
   runBuyEnergy,
+  runBuyGrindstone,
   runExpandSymbolBag,
   symbolBagCapacity,
   symbolBagExpandCost,
@@ -119,6 +121,7 @@ export {
   dailyMissionClaimKey,
   isDailyMissionClaimed,
   runClaimDailyMission,
+  DAILY_MISSION_REWARDS,
   runImprintSymbol,
   runJoinGuild,
   runGuildCheckIn,
@@ -163,6 +166,8 @@ export {
   FUSION_MANA_COST,
   ENERGY_CRYSTAL_COST,
   ENERGY_BUY_AMOUNT,
+  GRINDSTONE_BUY_MANA_COST,
+  GRINDSTONE_BUY_AMOUNT,
   CRAFT_SCROLL_JINMUN,
   CRAFT_SCROLL_MANA,
   ESSENCE_JINMUN_COST,
@@ -178,6 +183,17 @@ export {
   totalScrollCount,
 } from "./loop.js";
 export { migrateSave } from "./migrateSave.js";
+export {
+  MAIN_QUESTS,
+  claimableMainQuestCount,
+  claimableMainQuestIds,
+  getMainQuest,
+  isMainQuestClaimed,
+  isMainQuestComplete,
+  isMainQuestUnlocked,
+  runClaimMainQuest,
+} from "./mainQuest.js";
+export type { MainQuestDef, MainQuestId, MissionReward } from "./mainQuest.js";
 export type {
   BattleReward,
   ElementSummonerProfile,

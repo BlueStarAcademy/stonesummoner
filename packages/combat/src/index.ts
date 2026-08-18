@@ -53,6 +53,7 @@ export {
   rankStoneSuggestions,
   teamStoneColor,
 } from "./ai.js";
+export { pickExpertStone, scoreExpertStone } from "./stoneTactic.js";
 export type { StoneEval, StoneSuggestion } from "./ai.js";
 export type {
   BattlePhase,

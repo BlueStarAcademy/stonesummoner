@@ -12,7 +12,9 @@ import {
   bumpGearEnhance,
   bumpSymbolEnhance,
   canEquipGearOnElement,
+  createEmptyGear,
   createStarterGear,
+  gearPieces,
   createStarterHwalro,
   describeGear,
   describeSymbol,
@@ -67,6 +69,7 @@ import {
   isWeekdayStageOpenToday,
   WEEKDAY_EVOLVE_MAT_DROP,
   WEEKDAY_SKILL_MAT_DROP,
+  scenarioSymbolDropTable,
   getFusionRecipe,
   pickArenaRival,
   getArenaRivalDeck,
@@ -185,6 +188,7 @@ export {
 export {
   expForStage,
   isStageUnlocked,
+  nextStageInProgression,
   stageUnlockLabel,
 } from "./progress.js";
 export type { ScenarioDifficulty } from "./progress.js";
@@ -636,13 +640,13 @@ export function createSummonerRoster(
     awaken: Math.max(0, Math.floor(seed?.awaken ?? 0)),
     gear: seed?.gear
       ? normalizeSummonerGear(seed.gear, "light")
-      : createStarterGear("light"),
+      : createEmptyGear(),
   };
   const blank = (el: SummonerElement): ElementSummonerProfile => ({
     level: 1,
     exp: 0,
     awaken: 0,
-    gear: createStarterGear(el),
+    gear: createEmptyGear(),
   });
   return {
     fire: blank("fire"),
@@ -943,6 +947,8 @@ export interface PlayerSave {
   claimedMailIds: string[];
   /** Claimed daily mission keys (`missionId:YYYY-MM-DD`). */
   claimedMissionKeys: string[];
+  /** Claimed one-time main quest ids. */
+  claimedMainQuestIds: string[];
   /**
    * First-session rite checkpoint (client UI). Null = never written;
    * cloud sync carries it so Capacitor / multi-device stays aligned.
@@ -1056,7 +1062,7 @@ function buildSummonerState(
   summonerElement?: Element,
 ): SummonerState {
   const g = normalizeSummonerGear(gear, summonerElement);
-  const pieces = [g.weapon, g.top, g.bottom, g.shoes, g.ring, g.necklace];
+  const pieces = gearPieces(g);
   const sets = gearSetBonuses(g);
   const tree = skillTreeBonuses(skillTree);
   const a = Math.max(0, awaken);
@@ -1312,6 +1318,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     grindstones: 5,
     claimedMailIds: [],
     claimedMissionKeys: [],
+    claimedMainQuestIds: [],
     onboardRite: null,
   };
 }
@@ -1453,6 +1460,9 @@ export function runBuyGlory(
 export const FUSION_MANA_COST = 800;
 export const ENERGY_CRYSTAL_COST = 10;
 export const ENERGY_BUY_AMOUNT = 20;
+/** Shop: buy grindstones for symbol forge (mana). */
+export const GRINDSTONE_BUY_MANA_COST = 300;
+export const GRINDSTONE_BUY_AMOUNT = 1;
 
 /** Symbol bag: start 100, +10 per expand, hard cap 1000. */
 export const SYMBOL_BAG_BASE_SLOTS = 100;
@@ -1801,6 +1811,31 @@ export function runBuyEnergy(
   };
 }
 
+/** Buy grindstones with mana (shop stock for symbol forge). */
+export function runBuyGrindstone(
+  save: PlayerSave,
+  packs = 1,
+): LoopStepResult {
+  const n = Math.max(1, Math.min(20, Math.floor(packs)));
+  const qty = GRINDSTONE_BUY_AMOUNT * n;
+  const cost = GRINDSTONE_BUY_MANA_COST * n;
+  if (save.island.mana < cost) {
+    return {
+      save,
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  const next = (save.grindstones ?? 0) + qty;
+  return {
+    save: {
+      ...save,
+      island: { ...save.island, mana: save.island.mana - cost },
+      grindstones: next,
+    },
+    message: `연마석 +${qty} (−골드 ${cost}) · 보유 ${next}`,
+  };
+}
+
 /** Craft hall: jinmun + mana → summon scroll. */
 export function runCraftScroll(save: PlayerSave): LoopStepResult {
   let island = syncBuildingUnlocks(tickProduction(save.island));
@@ -2115,13 +2150,39 @@ export function listGear(save: PlayerSave): string[] {
         `${s.nameKo} ${s.count}${s.active6 ? "(6)" : s.active4 ? "(4)" : s.active2 ? "(2)" : ""}`,
     )
     .join(" · ");
+  const slotLine = (label: string, piece: typeof gear.weapon, extra: string) =>
+    piece ? `${label} ${describeGear(piece)} · ${extra}` : `${label} (미장착)`;
   return [
-    `무기 ${describeGear(gear.weapon)} · 스킬+${(gear.weapon.skillPowerBonus * 100).toFixed(0)}%`,
-    `상의 ${describeGear(gear.top)} · HP+${gear.top.summonerHpBonus} DEF+${gear.top.summonerDefBonus}`,
-    `하의 ${describeGear(gear.bottom)} · HP+${gear.bottom.summonerHpBonus} 리더+${(gear.bottom.leaderAtkBonus * 100).toFixed(1)}%`,
-    `신발 ${describeGear(gear.shoes)} · regen+${gear.shoes.manaRegenBonus.toFixed(2)} max+${gear.shoes.manaMaxBonus}`,
-    `반지 ${describeGear(gear.ring)} · 스킬+${(gear.ring.skillPowerBonus * 100).toFixed(0)}% 리더+${(gear.ring.leaderAtkBonus * 100).toFixed(1)}%`,
-    `목걸이 ${describeGear(gear.necklace)} · sense+${gear.necklace.boardSenseBonus.toFixed(2)}`,
+    slotLine(
+      "무기",
+      gear.weapon,
+      `스킬+${((gear.weapon?.skillPowerBonus ?? 0) * 100).toFixed(0)}%`,
+    ),
+    slotLine(
+      "상의",
+      gear.top,
+      `HP+${gear.top?.summonerHpBonus ?? 0} DEF+${gear.top?.summonerDefBonus ?? 0}`,
+    ),
+    slotLine(
+      "하의",
+      gear.bottom,
+      `HP+${gear.bottom?.summonerHpBonus ?? 0} 리더+${((gear.bottom?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
+    ),
+    slotLine(
+      "신발",
+      gear.shoes,
+      `regen+${(gear.shoes?.manaRegenBonus ?? 0).toFixed(2)} max+${gear.shoes?.manaMaxBonus ?? 0}`,
+    ),
+    slotLine(
+      "반지",
+      gear.ring,
+      `스킬+${((gear.ring?.skillPowerBonus ?? 0) * 100).toFixed(0)}% 리더+${((gear.ring?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
+    ),
+    slotLine(
+      "목걸이",
+      gear.necklace,
+      `sense+${(gear.necklace?.boardSenseBonus ?? 0).toFixed(2)}`,
+    ),
     `세트 ${sets || "없음"}`,
     `리더 합산 ATK +${leader}%`,
     `가방 ${(save.gearBag ?? []).length}/${MAX_GEAR_BAG}`,
@@ -2706,6 +2767,9 @@ export function runEnhanceGear(
   const synced = syncSummonerMirrors(save);
   const gearNorm = getActiveGear(synced);
   const piece = gearNorm[slot];
+  if (!piece) {
+    return { save: withActiveGear(synced, gearNorm), message: "장착된 장비 없음" };
+  }
   if (piece.enhance >= MAX_GEAR_ENHANCE) {
     return {
       save: withActiveGear(synced, gearNorm),
@@ -2752,6 +2816,9 @@ export function runAffixGearSet(
   const synced = syncSummonerMirrors(save);
   const gearNorm = getActiveGear(synced);
   const piece = gearNorm[slot];
+  if (!piece) {
+    return { save: withActiveGear(synced, gearNorm), message: "장착된 장비 없음" };
+  }
   if (piece.setId === setId) {
     return {
       save: withActiveGear(synced, gearNorm),
@@ -2805,11 +2872,13 @@ export function runEquipGearBag(
   const gearNorm = getActiveGear(synced);
   const displaced = gearNorm[normPiece.slot];
   bag.splice(bagIndex, 1);
-  bag.push(displaced);
+  if (displaced) bag.push(displaced);
   const gear = { ...gearNorm, [normPiece.slot]: normPiece };
   return {
     save: withActiveGear({ ...synced, gearBag: bag }, gear),
-    message: `장비 장착: ${describeGear(normPiece)} · 해제 ${describeGear(displaced)} → 가방`,
+    message: displaced
+      ? `장비 장착: ${describeGear(normPiece)} · 해제 ${describeGear(displaced)} → 가방`
+      : `장비 장착: ${describeGear(normPiece)}`,
   };
 }
 
@@ -3288,7 +3357,7 @@ export type DailyMissionId =
   | typeof DAILY_MISSION_COLLECT
   | typeof DAILY_MISSION_SORTIE;
 
-const DAILY_MISSION_REWARDS: Record<
+export const DAILY_MISSION_REWARDS: Record<
   DailyMissionId,
   { mana: number; energy: number }
 > = {
@@ -3520,7 +3589,7 @@ export function createStageBattle(
   const activeEl = save?.activeSummoner ?? "light";
   const gear = save
     ? getActiveGear(save)
-    : createStarterGear(activeEl);
+    : createEmptyGear();
   const allyMonsters: Unit[] = [];
   if (save?.party.length) {
     for (const uid of save.party.slice(0, 4)) {
@@ -3550,13 +3619,13 @@ export function createStageBattle(
   const magicProg =
     save?.summonerMagic?.[activeEl] ?? emptyMagicProgress();
   const robeHp =
-    (gear.top.summonerHpBonus ?? 0) +
-    (gear.bottom.summonerHpBonus ?? 0) +
+    (gear.top?.summonerHpBonus ?? 0) +
+    (gear.bottom?.summonerHpBonus ?? 0) +
     gearSetBonuses(gear).summonerHpBonus +
     tree.summonerHpBonus;
   const robeDef =
-    (gear.top.summonerDefBonus ?? 0) +
-    (gear.bottom.summonerDefBonus ?? 0) +
+    (gear.top?.summonerDefBonus ?? 0) +
+    (gear.bottom?.summonerDefBonus ?? 0) +
     gearSetBonuses(gear).summonerDefBonus;
   const leader = getSummonerLeader(activeEl);
   const awakenAtk = awakenLeaderAtkPct(awaken);
@@ -3592,13 +3661,13 @@ export function createStageBattle(
       hp:
         500 +
         lvl * 20 +
-        gear.shoes.manaMaxBonus * 2 +
+        (gear.shoes?.manaMaxBonus ?? 0) * 2 +
         robeHp +
         awaken * 30,
       atk: 85 + lvl * 3,
       def:
         42 +
-        Math.floor(gear.shoes.enhance) +
+        Math.floor(gear.shoes?.enhance ?? 0) +
         Math.floor(lvl / 2) +
         robeDef +
         awaken * 3,
@@ -3784,7 +3853,12 @@ export function applyRewards(
   if (stage.mode === "equip") crystalGain += 4;
   const gloryGain = stage.gloryReward ?? 0;
   const jinmunGain = stage.jinmunReward ?? 0;
-  const dropChance = stage.dropChance ?? 0.65;
+  const scenarioTable =
+    stage.mode === "scenario"
+      ? scenarioSymbolDropTable(difficulty, stage.stage)
+      : null;
+  const dropChance =
+    stage.dropChance ?? scenarioTable?.dropChance ?? 0.65;
   const expGain = expForStage(stage, difficulty);
   const monsterExpGain = Math.max(1, Math.round(expGain * 0.75));
 
@@ -3870,6 +3944,16 @@ export function applyRewards(
 
   let island = working.island;
 
+  const dropStarWeights = scenarioTable?.starWeights ?? stage.starWeights;
+  const dropQualityWeights =
+    scenarioTable?.qualityWeights ?? stage.qualityWeights;
+  const scenarioGearStars = scenarioTable
+    ? (scenarioTable.starWeights.filter((r) => r.value <= 5) as {
+        value: 1 | 2 | 3 | 4 | 5;
+        w: number;
+      }[])
+    : null;
+
   const symbols = [...save.symbols];
   let symbol: SymbolInstance | undefined;
   if (rng() < dropChance) {
@@ -3884,8 +3968,8 @@ export function applyRewards(
         preferredSet: stage.dropSetId,
         preferredSlot,
         setPool: stage.dropSetPool,
-        starWeights: stage.starWeights,
-        qualityWeights: stage.qualityWeights,
+        starWeights: dropStarWeights,
+        qualityWeights: dropQualityWeights,
       });
       symbols.push(symbol);
     }
@@ -3911,7 +3995,15 @@ export function applyRewards(
     gearDrop = rollGearDrop(
       rng,
       stage.mode === "equip" ? `equip_${stage.id}` : `gear_${stage.id}`,
-      { preferredElement: working.activeSummoner },
+      {
+        preferredElement: working.activeSummoner,
+        ...(scenarioGearStars
+          ? {
+              starWeights: scenarioGearStars,
+              qualityWeights: scenarioTable!.qualityWeights,
+            }
+          : {}),
+      },
     );
     if (
       stage.mode === "equip" &&
@@ -3940,9 +4032,13 @@ export function applyRewards(
   let scrolls = save.scrolls;
   let scrollsPremium = save.scrollsPremium ?? 0;
   const dropRoll = rng();
-  if (dropRoll < (stage.mode === "weekday" ? 0.08 : 0.05)) {
+  const mysticalChance =
+    stage.mode === "weekday" ? 0.08 : stage.mode === "scenario" ? 0.07 : 0.05;
+  const unknownChance =
+    stage.mode === "weekday" ? 0.55 : stage.mode === "scenario" ? 0.45 : 0.4;
+  if (dropRoll < mysticalChance) {
     scrollsPremium += 1;
-  } else if (dropRoll < (stage.mode === "weekday" ? 0.55 : 0.4)) {
+  } else if (dropRoll < unknownChance) {
     scrolls += 1;
   }
 
@@ -4297,7 +4393,10 @@ export function runDemoLoop(rng: () => number = () => 0.2): LoopStepResult[] {
   steps.push(enh);
   save = enh.save;
 
-  const g = runEnhanceGear(save, "shoes");
+  const g = runEnhanceGear(
+    withActiveGear(save, createStarterGear(save.activeSummoner ?? "light")),
+    "shoes",
+  );
   steps.push(g);
   save = g.save;
 

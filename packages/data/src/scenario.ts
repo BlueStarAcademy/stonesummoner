@@ -89,8 +89,7 @@ const MQ_ENEMY_POOL = [
 
 function mqBoardSize(map: number, stage: number): CombatBoardSize {
   if (map === 1 && stage <= 3) return 5;
-  if (map <= 2 && stage <= 4) return 7;
-  return 9;
+  return 7;
 }
 
 function mqEnergy(map: number, stage: number): number {
@@ -222,65 +221,160 @@ const CAIROS_NECRO_POOL: SymbolSetId[] = [
   "pamyeol",
 ];
 
-function cairosWeights(floor: number): {
-  starWeights: { value: SymbolStars; w: number }[];
-  qualityWeights: { value: SymbolQuality; w: number }[];
-} {
-  if (floor <= 3) {
+type StarW = { value: SymbolStars; w: number };
+type QualW = { value: SymbolQuality; w: number };
+
+export type ScenarioDropDifficulty = "normal" | "hard" | "hell";
+
+/**
+ * Scenario rune tables (SWARFARM / wiki), then nudged a bit luckier.
+ * Normal 1–2★ (tiny 3★), Hard 2–4★, Hell 3–5★. Boss (stage 7) leans higher.
+ */
+export function scenarioSymbolDropTable(
+  difficulty: ScenarioDropDifficulty,
+  stage = 1,
+): { starWeights: StarW[]; qualityWeights: QualW[]; dropChance: number } {
+  const boss = stage >= 7;
+  if (difficulty === "hell") {
     return {
-      starWeights: [
-        { value: 2, w: 15 },
-        { value: 3, w: 55 },
-        { value: 4, w: 25 },
-        { value: 5, w: 5 },
-      ],
+      starWeights: boss
+        ? [
+            { value: 3, w: 38 },
+            { value: 4, w: 44 },
+            { value: 5, w: 18 },
+          ]
+        : [
+            { value: 3, w: 50 },
+            { value: 4, w: 40 },
+            { value: 5, w: 10 },
+          ],
       qualityWeights: [
-        { value: "normal", w: 30 },
-        { value: "advanced", w: 40 },
-        { value: "rare", w: 25 },
-        { value: "epic", w: 5 },
+        { value: "advanced", w: 22 },
+        { value: "rare", w: 48 },
+        { value: "epic", w: 24 },
+        { value: "legend", w: 6 },
       ],
+      dropChance: 0.58,
     };
   }
-  if (floor <= 6) {
+  if (difficulty === "hard") {
     return {
-      starWeights: [
-        { value: 3, w: 15 },
-        { value: 4, w: 50 },
-        { value: 5, w: 30 },
-        { value: 6, w: 5 },
-      ],
+      starWeights: boss
+        ? [
+            { value: 2, w: 46 },
+            { value: 3, w: 40 },
+            { value: 4, w: 14 },
+          ]
+        : [
+            { value: 2, w: 60 },
+            { value: 3, w: 32 },
+            { value: 4, w: 8 },
+          ],
       qualityWeights: [
-        { value: "advanced", w: 20 },
-        { value: "rare", w: 45 },
-        { value: "epic", w: 30 },
-        { value: "legend", w: 5 },
+        { value: "normal", w: 26 },
+        { value: "advanced", w: 42 },
+        { value: "rare", w: 26 },
+        { value: "epic", w: 6 },
       ],
-    };
-  }
-  if (floor <= 9) {
-    return {
-      starWeights: [
-        { value: 4, w: 15 },
-        { value: 5, w: 60 },
-        { value: 6, w: 25 },
-      ],
-      qualityWeights: [
-        { value: "rare", w: 25 },
-        { value: "epic", w: 55 },
-        { value: "legend", w: 20 },
-      ],
+      dropChance: 0.5,
     };
   }
   return {
-    starWeights: [
-      { value: 5, w: 45 },
-      { value: 6, w: 55 },
-    ],
+    starWeights: boss
+      ? [
+          { value: 1, w: 66 },
+          { value: 2, w: 28 },
+          { value: 3, w: 6 },
+        ]
+      : [
+          { value: 1, w: 80 },
+          { value: 2, w: 18 },
+          { value: 3, w: 2 },
+        ],
     qualityWeights: [
-      { value: "epic", w: 55 },
-      { value: "legend", w: 45 },
+      { value: "normal", w: 62 },
+      { value: "advanced", w: 30 },
+      { value: "rare", w: 8 },
     ],
+    dropChance: 0.42,
+  };
+}
+
+/** @deprecated use scenarioSymbolDropTable("normal") — kept for callers/tests */
+export const SCENARIO_NORMAL_STAR_WEIGHTS: StarW[] =
+  scenarioSymbolDropTable("normal", 1).starWeights;
+
+/** SWARFARM Giant B1–B10 (2★–6★), then shifted toward the next star. */
+const CAIROS_STAR_BY_FLOOR: StarW[][] = [
+  [
+    { value: 2, w: 42 },
+    { value: 3, w: 50 },
+    { value: 4, w: 8 },
+  ],
+  [
+    { value: 2, w: 32 },
+    { value: 3, w: 54 },
+    { value: 4, w: 14 },
+  ],
+  [
+    { value: 2, w: 8 },
+    { value: 3, w: 48 },
+    { value: 4, w: 36 },
+    { value: 5, w: 8 },
+  ],
+  [
+    { value: 3, w: 34 },
+    { value: 4, w: 52 },
+    { value: 5, w: 14 },
+  ],
+  [
+    { value: 3, w: 12 },
+    { value: 4, w: 56 },
+    { value: 5, w: 26 },
+    { value: 6, w: 6 },
+  ],
+  [
+    { value: 3, w: 4 },
+    { value: 4, w: 54 },
+    { value: 5, w: 34 },
+    { value: 6, w: 8 },
+  ],
+  [
+    { value: 4, w: 46 },
+    { value: 5, w: 44 },
+    { value: 6, w: 10 },
+  ],
+  [
+    { value: 4, w: 32 },
+    { value: 5, w: 52 },
+    { value: 6, w: 16 },
+  ],
+  [
+    { value: 4, w: 14 },
+    { value: 5, w: 64 },
+    { value: 6, w: 22 },
+  ],
+  [
+    { value: 5, w: 74 },
+    { value: 6, w: 26 },
+  ],
+];
+
+/** Cairos rarity is Rare/Hero/Legend only (~70/25/5 in SW); we tilt to ~62/28/10. */
+const CAIROS_QUALITY: QualW[] = [
+  { value: "rare", w: 62 },
+  { value: "epic", w: 28 },
+  { value: "legend", w: 10 },
+];
+
+function cairosWeights(floor: number): {
+  starWeights: StarW[];
+  qualityWeights: QualW[];
+} {
+  const i = Math.max(1, Math.min(10, Math.floor(floor))) - 1;
+  return {
+    starWeights: CAIROS_STAR_BY_FLOOR[i]!,
+    qualityWeights: CAIROS_QUALITY,
   };
 }
 
@@ -299,7 +393,7 @@ function buildCairosDungeon(
       nameKo: `${nameKo} B${floor}`,
       map,
       stage: floor,
-      boardSize: 9 as CombatBoardSize,
+      boardSize: 7 as CombatBoardSize,
       energyCost: 5 + Math.floor(floor / 2),
       enemyMonsterIds: mqEnemies(map % 10, floor),
       dropSetId: primaryDrop,
@@ -308,7 +402,7 @@ function buildCairosDungeon(
       qualityWeights: w.qualityWeights,
       waves: floor >= 8 ? 3 : 2,
       mode: "depth" as const,
-      dropChance: 0.85 + floor * 0.01,
+      dropChance: 0.9 + floor * 0.007,
       cairosDungeon: dungeon,
     };
   });
@@ -369,7 +463,7 @@ export const ARENA_STAGES: StageDef[] = [
     nameKo: "아레나 · 숙련",
     map: 80,
     stage: 2,
-    boardSize: 9,
+    boardSize: 7,
     energyCost: 0,
     enemyMonsterIds: [
       "storm_spearmaster_light",
@@ -388,7 +482,7 @@ export const ARENA_STAGES: StageDef[] = [
     nameKo: "아레나 · 도전자",
     map: 80,
     stage: 3,
-    boardSize: 9,
+    boardSize: 7,
     energyCost: 0,
     enemyMonsterIds: [
       "abyss_priest_dark",
@@ -407,7 +501,7 @@ export const ARENA_STAGES: StageDef[] = [
     nameKo: "아레나 · 전설",
     map: 80,
     stage: 4,
-    boardSize: 9,
+    boardSize: 7,
     energyCost: 0,
     enemyMonsterIds: [
       "dragon_knight_fire",
@@ -505,7 +599,7 @@ export const TRIAL_STAGES: StageDef[] = [
     nameKo: "마법진 시련 · B2",
     map: 60,
     stage: 2,
-    boardSize: 9,
+    boardSize: 7,
     energyCost: 6,
     enemyMonsterIds: [
       "steel_armor_water",
@@ -525,7 +619,7 @@ export const TRIAL_STAGES: StageDef[] = [
     nameKo: "마법진 시련 · B3",
     map: 60,
     stage: 3,
-    boardSize: 9,
+    boardSize: 7,
     energyCost: 8,
     enemyMonsterIds: [
       "abyss_priest_dark",
@@ -548,7 +642,7 @@ export const WORLD_ARENA_STAGES: StageDef[] = [
     nameKo: "월드아레나 · 예선",
     map: 85,
     stage: 1,
-    boardSize: 9,
+    boardSize: 7,
     energyCost: 0,
     enemyMonsterIds: [
       "storm_spearmaster_light",
@@ -567,7 +661,7 @@ export const WORLD_ARENA_STAGES: StageDef[] = [
     nameKo: "월드아레나 · 결승",
     map: 85,
     stage: 2,
-    boardSize: 9,
+    boardSize: 7,
     energyCost: 0,
     enemyMonsterIds: [
       "abyss_priest_dark",
@@ -589,7 +683,7 @@ export const GUILD_RAID_STAGES: StageDef[] = [
     nameKo: "길드 레이드 · 거대 진문",
     map: 95,
     stage: 1,
-    boardSize: 13,
+    boardSize: 7,
     energyCost: 10,
     enemyMonsterIds: [
       "abyss_priest_dark",
@@ -626,7 +720,7 @@ export const EQUIP_STAGES: StageDef[] = [
     nameKo: "장비 금고 심층",
     map: 90,
     stage: 2,
-    boardSize: 9,
+    boardSize: 7,
     energyCost: 8,
     enemyMonsterIds: [
       "storm_spearmaster_light",

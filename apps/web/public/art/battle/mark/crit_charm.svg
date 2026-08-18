@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <radialGradient id="ccGlow" cx="32" cy="34" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8040" stop-opacity=".5"/>
+      <stop offset=".5" stop-color="#C04018" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ccPlate" cx="24" cy="20" r="26" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5A2410"/>
+      <stop offset=".5" stop-color="#241008"/>
+      <stop offset="1" stop-color="#100804"/>
+    </radialGradient>
+    <linearGradient id="ccRim" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE0B0"/>
+      <stop offset=".4" stop-color="#E09040"/>
+      <stop offset="1" stop-color="#6A2810"/>
+    </linearGradient>
+    <linearGradient id="ccPaper" x1="22" y1="12" x2="42" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD0A8"/>
+      <stop offset=".35" stop-color="#E05030"/>
+      <stop offset="1" stop-color="#7A1810"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="33" r="27" fill="url(#ccGlow)"/>
+  <circle cx="32" cy="32" r="22.4" fill="none" stroke="url(#ccRim)" stroke-width="3.1"/>
+  <circle cx="32" cy="32" r="19.6" fill="url(#ccPlate)" stroke="#FFD0A0" stroke-width="1.1"/>
+  <path d="M24.5 13.5h15v33.5c-2.4 3.2-5 5.8-7.5 7.6-2.5-1.8-5.1-4.4-7.5-7.6Z" fill="url(#ccPaper)" stroke="#FFE8C8" stroke-width="1.1" stroke-linejoin="round"/>
+  <path d="M28 20h8M28 25.5h8M31 20v16" stroke="#FFF4D8" stroke-width="1.6" stroke-linecap="round" opacity=".85"/>
+  <path d="M26.5 38.5l11-8" stroke="#FFF6C8" stroke-width="2.4" stroke-linecap="round"/>
+  <ellipse cx="23" cy="22" rx="6.5" ry="3.2" fill="#fff" fill-opacity=".18" transform="rotate(-32 23 22)"/>
+</svg>

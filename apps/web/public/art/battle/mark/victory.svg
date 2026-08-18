@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <radialGradient id="vcGlow" cx="32" cy="34" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0D878" stop-opacity=".55"/>
+      <stop offset=".5" stop-color="#C9A227" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vcPlate" cx="24" cy="20" r="26" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5A4818"/>
+      <stop offset=".5" stop-color="#241808"/>
+      <stop offset="1" stop-color="#100804"/>
+    </radialGradient>
+    <linearGradient id="vcRim" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D0"/>
+      <stop offset=".4" stop-color="#E8C84A"/>
+      <stop offset="1" stop-color="#6A4810"/>
+    </linearGradient>
+    <linearGradient id="vcCrown" x1="18" y1="14" x2="46" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFCE8"/>
+      <stop offset=".4" stop-color="#F0D878"/>
+      <stop offset="1" stop-color="#A87818"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="33" r="27" fill="url(#vcGlow)"/>
+  <circle cx="32" cy="32" r="22.4" fill="none" stroke="url(#vcRim)" stroke-width="3.1"/>
+  <circle cx="32" cy="32" r="19.6" fill="url(#vcPlate)" stroke="#FFF4C8" stroke-width="1.1"/>
+  <path d="M16 28.5L21.5 22 27 27.5 32 16.5 37 27.5 42.5 22 48 28.5 45.5 42H18.5Z" fill="url(#vcCrown)" stroke="#FFF8D0" stroke-width="1.15" stroke-linejoin="round"/>
+  <path d="M20 44.5h24v3.2H20z" fill="#C9A227" stroke="#FFF4C8" stroke-width=".7"/>
+  <circle cx="32" cy="31" r="2.4" fill="#FFFDF2" stroke="#E8C84A" stroke-width=".6"/>
+  <ellipse cx="23" cy="22" rx="7" ry="3.4" fill="#fff" fill-opacity=".22" transform="rotate(-32 23 22)"/>
+  <circle cx="45" cy="19" r="1.2" fill="#fff" fill-opacity=".95"/>
+</svg>

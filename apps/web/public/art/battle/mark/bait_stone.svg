@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <radialGradient id="bsGlow" cx="32" cy="34" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8A060" stop-opacity=".5"/>
+      <stop offset=".5" stop-color="#A05020" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bsPlate" cx="24" cy="20" r="26" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4A2814"/>
+      <stop offset=".5" stop-color="#201008"/>
+      <stop offset="1" stop-color="#100804"/>
+    </radialGradient>
+    <linearGradient id="bsRim" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE0B8"/>
+      <stop offset=".4" stop-color="#D08040"/>
+      <stop offset="1" stop-color="#6A3010"/>
+    </linearGradient>
+    <radialGradient id="bsStone" cx="28" cy="26" r="16" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE0A8"/>
+      <stop offset=".45" stop-color="#D07030"/>
+      <stop offset="1" stop-color="#6A2810"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="33" r="27" fill="url(#bsGlow)"/>
+  <circle cx="32" cy="32" r="22.4" fill="none" stroke="url(#bsRim)" stroke-width="3.1"/>
+  <circle cx="32" cy="32" r="19.6" fill="url(#bsPlate)" stroke="#FFD0A0" stroke-width="1.1"/>
+  <path d="M22 28.5c0-8.4 5.2-14.2 12.2-14.2 5.8 0 10.2 3.6 10.2 8.6 0 8.2-10.4 9.4-10.4 18.4" stroke="#F0C070" stroke-width="2.4" stroke-linecap="round"/>
+  <ellipse cx="32" cy="36.5" rx="11.4" ry="10.2" fill="url(#bsStone)" stroke="#FFE8C0" stroke-width="1.15"/>
+  <path d="M27.5 33.2c2.4-3.2 6.8-3.8 9.6-1.2" stroke="#FFF4D8" stroke-width="1.4" stroke-linecap="round"/>
+  <circle cx="36.8" cy="32.4" r="1.5" fill="#FFF8E0"/>
+  <ellipse cx="23" cy="22" rx="6.5" ry="3.2" fill="#fff" fill-opacity=".18" transform="rotate(-32 23 22)"/>
+</svg>

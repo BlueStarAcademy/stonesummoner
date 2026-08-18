@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <radialGradient id="snGlow" cx="32" cy="34" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8B090" stop-opacity=".45"/>
+      <stop offset=".5" stop-color="#6A5840" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="snPlate" cx="24" cy="20" r="26" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3A3228"/>
+      <stop offset=".5" stop-color="#181410"/>
+      <stop offset="1" stop-color="#0C0A08"/>
+    </radialGradient>
+    <linearGradient id="snRim" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0E0C8"/>
+      <stop offset=".4" stop-color="#A09078"/>
+      <stop offset="1" stop-color="#403428"/>
+    </linearGradient>
+    <linearGradient id="snNail" x1="24" y1="10" x2="40" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4EEE0"/>
+      <stop offset=".4" stop-color="#A09080"/>
+      <stop offset="1" stop-color="#3A3028"/>
+    </linearGradient>
+    <linearGradient id="snRibbon" x1="18" y1="18" x2="46" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0D878"/>
+      <stop offset="1" stop-color="#C04030"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="33" r="27" fill="url(#snGlow)"/>
+  <circle cx="32" cy="32" r="22.4" fill="none" stroke="url(#snRim)" stroke-width="3.1"/>
+  <circle cx="32" cy="32" r="19.6" fill="url(#snPlate)" stroke="#E8D8C0" stroke-width="1.1"/>
+  <path d="M27 14h10l2.4 6.2H24.6Z" fill="url(#snNail)" stroke="#F4EEE0" stroke-width=".9" stroke-linejoin="round"/>
+  <path d="M29.4 20.2h5.2L33.4 51 32 53.4 30.6 51Z" fill="url(#snNail)" stroke="#E8DCC8" stroke-width=".9" stroke-linejoin="round"/>
+  <path d="M18.5 24.5c8.2-4.8 18.8-4.8 27 0" stroke="url(#snRibbon)" stroke-width="3.1" stroke-linecap="round"/>
+  <ellipse cx="23" cy="22" rx="6.5" ry="3.2" fill="#fff" fill-opacity=".18" transform="rotate(-32 23 22)"/>
+</svg>

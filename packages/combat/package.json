@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "tsx --test src/battle.test.ts src/damage.test.ts src/power.test.ts src/ai.test.ts src/shapes.test.ts src/events.test.ts src/modules.test.ts"
+    "test": "tsx --test src/battle.test.ts src/damage.test.ts src/power.test.ts src/ai.test.ts src/stoneTactic.test.ts src/shapes.test.ts src/events.test.ts src/modules.test.ts"
   },
   "dependencies": {
     "stonesummoner-board": "*",

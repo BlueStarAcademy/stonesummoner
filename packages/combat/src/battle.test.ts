@@ -531,13 +531,44 @@ describe("Battle flow", () => {
     b.tickUntilReady();
     assert.equal(b.playStone({ x: 1, y: 2 }), true);
     assert.equal(b.board.at({ x: 1, y: 2 }), "white");
+    assert.deepEqual(b.lastEnemyStone, { x: 1, y: 2, boardIndex: 0 });
 
     b.phase = "await_stone";
     b.activeUnitId = "a-m1";
     b.tokens = [{ id: "transform_dust", x: 2, y: 2 }];
     assert.equal(b.playStone({ x: 2, y: 2 }), true);
     assert.equal(b.board.at({ x: 1, y: 2 }), "black");
+    assert.equal(b.lastEnemyStone, null);
     assert.match(b.log.join("\n"), /변환가루/);
+  });
+
+  it("remembers the last enemy stone for placement hints", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) u.atb = u.id === "e-m1" ? 100 : 0;
+    b.tickUntilReady();
+    assert.equal(b.playStone({ x: 2, y: 2 }), true);
+    assert.deepEqual(b.lastEnemyStone, { x: 2, y: 2, boardIndex: 0 });
+
+    b.phase = "await_stone";
+    b.activeUnitId = "e-m1";
+    assert.equal(b.playStone({ x: 3, y: 3 }), true);
+    assert.deepEqual(b.lastEnemyStone, { x: 3, y: 3, boardIndex: 0 });
+
+    b.phase = "await_stone";
+    b.activeUnitId = "a-m1";
+    // Surround and capture the last enemy stone at (3,3).
+    b.board.play("black", { x: 2, y: 3 });
+    b.board.play("black", { x: 4, y: 3 });
+    b.board.play("black", { x: 3, y: 2 });
+    assert.equal(b.playStone({ x: 3, y: 4 }), true);
+    assert.equal(b.board.at({ x: 3, y: 3 }), null);
+    assert.equal(b.lastEnemyStone, null);
   });
 
   it("blocks skill while on cooldown", () => {
@@ -658,9 +689,9 @@ describe("Battle flow", () => {
     assert.ok(sug.length >= 3);
   });
 
-  it("resets 9x9 after threshold into empowered circle", () => {
+  it("resets 7x7 after threshold into empowered circle", () => {
     const b = new Battle({
-      boardSize: 9,
+      boardSize: 7,
       units: roster(),
       allySummoner: summonerState("a-sum"),
       enemySummoner: summonerState("e-sum"),
@@ -692,7 +723,7 @@ describe("Battle flow", () => {
 
   it("applies opening bonus on the next stone after reset", () => {
     const b = new Battle({
-      boardSize: 9,
+      boardSize: 7,
       units: roster(),
       allySummoner: summonerState("a-sum"),
       enemySummoner: summonerState("e-sum"),
@@ -715,8 +746,8 @@ describe("Battle flow", () => {
     const sug = b.suggestStones(b.getUnit("a-m1")!);
     assert.ok(sug.length >= 1);
     const top = sug[0]!.point;
-    const cx = 4;
-    const cy = 4;
+    const cx = 3;
+    const cy = 3;
     const topDist = Math.abs(top.x - cx) + Math.abs(top.y - cy);
     assert.ok(topDist <= 4);
 
@@ -771,7 +802,7 @@ describe("Battle flow", () => {
     // Place on empty that captures: after black at 1,0 and 0,1, white at 0,0 should already be dead
     // Use playStone on a fresh isolated capture setup
     const b3 = new Battle({
-      boardSize: 9,
+      boardSize: 7,
       units: roster(),
       allySummoner: summonerState("a-sum"),
       enemySummoner: summonerState("e-sum"),

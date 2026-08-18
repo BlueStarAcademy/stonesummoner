@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <radialGradient id="tdGlow" cx="32" cy="34" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C0A0FF" stop-opacity=".5"/>
+      <stop offset=".5" stop-color="#7050C0" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="tdPlate" cx="24" cy="20" r="26" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#342458"/>
+      <stop offset=".5" stop-color="#181028"/>
+      <stop offset="1" stop-color="#0C0814"/>
+    </radialGradient>
+    <linearGradient id="tdRim" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0E0FF"/>
+      <stop offset=".4" stop-color="#A080E0"/>
+      <stop offset="1" stop-color="#403068"/>
+    </linearGradient>
+    <linearGradient id="tdVial" x1="24" y1="12" x2="40" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8F0FF"/>
+      <stop offset=".35" stop-color="#A080E8"/>
+      <stop offset="1" stop-color="#3A2068"/>
+    </linearGradient>
+    <linearGradient id="tdDust" x1="22" y1="28" x2="42" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0D878"/>
+      <stop offset=".5" stop-color="#C070FF"/>
+      <stop offset="1" stop-color="#4060E0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="33" r="27" fill="url(#tdGlow)"/>
+  <circle cx="32" cy="32" r="22.4" fill="none" stroke="url(#tdRim)" stroke-width="3.1"/>
+  <circle cx="32" cy="32" r="19.6" fill="url(#tdPlate)" stroke="#E8D8FF" stroke-width="1.1"/>
+  <rect x="26.4" y="12.2" width="11.2" height="5.2" rx="1.6" fill="#C9A227" stroke="#FFF4C8" stroke-width=".7"/>
+  <path d="M24.6 18.6h14.8l3.2 8.4v18.6c0 4.4-4 7.8-11.2 7.8s-11.2-3.4-11.2-7.8V27Z" fill="url(#tdVial)" stroke="#F4EAFF" stroke-width="1.15" stroke-linejoin="round"/>
+  <path d="M23.8 34.5c4.6-6.4 12.6-6.2 16.4 0 3.6 6-1.2 13.4-8.2 13.6-7 .2-12.4-7.4-8.2-13.6Z" fill="url(#tdDust)"/>
+  <path d="M28.2 22.4h7.6" stroke="#fff" stroke-width="1.2" opacity=".5" stroke-linecap="round"/>
+  <ellipse cx="23" cy="22" rx="6.5" ry="3.2" fill="#fff" fill-opacity=".18" transform="rotate(-32 23 22)"/>
+  <circle cx="44.5" cy="20" r="1.15" fill="#fff" fill-opacity=".9"/>
+</svg>

@@ -25,7 +25,7 @@ export class Board {
   private koPoint: Point | null = null;
   private historyHashes: string[] = [];
 
-  constructor(size = 9) {
+  constructor(size = 7) {
     if (size < 5 || size > 19) {
       throw new Error(`Unsupported board size: ${size}`);
     }
@@ -50,7 +50,15 @@ export class Board {
     return this.koPoint ? { ...this.koPoint } : null;
   }
 
-  /** Wipe all stones and ko (same size). Used for empowered 9×9 circle reset. */
+  /** Copy grid + ko (for tactical search). */
+  clone(): Board {
+    const b = Board.fromGrid(this.grid);
+    b.koPoint = this.koPoint ? { ...this.koPoint } : null;
+    b.historyHashes = [...this.historyHashes];
+    return b;
+  }
+
+  /** Wipe all stones and ko (same size). Used for empowered 7×7 circle reset. */
   clear(): void {
     this.grid = Array.from({ length: this.size }, () =>
       Array.from({ length: this.size }, () => null),
