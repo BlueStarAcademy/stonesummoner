@@ -32,7 +32,7 @@ for (const f of files) {
   const src = path.join(srcDir, f);
   const dst = path.join(outDir, `${id}.webp`);
   await pngToDematteWebp(src, dst, {
-    size: 128,
+    size: 256,
     lim: 36,
     fit: "contain",
     quality: 92,

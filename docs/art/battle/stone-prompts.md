@@ -7,7 +7,7 @@
 
 ## Spec
 
-- **Size:** 128×128 (source may be 256×256 then downscale)
+- **Size:** 256×256 (source may be larger then downscale)
 - **Silhouette:** slightly oval “go stone” / magic gem (matches CSS `.magic-stone` oval)
 - **Alpha:** outer matte punched; gem body opaque
 - **Readability:** strong specular highlight + glowing elemental core; must read at ~28–40px on mobile

@@ -150,7 +150,7 @@ export async function dematteBlackSrc(src: string): Promise<string> {
 
     ctx.putImageData(image, 0, 0);
     const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/webp", 0.92),
+      canvas.toBlob(resolve, "image/png"),
     );
     if (!blob) {
       cache.set(src, src);

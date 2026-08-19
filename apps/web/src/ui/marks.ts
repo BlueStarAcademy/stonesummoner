@@ -36,6 +36,34 @@ export function monStarsHtml(count: number): string {
   return MON_STAR_HTML.repeat(n);
 }
 
+/**
+ * Faceted ice-crystal gem (SVG). Color via CSS `currentColor` on `.sum-awaken-gem`.
+ * Used for summoner awaken so it stays distinct from monster grade stars.
+ */
+const SUM_AWAKEN_GEM_SVG =
+  '<svg class="sum-awaken-gem-ico" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">' +
+  '<path fill="currentColor" d="M8 1.05L13.85 4.5v7L8 14.95 2.15 11.5v-7z"/>' +
+  '<path fill="none" stroke="#061018" stroke-opacity=".42" stroke-width=".6" d="M8 1.05L13.85 4.5v7L8 14.95 2.15 11.5v-7z"/>' +
+  '<path fill="#fff" fill-opacity=".3" d="M8 3.1l3.1 1.75v3.4L8 10 4.9 8.25v-3.4z"/>' +
+  '<path fill="none" stroke="#fff" stroke-opacity=".42" stroke-width=".55" d="M8 1.05v13.9M2.15 4.5l11.7 7M13.85 4.5l-11.7 7"/>' +
+  '<path fill="#fff" fill-opacity=".78" d="M5.55 3.4l1.12 1.32-1.52-.32z"/>' +
+  "</svg>";
+
+/** One awaken gem chip. Pass `empty` for unfilled slots. */
+export function sumAwakenGemHtml(empty = false): string {
+  return `<span class="sum-awaken-gem${empty ? " is-empty" : ""}" aria-hidden="true">${SUM_AWAKEN_GEM_SVG}</span>`;
+}
+
+/** Summoner awaken meter (filled gems + empty slots up to `max`). */
+export function sumAwakenGemsHtml(filled: number, max = 5): string {
+  const n = Math.max(0, Math.floor(filled));
+  const cap = Math.max(n, Math.max(0, Math.floor(max)));
+  if (cap <= 0) return "";
+  let html = "";
+  for (let i = 0; i < cap; i++) html += sumAwakenGemHtml(i >= n);
+  return `<span class="sum-awaken-gems">${html}</span>`;
+}
+
 /** Codex button seal - ornate tome glyph (no CJK). */
 export const CODEX_SEAL_HTML =
   '<svg class="mon-topbar-codex-ico" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +

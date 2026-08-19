@@ -74,6 +74,8 @@ describe("Phase1 island", () => {
     const wish = runWish(island, Date.UTC(2026, 0, 1), () => 0.1);
     assert.match(wish.message, /소원/);
     assert.equal(wish.island.lastWishDay, "2026-01-01");
+    assert.ok(wish.reward);
+    assert.equal(wish.reward?.kind, "mana");
   });
 
   it("regens energy 1 per 3 minutes up to max", () => {

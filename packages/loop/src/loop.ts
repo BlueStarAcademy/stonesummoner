@@ -101,6 +101,7 @@ import {
   summonerExpToNext,
   type BuildingId,
   type IslandState,
+  type WishReward,
 } from "stonesummoner-home";
 import {
   createStarterRoster,
@@ -998,6 +999,8 @@ export interface LoopStepResult {
   battleLog?: string[];
   /** Island buildings unlocked by account-level gain this step. */
   unlockedBuildingIds?: BuildingId[];
+  /** Structured daily wish grant (when runDailyWish succeeds). */
+  wishReward?: WishReward;
 }
 
 function resolveOwned(
@@ -1406,6 +1409,7 @@ export function runDailyWish(
       scrolls: save.scrolls + r.scrollGain,
     },
     message: r.message,
+    wishReward: r.reward,
   };
 }
 

@@ -31,7 +31,7 @@ export function battleCircleSrc(id: BattleBgId = "map-01"): string {
 
 export function battleStoneSrc(id: BattleStoneId = "enemy"): string {
   const key = STONE_ELEMENTS.has(id) ? id : "enemy";
-  return `/art/battle/stone/${key}.webp?v=5`;
+  return `/art/battle/stone/${key}.webp?v=6`;
 }
 
 export const BATTLE_BOARD_MARK_IDS = [
@@ -54,6 +54,11 @@ export type BattleBoardMarkId = (typeof BATTLE_BOARD_MARK_IDS)[number];
 const BOARD_MARK_IDS = new Set<string>(BATTLE_BOARD_MARK_IDS);
 
 export function battleBoardMarkSrc(id: string): string {
+  const key = BOARD_MARK_IDS.has(id) ? id : "star";
+  return `/art/battle/mark/${key}.webp?v=1`;
+}
+
+export function battleBoardMarkFallbackSrc(id: string): string {
   const key = BOARD_MARK_IDS.has(id) ? id : "star";
   return `/art/battle/mark/${key}.svg`;
 }

@@ -65,3 +65,5 @@ node scripts/gen-battle-circle-stones.mjs --circles
 ```
 
 Fallback in client: `map-01` (same as battle BG).
+
+Board stones: [stone-prompts.md](./stone-prompts.md). Effect relics: [mark-prompts.md](./mark-prompts.md).

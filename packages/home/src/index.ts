@@ -22,6 +22,7 @@ export {
   productionManaPerHour,
   productionStorageCap,
   runWish,
+  WISH_REWARD_POOL,
   summonerExpToNext,
   spendEnergy,
   syncBuildingUnlocks,
@@ -29,4 +30,11 @@ export {
   todayKey,
   upgradeBuilding,
 } from "./island.js";
-export type { BuildingDef, BuildingId, BuildingInstance, IslandState } from "./island.js";
+export type {
+  BuildingDef,
+  BuildingId,
+  BuildingInstance,
+  IslandState,
+  WishReward,
+  WishRewardKind,
+} from "./island.js";

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="eb-glow" cx="50%" cy="42%" r="48%">
+      <stop offset="0" stop-color="#c9a22728"/>
+      <stop offset="1" stop-color="#120c0800"/>
+    </radialGradient>
+    <linearGradient id="eb-metal" x1="16" y1="12" x2="48" y2="54">
+      <stop stop-color="#5a4a28"/>
+      <stop offset=".55" stop-color="#2a2214"/>
+      <stop offset="1" stop-color="#c9a22766"/>
+    </linearGradient>
+  </defs>
+  <rect x="5" y="5" width="54" height="54" rx="12" fill="#120c08cc" stroke="#c9a22755"/>
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="url(#eb-glow)" stroke="#7a6a3a44"/>
+  <path d="M22 16 H42 V28 L48 50 H36 L32 34 L28 50 H16 L22 28 Z" fill="url(#eb-metal)" stroke="#c9a22788" stroke-width="1.2"/>
+</svg>

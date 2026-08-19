@@ -421,12 +421,31 @@ export function todayKey(now = Date.now()): string {
   return new Date(now).toISOString().slice(0, 10);
 }
 
+export type WishRewardKind = "mana" | "crystal" | "scroll";
+
+export type WishReward = {
+  kind: WishRewardKind;
+  amount: number;
+};
+
+/** Display ranges / weights for the wish temple pool UI (matches runWish odds). */
+export const WISH_REWARD_POOL = [
+  { kind: "mana" as const, weightPct: 40, min: 800, max: 1199 },
+  { kind: "crystal" as const, weightPct: 35, min: 5, max: 10 },
+  { kind: "scroll" as const, weightPct: 25, min: 1, max: 2 },
+] as const;
+
 /** Daily wish: mana / crystal / scroll roll once per day. */
 export function runWish(
   island: IslandState,
   now = Date.now(),
   rng: () => number = Math.random,
-): { island: IslandState; message: string; scrollGain: number } {
+): {
+  island: IslandState;
+  message: string;
+  scrollGain: number;
+  reward?: WishReward;
+} {
   if (!hasBuilding(island, "wish_temple") && island.summonerLevel < 7) {
     return {
       island,
@@ -450,19 +469,23 @@ export function runWish(
   let next = { ...synced, lastWishDay: day };
   let message: string;
   let scrollGain = 0;
+  let reward: WishReward;
   if (r < 0.4) {
     const mana = 800 + Math.floor(rng() * 400);
     next = { ...next, mana: next.mana + mana };
+    reward = { kind: "mana", amount: mana };
     message = `소원: 골드 +${mana}`;
   } else if (r < 0.75) {
     const crystal = 5 + Math.floor(rng() * 6);
     next = { ...next, crystal: next.crystal + crystal };
+    reward = { kind: "crystal", amount: crystal };
     message = `소원: 크리스탈 +${crystal}`;
   } else {
     scrollGain = 1 + (rng() < 0.3 ? 1 : 0);
+    reward = { kind: "scroll", amount: scrollGain };
     message = `소원: 소환서 +${scrollGain}`;
   }
-  return { island: next, message, scrollGain };
+  return { island: next, message, scrollGain, reward };
 }
 
 export function addSummonerExp(

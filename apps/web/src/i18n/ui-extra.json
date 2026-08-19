@@ -844,8 +844,8 @@
     "en": "같은 종의 두 마리를 합치면 진화 +1 · 높은 레벨·스킬·상징을 유지합니다"
   },
   "ui.7e6bcf70a0": {
-    "ko": "마나 · 크리스탈 · 소환서 중 하나가 무작위로 내려옵니다",
-    "en": "마나 · 크리스탈 · 소환서 중 하나가 무작위로 내려옵니다"
+    "ko": "골드 · 크리스탈 · 소환서 중 하나가 무작위로 내려옵니다",
+    "en": "One of gold, crystal, or a scroll is granted at random"
   },
   "ui.a8d95f19ad": {
     "ko": "가방이 비어 있습니다. 장비 금고에서 드롭을 획득하세요",
@@ -1689,11 +1689,11 @@
   },
   "ui.statAtk": {
     "ko": "공격력",
-    "en": "ATK"
+    "en": "Attack Power"
   },
   "ui.statHp": {
     "ko": "체력",
-    "en": "HP"
+    "en": "Health"
   },
   "ui.monStatsTitle": {
     "ko": "능력치",
@@ -1709,19 +1709,19 @@
   },
   "ui.statDef": {
     "ko": "방어력",
-    "en": "DEF"
+    "en": "Defense"
   },
   "ui.statSpd": {
     "ko": "속도",
-    "en": "SPD"
+    "en": "Speed"
   },
   "ui.statCriRate": {
     "ko": "치명타율",
-    "en": "CRI Rate"
+    "en": "Critical Rate"
   },
   "ui.statCriDmg": {
     "ko": "치명타 피해",
-    "en": "CRI Dmg"
+    "en": "Critical Damage"
   },
   "ui.setPiecesN": {
     "ko": "{n}세트",
@@ -2057,11 +2057,11 @@
   },
   "ui.statAcc": {
     "ko": "효과 적중",
-    "en": "ACC"
+    "en": "Effect Accuracy"
   },
   "ui.statRes": {
     "ko": "효과 저항",
-    "en": "RES"
+    "en": "Effect Resistance"
   },
   "ui.roleAttack": {
     "ko": "공격형",
@@ -2073,7 +2073,7 @@
   },
   "ui.roleHp": {
     "ko": "체력형",
-    "en": "HP"
+    "en": "Health"
   },
   "ui.roleSupport": {
     "ko": "지원형",
@@ -2423,6 +2423,34 @@
     "ko": "강화하기",
     "en": "Power Up"
   },
+  "ui.powerUpSkillMark": {
+    "ko": "스킬",
+    "en": "Skill"
+  },
+  "ui.powerUpConfirmHighStar": {
+    "ko": "4성 이상의 소환수가 재료로 선택되었습니다. 강화 하시겠습니까?",
+    "en": "A 4★ or higher monster is selected as material. Power up anyway?"
+  },
+  "ui.powerUpPreviewLevel": {
+    "ko": "Lv.{from} → Lv.{to}",
+    "en": "Lv.{from} → Lv.{to}"
+  },
+  "ui.powerUpPreviewExp": {
+    "ko": "+{n} EXP",
+    "en": "+{n} EXP"
+  },
+  "ui.powerUpPreviewExpNow": {
+    "ko": "{cur} / {need}",
+    "en": "{cur} / {need}"
+  },
+  "ui.powerUpStatAfter": {
+    "ko": "예상 능력치",
+    "en": "Projected stats"
+  },
+  "ui.powerUpSkillChance": {
+    "ko": "동일 소환수 재료 {n} · 랜덤 스킬 상승 가능",
+    "en": "{n} matching materials · random skill-up possible"
+  },
   "ui.symFilter": {
     "ko": "세트 필터",
     "en": "Set filter"
@@ -2521,7 +2549,11 @@
   },
   "ui.stagePrepLeaderAtk": {
     "ko": "아군 공격력 +{pct}%",
-    "en": "Ally ATK +{pct}%"
+    "en": "Ally Attack Power +{pct}%"
+  },
+  "ui.leaderBuffMatchingAtk": {
+    "ko": "{element} 공격력 +{n}%",
+    "en": "{element} Attack Power +{n}%"
   },
   "ui.stagePrepLeaderNone": {
     "ko": "리더 패시브 없음",
@@ -2836,8 +2868,8 @@
     "en": "Awakened"
   },
   "ui.monBookAwakenNeedLv": {
-    "ko": "몬스터 Lv.{n}+ 필요",
-    "en": "Needs monster Lv.{n}+"
+    "ko": "소환수 Lv.{n}+ 필요",
+    "en": "Needs summon Lv.{n}+"
   },
   "ui.monBookAwakenCost": {
     "ko": "골드 {mana} · 크리스탈 {crystal} · 재료 {mat}",
@@ -2872,8 +2904,8 @@
     "en": "Evolve MAX"
   },
   "ui.monBookEvolveNeedLv": {
-    "ko": "몬스터 Lv.{n}+ 필요",
-    "en": "Needs monster Lv.{n}+"
+    "ko": "소환수 Lv.{n}+ 필요",
+    "en": "Needs summon Lv.{n}+"
   },
   "ui.monBookEvolveCost": {
     "ko": "골드 {mana}{crystal}",
@@ -2885,7 +2917,7 @@
   },
   "ui.monEvolveBonus": {
     "ko": "진화 시 성장 한계가 올라갑니다.",
-    "en": "Evolve raises this monster's growth cap."
+    "en": "Evolve raises this summon's growth cap."
   },
   "ui.monRiteCondition": {
     "ko": "조건",
@@ -2955,6 +2987,18 @@
     "ko": "판매",
     "en": "Sell"
   },
+  "ui.gearSellConfirmTitle": {
+    "ko": "장비 판매",
+    "en": "Sell equipment"
+  },
+  "ui.gearSellConfirmBody": {
+    "ko": "이 장비를 판매할까요?",
+    "en": "Sell this equipment?"
+  },
+  "ui.gearSellConfirmGain": {
+    "ko": "판매 가격",
+    "en": "Sell price"
+  },
   "ui.gearSlotWeapon": {
     "ko": "무기",
     "en": "Weapon"
@@ -2979,6 +3023,18 @@
     "ko": "반지",
     "en": "Ring"
   },
+  "ui.gearFilter": {
+    "ko": "종류 필터",
+    "en": "Type filter"
+  },
+  "ui.gearFilterAll": {
+    "ko": "전체",
+    "en": "All"
+  },
+  "ui.gearFilterEmpty": {
+    "ko": "필터에 맞는 장비가 없습니다",
+    "en": "No gear matches this filter"
+  },
   "ui.gearEnhanceCost": {
     "ko": "강화 골드 {mana}",
     "en": "Enhance gold {mana}"
@@ -2988,12 +3044,12 @@
     "en": "Enhance gold {mana} · crystal {crystal}"
   },
   "ui.skillLockedHint": {
-    "ko": "{branch} +{n} 필요",
-    "en": "Needs {branch} +{n}"
+    "ko": "{skill}+{n} 필요",
+    "en": "Needs {skill}+{n}"
   },
   "ui.skillLockedHintTier2": {
-    "ko": "{branch}1·{branch}2 +{n} 필요",
-    "en": "Needs {branch}1·{branch}2 +{n}"
+    "ko": "{skill1}+{n} · {skill2}+{n} 필요",
+    "en": "Needs {skill1}+{n} · {skill2}+{n}"
   },
   "ui.resultVictory": {
     "ko": "승리",
@@ -3070,6 +3126,58 @@
   "ui.islandInfo": {
     "ko": "정보",
     "en": "Info"
+  },
+  "ui.islandUp": {
+    "ko": "UP",
+    "en": "UP"
+  },
+  "ui.islandAction.summon_hearth": {
+    "ko": "소환",
+    "en": "Summon"
+  },
+  "ui.islandAction.power_circle": {
+    "ko": "강화",
+    "en": "Enhance"
+  },
+  "ui.islandAction.gateway": {
+    "ko": "출정",
+    "en": "Battle"
+  },
+  "ui.islandAction.mana_pond": {
+    "ko": "수집",
+    "en": "Collect"
+  },
+  "ui.islandAction.shop": {
+    "ko": "구매",
+    "en": "Shop"
+  },
+  "ui.islandAction.party": {
+    "ko": "편성",
+    "en": "Party"
+  },
+  "ui.islandAction.wish": {
+    "ko": "소원",
+    "en": "Wish"
+  },
+  "ui.islandAction.dojo": {
+    "ko": "수련",
+    "en": "Drill"
+  },
+  "ui.islandAction.crystal_mine": {
+    "ko": "수집",
+    "en": "Collect"
+  },
+  "ui.islandAction.glory": {
+    "ko": "영광",
+    "en": "Glory"
+  },
+  "ui.islandAction.guild": {
+    "ko": "길드",
+    "en": "Guild"
+  },
+  "ui.islandAction.fusion": {
+    "ko": "융합",
+    "en": "Fusion"
   },
   "ui.buildingInfoClose": {
     "ko": "닫기",
@@ -3288,16 +3396,16 @@
     "en": "Skill power +{n}%"
   },
   "ui.gearBonusHp": {
-    "ko": "HP +{n}",
-    "en": "HP +{n}"
+    "ko": "체력 +{n}",
+    "en": "Health +{n}"
   },
   "ui.gearBonusDef": {
-    "ko": "DEF +{n}",
-    "en": "DEF +{n}"
+    "ko": "방어력 +{n}",
+    "en": "Defense +{n}"
   },
   "ui.gearBonusLeaderAtk": {
     "ko": "리더 공격력 +{n}%",
-    "en": "Leader ATK +{n}%"
+    "en": "Leader Attack Power +{n}%"
   },
   "ui.sumInfoLeaderBuffs": {
     "ko": "리더 버프",
@@ -3313,11 +3421,19 @@
   },
   "ui.sumInfoDamageReduction": {
     "ko": "받는 피해 감소",
-    "en": "Damage taken"
+    "en": "Damage Reduction"
   },
   "ui.sumInfoProfile": {
     "ko": "소환사 정보",
     "en": "Summoner profile"
+  },
+  "ui.sumInfoAwaken": {
+    "ko": "각성",
+    "en": "Awaken"
+  },
+  "ui.sumInfoAwakenEffects": {
+    "ko": "각성 효과",
+    "en": "Awaken bonuses"
   },
   "ui.sumBookAwakenCostWithMat": {
     "ko": "골드 {mana} · 크리스탈 {crystal} · {element} 정수 {mat}",
@@ -3366,5 +3482,173 @@
   "ui.sumMagicEnhanceCost": {
     "ko": "강화 비용",
     "en": "Enhance cost"
+  },
+  "ui.growthPlayingSkill": {
+    "ko": "스킬 강화 중",
+    "en": "Enhancing skill"
+  },
+  "ui.growthPlayingPowerUp": {
+    "ko": "소환수 강화 중",
+    "en": "Powering up"
+  },
+  "ui.growthPlayingEvolve": {
+    "ko": "진화 중",
+    "en": "Evolving"
+  },
+  "ui.growthPlayingAwaken": {
+    "ko": "각성 중",
+    "en": "Awakening"
+  },
+  "ui.growthPlayingFusion": {
+    "ko": "융합 중",
+    "en": "Fusing"
+  },
+  "ui.growthPlayingMagic": {
+    "ko": "마법 강화 중",
+    "en": "Enhancing magic"
+  },
+  "ui.growthResultSkill": {
+    "ko": "스킬 강화 완료",
+    "en": "Skill enhanced"
+  },
+  "ui.growthResultPowerUp": {
+    "ko": "강화 완료",
+    "en": "Power-up complete"
+  },
+  "ui.growthResultEvolve": {
+    "ko": "진화 완료",
+    "en": "Evolution complete"
+  },
+  "ui.growthResultAwaken": {
+    "ko": "각성 완료",
+    "en": "Awaken complete"
+  },
+  "ui.growthResultFusion": {
+    "ko": "융합 완료",
+    "en": "Fusion complete"
+  },
+  "ui.growthResultMagic": {
+    "ko": "마법 강화 완료",
+    "en": "Magic enhanced"
+  },
+  "ui.growthClose": {
+    "ko": "결과 닫기",
+    "en": "Close result"
+  },
+  "ui.growthSkipHint": {
+    "ko": "탭하면 결과를 바로 봅니다",
+    "en": "Tap to skip to the result"
+  },
+  "ui.growthStatTitle": {
+    "ko": "능력치 변화",
+    "en": "Stat changes"
+  },
+  "ui.growthSkillTitle": {
+    "ko": "스킬 변화",
+    "en": "Skill changes"
+  },
+  "ui.growthNotesTitle": {
+    "ko": "변화",
+    "en": "Changes"
+  },
+  "ui.growthEvolveLine": {
+    "ko": "E{from} → E{to}",
+    "en": "E{from} → E{to}"
+  },
+  "ui.growthAwakenLine": {
+    "ko": "+{from} → +{to}",
+    "en": "+{from} → +{to}"
+  },
+  "ui.growthMagicRank": {
+    "ko": "+{from} → +{to}",
+    "en": "+{from} → +{to}"
+  },
+  "ui.growthMagicUnlockBranch": {
+    "ko": "{skill1}, {skill2} 해금",
+    "en": "Unlocked {skill1}, {skill2}"
+  },
+  "ui.growthMagicUnlockTier2": {
+    "ko": "{skill1}, {skill2} 해금",
+    "en": "Unlocked {skill1}, {skill2}"
+  },
+  "ui.growthPlayingGear": {
+    "ko": "장비 강화 중",
+    "en": "Enhancing gear"
+  },
+  "ui.growthResultGear": {
+    "ko": "장비 강화 완료",
+    "en": "Gear enhanced"
+  },
+  "ui.growthGearEnhance": {
+    "ko": "+{from} → +{to}",
+    "en": "+{from} → +{to}"
+  },
+  "ui.growthGearStatManaMax": {
+    "ko": "마나 최대",
+    "en": "Max mana"
+  },
+  "ui.growthGearStatManaRegen": {
+    "ko": "마나 회복",
+    "en": "Mana regen"
+  },
+  "ui.growthGearStatSkillPower": {
+    "ko": "스킬 위력",
+    "en": "Skill power"
+  },
+  "ui.growthGearStatLeaderAtk": {
+    "ko": "리더 공격력",
+    "en": "Leader Attack Power"
+  },
+  "ui.growthGearStatBoardSense": {
+    "ko": "보드 감지",
+    "en": "Board sense"
+  },
+  "ui.growthGearStatStartMana": {
+    "ko": "시작 마나",
+    "en": "Start mana"
+  },
+  "ui.wishPoolTitle": {
+    "ko": "받을 수 있는 보상",
+    "en": "Possible rewards"
+  },
+  "ui.wishPoolGold": {
+    "ko": "골드 {min}–{max}",
+    "en": "Gold {min}–{max}"
+  },
+  "ui.wishPoolCrystal": {
+    "ko": "크리스탈 {min}–{max}",
+    "en": "Crystal {min}–{max}"
+  },
+  "ui.wishPoolScroll": {
+    "ko": "소환서 {min}–{max}",
+    "en": "Scroll {min}–{max}"
+  },
+  "ui.wishPoolRate": {
+    "ko": "약 {pct}%",
+    "en": "~{pct}%"
+  },
+  "ui.wishSpinning": {
+    "ko": "소원을 빌고 있습니다…",
+    "en": "Making a wish…"
+  },
+  "ui.wishResultTitle": {
+    "ko": "소원이 이루어졌습니다",
+    "en": "Wish granted"
+  },
+  "ui.wishResultGain": {
+    "ko": "{name} +{amount}",
+    "en": "{name} +{amount}"
+  },
+  "ui.wishSkipHint": {
+    "ko": "탭하여 건너뛰기",
+    "en": "Tap to skip"
+  },
+  "ui.wishClose": {
+    "ko": "닫기",
+    "en": "Close"
+  },
+  "ui.wishShrineCaption": {
+    "ko": "하루에 한 번, 사당에 소원을 빕니다",
+    "en": "Make one wish at the shrine each day"
   }
 }

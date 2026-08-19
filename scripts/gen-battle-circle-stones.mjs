@@ -5,6 +5,7 @@
  * Prefer painted dematte pipeline when _src PNGs exist:
  *   node scripts/process-battle-circles.mjs
  *   node scripts/process-battle-stones.mjs
+ *   node scripts/process-battle-marks.mjs
  *
  * Usage:
  *   node scripts/gen-battle-circle-stones.mjs           # circles + stones

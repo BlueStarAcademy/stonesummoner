@@ -21,6 +21,7 @@ export {
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
   MAX_MONSTER_LEVEL,
+  addOwnedMonsterExp,
   monsterExpToNext,
   monsterGrade,
   monsterMaxLevel,

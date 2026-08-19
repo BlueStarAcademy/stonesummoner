@@ -31,10 +31,29 @@ import {
   battleCircleSrc,
   battleStoneSrc,
   battleBoardMarkSrc,
+  battleBoardMarkFallbackSrc,
   BATTLE_BOARD_MARK_IDS,
   normalizeBattleStoneId,
 } from "./battle/battleCircle";
 import { dematteArtInTree } from "./ui/dematteArt";
+import {
+  GROWTH_REVEAL_LAYER_ID,
+  growthRevealIsOpen,
+  playGrowthReveal,
+  remountGrowthReveal,
+  type GrowthRevealKind,
+  type GrowthRevealPayload,
+  type GrowthSkillDelta,
+  type GrowthStatDelta,
+} from "./ui/growthReveal";
+import {
+  WISH_REVEAL_LAYER_ID,
+  abortWishReveal,
+  playWishReveal,
+  remountWishReveal,
+  wishRevealIsOpen,
+  wishRewardIconSrc,
+} from "./ui/wishReveal";
 import { initUiScale } from "./ui/uiScale";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
 import { bindCoreStageMapController } from "./core-loop/stages/mapController";
@@ -67,6 +86,7 @@ import {
   CODEX_LOCK_HTML,
   CODEX_SEAL_HTML,
   monStarsHtml,
+  sumAwakenGemsHtml,
   RANGE,
   STAR,
   TIMES,
@@ -130,6 +150,7 @@ import {
   magicEnhanceCrystalCost,
   MAX_MAGIC_RANK,
   type MagicSkillSlot,
+  type SummonerMagicProgress,
   type SummonerMagicSkillDef,
   MONSTERS,
   resolveMonsterId,
@@ -172,6 +193,7 @@ import {
   summonerExpToNext,
   tickProduction,
   todayKey,
+  WISH_REWARD_POOL,
   type BuildingId,
 } from "stonesummoner-home";
 import {
@@ -228,9 +250,11 @@ import {
   GRINDSTONE_BUY_MANA_COST,
   ESSENCE_JINMUN_COST,
   ESSENCE_CRYSTAL_GAIN,
+  addOwnedMonsterExp,
   monsterPowerUpExp,
   monsterPowerUpManaCost,
   runPowerUpMonster,
+  skillUpgradableIndices,
   runEnhanceGear,
   runEnhanceSymbol,
   runEquipSymbol,
@@ -705,6 +729,12 @@ let symbolCompareIndex: number | null = null;
 /** Gear source open in the summoner equipment detail modal. */
 let gearDetailTarget: { kind: "equipped"; slot: GearSlot } | { kind: "bag"; index: number } | null =
   null;
+/** Gear bag index waiting on the sell confirmation sheet. */
+let gearSellConfirmIndex: number | null = null;
+/** Gear bag type filter (all or one slot). */
+let gearBagFilterSlot: GearSlot | "all" = "all";
+let gearBagFilterOpen = false;
+let gearBagFilterUiAbort: AbortController | null = null;
 /** Magic skill slot open in the summoner skill detail modal. */
 let sumMagicDetailSlot: MagicSkillSlot | null = null;
 /** Grind/imprint before/after reveal card. */
@@ -717,10 +747,10 @@ let enhanceTab: EnhanceTab = "monsters";
 /** Bottom dock on monster book: roster slots or symbol bag. */
 let monBookDock: "roster" | "symbols" = "roster";
 /** Selected monster detail side-tab. */
-type MonDetailTab = "info" | "skills" | "awaken" | "symbols";
+type MonDetailTab = "info" | "skills" | "symbols";
 let monDetailTab: MonDetailTab = "info";
 /** Selected summoner book detail side-tab. */
-type SumDetailTab = "info" | "skills" | "awaken" | "gear";
+type SumDetailTab = "info" | "skills" | "gear";
 let sumDetailTab: SumDetailTab = "info";
 /** Full-screen codex overlay (monster + summoner catalog). */
 let codexOpen = false;
@@ -755,6 +785,10 @@ const ROSTER_SLOT_CAP = 60;
 function applyMonDetailTabUi(): boolean {
   const shell = app.querySelector<HTMLElement>(".mon-inspect-shell");
   if (!shell) return false;
+  shell.closest(".mon-inspect")?.classList.toggle(
+    "mon-inspect--tab-symbols",
+    monDetailTab === "symbols",
+  );
   shell.querySelectorAll<HTMLButtonElement>("[data-mon-detail-tab]").forEach((btn) => {
     const on = btn.dataset.monDetailTab === monDetailTab;
     btn.classList.toggle("is-active", on);
@@ -859,7 +893,7 @@ function bindMonInspectInteractions(): void {
       "click",
       () => {
         const raw = btn.dataset.monDetailTab;
-        if (raw === "info" || raw === "skills" || raw === "awaken" || raw === "symbols") {
+        if (raw === "info" || raw === "skills" || raw === "symbols") {
           if (monDetailTab === raw) return;
           monDetailTab = raw;
           if (raw !== "symbols") symbolInvFilterOpen = null;
@@ -878,11 +912,6 @@ function bindMonInspectInteractions(): void {
         const slot = Number(btn.dataset.monSkillPick ?? "0");
         if (slot < 0 || slot > 2 || slot === monSkillPick) return;
         monSkillPick = slot;
-        const owned = selectedEnhanceUid
-          ? save.roster.find((m) => m.uid === selectedEnhanceUid)
-          : null;
-        const ownedLv = owned?.skillLevels?.[slot] ?? 1;
-        monSkillPreviewLv = Math.max(1, Math.min(MAX_SKILL_LEVEL, ownedLv));
         monDetailTab = "skills";
         enhanceTab = "monsters";
         applyMonDetailTabUi();
@@ -891,43 +920,6 @@ function bindMonInspectInteractions(): void {
       opts,
     );
   });
-
-  host
-    .querySelector('.mon-pane[data-mon-pane="skills"]')
-    ?.addEventListener(
-      "click",
-      (ev) => {
-        const stepBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
-          "[data-mon-skill-preview]",
-        );
-        if (stepBtn && host.contains(stepBtn) && !stepBtn.disabled) {
-          const step = Number(stepBtn.dataset.monSkillPreview ?? "0");
-          if (step === -1 || step === 1) {
-            const next = Math.max(
-              1,
-              Math.min(MAX_SKILL_LEVEL, monSkillPreviewLv + step),
-            );
-            if (next !== monSkillPreviewLv) {
-              monSkillPreviewLv = next;
-              if (!applyMonSkillPickUi()) render();
-            }
-            return;
-          }
-        }
-
-        const setBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
-          "[data-mon-skill-preview-set]",
-        );
-        if (setBtn && host.contains(setBtn)) {
-          const lv = Number(setBtn.dataset.monSkillPreviewSet ?? "0");
-          if (!Number.isFinite(lv) || lv < 1 || lv > MAX_SKILL_LEVEL) return;
-          if (lv === monSkillPreviewLv) return;
-          monSkillPreviewLv = lv;
-          if (!applyMonSkillPickUi()) render();
-        }
-      },
-      opts,
-    );
 }
 
 /** Swap summoner-book inspect panes without full app re-render. */
@@ -942,6 +934,11 @@ function applySumDetailTabUi(): boolean {
   shell.querySelectorAll<HTMLElement>("[data-sum-pane]").forEach((pane) => {
     pane.hidden = pane.dataset.sumPane !== sumDetailTab;
   });
+  if (sumDetailTab !== "gear" && gearBagFilterOpen) {
+    gearBagFilterOpen = false;
+    clearGearBagFilterMenuPortal();
+    refreshSumGearPane();
+  }
   return true;
 }
 
@@ -966,10 +963,17 @@ function refreshSumBookModals(): boolean {
   const el = activeSummonerElement();
   softRemoveOverlay("gear-detail-layer");
   softRemoveOverlay("sum-magic-detail-layer");
+  if (gearSellConfirmIndex == null || !save.gearBag?.[gearSellConfirmIndex]) {
+    gearSellConfirmIndex = null;
+    softRemoveOverlay("gear-sell-confirm-layer");
+  }
   const gear = renderGearDetailModal(el);
   const magic = renderSumMagicDetailModal(el);
   if (gear) softMountOverlay("gear-detail-layer", gear);
   if (magic) softMountOverlay("sum-magic-detail-layer", magic);
+  if (gearSellConfirmIndex != null && save.gearBag?.[gearSellConfirmIndex]) {
+    softMountOverlay("gear-sell-confirm-layer", renderGearSellConfirmModal());
+  }
   syncSumMagicNodeActive();
   bindSumBookModalInteractions();
   return onBook;
@@ -979,7 +983,13 @@ function refreshSumGearPane(): boolean {
   const pane = app.querySelector<HTMLElement>('[data-sum-pane="gear"]');
   if (!pane) return false;
   pane.innerHTML = renderGearDollHtml(activeSummonerElement());
+  dematteArtInTree(
+    pane,
+    "img.gear-slot-ico, .gear-bag-slot:not(.gear-bag-slot--empty) img",
+  );
   bindSumGearSlotClicks();
+  bindGearBagFilter();
+  syncGearBagFilterMenuUi();
   queueMicrotask(() => {
     enhanceFx = null;
   });
@@ -1018,6 +1028,8 @@ function bindSumGearSlotClicks(): void {
   const root = app.querySelector(".sum-screen") ?? app;
   root.querySelectorAll<HTMLButtonElement>("[data-gear-detail-slot]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      gearBagFilterOpen = false;
+      clearGearBagFilterMenuPortal();
       gearDetailTarget = {
         kind: "equipped",
         slot: parseGearSlot(btn.dataset.gearDetailSlot),
@@ -1031,10 +1043,108 @@ function bindSumGearSlotClicks(): void {
     btn.addEventListener("click", () => {
       const index = Number(btn.dataset.gearDetailBag ?? "-1");
       if (!Number.isInteger(index) || index < 0 || !save.gearBag?.[index]) return;
+      gearBagFilterOpen = false;
+      clearGearBagFilterMenuPortal();
       gearDetailTarget = { kind: "bag", index };
       sumMagicDetailSlot = null;
       softRefreshSumBookUi({ modals: true });
     });
+  });
+}
+
+function clearGearBagFilterMenuPortal(): void {
+  document.querySelectorAll("body > .mon-sym-filter-menu[data-gear-filter-menu]").forEach((el) =>
+    el.remove(),
+  );
+}
+
+function placeGearBagFilterMenu(): void {
+  if (!gearBagFilterOpen) return;
+  const btn = app.querySelector<HTMLElement>("[data-gear-filter-toggle]");
+  const menu =
+    document.querySelector<HTMLElement>("body > .mon-sym-filter-menu[data-gear-filter-menu]") ??
+    app.querySelector<HTMLElement>(".mon-sym-filter-menu[data-gear-filter-menu]");
+  if (!btn || !menu) return;
+  const r = btn.getBoundingClientRect();
+  const pad = 8;
+  const mw = Math.max(menu.offsetWidth, 160);
+  const mh = Math.max(menu.offsetHeight, 40);
+  let left = r.right - mw;
+  left = Math.min(Math.max(pad, left), Math.max(pad, window.innerWidth - mw - pad));
+  let top = r.bottom + 4;
+  if (top + mh > window.innerHeight - pad) {
+    top = Math.max(pad, r.top - mh - 4);
+  }
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
+}
+
+function syncGearBagFilterMenuUi(): void {
+  gearBagFilterUiAbort?.abort();
+  gearBagFilterUiAbort = null;
+  clearGearBagFilterMenuPortal();
+  if (!gearBagFilterOpen) return;
+  const menu = app.querySelector<HTMLElement>(".mon-sym-filter-menu[data-gear-filter-menu]");
+  if (!menu) return;
+  document.body.appendChild(menu);
+  placeGearBagFilterMenu();
+  requestAnimationFrame(placeGearBagFilterMenu);
+  menu.querySelectorAll<HTMLButtonElement>("[data-gear-filter-slot]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const raw = btn.dataset.gearFilterSlot ?? "all";
+      gearBagFilterSlot = raw === "all" || !isGearSlot(raw) ? "all" : raw;
+      gearBagFilterOpen = false;
+      if (!refreshSumGearPane()) render();
+    });
+  });
+  const ac = new AbortController();
+  gearBagFilterUiAbort = ac;
+  const onOutside = (ev: Event) => {
+    const target = ev.target as HTMLElement | null;
+    if (
+      target?.closest?.("[data-gear-filter]") ||
+      target?.closest?.("[data-gear-filter-menu]")
+    ) {
+      return;
+    }
+    gearBagFilterOpen = false;
+    gearBagFilterUiAbort?.abort();
+    gearBagFilterUiAbort = null;
+    clearGearBagFilterMenuPortal();
+    app.querySelectorAll<HTMLButtonElement>("[data-gear-filter-toggle]").forEach((btn) => {
+      btn.setAttribute("aria-expanded", "false");
+    });
+  };
+  setTimeout(() => {
+    if (ac.signal.aborted) return;
+    document.addEventListener("pointerdown", onOutside, {
+      capture: true,
+      signal: ac.signal,
+    });
+  }, 0);
+  window.addEventListener(
+    "resize",
+    () => {
+      if (gearBagFilterOpen) placeGearBagFilterMenu();
+    },
+    { signal: ac.signal },
+  );
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (gearBagFilterOpen) placeGearBagFilterMenu();
+    },
+    { capture: true, signal: ac.signal },
+  );
+}
+
+function bindGearBagFilter(): void {
+  const root = app.querySelector(".sum-screen") ?? app;
+  root.querySelector("[data-gear-filter-toggle]")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    gearBagFilterOpen = !gearBagFilterOpen;
+    if (!refreshSumGearPane()) render();
   });
 }
 
@@ -1045,6 +1155,7 @@ function bindSumMagicNodeClicks(): void {
       const slot = btn.dataset.magicDetailSlot as MagicSkillSlot | undefined;
       if (!slot || !["A", "B", "A1", "A2", "A3", "A4", "B1", "B2", "B3", "B4"].includes(slot)) return;
       sumMagicDetailSlot = slot;
+      closeGearSellConfirm();
       gearDetailTarget = null;
       sumDetailTab = "skills";
       applySumDetailTabUi();
@@ -1058,6 +1169,7 @@ function bindSumBookModalInteractions(): void {
   const magicLayer = app.querySelector<HTMLElement>("#sum-magic-detail-layer");
 
   const closeGearDetail = () => {
+    closeGearSellConfirm();
     gearDetailTarget = null;
     softRefreshSumBookUi({ modals: true });
   };
@@ -1067,15 +1179,42 @@ function bindSumBookModalInteractions(): void {
 
   gearLayer?.querySelectorAll<HTMLButtonElement>("[data-gear-detail-enhance]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (growthRevealIsOpen()) return;
       const slot = parseGearSlot(btn.dataset.gearDetailEnhance);
-      const r = runEnhanceGear(save, slot);
-      save = r.save;
-      if (r.message.startsWith(t("ui.efa49027d0"))) {
-        enhanceFx = { kind: "gear", slot };
+      const el = activeSummonerElement();
+      const before = getActiveGear(save)[slot];
+      if (!before) {
+        flash(t("ui.43d54a7358"));
+        return;
       }
+      const beforeEnhance = before.enhance;
+      const r = runEnhanceGear(save, slot);
+      const after = getActiveGear(r.save)[slot];
+      save = r.save;
       persist();
-      flash(r.message);
-      softRefreshSumBookUi({ gear: true, modals: true });
+      if (!after || after.enhance <= beforeEnhance) {
+        flash(r.message);
+        return;
+      }
+      enhanceFx = { kind: "gear", slot };
+      const art = gearSlotArtSrc(after.slot, after.element ?? el, after.setId);
+      const fallback = gearSlotArtFallbackSrc(
+        after.slot,
+        after.element ?? el,
+        after.setId,
+      );
+      beginGrowthReveal({
+        kind: "gear",
+        portraitHtml: `<img class="growth-rite-img" src="${art}" width="96" height="96" alt="" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />`,
+        name: describeGear(after),
+        heroLine: t("ui.growthGearEnhance", {
+          from: beforeEnhance,
+          to: after.enhance,
+        }),
+        stats: gearGrowthStatDeltas(before, after),
+        skills: [],
+        notes: [],
+      });
     });
   });
 
@@ -1124,6 +1263,7 @@ function bindSumBookModalInteractions(): void {
       if ((save.gearBag ?? []).length < bagLen) {
         patchOnboard({ equipped: true });
       }
+      closeGearSellConfirm();
       gearDetailTarget = null;
       flash(r.message);
       softRefreshSumBookUi({ gear: true, modals: true });
@@ -1133,14 +1273,11 @@ function bindSumBookModalInteractions(): void {
   gearLayer?.querySelectorAll<HTMLButtonElement>("[data-gear-detail-sell]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.gearDetailSell ?? "-1");
-      const r = runSellGearBag(save, idx);
-      save = r.save;
-      persist();
-      gearDetailTarget = null;
-      flash(r.message);
-      softRefreshSumBookUi({ gear: true, modals: true });
+      if (!Number.isInteger(idx) || idx < 0 || !save.gearBag?.[idx]) return;
+      openGearSellConfirm(idx);
     });
   });
+  bindGearSellConfirm();
 
   const closeSumMagicDetail = () => {
     sumMagicDetailSlot = null;
@@ -1154,11 +1291,66 @@ function bindSumBookModalInteractions(): void {
     btn.addEventListener("click", () => {
       const id = btn.dataset.magicEnhance ?? "";
       if (!id) return;
+      if (growthRevealIsOpen()) return;
+      const el = activeSummonerElement();
+      const kit = getSummonerKit(el);
+      const allSkills = Object.values(kit.skills);
+      const def = allSkills.find((skill) => skill.id === id);
+      if (!def) return;
+      const beforeProg = save.summonerMagic?.[el] ?? emptyMagicProgress();
+      const beforeRank = magicRank(beforeProg, id);
+      const beforeTier2 = magicTier2Unlocked(el, beforeProg);
       const r = runEnhanceMagicSkill(save, id);
+      const afterProg = r.save.summonerMagic?.[el] ?? emptyMagicProgress();
+      const afterRank = magicRank(afterProg, id);
       save = r.save;
       persist();
-      flash(r.message);
-      softRefreshSumBookUi({ skills: true, modals: true });
+      if (afterRank <= beforeRank) {
+        flash(r.message);
+        return;
+      }
+      const notes: string[] = [];
+      if (!beforeProg.branch && afterProg.branch) {
+        const next =
+          afterProg.branch === "A"
+            ? [kit.skills.A1, kit.skills.A2]
+            : [kit.skills.B1, kit.skills.B2];
+        notes.push(
+          t("ui.growthMagicUnlockBranch", {
+            skill1: next[0].nameKo,
+            skill2: next[1].nameKo,
+          }),
+        );
+      } else if (!beforeTier2 && magicTier2Unlocked(el, afterProg)) {
+        const next =
+          afterProg.branch === "A"
+            ? [kit.skills.A3, kit.skills.A4]
+            : [kit.skills.B3, kit.skills.B4];
+        notes.push(
+          t("ui.growthMagicUnlockTier2", {
+            skill1: next[0].nameKo,
+            skill2: next[1].nameKo,
+          }),
+        );
+      }
+      const afterLines = magicSkillDescLines(def, afterRank);
+      beginGrowthReveal({
+        kind: "magic",
+        portraitHtml: summonerSkillArtImg(def.id, "growth-rite-img", 96),
+        name: def.nameKo,
+        heroLine: t("ui.growthMagicRank", { from: beforeRank, to: afterRank }),
+        stats: [],
+        skills: [
+          {
+            name: def.nameKo,
+            iconHtml: summonerSkillArtImg(def.id, "growth-skill-img", 44),
+            from: beforeRank,
+            to: afterRank,
+            effect: afterLines.slice(1).join(` ${MIDDOT} `) || afterLines[0] || "",
+          },
+        ],
+        notes,
+      });
     });
   });
 }
@@ -1176,13 +1368,6 @@ function applyMonSkillPickUi(): boolean {
   if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
   const focusSk = def?.skills[monSkillPick];
   const focusLv = levels[monSkillPick] ?? 1;
-  if (!Number.isFinite(monSkillPreviewLv) || monSkillPreviewLv < 1) {
-    monSkillPreviewLv = focusLv;
-  }
-  monSkillPreviewLv = Math.max(
-    1,
-    Math.min(MAX_SKILL_LEVEL, monSkillPreviewLv),
-  );
 
   pane.querySelectorAll<HTMLButtonElement>("[data-mon-skill-pick]").forEach((btn) => {
     const slot = Number(btn.dataset.monSkillPick ?? "0");
@@ -1193,19 +1378,13 @@ function applyMonSkillPickUi(): boolean {
 
   const main = pane.querySelector<HTMLElement>(".mon-skill-main");
   if (main) {
-    main.innerHTML = renderMonsterSkillDetailHtml(
-      focusSk,
-      focusLv,
-      monSkillPreviewLv,
-    );
+    main.innerHTML = renderMonsterSkillDetailHtml(focusSk, focusLv);
   }
   return true;
 }
 
 /** Selected skill slot (0..2) on skills tab detail pane. */
 let monSkillPick = 0;
-/** Previewed level (1..MAX) in the selected monster skill's growth viewer. */
-let monSkillPreviewLv = 1;
 /** Selected monster uid on the monsters book screen. */
 let selectedEnhanceUid: string | null = null;
 /** Skill-feed enhance is only available when entered via island power_circle. */
@@ -1231,8 +1410,6 @@ let symbolInvFilterSlots: Set<SymbolSlotNum> = new Set(SYMBOL_SLOT_NUMS);
 /** One-shot pulse/flash on next enhance paint. */
 let enhanceFx: { kind: "node"; id: string } | { kind: "gear"; slot: string } | null =
   null;
-/** Daily wish result card. */
-let wishReveal: string | null = null;
 /** Party editor draft (uid set); null means mirror save.party. */
 let partyDraft: Set<string> | null = null;
 let toast = "";
@@ -1269,6 +1446,8 @@ let dmgFloats: {
   targetId: string;
 }[] = [];
 let floatSeq = 0;
+/** Coalesce layout after soft battle DOM patches. */
+let dmgLayoutRaf = 0;
 /** Last seen circle phase — detect empowered reset for board FX. */
 let lastSeenBoardPhase = 0;
 /** One-shot collapse/rekindle class on the board frame. */
@@ -1585,6 +1764,49 @@ const ISLAND_BLDG_INFO_KEYS: Record<string, string> = {
   fusion: "ui.bldgInfo.fusion",
 };
 
+const ISLAND_SPOT_ACTION_KEYS: Record<string, string> = {
+  summon_hearth: "ui.islandAction.summon_hearth",
+  power_circle: "ui.islandAction.power_circle",
+  gateway: "ui.islandAction.gateway",
+  mana_pond: "ui.islandAction.mana_pond",
+  shop: "ui.islandAction.shop",
+  party: "ui.islandAction.party",
+  wish: "ui.islandAction.wish",
+  dojo: "ui.islandAction.dojo",
+  crystal_mine: "ui.islandAction.crystal_mine",
+  glory: "ui.islandAction.glory",
+  guild: "ui.islandAction.guild",
+  fusion: "ui.islandAction.fusion",
+};
+
+function islandSpotActionLabel(id: string): string {
+  const key = ISLAND_SPOT_ACTION_KEYS[id];
+  return key ? t(key as Parameters<typeof t>[0]) : t("ui.islandEnter");
+}
+
+function islandSpotUpgradeableBuildingId(id: string): BuildingId | null {
+  if (id === "mana_pond" || id === "crystal_mine") return id;
+  return null;
+}
+
+function islandSpotShowsUp(id: string): boolean {
+  const buildingId = islandSpotUpgradeableBuildingId(id);
+  if (!buildingId) return false;
+  const inst = save.island.buildings.find((b) => b.id === buildingId);
+  if (!inst) return false;
+  return inst.level < MAX_BUILDING_LEVEL;
+}
+
+function summonerAwakenGemsHtml(
+  awaken: number,
+  extraClass = "",
+): string {
+  const n = Math.max(0, Math.floor(awaken));
+  const label = t("summonerPicker.awaken", { n });
+  const cls = extraClass ? ` ${extraClass}` : "";
+  return `<span class="sum-awaken-gems-wrap${cls}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${sumAwakenGemsHtml(n, MAX_SUMMONER_AWAKEN)}</span>`;
+}
+
 function buildingInfoLines(id: string): string[] {
   const key = ISLAND_BLDG_INFO_KEYS[id];
   if (!key) return [];
@@ -1788,7 +2010,7 @@ function enterIslandBuilding(id: string): void {
     view = "mine";
     renderPreservingIsland();
   } else if (id === "wish") {
-    wishReveal = null;
+    abortWishReveal();
     view = "wish";
     renderPreservingIsland();
   } else if (id === "glory") {
@@ -1810,6 +2032,7 @@ function enterIslandBuilding(id: string): void {
     enhanceSkillFeedAllowed = true;
     monDetailTab = "skills";
     view = "enhance";
+    selectFirstEnhanceRosterSlot();
     renderPreservingIsland();
   } else if (id === "shop") {
     view = "shop";
@@ -2211,6 +2434,7 @@ function runOnboardCta(): void {
     enhanceTab = "monsters";
     monBookDock = step === "equip" ? "symbols" : "roster";
     monDetailTab = step === "equip" ? "symbols" : "info";
+    selectFirstEnhanceRosterSlot();
     render();
   }
 }
@@ -2652,7 +2876,7 @@ function renderStagePrepDock(): string {
         const p = save.summoners?.[el] ?? { level: 1, exp: 0, awaken: 0 };
         return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${on ? " is-active" : ""}" data-stage-prep-info="summoner" data-stage-prep-summoner="${el}" role="option" aria-selected="${on}" title="${escapeHtml(elementLabel(el))}">
           <span class="mon-slot-art" aria-hidden="true">
-            <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="56" height="56" alt="" draggable="false" decoding="async" />
+            <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
           </span>
           <span class="mon-slot-lv-overlay">Lv.${p.level}</span>
         </button>`;
@@ -2831,16 +3055,29 @@ function stagePrepLeaderPassive(saveRef: PlayerSave): {
     tree.leaderAtkBonus;
   const title = leader.nameKo;
   const bits: string[] = [];
-  if (leader.atkPct) bits.push(`ATK +${Math.round(leader.atkPct * 100)}%`);
+  if (leader.atkPct)
+    bits.push(`${t("ui.statAtk")} +${Math.round(leader.atkPct * 100)}%`);
   if (leader.elementAtkPct)
-    bits.push(`same-el ATK +${Math.round(leader.elementAtkPct * 100)}%`);
-  if (leader.hpPct) bits.push(`HP +${Math.round(leader.hpPct * 100)}%`);
-  if (leader.spdPct) bits.push(`SPD +${Math.round(leader.spdPct * 100)}%`);
-  if (leader.accuracyFlat) bits.push(`ACC +${leader.accuracyFlat}`);
-  if (leader.critRateFlat) bits.push(`CR +${leader.critRateFlat}%`);
-  if (leader.critDmgFlat) bits.push(`CD +${leader.critDmgFlat}%`);
+    bits.push(
+      t("ui.leaderBuffMatchingAtk", {
+        element: elementLabel(el),
+        n: String(Math.round(leader.elementAtkPct * 100)),
+      }),
+    );
+  if (leader.hpPct)
+    bits.push(`${t("ui.statHp")} +${Math.round(leader.hpPct * 100)}%`);
+  if (leader.spdPct)
+    bits.push(`${t("ui.statSpd")} +${Math.round(leader.spdPct * 100)}%`);
+  if (leader.accuracyFlat)
+    bits.push(`${t("ui.statAcc")} +${leader.accuracyFlat}`);
+  if (leader.critRateFlat)
+    bits.push(`${t("ui.statCriRate")} +${leader.critRateFlat}%`);
+  if (leader.critDmgFlat)
+    bits.push(`${t("ui.statCriDmg")} +${leader.critDmgFlat}%`);
   if (leader.damageTakenMul != null)
-    bits.push(`DR ${Math.round((1 - leader.damageTakenMul) * 100)}%`);
+    bits.push(
+      `${t("ui.sumInfoDamageReduction")} ${Math.round((1 - leader.damageTakenMul) * 100)}%`,
+    );
   if (pct > (leader.atkPct ?? 0))
     bits.push(
       t("ui.stagePrepLeaderAtk", {
@@ -2852,6 +3089,15 @@ function stagePrepLeaderPassive(saveRef: PlayerSave): {
     markers: bits.length ? bits : [t("ui.stagePrepLeaderNone")],
     pct,
   };
+}
+
+function renderLeaderPassiveMarkerChips(markers: string[]): string {
+  return markers
+    .map(
+      (marker) =>
+        `<span class="stage-prep-leader-marker">${escapeHtml(marker)}</span>`,
+    )
+    .join("");
 }
 
 function renderStageEntryModal(): string {
@@ -2943,9 +3189,7 @@ function renderStageEntryModal(): string {
   const titleText = `${stage.nameKo}(${diff.labelKo})`;
   const canStart = selected.size > 0 && energyNow >= cost;
 
-  const leaderMarkers = leader.markers
-    .map((marker) => `<span class="stage-prep-leader-marker">${escapeHtml(marker)}</span>`)
-    .join("");
+  const leaderMarkers = renderLeaderPassiveMarkerChips(leader.markers);
 
   return `<div class="stage-prep-layer" role="presentation">
     <button type="button" class="stage-prep-backdrop" data-core-prep-action="cancel" aria-label="${escapeHtml(t("ui.stagePrepCancel"))}"></button>
@@ -3105,8 +3349,9 @@ function renderStagePrepInfoModal(): string {
       <img class="stage-prep-info-art" src="${summonerArtSrc(el)}" width="88" height="88" alt="" draggable="false" decoding="async" />
       <div class="stage-prep-info-hero-copy">
         <strong>${escapeHtml(leader.nameKo)}</strong>
-        <small>${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${p.level}${p.awaken > 0 ? ` ${MIDDOT} +${p.awaken}` : ""}</small>
-        <p class="stage-prep-info-leader"><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span> ${escapeHtml(leaderBits.markers.join(` ${MIDDOT} `))}</p>
+        <small>${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${p.level} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}</small>
+        <p class="stage-prep-info-leader"><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span></p>
+        <div class="stage-prep-leader-markers">${renderLeaderPassiveMarkerChips(leaderBits.markers)}</div>
       </div>
     </div>
     <div class="stage-prep-info-section">
@@ -4259,18 +4504,32 @@ function pushDamageFloats(hits: SkillResult[]): void {
 }
 
 function renderDmgLayer(): string {
-  // Floats mount onto unit portraits; the layer stays as a fallback host only.
+  // Floats are positioned onto this host from unit art rects (see layoutDmgFloats).
   return "";
 }
 
-/** Mount HP change numbers on the hit unit's character (ally & enemy). */
-function layoutDmgFloats(_layer?: HTMLElement | null): void {
+/**
+ * Place HP change numbers over each hit unit's sprite.
+ * Always host on `.dmg-layer` (above the board) using art getBoundingClientRect —
+ * never fall back to the layout center (that looked like the magic circle).
+ */
+function layoutDmgFloats(): void {
   app.querySelectorAll(".dmg-float").forEach((el) => el.remove());
+  const layer = app.querySelector<HTMLElement>(".dmg-layer");
+  if (!layer || !dmgFloats.length) return;
+  const layerRect = layer.getBoundingClientRect();
+  if (layerRect.width < 1 || layerRect.height < 1) return;
+
   const perTarget = new Map<string, number>();
   for (const f of dmgFloats) {
     const unit = app.querySelector<HTMLElement>(
       `.battle-unit[data-unit="${CSS.escape(f.targetId)}"]`,
     );
+    const anchor =
+      unit?.querySelector<HTMLElement>(".battle-unit-art") ?? unit;
+    // Soft patch may briefly detach units — skip rather than paint board-center.
+    if (!anchor) continue;
+
     const stack = perTarget.get(f.targetId) ?? 0;
     perTarget.set(f.targetId, stack + 1);
     const el = document.createElement("span");
@@ -4279,23 +4538,30 @@ function layoutDmgFloats(_layer?: HTMLElement | null): void {
     el.dataset.target = f.targetId;
     el.style.setProperty("--i", String(stack));
     el.textContent = f.text;
-    if (unit) {
-      // Attach to the unit (not .battle-unit-art) so mask-image does not clip.
-      unit.appendChild(el);
-    } else {
-      const host = app.querySelector<HTMLElement>(".dmg-layer");
-      if (!host) continue;
-      el.classList.add("dmg-float--orphan");
-      host.appendChild(el);
-    }
+
+    const r = anchor.getBoundingClientRect();
+    const x = r.left + r.width * 0.5 - layerRect.left;
+    // Upper portion of the sprite ≈ head; float CSS translates up from here.
+    const y = r.top + r.height * 0.16 - layerRect.top;
+    const jitter = (stack % 3) * 8 - 8;
+    el.style.left = `${Math.round(x + jitter)}px`;
+    el.style.top = `${Math.round(y)}px`;
+    layer.appendChild(el);
   }
 }
 
 function refreshDmgLayer(): void {
   const layer = app.querySelector<HTMLElement>(".dmg-layer");
   if (layer) layer.innerHTML = "";
-  layoutDmgFloats(layer);
-  requestAnimationFrame(() => layoutDmgFloats(layer));
+  layoutDmgFloats();
+  if (dmgLayoutRaf) cancelAnimationFrame(dmgLayoutRaf);
+  // Double rAF: wait until soft-patched unit art has a real layout box.
+  dmgLayoutRaf = requestAnimationFrame(() => {
+    dmgLayoutRaf = requestAnimationFrame(() => {
+      dmgLayoutRaf = 0;
+      layoutDmgFloats();
+    });
+  });
 }
 
 /** Monsters with summoner seated in the middle of the line (e.g. M M S M M). */
@@ -5077,7 +5343,9 @@ function renderBoardCells(canClick: boolean): string {
         title?: string,
       ): string => {
         const titleAttr = title ? ` title="${title}"` : "";
-        return `<span class="board-mark ${cls}"${titleAttr} aria-hidden="true"><img class="board-mark-img" src="${battleBoardMarkSrc(id)}" width="64" height="64" alt="" draggable="false" decoding="async" onerror="this.closest('.board-mark')?.classList.add('art-failed')"/></span>`;
+        const webp = battleBoardMarkSrc(id);
+        const svg = battleBoardMarkFallbackSrc(id);
+        return `<span class="board-mark ${cls}"${titleAttr} aria-hidden="true"><i class="board-mark-sigil"></i><img class="board-mark-img" src="${webp}" data-svg="${svg}" width="256" height="256" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}this.closest('.board-mark')?.classList.add('art-failed')"/></span>`;
       };
       const bait =
         battle.baitLure &&
@@ -5111,8 +5379,9 @@ function renderBoardCells(canClick: boolean): string {
         : summoning
           ? `<i class="summon-seal" aria-hidden="true"><i></i></i>`
           : token
-          ? `<span class="token-mark token-mark--${tokenResource}">
-              <img class="token-item-img" src="${battleBoardMarkSrc(token.id)}" width="64" height="64" alt="" draggable="false" decoding="async" />
+          ? `<span class="token-mark token-mark--${tokenResource} token-mark--${token.id}">
+              <i class="board-mark-sigil"></i>
+              <img class="token-item-img" src="${battleBoardMarkSrc(token.id)}" data-svg="${battleBoardMarkFallbackSrc(token.id)}" width="256" height="256" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" />
               <span class="token-resource-orbit" aria-hidden="true">
                 <img class="token-resource-img" src="/art/ui/res/${tokenResource}.svg" width="36" height="36" alt="" draggable="false" />
               </span>
@@ -5798,7 +6067,7 @@ function applyResMoreOpen(): void {
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card",
+    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -5847,6 +6116,7 @@ const APP_ROOT_OVERLAY_IDS = [
   "skill-feed-layer",
   "power-up-layer",
   "gear-detail-layer",
+  "gear-sell-confirm-layer",
   "sum-magic-detail-layer",
   "sym-detail-layer",
   "sym-bag-expand-layer",
@@ -5857,6 +6127,8 @@ const APP_ROOT_OVERLAY_IDS = [
   "stage-drop-info-layer",
   "forge-reveal-layer",
   "mon-rite-layer",
+  GROWTH_REVEAL_LAYER_ID,
+  WISH_REVEAL_LAYER_ID,
 ] as const;
 
 function promoteKnownOverlays(): void {
@@ -6963,6 +7235,9 @@ function renderPreservingIsland(): void {
 
 function renderScreen(): void {
   clearEnergyRegenTimer();
+  gearBagFilterUiAbort?.abort();
+  gearBagFilterUiAbort = null;
+  clearGearBagFilterMenuPortal();
   if (!bootReady) {
     app.classList.add("auth-mode");
     app.classList.remove("home-mode");
@@ -7069,12 +7344,11 @@ function renderScreen(): void {
   const summonerPickerList = SUMMONER_ELEMENTS.map((el) => {
     const p = rosterForPicker[el];
     const on = el === activeEl;
-    const aw = p.awaken > 0 ? ` - ${t("summonerPicker.awaken", { n: p.awaken })}` : "";
     return `<button type="button" class="summoner-pick${on ? " is-active" : ""}" data-summoner="${el}" ${on ? "disabled" : ""}>
       <img class="summoner-pick-art" src="/art/summoner/${el}.webp" width="44" height="44" alt="" draggable="false" decoding="async" />
       <span class="summoner-pick-body">
         <strong>${escapeHtml(t("summonerPicker.summoner", { element: elementLabel(el) }))}</strong>
-        <small>Lv.${p.level}${aw}${on ? ` - ${escapeHtml(t("summonerPicker.active"))}` : ""}</small>
+        <small>Lv.${p.level} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}${on ? ` - ${escapeHtml(t("summonerPicker.active"))}` : ""}</small>
       </span>
     </button>`;
   }).join("");
@@ -7112,9 +7386,7 @@ function renderScreen(): void {
             ${
               onIsland || view === "summoner" || view === "enhance"
                 ? ""
-                : `<p class="user-profile-sub">${escapeHtml(elementLabel(activeEl))} Lv.${activeSum.level}${
-                    activeSum.awaken > 0 ? ` - ${escapeHtml(t("summonerPicker.awaken", { n: activeSum.awaken }))}` : ""
-                  }</p>`
+                : `<p class="user-profile-sub">${escapeHtml(elementLabel(activeEl))} Lv.${activeSum.level} ${summonerAwakenGemsHtml(activeSum.awaken, "sum-awaken-gems-wrap--inline")}</p>`
             }
           </div>
         </div>
@@ -7457,10 +7729,15 @@ function renderHome(): string {
     const focusSpot = onboardFocusSpotId(onboard.step);
     const onboardFocus =
       !locked && !islandLayoutEdit && focusSpot === id ? " is-onboard-focus" : "";
+    const upFab =
+      !locked && islandSpotShowsUp(id)
+        ? `<button type="button" class="island-spot-fab island-spot-fab--up" data-spot-up="${id}">${escapeHtml(t("ui.islandUp"))}</button>`
+        : "";
     const fabs = locked
       ? ""
       : `<div class="island-spot-fabs" ${menuOpen || onboardFocus ? "" : "hidden"} aria-hidden="${menuOpen || onboardFocus ? "false" : "true"}">
-      <button type="button" class="island-spot-fab island-spot-fab--enter" data-spot-enter="${id}">${escapeHtml(t("ui.islandEnter"))}</button>
+      <button type="button" class="island-spot-fab island-spot-fab--enter" data-spot-enter="${id}">${escapeHtml(islandSpotActionLabel(id))}</button>
+      ${upFab}
       <button type="button" class="island-spot-fab island-spot-fab--info" data-spot-info="${id}">${escapeHtml(t("ui.islandInfo"))}</button>
     </div>`;
     return `<div class="island-spot${tone}${locked ? " is-locked" : ""}${islandLayoutEdit ? " is-layout-edit" : ""}${focus}${onboardFocus}${menuOpen ? " is-menu-open" : ""}" style="left:${x}%;top:${y}%;--spot-scale:${spotScale};z-index:${spotZ}" data-b="${id}" data-locked="${locked ? "1" : "0"}" ${opts?.unlockLv ? `data-unlock="${opts.unlockLv}"` : ""} role="group" aria-label="${escapeHtml(label)}">
@@ -7651,15 +7928,6 @@ function renderFusionReveal(): string {
   </div>`;
 }
 
-function renderWishReveal(): string {
-  if (!wishReveal) return "";
-  return `<div class="forge-reveal forge-reveal--wish" aria-live="polite">
-    <p class="forge-reveal-kicker"><span class="forge-reveal-mark" aria-hidden="true">${Mark.wish}</span>${t('ui.0b4d534507')}</p>
-    <p class="forge-after">${wishReveal}</p>
-    <button type="button" class="secondary full auth-btn-ghost" id="btn-wish-dismiss" style="margin-top:12px">${t('ui.468266d639')}</button>
-  </div>`;
-}
-
 function bindForgeRevealDismiss(): void {
   const close = (): void => {
     if (!forgeReveal) return;
@@ -7685,13 +7953,6 @@ function bindFusionRevealDismiss(): void {
   });
 }
 
-function bindWishRevealDismiss(): void {
-  app.querySelector("#btn-wish-dismiss")?.addEventListener("click", () => {
-    wishReveal = null;
-    softRefreshOverlayReveals();
-  });
-}
-
 function softRefreshOverlayReveals(): boolean {
   let ok = false;
   const fusionHost = softPatchHost("#fusion-reveal-host", renderFusionReveal());
@@ -7699,11 +7960,8 @@ function softRefreshOverlayReveals(): boolean {
     bindFusionRevealDismiss();
     ok = true;
   }
-  const wishHost = softPatchHost("#wish-reveal-host", renderWishReveal());
-  if (wishHost) {
-    bindWishRevealDismiss();
-    ok = true;
-  }
+  const wishHost = softPatchHost("#wish-reveal-host", "");
+  if (wishHost) ok = true;
   const enhanceHost = app.querySelector<HTMLElement>("#enhance-modal-host");
   if (enhanceHost) {
     enhanceHost.innerHTML = "";
@@ -7741,17 +7999,43 @@ function softShowFusionReveal(): void {
   if (!softRefreshOverlayReveals()) render();
 }
 
-function softShowWishReveal(): void {
-  if (!softRefreshOverlayReveals()) {
-    render();
-    return;
-  }
+function softRefreshWishChrome(): void {
   const day = todayKey();
-  if (save.island.lastWishDay === day) {
-    const meta = app.querySelector<HTMLElement>(".hub-meta");
-    if (meta) meta.textContent = `${t("ui.ecc82466ef")} ${MIDDOT} ${day}`;
-    app.querySelector<HTMLButtonElement>("#btn-wish-cast")?.setAttribute("disabled", "");
+  const used = save.island.lastWishDay === day;
+  const meta = app.querySelector<HTMLElement>(".hub-meta");
+  if (meta) {
+    meta.textContent = used
+      ? `${t("ui.ecc82466ef")} ${MIDDOT} ${day}`
+      : t("ui.b65d90440e");
   }
+  const btn = app.querySelector<HTMLButtonElement>("#btn-wish-cast");
+  if (btn) {
+    btn.disabled = used;
+    btn.textContent = used ? t("ui.566fd24305") : t("ui.7898ac8908");
+  }
+  const status = app.querySelector<HTMLElement>("[data-wish-status]");
+  if (status) status.textContent = used ? t("ui.8d8680373c") : t("ui.9614672b56");
+  const lastEl = app.querySelector<HTMLElement>("[data-wish-last]");
+  if (lastEl) lastEl.textContent = save.island.lastWishDay ?? EM_DASH;
+  const scrollsEl = app.querySelector<HTMLElement>("[data-wish-scrolls]");
+  if (scrollsEl) scrollsEl.textContent = String(save.scrolls);
+  syncHudResources();
+}
+
+function beginWishReveal(reward: NonNullable<ReturnType<typeof runDailyWish>["wishReward"]>): void {
+  if (!reward) return;
+  softRefreshWishChrome();
+  playWishReveal(
+    reward,
+    {
+      mount: softMountOverlay,
+      remove: softRemoveOverlay,
+      dematte: (root) => dematteArtInTree(root),
+    },
+    () => {
+      softRefreshWishChrome();
+    },
+  );
 }
 
 function renderDojo(): string {
@@ -7878,22 +8162,52 @@ function renderWish(): string {
   const day = todayKey();
   const last = save.island.lastWishDay ?? null;
   const used = last === day;
+  const poolRows = WISH_REWARD_POOL.map((row) => {
+    const name =
+      row.kind === "mana"
+        ? t("ui.wishPoolGold", { min: row.min, max: row.max })
+        : row.kind === "crystal"
+          ? t("ui.wishPoolCrystal", { min: row.min, max: row.max })
+          : t("ui.wishPoolScroll", { min: row.min, max: row.max });
+    return `<li class="wish-pool-row" data-kind="${row.kind}">
+      <img class="wish-pool-ico" src="${wishRewardIconSrc(row.kind)}" width="36" height="36" alt="" draggable="false" />
+      <strong class="wish-pool-name">${escapeHtml(name)}</strong>
+      <em class="wish-pool-rate">${escapeHtml(t("ui.wishPoolRate", { pct: row.weightPct }))}</em>
+    </li>`;
+  }).join("");
   return hubShell(
     t("ui.hubWish"),
-    used ? `${t('ui.ecc82466ef')} ${MIDDOT} ${last}` : t('ui.b65d90440e'),
-    `<div class="hub-panel">
-      <div id="wish-reveal-host">${renderWishReveal()}</div>
-      <div class="guild-panel wish-panel">
-        <p class="guild-panel-title">${t('ui.6667aae26a')}</p>
-        <div class="guild-stats">
-          <div class="guild-stat"><span>${t('ui.2bdce5e8cc')}</span><strong>${used ? t('ui.8d8680373c') : t('ui.9614672b56')}</strong></div>
-          <div class="guild-stat"><span>${t('ui.0f8cd87cd5')}</span><strong>${last ?? EM_DASH}</strong></div>
-          <div class="guild-stat"><span>${t('ui.fa73f3a42f')}</span><strong>${save.scrolls}</strong></div>
+    used ? `${t("ui.ecc82466ef")} ${MIDDOT} ${last}` : t("ui.b65d90440e"),
+    `<div class="hub-panel wish-hub">
+      <div id="wish-reveal-host" hidden></div>
+      <section class="wish-shrine" aria-label="${escapeHtml(t("ui.hubWish"))}">
+        <div class="wish-shrine-art">
+          <img
+            src="/art/hub/bldg-wish.webp"
+            width="280"
+            height="200"
+            alt=""
+            draggable="false"
+            onerror="this.onerror=null;this.src='/art/hub/emblem-wish.svg'"
+          />
         </div>
-        <p class="muted dojo-hint">${t('ui.7e6bcf70a0')}.</p>
+        <p class="wish-shrine-caption">${escapeHtml(t("ui.wishShrineCaption"))}</p>
+      </section>
+      <section class="wish-pool guild-panel wish-panel" aria-label="${escapeHtml(t("ui.wishPoolTitle"))}">
+        <p class="guild-panel-title">${escapeHtml(t("ui.wishPoolTitle"))}</p>
+        <ul class="wish-pool-list">${poolRows}</ul>
+        <p class="muted dojo-hint">${escapeHtml(t("ui.7e6bcf70a0"))}</p>
+      </section>
+      <div class="guild-panel wish-panel wish-status">
+        <p class="guild-panel-title">${t("ui.6667aae26a")}</p>
+        <div class="guild-stats">
+          <div class="guild-stat"><span>${t("ui.2bdce5e8cc")}</span><strong data-wish-status>${used ? t("ui.8d8680373c") : t("ui.9614672b56")}</strong></div>
+          <div class="guild-stat"><span>${t("ui.0f8cd87cd5")}</span><strong data-wish-last>${last ?? EM_DASH}</strong></div>
+          <div class="guild-stat"><span>${t("ui.fa73f3a42f")}</span><strong data-wish-scrolls>${save.scrolls}</strong></div>
+        </div>
       </div>
       <button type="button" class="auth-btn-primary full" id="btn-wish-cast" ${used ? "disabled" : ""}>
-        ${used ? t('ui.566fd24305') : t('ui.7898ac8908')}
+        ${used ? t("ui.566fd24305") : t("ui.7898ac8908")}
       </button>
     </div>`,
   );
@@ -7951,7 +8265,7 @@ function renderPartyDock(): string {
         const p = save.summoners?.[el] ?? { level: 1, exp: 0, awaken: 0 };
         return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${on ? " is-active" : ""}" data-party-pick-summoner="${el}" role="option" aria-selected="${on}" title="${escapeHtml(elementLabel(el))}">
           <span class="mon-slot-art" aria-hidden="true">
-            <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="56" height="56" alt="" draggable="false" decoding="async" />
+            <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
           </span>
           <span class="mon-slot-lv-overlay">Lv.${p.level}</span>
         </button>`;
@@ -8085,7 +8399,11 @@ function renderParty(): string {
         </div>
         <div class="stage-prep-effects stage-prep-effects--ally">
           <div class="stage-prep-effects-main">
-            <p><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span> ${escapeHtml(leader.title)} ${MIDDOT} ${escapeHtml(leader.markers.join(` ${MIDDOT} `))}</p>
+            <div class="stage-prep-leader-passive">
+              <strong>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</strong>
+              <span class="stage-prep-leader-name">${escapeHtml(leader.title)}</span>
+              <div class="stage-prep-leader-markers">${renderLeaderPassiveMarkerChips(leader.markers)}</div>
+            </div>
           </div>
           <div class="stage-prep-skill-icos" aria-hidden="true">${skillIcons}</div>
         </div>
@@ -8282,35 +8600,23 @@ function monsterSkillLevelEffect(
   if (level >= MAX_SKILL_LEVEL && (skill?.cooldown ?? 0) > 0) {
     return t("ui.skillLvCd");
   }
-  return t("ui.skillLvPower", { pct: 8 * (level - 1) });
+  return t("ui.skillLvPower", { pct: 8 });
 }
 
 function renderMonsterSkillDetailHtml(
   skill: { nameKo?: string; cooldown: number } | null | undefined,
   ownedLevel: number,
-  previewLevel: number,
 ): string {
   const owned = Math.max(1, Math.min(MAX_SKILL_LEVEL, ownedLevel));
-  const level = Math.max(1, Math.min(MAX_SKILL_LEVEL, previewLevel));
-  const isCurrent = level === owned;
   const descLines = monsterSkillDescLines(skill);
-  const levelDots = Array.from({ length: MAX_SKILL_LEVEL }, (_, index) => {
-    const dotLevel = index + 1;
-    const classes = [
-      "mon-skill-level-dot",
-      dotLevel === level ? "is-preview" : "",
-      dotLevel === owned ? "is-current" : "",
-      dotLevel <= owned ? "is-owned" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    const marker =
-      dotLevel === owned
-        ? `<em class="mon-skill-level-dot-mark">${escapeHtml(t("ui.skillLevelCurrent"))}</em>`
-        : "";
-    return `<button type="button" class="${classes}" data-mon-skill-preview-set="${dotLevel}" aria-label="Lv.${dotLevel}" aria-current="${dotLevel === level ? "true" : "false"}">
-      <span class="mon-skill-level-dot-num">${dotLevel}</span>${marker}
-    </button>`;
+  const levelRows = Array.from({ length: MAX_SKILL_LEVEL }, (_, index) => {
+    const lv = index + 1;
+    const unlocked = lv <= owned;
+    const current = lv === owned;
+    return `<li class="mon-skill-level-row${unlocked ? " is-owned" : " is-locked"}${current ? " is-current" : ""}">
+      <span class="mon-skill-level-row-lv">Lv.${lv}</span>
+      <span class="mon-skill-level-row-fx">${escapeHtml(monsterSkillLevelEffect(skill, lv))}</span>
+    </li>`;
   }).join("");
 
   return `<section class="mon-skill-showcase">
@@ -8329,23 +8635,8 @@ function renderMonsterSkillDetailHtml(
     <section class="mon-skill-growth" aria-label="${escapeHtml(t("ui.skillGrowth"))}">
       <div class="mon-skill-growth-head">
         <span>${escapeHtml(t("ui.skillGrowth"))}</span>
-        <strong>Lv.${level}${level === MAX_SKILL_LEVEL ? " MAX" : ""}</strong>
       </div>
-      <div class="mon-skill-level-viewer">
-        <button type="button" class="mon-skill-level-nav" data-mon-skill-preview="-1" aria-label="${escapeHtml(t("ui.skillPreviewPrev"))}" ${level <= 1 ? "disabled" : ""}>&lsaquo;</button>
-        <div class="mon-skill-level-effect${isCurrent ? " is-current" : ""}">
-          <span class="mon-skill-level-effect-label">
-            ${
-              isCurrent
-                ? `<em class="mon-skill-current-badge">${escapeHtml(t("ui.skillLevelCurrent"))}</em>`
-                : escapeHtml(t("ui.skillLevelPreview"))
-            }
-          </span>
-          <strong>${escapeHtml(monsterSkillLevelEffect(skill, level))}</strong>
-        </div>
-        <button type="button" class="mon-skill-level-nav" data-mon-skill-preview="1" aria-label="${escapeHtml(t("ui.skillPreviewNext"))}" ${level >= MAX_SKILL_LEVEL ? "disabled" : ""}>&rsaquo;</button>
-      </div>
-      <div class="mon-skill-level-track">${levelDots}</div>
+      <ul class="mon-skill-level-list">${levelRows}</ul>
     </section>
   </section>`;
 }
@@ -8423,13 +8714,15 @@ function summonerArtSrc(element: string | undefined | null): string {
 function monsterArtImg(
   monsterId: string | undefined | null,
   className: string,
-  size = 44,
+  size = 96,
 ): string {
   const src = monsterArtSrc(monsterId);
   if (!src) return "";
   const el = getMonster(monsterId ?? "")?.element;
   const tint = el ? ` el-tint-${el}` : "";
-  return `<img class="${className}${tint}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
+  // Request a larger decode target than the slot so downscale stays crisp on retina.
+  const decode = Math.max(size * 2, 128);
+  return `<img class="${className}${tint}" src="${src}" width="${decode}" height="${decode}" alt="" draggable="false" decoding="async" />`;
 }
 
 /** Art used in battle / book hero: Spine still when available, else WebP. */
@@ -9049,7 +9342,187 @@ function selectedPowerUpFodders(): typeof save.roster {
   );
 }
 
+function powerUpTargetCanSkillUp(): boolean {
+  const target = powerUpTarget();
+  if (!target) return false;
+  return skillUpgradableIndices(target.skillLevels).length > 0;
+}
+
+function powerUpHasHighStarFodder(): boolean {
+  return selectedPowerUpFodders().some((monster) => {
+    const stars = Math.max(1, getMonster(monster.monsterId)?.naturalStars ?? 1);
+    return stars >= 4;
+  });
+}
+
+function powerUpPreviewState(): {
+  target: (typeof save.roster)[number];
+  materials: typeof save.roster;
+  expGain: number;
+  before: NonNullable<ReturnType<typeof previewOwnedCombatStats>>;
+  after: NonNullable<ReturnType<typeof previewOwnedCombatStats>>;
+  afterMonster: (typeof save.roster)[number];
+  levelsGained: number;
+  skillMatches: number;
+  needExp: number;
+  curExp: number;
+  projectedBarPct: number;
+  afterNeedExp: number;
+  afterCurExp: number;
+} | null {
+  const target = powerUpTarget();
+  if (!target) return null;
+  const before = previewOwnedCombatStats(save, target.uid);
+  if (!before) return null;
+  const materials = selectedPowerUpFodders();
+  const expGain = materials.reduce(
+    (total, monster) => total + monsterPowerUpExp(monster),
+    0,
+  );
+  const powered = addOwnedMonsterExp(target, expGain);
+  const afterMonster = powered.monster;
+  const tempSave: typeof save = {
+    ...save,
+    roster: save.roster.map((monster) =>
+      monster.uid === target.uid ? afterMonster : monster,
+    ),
+  };
+  const after = previewOwnedCombatStats(tempSave, target.uid);
+  if (!after) return null;
+  const needExp = Math.max(1, monsterExpToNext(target));
+  const curExp = Math.max(0, target.exp ?? 0);
+  const afterNeedExp = Math.max(1, monsterExpToNext(afterMonster));
+  const afterCurExp = Math.max(0, afterMonster.exp ?? 0);
+  const projectedBarPct =
+    powered.levelsGained > 0 || afterMonster.level > target.level
+      ? 100
+      : Math.min(100, Math.round(((curExp + expGain) / needExp) * 100));
+  const skillMatches = materials.filter(
+    (monster) => monster.monsterId === target.monsterId,
+  ).length;
+  return {
+    target,
+    materials,
+    expGain,
+    before,
+    after,
+    afterMonster,
+    levelsGained: powered.levelsGained,
+    skillMatches,
+    needExp,
+    curExp,
+    projectedBarPct,
+    afterNeedExp,
+    afterCurExp,
+  };
+}
+
+function powerUpPreviewHtml(): string {
+  const preview = powerUpPreviewState();
+  if (!preview) {
+    return `<div class="power-up-preview is-empty" id="power-up-preview"></div>`;
+  }
+  const { target, before, after, afterMonster, expGain, levelsGained, skillMatches } =
+    preview;
+  const def = getMonster(target.monsterId);
+  const art =
+    monsterArtImg(target.monsterId, "power-up-preview-img", 88) ||
+    (def?.element?.[0]?.toUpperCase() ?? "?");
+  const levelLine = escapeHtml(
+    t("ui.powerUpPreviewLevel", {
+      from: String(target.level),
+      to: String(afterMonster.level),
+    }),
+  );
+  const expLine =
+    expGain > 0
+      ? escapeHtml(t("ui.powerUpPreviewExp", { n: expGain }))
+      : escapeHtml(t("ui.powerUpMaterials", { n: 0 }));
+  const expNow = escapeHtml(
+    t("ui.powerUpPreviewExpNow", {
+      cur: String(preview.curExp),
+      need: String(preview.needExp),
+    }),
+  );
+  const expAfter =
+    levelsGained > 0
+      ? escapeHtml(
+          t("ui.powerUpPreviewExpNow", {
+            cur: String(preview.afterCurExp),
+            need: String(preview.afterNeedExp),
+          }),
+        )
+      : "";
+  const fillNow = Math.min(100, Math.round((preview.curExp / preview.needExp) * 100));
+  const fillGain = Math.max(0, preview.projectedBarPct - fillNow);
+  const skillNote =
+    skillMatches > 0 && powerUpTargetCanSkillUp()
+      ? `<p class="power-up-preview-skill">${escapeHtml(
+          t("ui.powerUpSkillChance", { n: skillMatches }),
+        )}</p>`
+      : "";
+
+  const statRows: Array<{
+    id: string;
+    label: string;
+    from: number;
+    to: number;
+    percent?: boolean;
+  }> = [
+    { id: "hp", label: t("ui.statHp"), from: before.final.hp, to: after.final.hp },
+    { id: "atk", label: t("ui.statAtk"), from: before.final.atk, to: after.final.atk },
+    { id: "def", label: t("ui.statDef"), from: before.final.def, to: after.final.def },
+    { id: "spd", label: t("ui.statSpd"), from: before.final.spd, to: after.final.spd },
+  ];
+  const statsHtml = statRows
+    .map((row) => {
+      const delta = row.to - row.from;
+      const deltaCls =
+        delta > 0 ? "is-up" : delta < 0 ? "is-down" : "is-flat";
+      const deltaText =
+        delta === 0 ? EM_DASH : `${delta > 0 ? "+" : ""}${delta}`;
+      return `<div class="power-up-stat-row" data-stat="${row.id}">
+        <span class="power-up-stat-k">${escapeHtml(row.label)}</span>
+        <span class="power-up-stat-v">${row.from}<span class="power-up-stat-arrow" aria-hidden="true">${ARROW_RIGHT}</span>${row.to}</span>
+        <span class="power-up-stat-d ${deltaCls}">${deltaText}</span>
+      </div>`;
+    })
+    .join("");
+
+  return `<div class="power-up-preview" id="power-up-preview">
+    <div class="power-up-preview-hero">
+      <div class="power-up-preview-art" aria-hidden="true">${art}</div>
+      <div class="power-up-preview-meta">
+        <strong class="power-up-preview-name">${escapeHtml(def?.nameKo ?? target.monsterId)}</strong>
+        <span class="power-up-preview-lv">${levelLine}${
+          levelsGained > 0
+            ? ` <em class="power-up-preview-lv-gain">(+${levelsGained})</em>`
+            : ""
+        }</span>
+        <span class="power-up-preview-exp-label">${expLine}</span>
+        <div class="power-up-preview-exp" aria-hidden="true">
+          <div class="power-up-preview-exp-track">
+            <div class="power-up-preview-exp-fill" style="width:${fillNow}%"></div>
+            <div class="power-up-preview-exp-gain" style="left:${fillNow}%;width:${fillGain}%"></div>
+          </div>
+          <small class="power-up-preview-exp-nums">${expNow}${
+            expAfter ? ` → ${expAfter}` : ""
+          }</small>
+        </div>
+        ${skillNote}
+      </div>
+    </div>
+    <div class="power-up-preview-stats" aria-label="${escapeHtml(t("ui.powerUpStatAfter"))}">
+      <p class="power-up-preview-stats-title">${escapeHtml(t("ui.powerUpStatAfter"))}</p>
+      ${statsHtml}
+    </div>
+  </div>`;
+}
+
 function powerUpSlotsHtml(): string {
+  const target = powerUpTarget();
+  const canSkill = powerUpTargetCanSkillUp();
+  const skillLabel = escapeHtml(t("ui.powerUpSkillMark"));
   return powerUpFodderList()
     .map((monster) => {
       const def = getMonster(monster.monsterId);
@@ -9058,18 +9531,20 @@ function powerUpSlotsHtml(): string {
       const grade = invGradeFromStars(stars);
       const inParty = save.party.includes(monster.uid);
       const selected = powerUpFodderUids.has(monster.uid);
+      const skillMark =
+        canSkill && target && monster.monsterId === target.monsterId;
       const art =
         monsterArtImg(monster.monsterId, "mon-slot-img", 56) ||
         (def?.element?.[0]?.toUpperCase() ?? "?");
       const title = `${describeOwned(monster)} · EXP +${monsterPowerUpExp(monster)}${
-        monster.monsterId === powerUpTarget()?.monsterId
-          ? " · skill-up"
-          : ""
+        skillMark ? ` · ${t("ui.powerUpSkillMark")}` : ""
       }`;
-      return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${element}${inParty ? " is-party" : ""}${selected ? " is-on" : ""}" data-power-up-fodder="${monster.uid}" role="option" aria-selected="${selected}" title="${escapeHtml(title)}">
+      return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${element}${inParty ? " is-party" : ""}${selected ? " is-on" : ""}${skillMark ? " is-skill-fodder" : ""}" data-power-up-fodder="${monster.uid}" role="option" aria-selected="${selected}" title="${escapeHtml(title)}">
         <span class="mon-slot-art" aria-hidden="true">${art}</span>
         <span class="mon-slot-stars-overlay" aria-label="${stars}">${monStarsHtml(stars)}</span>
         <span class="mon-slot-lv-overlay">Lv.${monster.level}</span>
+        ${skillMark ? `<span class="mon-slot-skill-mark">${skillLabel}</span>` : ""}
+        ${selected ? `<span class="mon-slot-check" aria-hidden="true"></span>` : ""}
       </button>`;
     })
     .join("");
@@ -9078,10 +9553,6 @@ function powerUpSlotsHtml(): string {
 function powerUpConfirmBtnHtml(): string {
   const target = powerUpTarget();
   const materials = selectedPowerUpFodders();
-  const exp = materials.reduce(
-    (total, monster) => total + monsterPowerUpExp(monster),
-    0,
-  );
   const cost = monsterPowerUpManaCost(materials);
   const canPay = Math.floor(save.island.mana) >= cost;
   const disabled =
@@ -9090,45 +9561,42 @@ function powerUpConfirmBtnHtml(): string {
     materials.length === 0 ||
     !canPay;
   return `<button type="button" class="auth-btn-primary mon-book-enh mon-book-enh--cost power-up-confirm" id="btn-power-up-confirm" ${disabled ? "disabled" : ""}>
+    <span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(cost)}</strong></span>
     <span class="mon-enh-label">${escapeHtml(t("ui.powerUpConfirm"))}</span>
-    <span class="mon-enh-cost"><img class="res-ico mon-enh-cost-ico" src="/art/ui/res/gold.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(cost)}</strong><span class="muted"> · ${escapeHtml(t("ui.powerUpExp", { n: exp }))}</span></span>
   </button>`;
 }
 
 function refreshPowerUpModalDom(): void {
   const list = app.querySelector<HTMLElement>("#power-up-inv");
-  const summary = app.querySelector<HTMLElement>("#power-up-summary");
+  const preview = app.querySelector<HTMLElement>("#power-up-preview");
   const footer = app.querySelector<HTMLElement>("#power-up-foot");
   const empty = app.querySelector<HTMLElement>("#power-up-empty");
   if (list) {
     list.innerHTML = powerUpSlotsHtml();
     dematteArtInTree(list, "img.mon-slot-img");
   }
-  const materials = selectedPowerUpFodders();
-  if (summary) {
-    summary.textContent = t("ui.powerUpMaterials", { n: materials.length });
+  if (preview) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = powerUpPreviewHtml();
+    const next = wrap.firstElementChild;
+    if (next) {
+      preview.replaceWith(next);
+      dematteArtInTree(next as HTMLElement, "img.power-up-preview-img, img.mon-slot-img");
+    }
   }
   if (footer) footer.innerHTML = powerUpConfirmBtnHtml();
   if (empty) empty.hidden = powerUpFodderList().length > 0;
 }
 
 function renderPowerUpModal(): string {
-  const target = powerUpTarget();
   const fodderCount = powerUpFodderList().length;
-  const targetName = target
-    ? getMonster(target.monsterId)?.nameKo ?? target.monsterId
-    : "";
   return `<div class="settings-layer power-up-layer" id="power-up-layer" ${powerUpModalOpen ? "" : "hidden"} aria-hidden="${powerUpModalOpen ? "false" : "true"}">
     <button type="button" class="settings-backdrop" id="btn-power-up-close" aria-label="${escapeHtml(t("ui.skillFeedClose"))}"></button>
     <div class="settings-sheet power-up-sheet" role="dialog" aria-modal="true" aria-labelledby="power-up-title">
       <div class="settings-sheet-handle" aria-hidden="true"></div>
       ${modalCloseX(t("ui.skillFeedClose"), "btn-power-up-close")}
       <h2 class="settings-title" id="power-up-title">${escapeHtml(t("ui.powerUpTitle"))}</h2>
-      <p class="power-up-target">${escapeHtml(targetName)} · Lv.${target?.level ?? 0}</p>
-      <p class="power-up-hint muted">${escapeHtml(t("ui.powerUpHint"))}</p>
-      <p class="power-up-summary" id="power-up-summary">${escapeHtml(
-        t("ui.powerUpMaterials", { n: selectedPowerUpFodders().length }),
-      )}</p>
+      ${powerUpPreviewHtml()}
       <div class="mon-book-inv mon-book-inv--rail power-up-inv" id="power-up-inv" role="listbox" aria-label="${escapeHtml(t("ui.powerUpTitle"))}">
         ${powerUpSlotsHtml()}
       </div>
@@ -10353,6 +10821,38 @@ function gearSlotArtFallbackSrc(
   return `/art/ui/gear/${slot}.svg`;
 }
 
+function gearEmptySlotArtSrc(slot: GearSlot): string {
+  return `/art/ui/gear/empty-${slot}.webp`;
+}
+
+function gearEmptySlotArtFallbackSrc(slot: GearSlot): string {
+  return `/art/ui/gear/empty-${slot}.svg`;
+}
+
+function gearEmptySlotImg(slot: GearSlot, className: string, size = 42): string {
+  const src = gearEmptySlotArtSrc(slot);
+  const fb = gearEmptySlotArtFallbackSrc(slot);
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" onerror="this.onerror=null;this.src='${fb}'" />`;
+}
+
+function gearBagFilterLabel(): string {
+  return gearBagFilterSlot === "all"
+    ? t("ui.gearFilterAll")
+    : gearSlotLabel(gearBagFilterSlot);
+}
+
+function compareGearBagPieces(
+  a: { piece: GearPiece; i: number },
+  b: { piece: GearPiece; i: number },
+): number {
+  const sa = GEAR_SLOTS.indexOf(a.piece.slot);
+  const sb = GEAR_SLOTS.indexOf(b.piece.slot);
+  if (sa !== sb) return sa - sb;
+  if (b.piece.stars !== a.piece.stars) return b.piece.stars - a.piece.stars;
+  if (b.piece.enhance !== a.piece.enhance) return b.piece.enhance - a.piece.enhance;
+  return a.i - b.i;
+}
+
 function gearQualityLabel(quality: GearQuality | string | undefined): string {
   return symbolQualityMeta(quality).label;
 }
@@ -10403,6 +10903,78 @@ function gearStatBonusLines(bonus: {
 
 function gearBonusLines(piece: GearPiece): string[] {
   return gearStatBonusLines(piece);
+}
+
+function gearGrowthStatDeltas(
+  before: GearPiece,
+  after: GearPiece,
+): Array<{
+  id: string;
+  label: string;
+  from: number;
+  to: number;
+  percent?: boolean;
+}> {
+  const deltas: Array<{
+    id: string;
+    label: string;
+    from: number;
+    to: number;
+    percent?: boolean;
+  }> = [];
+  const push = (
+    id: string,
+    label: string,
+    from: number,
+    to: number,
+    percent?: boolean,
+  ) => {
+    if (from === to) return;
+    deltas.push({ id, label, from, to, percent });
+  };
+  push("hp", t("ui.statHp"), before.summonerHpBonus ?? 0, after.summonerHpBonus ?? 0);
+  push("def", t("ui.statDef"), before.summonerDefBonus ?? 0, after.summonerDefBonus ?? 0);
+  push(
+    "manaMax",
+    t("ui.growthGearStatManaMax"),
+    before.manaMaxBonus ?? 0,
+    after.manaMaxBonus ?? 0,
+  );
+  push(
+    "manaRegen",
+    t("ui.growthGearStatManaRegen"),
+    Number((before.manaRegenBonus ?? 0).toFixed(2)),
+    Number((after.manaRegenBonus ?? 0).toFixed(2)),
+  );
+  push(
+    "skillPower",
+    t("ui.growthGearStatSkillPower"),
+    Math.round((before.skillPowerBonus ?? 0) * 100),
+    Math.round((after.skillPowerBonus ?? 0) * 100),
+    true,
+  );
+  push(
+    "leaderAtk",
+    t("ui.growthGearStatLeaderAtk"),
+    Number(((before.leaderAtkBonus ?? 0) * 100).toFixed(1)),
+    Number(((after.leaderAtkBonus ?? 0) * 100).toFixed(1)),
+    true,
+  );
+  push(
+    "boardSense",
+    t("ui.growthGearStatBoardSense"),
+    Math.round((before.boardSenseBonus ?? 0) * 100),
+    Math.round((after.boardSenseBonus ?? 0) * 100),
+    true,
+  );
+  push(
+    "startMana",
+    t("ui.growthGearStatStartMana"),
+    Math.round((before.startManaPct ?? 0) * 100),
+    Math.round((after.startManaPct ?? 0) * 100),
+    true,
+  );
+  return deltas;
 }
 
 function activeGearSetBonusLines(setId: string, prog: {
@@ -10460,15 +11032,85 @@ function gearSetSummaryHtml(gear: ReturnType<typeof getActiveGear>): string {
     .join("");
 }
 
-function renderGearDetailModal(activeEl: SummonerElement): string {
-  if (!gearDetailTarget) return "";
-  const source =
-    gearDetailTarget.kind === "equipped"
-      ? getActiveGear(save)[gearDetailTarget.slot]
-      : save.gearBag?.[gearDetailTarget.index];
-  if (!source) return "";
+function closeGearSellConfirm(): void {
+  gearSellConfirmIndex = null;
+  softRemoveOverlay("gear-sell-confirm-layer");
+}
 
-  const piece = normalizeGearPiece(source, source.slot);
+function bindGearSellConfirm(): void {
+  const layer = app.querySelector<HTMLElement>("#gear-sell-confirm-layer");
+  if (!layer) return;
+  layer.querySelectorAll("#btn-gear-sell-close, #btn-gear-sell-cancel").forEach((el) => {
+    el.addEventListener("click", () => {
+      closeGearSellConfirm();
+    });
+  });
+  layer.querySelector("#btn-gear-sell-ok")?.addEventListener("click", () => {
+    const idx = gearSellConfirmIndex;
+    closeGearSellConfirm();
+    if (idx == null || !save.gearBag?.[idx]) return;
+    const r = runSellGearBag(save, idx);
+    save = r.save;
+    persist();
+    gearDetailTarget = null;
+    flash(r.message);
+    syncHudResources();
+    softRefreshSumBookUi({ gear: true, modals: true });
+  });
+}
+
+function openGearSellConfirm(idx: number): void {
+  if (!save.gearBag?.[idx]) return;
+  gearSellConfirmIndex = idx;
+  if (softMountOverlay("gear-sell-confirm-layer", renderGearSellConfirmModal())) {
+    bindGearSellConfirm();
+  }
+}
+
+function renderGearSellConfirmModal(): string {
+  if (gearSellConfirmIndex == null) return "";
+  const piece = save.gearBag?.[gearSellConfirmIndex];
+  if (!piece) return "";
+  const mana = gearSellMana(piece);
+  const crystal = gearSellCrystal(piece);
+  const crystalRow =
+    crystal > 0
+      ? `<div class="gear-sell-price">
+          <span>${escapeHtml(t("res.crystal"))}</span>
+          <strong><img src="/art/ui/res/crystal.svg" width="16" height="16" alt="" draggable="false" />+${fmtRes(crystal)}</strong>
+        </div>`
+      : "";
+  return `<div class="settings-layer gear-sell-confirm-layer" id="gear-sell-confirm-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-gear-sell-close" aria-label="${escapeHtml(t("ui.19b2d19bc1"))}"></button>
+    <div class="gear-sell-confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="gear-sell-confirm-title">
+      ${modalCloseX(t("ui.19b2d19bc1"), "btn-gear-sell-close")}
+      <h3 class="gear-sell-confirm-title" id="gear-sell-confirm-title">${escapeHtml(t("ui.gearSellConfirmTitle"))}</h3>
+      <p class="gear-sell-confirm-body">${escapeHtml(t("ui.gearSellConfirmBody"))}</p>
+      <p class="gear-sell-confirm-name">${escapeHtml(describeGear(piece))}</p>
+      <div class="gear-sell-prices">
+        <div class="gear-sell-price-label">${escapeHtml(t("ui.gearSellConfirmGain"))}</div>
+        <div class="gear-sell-price">
+          <span>${escapeHtml(t("res.gold"))}</span>
+          <strong><img src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" />+${fmtRes(mana)}</strong>
+        </div>
+        ${crystalRow}
+      </div>
+      <div class="gear-sell-acts">
+        <button type="button" class="secondary" id="btn-gear-sell-cancel">${escapeHtml(t("ui.19b2d19bc1"))}</button>
+        <button type="button" class="auth-btn-primary" id="btn-gear-sell-ok">${escapeHtml(t("ui.sumBookSell"))}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+type GearDetailRole = "single" | "equipped" | "candidate";
+
+function renderGearDetailSheet(
+  piece: GearPiece,
+  activeEl: SummonerElement,
+  role: GearDetailRole,
+  opts?: { bagIndex?: number; titleId?: string },
+): string {
   const set = GEAR_SETS.find((entry) => entry.id === piece.setId);
   const grade = gearStarsToInvGrade(piece.stars);
   const art = gearSlotArtSrc(piece.slot, piece.element ?? activeEl, piece.setId);
@@ -10478,27 +11120,37 @@ function renderGearDetailModal(activeEl: SummonerElement): string {
     piece.setId,
   );
   const bonusLines = gearBonusLines(piece);
-  const equipped = gearDetailTarget.kind === "equipped";
   const canEquip = canEquipGearOnElement(piece, activeEl);
-  const action = equipped
-    ? `<button type="button" class="auth-btn-primary" data-gear-detail-enhance="${piece.slot}" ${piece.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>${escapeHtml(t("ui.sumBookEnhance"))} +1</button>`
-    : `<button type="button" class="auth-btn-primary${canEquip ? "" : " is-locked"}" data-gear-detail-equip="${gearDetailTarget.index}">${escapeHtml(t("ui.sumBookEquip"))}</button>
-       <button type="button" class="secondary" data-gear-detail-sell="${gearDetailTarget.index}">+${gearSellMana(piece)}${gearSellCrystal(piece) > 0 ? ` / +${gearSellCrystal(piece)}` : ""}</button>`;
-  const setChoices = equipped
-    ? `<div class="gear-detail-set-choices">${GEAR_SETS.map(
-        (entry) =>
-          `<button type="button" class="set-chip-btn${entry.id === piece.setId ? " is-active" : ""}" data-gear-detail-set="${piece.slot}" data-set-id="${entry.id}" ${entry.id === piece.setId ? "disabled" : ""}>${escapeHtml(entry.nameKo)}</button>`,
-      ).join("")}</div>`
-    : "";
+  const bagIndex = opts?.bagIndex;
+  const badge =
+    role === "equipped"
+      ? `<span class="gear-detail-badge">${escapeHtml(t("ui.symCompareEquipped"))}</span>`
+      : role === "candidate"
+        ? `<span class="gear-detail-badge gear-detail-badge--pick">${escapeHtml(t("ui.symCompareSelected"))}</span>`
+        : "";
+  const closeX =
+    role === "single" ? modalCloseX("close", "btn-gear-detail-close") : "";
+  const titleAttrs = opts?.titleId ? ` id="${opts.titleId}"` : "";
+  const action =
+    role === "equipped" || (role === "single" && bagIndex == null)
+      ? `<button type="button" class="auth-btn-primary" data-gear-detail-enhance="${piece.slot}" ${piece.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>${escapeHtml(t("ui.sumBookEnhance"))} +1</button>`
+      : `<button type="button" class="auth-btn-primary${canEquip ? "" : " is-locked"}" data-gear-detail-equip="${bagIndex ?? -1}">${escapeHtml(t("ui.sumBookEquip"))}</button>
+         <button type="button" class="secondary" data-gear-detail-sell="${bagIndex ?? -1}">${escapeHtml(t("ui.sumBookSell"))}</button>`;
+  const setChoices =
+    role === "equipped" || (role === "single" && bagIndex == null)
+      ? `<div class="gear-detail-set-choices">${GEAR_SETS.map(
+          (entry) =>
+            `<button type="button" class="set-chip-btn${entry.id === piece.setId ? " is-active" : ""}" data-gear-detail-set="${piece.slot}" data-set-id="${entry.id}" ${entry.id === piece.setId ? "disabled" : ""}>${escapeHtml(entry.nameKo)}</button>`,
+        ).join("")}</div>`
+      : "";
 
-  return `<div class="settings-layer gear-detail-layer" id="gear-detail-layer" aria-hidden="false">
-    <button type="button" class="settings-backdrop" id="btn-gear-detail-close" aria-label="close"></button>
-    <div class="gear-detail-sheet inv-grade--${grade}" role="dialog" aria-modal="true" aria-labelledby="gear-detail-title">
-      ${modalCloseX("close", "btn-gear-detail-close")}
+  return `<div class="gear-detail-sheet gear-detail-sheet--${role} inv-grade--${grade}" role="${role === "single" ? "dialog" : "group"}"${role === "single" ? ' aria-modal="true" aria-labelledby="gear-detail-title"' : ""}>
+      ${closeX}
+      ${badge}
       <div class="gear-detail-hero">
         <img src="${art}" width="72" height="72" alt="" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />
         <div>
-          <h3 id="gear-detail-title">${escapeHtml(describeGear(piece))}</h3>
+          <h3${titleAttrs}>${escapeHtml(describeGear(piece))}</h3>
           <p>${escapeHtml(gearSlotLabel(piece.slot))} ${MIDDOT} ${escapeHtml(gearQualityLabel(piece.quality))}</p>
           <p>${escapeHtml(set?.nameKo ?? piece.setId)} ${MIDDOT} ★${piece.stars} +${piece.enhance}</p>
         </div>
@@ -10508,8 +11160,88 @@ function renderGearDetailModal(activeEl: SummonerElement): string {
       </div>
       ${setChoices}
       <div class="gear-detail-actions">${action}</div>
+    </div>`;
+}
+
+function renderGearDetailModal(activeEl: SummonerElement): string {
+  if (!gearDetailTarget) return "";
+
+  if (gearDetailTarget.kind === "equipped") {
+    const source = getActiveGear(save)[gearDetailTarget.slot];
+    if (!source) return "";
+    const piece = normalizeGearPiece(source, source.slot);
+    return `<div class="settings-layer gear-detail-layer" id="gear-detail-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-gear-detail-close" aria-label="close"></button>
+    ${renderGearDetailSheet(piece, activeEl, "single", { titleId: "gear-detail-title" })}
+  </div>`;
+  }
+
+  const bagSource = save.gearBag?.[gearDetailTarget.index];
+  if (!bagSource) return "";
+  const candidate = normalizeGearPiece(bagSource, bagSource.slot);
+  const equippedRaw = getActiveGear(save)[candidate.slot];
+  const comparing = Boolean(equippedRaw);
+
+  if (comparing && equippedRaw) {
+    const equipped = normalizeGearPiece(equippedRaw, equippedRaw.slot);
+    return `<div class="settings-layer gear-detail-layer gear-detail-layer--compare" id="gear-detail-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-gear-detail-close" aria-label="close"></button>
+    <div class="gear-detail-compare" role="dialog" aria-modal="true" aria-label="${escapeHtml(t("ui.sumBookTabGear"))}">
+      ${modalCloseX("close", "btn-gear-detail-close")}
+      ${renderGearDetailSheet(equipped, activeEl, "equipped")}
+      ${renderGearDetailSheet(candidate, activeEl, "candidate", {
+        bagIndex: gearDetailTarget.index,
+        titleId: "gear-detail-title",
+      })}
     </div>
   </div>`;
+  }
+
+  return `<div class="settings-layer gear-detail-layer" id="gear-detail-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-gear-detail-close" aria-label="close"></button>
+    ${renderGearDetailSheet(candidate, activeEl, "single", {
+      bagIndex: gearDetailTarget.index,
+      titleId: "gear-detail-title",
+    })}
+  </div>`;
+}
+
+function sumMagicLockedHint(
+  activeEl: SummonerElement,
+  slot: MagicSkillSlot,
+  prog: SummonerMagicProgress,
+): string {
+  const kit = getSummonerKit(activeEl);
+  const isTier2 = slot === "A3" || slot === "A4" || slot === "B3" || slot === "B4";
+  if (isTier2) {
+    if (slot.startsWith("A") && (prog.branch !== "A" || !magicTier2Unlocked(activeEl, prog))) {
+      return t("ui.skillLockedHintTier2", {
+        skill1: kit.skills.A1.nameKo,
+        skill2: kit.skills.A2.nameKo,
+        n: MAX_MAGIC_RANK,
+      });
+    }
+    if (slot.startsWith("B") && (prog.branch !== "B" || !magicTier2Unlocked(activeEl, prog))) {
+      return t("ui.skillLockedHintTier2", {
+        skill1: kit.skills.B1.nameKo,
+        skill2: kit.skills.B2.nameKo,
+        n: MAX_MAGIC_RANK,
+      });
+    }
+  }
+  if (slot.startsWith("A") && slot !== "A" && prog.branch !== "A") {
+    return t("ui.skillLockedHint", {
+      skill: kit.skills.A.nameKo,
+      n: MAX_MAGIC_RANK,
+    });
+  }
+  if (slot.startsWith("B") && slot !== "B" && prog.branch !== "B") {
+    return t("ui.skillLockedHint", {
+      skill: kit.skills.B.nameKo,
+      n: MAX_MAGIC_RANK,
+    });
+  }
+  return "";
 }
 
 function renderSumMagicDetailModal(activeEl: SummonerElement): string {
@@ -10521,26 +11253,9 @@ function renderSumMagicDetailModal(activeEl: SummonerElement): string {
   const unlocked = unlockedMagicSkills(activeEl, prog);
   const open = unlocked.some((entry) => entry.id === sk.id);
   const rank = magicRank(prog, sk.id);
-  const lockedHint = (() => {
-    const slot = sumMagicDetailSlot;
-    const isTier2 =
-      slot === "A3" || slot === "A4" || slot === "B3" || slot === "B4";
-    if (isTier2) {
-      if (slot.startsWith("A") && (prog.branch !== "A" || !magicTier2Unlocked(activeEl, prog))) {
-        return t("ui.skillLockedHintTier2", { branch: "A", n: MAX_MAGIC_RANK });
-      }
-      if (slot.startsWith("B") && (prog.branch !== "B" || !magicTier2Unlocked(activeEl, prog))) {
-        return t("ui.skillLockedHintTier2", { branch: "B", n: MAX_MAGIC_RANK });
-      }
-    }
-    if (slot.startsWith("A") && slot !== "A" && prog.branch !== "A") {
-      return t("ui.skillLockedHint", { branch: "A", n: MAX_MAGIC_RANK });
-    }
-    if (slot.startsWith("B") && slot !== "B" && prog.branch !== "B") {
-      return t("ui.skillLockedHint", { branch: "B", n: MAX_MAGIC_RANK });
-    }
-    return t("ui.stagePrepSkillLocked");
-  })();
+  const lockedHint =
+    sumMagicLockedHint(activeEl, sumMagicDetailSlot, prog) ||
+    t("ui.stagePrepSkillLocked");
   const lines = magicSkillDescLines(sk, open ? rank : 0);
   const nextLines =
     open && rank < MAX_MAGIC_RANK
@@ -10582,7 +11297,6 @@ function renderSumMagicDetailModal(activeEl: SummonerElement): string {
       <div class="sum-magic-detail-hero">
         ${summonerSkillArtImg(sk.id, "sum-magic-detail-ico", 56)}
         <div>
-          <span class="sum-magic-detail-slot">${sumMagicDetailSlot}</span>
           <h3 id="sum-magic-detail-title">${escapeHtml(sk.nameKo)}</h3>
           <p>${escapeHtml(
             open
@@ -10607,6 +11321,30 @@ function renderSumMagicDetailModal(activeEl: SummonerElement): string {
   </div>`;
 }
 
+function renderGearBagFilterDropdown(): string {
+  const open = gearBagFilterOpen;
+  const rows = [
+    `<button type="button" class="mon-sym-filter-row${gearBagFilterSlot === "all" ? " is-on" : ""}" data-gear-filter-slot="all">${escapeHtml(t("ui.gearFilterAll"))}</button>`,
+    ...GEAR_SLOTS.map(
+      (slot) =>
+        `<button type="button" class="mon-sym-filter-row${gearBagFilterSlot === slot ? " is-on" : ""}" data-gear-filter-slot="${slot}">
+          ${gearEmptySlotImg(slot, "mon-sym-filter-ico mon-sym-filter-ico--slot", 16)}
+          <span>${escapeHtml(gearSlotLabel(slot))}</span>
+        </button>`,
+    ),
+  ].join("");
+  const menu = open
+    ? `<div class="mon-sym-filter-menu" data-gear-filter-menu role="menu" aria-label="${escapeHtml(t("ui.gearFilter"))}">${rows}</div>`
+    : "";
+  return `<div class="mon-sym-filter" data-gear-filter>
+    <button type="button" class="mon-sym-filter-btn" data-gear-filter-toggle aria-expanded="${open ? "true" : "false"}" title="${escapeHtml(t("ui.gearFilter"))}">
+      <span class="mon-sym-filter-btn-label">${escapeHtml(gearBagFilterLabel())}</span>
+      <span class="mon-sym-filter-caret" aria-hidden="true">${ARROW_DOWN}</span>
+    </button>
+    ${menu}
+  </div>`;
+}
+
 function renderGearDollHtml(activeEl: SummonerElement): string {
   const gear = getActiveGear(save);
   const fxGear = enhanceFx?.kind === "gear" ? enhanceFx.slot : null;
@@ -10614,7 +11352,7 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
   const slotBtn = (slot: GearSlot, piece: GearPiece | null): string => {
     if (!piece) {
       return `<span class="gear-slot gear-slot--image gear-slot--empty" title="${escapeHtml(t("ui.43d54a7358"))}" aria-label="${escapeHtml(gearSlotLabel(slot))}">
-        <span class="gear-slot-empty-mark" aria-hidden="true">+</span>
+        ${gearEmptySlotImg(slot, "gear-slot-empty-sil", 52)}
       </span>`;
     }
     const grade = gearStarsToInvGrade(piece.stars);
@@ -10626,30 +11364,60 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
     </button>`;
   };
   const bag = save.gearBag ?? [];
-  const bagSlots = Array.from({ length: MAX_GEAR_BAG }, (_, i) => {
-    const p = bag[i];
-    if (!p) {
-      return `<span class="gear-bag-slot gear-bag-slot--empty" aria-hidden="true"></span>`;
-    }
-          const piece = normalizeGearPiece(p, p.slot);
-          const grade = gearStarsToInvGrade(piece.stars);
-          const art = gearSlotArtSrc(piece.slot, piece.element, piece.setId);
-          const fallback = gearSlotArtFallbackSrc(piece.slot, piece.element, piece.setId);
-          return `<button type="button" class="gear-bag-slot inv-grade--${grade}" data-gear-detail-bag="${i}" title="${escapeHtml(describeGear(piece))}">
-            <img src="${art}" width="42" height="42" alt="${escapeHtml(gearSlotLabel(piece.slot))}" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />
-            <span>+${piece.enhance}</span>
-          </button>`;
-  }).join("");
+  const visible = bag
+    .map((p, i) => ({ piece: normalizeGearPiece(p, p.slot), i }))
+    .filter(
+      ({ piece }) => gearBagFilterSlot === "all" || piece.slot === gearBagFilterSlot,
+    )
+    .sort(compareGearBagPieces);
+  const emptySilhouette = (e: number): GearSlot =>
+    gearBagFilterSlot === "all"
+      ? GEAR_SLOTS[e % GEAR_SLOTS.length]!
+      : gearBagFilterSlot;
+  const emptyCount = Math.max(0, MAX_GEAR_BAG - bag.length);
+  const filledCells = visible.map(({ piece, i }) => {
+    const grade = gearStarsToInvGrade(piece.stars);
+    const art = gearSlotArtSrc(piece.slot, piece.element, piece.setId);
+    const fallback = gearSlotArtFallbackSrc(piece.slot, piece.element, piece.setId);
+    return `<button type="button" class="gear-bag-slot inv-grade--${grade}" data-gear-detail-bag="${i}" title="${escapeHtml(describeGear(piece))}">
+      <img src="${art}" width="42" height="42" alt="${escapeHtml(gearSlotLabel(piece.slot))}" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />
+      <span>+${piece.enhance}</span>
+    </button>`;
+  });
+  const emptyCells =
+    visible.length === 0 && emptyCount === 0
+      ? [
+          `<p class="gear-bag-empty muted">${escapeHtml(t("ui.gearFilterEmpty"))}</p>`,
+        ]
+      : Array.from({ length: emptyCount }, (_, e) => {
+          const slot = emptySilhouette(e);
+          return `<span class="gear-bag-slot gear-bag-slot--empty" title="${escapeHtml(gearSlotLabel(slot))}" aria-hidden="true">
+            ${gearEmptySlotImg(slot, "gear-empty-sil", 42)}
+          </span>`;
+        });
+  const bagSlots = [...filledCells, ...emptyCells].join("");
 
   return `<div class="sum-gear-panel">
-    <div class="sum-gear-equip-row">
-      <div class="gear-doll" aria-label="${escapeHtml(t("ui.sumBookTabGear"))}">
-        ${slots.map((slot) => slotBtn(slot, gear[slot])).join("")}
+    <section class="sum-gear-equip-panel">
+      <div class="sum-panel-head">
+        <span class="sum-panel-ornament" aria-hidden="true"></span>
+        <h3 class="sum-panel-title">${escapeHtml(t("ui.sumBookTabGear"))}</h3>
+        <span class="sum-panel-ornament sum-panel-ornament--flip" aria-hidden="true"></span>
       </div>
-      <div class="gear-set-summary gear-set-summary--brief">${gearSetSummaryHtml(gear)}</div>
-    </div>
-    <p class="section-label">${escapeHtml(t("ui.sumBookGearBag", { n: bag.length, max: MAX_GEAR_BAG }))}</p>
-    <div class="gear-bag-grid" role="list">${bagSlots}</div>
+      <div class="sum-gear-equip-row">
+        <div class="gear-doll" aria-label="${escapeHtml(t("ui.sumBookTabGear"))}">
+          ${slots.map((slot) => slotBtn(slot, gear[slot])).join("")}
+        </div>
+        <div class="gear-set-summary gear-set-summary--brief">${gearSetSummaryHtml(gear)}</div>
+      </div>
+    </section>
+    <section class="sum-gear-bag-panel">
+      <div class="sum-gear-bag-head">
+        <p class="section-label">${escapeHtml(t("ui.sumBookGearBag", { n: bag.length, max: MAX_GEAR_BAG }))}</p>
+        ${renderGearBagFilterDropdown()}
+      </div>
+      <div class="gear-bag-grid" role="list">${bagSlots}</div>
+    </section>
   </div>`;
 }
 
@@ -10858,7 +11626,7 @@ function renderCodexLayer(): string {
         <strong>${escapeHtml(leader.nameKo)}</strong>
         <small class="codex-summoner-meta">
           <img class="codex-detail-el" src="${elSrc}" width="18" height="18" alt="" draggable="false" />
-          Lv.${p.level}${p.awaken > 0 ? ` ${MIDDOT} +${p.awaken}` : ""}
+          Lv.${p.level} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}
         </small>
       </button>`;
     }).join("");
@@ -10975,9 +11743,11 @@ function renderLeaderBuffChips(
   const matching = t("ui.sumInfoMatchingElement", {
     element: elementLabel(element),
   });
-  const buffs: { stat: string; value: string; scope: string }[] = [];
+  const buffs: { tone: string; stat: string; value: string; scope: string }[] =
+    [];
   if (leader.atkPct) {
     buffs.push({
+      tone: "atk",
       stat: t("ui.statAtk"),
       value: `+${Math.round(leader.atkPct * 100)}%`,
       scope: allAllies,
@@ -10985,6 +11755,7 @@ function renderLeaderBuffChips(
   }
   if (leader.elementAtkPct) {
     buffs.push({
+      tone: "atk",
       stat: t("ui.statAtk"),
       value: `+${Math.round(leader.elementAtkPct * 100)}%`,
       scope: matching,
@@ -10992,6 +11763,7 @@ function renderLeaderBuffChips(
   }
   if (leader.hpPct) {
     buffs.push({
+      tone: "hp",
       stat: t("ui.statHp"),
       value: `+${Math.round(leader.hpPct * 100)}%`,
       scope: allAllies,
@@ -10999,6 +11771,7 @@ function renderLeaderBuffChips(
   }
   if (leader.spdPct) {
     buffs.push({
+      tone: "spd",
       stat: t("ui.statSpd"),
       value: `+${Math.round(leader.spdPct * 100)}%`,
       scope: allAllies,
@@ -11006,6 +11779,7 @@ function renderLeaderBuffChips(
   }
   if (leader.accuracyFlat) {
     buffs.push({
+      tone: "acc",
       stat: t("ui.statAcc"),
       value: `+${leader.accuracyFlat}`,
       scope: allAllies,
@@ -11013,6 +11787,7 @@ function renderLeaderBuffChips(
   }
   if (leader.critRateFlat) {
     buffs.push({
+      tone: "cri",
       stat: t("ui.statCriRate"),
       value: `+${leader.critRateFlat}%`,
       scope: allAllies,
@@ -11020,6 +11795,7 @@ function renderLeaderBuffChips(
   }
   if (leader.critDmgFlat) {
     buffs.push({
+      tone: "cri",
       stat: t("ui.statCriDmg"),
       value: `+${leader.critDmgFlat}%`,
       scope: allAllies,
@@ -11027,19 +11803,21 @@ function renderLeaderBuffChips(
   }
   if (leader.damageTakenMul != null) {
     buffs.push({
+      tone: "dr",
       stat: t("ui.sumInfoDamageReduction"),
-      value: `-${Math.round((1 - leader.damageTakenMul) * 100)}%`,
+      value: `${Math.round((1 - leader.damageTakenMul) * 100)}%`,
       scope: allAllies,
     });
   }
   return buffs
-    .map(
-      (buff) => `<div class="sum-leader-buff">
-        <span class="sum-leader-buff-stat">${escapeHtml(buff.stat)}</span>
-        <strong>${escapeHtml(buff.value)}</strong>
-        <small>${escapeHtml(buff.scope)}</small>
-      </div>`,
-    )
+    .map((buff) => {
+      const showScope = buff.scope !== allAllies;
+      return `<div class="sum-leader-marker sum-leader-marker--${buff.tone}${showScope ? "" : " is-compact"}" title="${escapeHtml(buff.scope)}">
+        <span class="sum-leader-marker-stat">${escapeHtml(buff.stat)}</span>
+        <strong class="sum-leader-marker-val">${escapeHtml(buff.value)}</strong>
+        ${showScope ? `<small class="sum-leader-marker-scope">${escapeHtml(buff.scope)}</small>` : ""}
+      </div>`;
+    })
     .join("");
 }
 
@@ -11048,35 +11826,25 @@ function renderSumSkillsPaneHtml(activeEl: SummonerElement): string {
   const prog = save.summonerMagic?.[activeEl] ?? emptyMagicProgress();
   const unlocked = unlockedMagicSkills(activeEl, prog);
   const unlockedIds = new Set(unlocked.map((s) => s.id));
-  const tier2 = magicTier2Unlocked(activeEl, prog);
   const magicNode = (slot: MagicSkillSlot): string => {
     const sk = kit.skills[slot];
     const open = unlockedIds.has(sk.id);
     const rank = magicRank(prog, sk.id);
-    const isTier2 = slot === "A3" || slot === "A4" || slot === "B3" || slot === "B4";
-    const lockedHint =
-      isTier2 && slot.startsWith("A") && (!prog.branch || prog.branch !== "A" || !tier2)
-        ? t("ui.skillLockedHintTier2", { branch: "A", n: MAX_MAGIC_RANK })
-        : isTier2 && slot.startsWith("B") && (!prog.branch || prog.branch !== "B" || !tier2)
-          ? t("ui.skillLockedHintTier2", { branch: "B", n: MAX_MAGIC_RANK })
-          : slot.startsWith("A") && slot !== "A" && prog.branch !== "A"
-            ? t("ui.skillLockedHint", { branch: "A", n: MAX_MAGIC_RANK })
-            : slot.startsWith("B") && slot !== "B" && prog.branch !== "B"
-              ? t("ui.skillLockedHint", { branch: "B", n: MAX_MAGIC_RANK })
-              : "";
-    const hint = open
-      ? `+${rank}/${MAX_MAGIC_RANK}`
-      : t("ui.stagePrepSkillLocked");
+    const lockedHint = sumMagicLockedHint(activeEl, slot, prog);
     const title = lockedHint
       ? `${sk.nameKo} · ${lockedHint}`
-      : sk.nameKo;
+      : open
+        ? `${sk.nameKo} · +${rank}/${MAX_MAGIC_RANK}`
+        : `${sk.nameKo} · ${t("ui.stagePrepSkillLocked")}`;
+    const rankBadge = open
+      ? `<span class="sum-magic-node-rank">+${rank}</span>`
+      : "";
     return `<button type="button" class="sum-magic-node${open ? " is-on" : " is-locked"}${sumMagicDetailSlot === slot ? " is-active" : ""}" data-magic-detail-slot="${slot}" title="${escapeHtml(title)}">
-      <span class="sum-magic-node-slot">${slot}</span>
       <div class="sum-magic-node-seal">
         ${summonerSkillArtImg(sk.id, "sum-magic-ico", 36)}
+        ${rankBadge}
       </div>
       <strong class="sum-magic-node-name">${escapeHtml(sk.nameKo)}</strong>
-      <small class="sum-magic-node-hint">${escapeHtml(hint)}</small>
     </button>`;
   };
   const openA = unlockedIds.has(kit.skills.A.id);
@@ -11100,7 +11868,6 @@ function renderSumSkillsPaneHtml(activeEl: SummonerElement): string {
         <path class="sum-magic-edge${openA2 && openA4 ? " is-live" : ""}" d="M37.5 42 L37.5 72" />
         <path class="sum-magic-edge${openB1 && openB3 ? " is-live" : ""}" d="M62.5 42 L62.5 72" />
         <path class="sum-magic-edge${openB2 && openB4 ? " is-live" : ""}" d="M87.5 42 L87.5 72" />
-        <path class="sum-magic-edge sum-magic-edge--root${openA || openB ? " is-live" : ""}" d="M25 18 H75" />
       </svg>
       <div class="sum-magic-tree-grid">
         <div class="sum-magic-tree-cell sum-magic-tree-cell--a">${magicNode("A")}</div>
@@ -11137,6 +11904,11 @@ function renderSummonerBook(): string {
     save.island.crystal >= awakenCrystal &&
     awakenMatOwned >= awakenMat;
   const leaderPct = (awakenLeaderAtkPct(awaken) * 100).toFixed(1);
+  const leaderNextPct = (awakenLeaderAtkPct(awakenNext) * 100).toFixed(1);
+  const manaBonus = awaken * 8;
+  const manaNext = awakenNext * 8;
+  const skillBonus = (awaken * 2.5).toFixed(1);
+  const skillNext = (awakenNext * 2.5).toFixed(1);
   const levelPct = Math.max(
     0,
     Math.min(
@@ -11148,85 +11920,45 @@ function renderSummonerBook(): string {
   );
 
   const leaderBuffs = renderLeaderBuffChips(leader, activeEl);
-  const infoPanel = `<div class="mon-pane mon-pane--info sum-info-panel" data-sum-pane="info"${sumDetailTab === "info" ? "" : " hidden"}>
-    <section class="sum-leader-card">
-      <div class="sum-leader-head">
-        <div class="sum-leader-art">
-          <img src="${summonerArtSrc(activeEl)}" width="52" height="52" alt="" draggable="false" />
-        </div>
-        <div>
-          <span class="sum-leader-k">${escapeHtml(t("ui.sumBookLeader"))}</span>
-          <strong>${escapeHtml(leader.nameKo)}</strong>
-          <p>${escapeHtml(stagePrepLeaderPassive(save).markers.join(` ${MIDDOT} `))}</p>
-        </div>
-      </div>
-      <div class="sum-leader-buffs" aria-label="${escapeHtml(t("ui.sumInfoLeaderBuffs"))}">
-        ${leaderBuffs}
-      </div>
-      <div class="sum-leader-total">
-        <span>${escapeHtml(t("ui.gearBonusLeaderAtk", { n: leaderPct }))}</span>
-        <small>${escapeHtml(t("ui.sumInfoAllAllies"))}</small>
-      </div>
-    </section>
-    <div class="sum-info-stats mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list">
-      <div class="stat-cell" role="listitem"><span class="stat-cell-k">Lv</span><span class="stat-cell-v">${active.level}</span></div>
-      <div class="stat-cell" role="listitem"><span class="stat-cell-k">EXP</span><span class="stat-cell-v">${Math.floor(active.exp ?? 0)}</span></div>
-      <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(t("ui.a2d1ab7b28"))}</span><span class="stat-cell-v">+${awaken}</span></div>
-      <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(elementLabel(activeEl))}</span><span class="stat-cell-v">${escapeHtml(kit.leader.nameKo)}</span></div>
-    </div>
-  </div>`;
-
-  const skillsPanel = renderSumSkillsPaneHtml(activeEl);
-
   const awakenLabel = awakenMax
     ? t("ui.sumBookAwakenMax")
     : awakenLocked
       ? t("ui.sumBookAwakenNeedLv", { n: awakenNeedLv })
       : t("ui.sumBookAwakenBtn", { n: awaken + 1 });
-  const awakenPanel = `<div class="mon-pane mon-pane--awaken" data-sum-pane="awaken"${sumDetailTab === "awaken" ? "" : " hidden"}>
-    <div class="sum-awaken-card${awakenMax ? " is-max" : ""}">
-      <div class="sum-awaken-preview">
-        <p class="sum-awaken-section-title">${escapeHtml(t("ui.sumAwakenPreview"))}</p>
-        <div class="sum-awaken-forms">
-          <div class="sum-awaken-form">
-            <span>${escapeHtml(t("ui.sumAwakenCurrent"))}</span>
-            <div class="sum-awaken-portrait">
-              <img src="${summonerArtSrc(activeEl)}" width="60" height="60" alt="" draggable="false" />
-              <strong>+${awaken}</strong>
-            </div>
-          </div>
-          <span class="sum-awaken-arrow" aria-hidden="true">${ARROW_RIGHT}</span>
-          <div class="sum-awaken-form sum-awaken-form--next">
-            <span>${escapeHtml(t("ui.sumAwakenNext"))}</span>
-            <div class="sum-awaken-portrait">
-              <img src="${summonerArtSrc(activeEl)}" width="60" height="60" alt="" draggable="false" />
-              <strong>+${awakenNext}</strong>
-            </div>
-          </div>
-        </div>
-        <div class="sum-awaken-gains">
-          <div><span>${escapeHtml(t("ui.sumAwakenLeaderBonus"))}</span><strong>+${leaderPct}% ${ARROW_RIGHT} +${(awakenLeaderAtkPct(awakenNext) * 100).toFixed(1)}%</strong></div>
-          <div><span>${escapeHtml(t("ui.sumAwakenManaBonus"))}</span><strong>+${awaken * 8} ${ARROW_RIGHT} +${awakenNext * 8}</strong></div>
-          <div><span>${escapeHtml(t("ui.sumAwakenSkillBonus"))}</span><strong>+${(awaken * 2.5).toFixed(1)}% ${ARROW_RIGHT} +${(awakenNext * 2.5).toFixed(1)}%</strong></div>
-        </div>
-      </div>
+  const awakenCard = `<section class="sum-awaken-card${awakenMax ? " is-max" : ""}">
+      <header class="sum-info-section-head">
+        <span>${escapeHtml(t("ui.sumInfoAwaken"))}</span>
+      </header>
       ${
         !awakenMax
-          ? `<div class="sum-awaken-cost-panel">
+          ? `<div class="sum-awaken-next">
+              <p class="sum-awaken-section-title">${escapeHtml(t("ui.sumAwakenNext"))}</p>
+              <div class="sum-awaken-delta-gems">
+                ${summonerAwakenGemsHtml(awaken, "sum-awaken-gems-wrap--form")}
+                <span class="sum-awaken-arrow" aria-hidden="true">${ARROW_RIGHT}</span>
+                ${summonerAwakenGemsHtml(awakenNext, "sum-awaken-gems-wrap--form")}
+              </div>
+              <div class="sum-awaken-gains">
+                <div><span>${escapeHtml(t("ui.sumAwakenLeaderBonus"))}</span><strong>+${leaderNextPct}%</strong></div>
+                <div><span>${escapeHtml(t("ui.sumAwakenManaBonus"))}</span><strong>+${manaNext}</strong></div>
+                <div><span>${escapeHtml(t("ui.sumAwakenSkillBonus"))}</span><strong>+${skillNext}%</strong></div>
+              </div>
+            </div>
+            <div class="sum-awaken-cost-panel">
               <p class="sum-awaken-section-title">${escapeHtml(t("ui.sumAwakenCost"))}</p>
               <div class="sum-awaken-costs">
                 <div class="sum-awaken-cost${save.island.mana < awakenMana ? " is-short" : ""}">
-                  <img src="/art/ui/res/gold.svg" width="30" height="30" alt="" draggable="false" />
+                  <img src="/art/ui/res/gold.svg" width="18" height="18" alt="" draggable="false" />
                   <span>${fmtRes(awakenMana)}</span>
                   <small>${fmtRes(save.island.mana)}</small>
                 </div>
                 <div class="sum-awaken-cost${save.island.crystal < awakenCrystal ? " is-short" : ""}">
-                  <img src="/art/ui/res/crystal.svg" width="30" height="30" alt="" draggable="false" />
+                  <img src="/art/ui/res/crystal.svg" width="18" height="18" alt="" draggable="false" />
                   <span>${fmtRes(awakenCrystal)}</span>
                   <small>${fmtRes(save.island.crystal)}</small>
                 </div>
                 <div class="sum-awaken-cost${awakenMatOwned < awakenMat ? " is-short" : ""}">
-                  <img src="${monsterElementArtSrc(activeEl) ?? ""}" width="30" height="30" alt="" draggable="false" />
+                  <img src="${monsterElementArtSrc(activeEl) ?? ""}" width="18" height="18" alt="" draggable="false" />
                   <span>${fmtRes(awakenMat)}</span>
                   <small>${fmtRes(awakenMatOwned)}</small>
                 </div>
@@ -11235,19 +11967,37 @@ function renderSummonerBook(): string {
           : ""
       }
       <button type="button" class="auth-btn-primary sum-awaken-confirm" data-awaken ${awakenMax || awakenLocked || !canAffordAwaken ? "disabled" : ""}>${escapeHtml(awakenLabel)}</button>
-    </div>
+    </section>`;
+  const infoPanel = `<div class="mon-pane mon-pane--info sum-info-panel" data-sum-pane="info"${sumDetailTab === "info" ? "" : " hidden"}>
+    <section class="sum-leader-card">
+      <header class="sum-info-section-head">
+        <span>${escapeHtml(t("ui.sumBookLeader"))}</span>
+      </header>
+      <div class="sum-leader-buffs" aria-label="${escapeHtml(t("ui.sumInfoLeaderBuffs"))}">
+        ${leaderBuffs}
+      </div>
+      <div class="sum-info-effects" aria-label="${escapeHtml(t("ui.sumInfoAwakenEffects"))}">
+        <p class="sum-awaken-section-title">${escapeHtml(t("ui.sumInfoAwakenEffects"))}</p>
+        <div class="sum-info-effects-grid">
+          <div class="sum-info-effect"><span>${escapeHtml(t("ui.sumAwakenLeaderBonus"))}</span><strong>+${leaderPct}%</strong></div>
+          <div class="sum-info-effect"><span>${escapeHtml(t("ui.sumAwakenManaBonus"))}</span><strong>+${manaBonus}</strong></div>
+          <div class="sum-info-effect"><span>${escapeHtml(t("ui.sumAwakenSkillBonus"))}</span><strong>+${skillBonus}%</strong></div>
+        </div>
+      </div>
+    </section>
+    ${awakenCard}
   </div>`;
+
+  const skillsPanel = renderSumSkillsPaneHtml(activeEl);
 
   const gearPanel = `<div class="mon-pane mon-pane--gear" data-sum-pane="gear"${sumDetailTab === "gear" ? "" : " hidden"}>
     ${renderGearDollHtml(activeEl)}
   </div>`;
 
   const heroBlock = `<div class="mon-inspect-hero">
-    <div class="mon-inspect-preview">
+    <div class="mon-inspect-preview" data-mon-preview="summoner-${activeEl}">
       <div class="mon-preview-turntable" role="img" aria-label="${escapeHtml(leader.nameKo)}">
-        <div class="mon-preview-art">
-          <img class="mon-preview-img sum-preview-img" src="${summonerArtSrc(activeEl)}" width="120" height="120" alt="" draggable="false" decoding="async" />
-        </div>
+        <div class="mon-preview-art">${summonerBattleArtImg(activeEl, "mon-preview-img sum-preview-img", 256)}</div>
       </div>
     </div>
     <div class="mon-inspect-hero-info">
@@ -11256,18 +12006,21 @@ function renderSummonerBook(): string {
           <img class="mon-el-ico-img" src="${monsterElementArtSrc(activeEl) ?? ""}" width="24" height="24" alt="" draggable="false" />
         </span>
         <strong class="mon-inspect-name">${escapeHtml(leader.nameKo)}</strong>
-        <span class="mon-inspect-type">${escapeHtml(elementLabel(activeEl))}</span>
       </div>
       <div class="mon-inspect-meta-row">
         <span class="mon-inspect-lv">Lv.${active.level}</span>
-        <div class="mon-inspect-exp" aria-hidden="true">
-          <div class="mon-inspect-exp-track">
+        <div class="mon-inspect-exp">
+          <div class="mon-inspect-exp-meta">
+            <span>EXP</span>
+            <strong>${Math.floor(active.exp ?? 0)}</strong>
+          </div>
+          <div class="mon-inspect-exp-track" aria-hidden="true">
             <div class="mon-inspect-exp-fill" style="width:${levelPct}%"></div>
           </div>
         </div>
       </div>
       <div class="mon-inspect-stars-row">
-        <span class="mon-evo">+${awaken}</span>
+        ${summonerAwakenGemsHtml(awaken, "sum-awaken-gems-wrap--hero")}
       </div>
     </div>
   </div>`;
@@ -11275,14 +12028,13 @@ function renderSummonerBook(): string {
   const detail = `<div class="mon-inspect el-${activeEl} sum-inspect">
     ${heroBlock}
     <div class="mon-inspect-shell sum-inspect-shell">
-      <div class="mon-inspect-tabs mon-inspect-tabs--row mon-inspect-tabs--4 mon-inspect-tabs--compact" role="tablist" aria-label="detail">
+      <div class="mon-inspect-tabs mon-inspect-tabs--row mon-inspect-tabs--3 mon-inspect-tabs--compact" role="tablist" aria-label="detail">
         <button type="button" class="mon-side-tab${sumDetailTab === "info" ? " is-active" : ""}" data-sum-detail-tab="info" role="tab" aria-selected="${sumDetailTab === "info"}">${t("ui.tabInfo")}</button>
         <button type="button" class="mon-side-tab${sumDetailTab === "skills" ? " is-active" : ""}" data-sum-detail-tab="skills" role="tab" aria-selected="${sumDetailTab === "skills"}">${t("ui.2b47128fd2")}</button>
-        <button type="button" class="mon-side-tab${sumDetailTab === "awaken" ? " is-active" : ""}" data-sum-detail-tab="awaken" role="tab" aria-selected="${sumDetailTab === "awaken"}">${t("ui.a2d1ab7b28")}</button>
         <button type="button" class="mon-side-tab${sumDetailTab === "gear" ? " is-active" : ""}" data-sum-detail-tab="gear" role="tab" aria-selected="${sumDetailTab === "gear"}">${t("ui.sumBookTabGear")}</button>
       </div>
       <div class="mon-inspect-body mon-inspect-body--full">
-        <div class="mon-inspect-panel">${infoPanel}${skillsPanel}${awakenPanel}${gearPanel}</div>
+        <div class="mon-inspect-panel">${infoPanel}${skillsPanel}${gearPanel}</div>
       </div>
     </div>
   </div>`;
@@ -11293,9 +12045,9 @@ function renderSummonerBook(): string {
       const p = roster[el];
       const on = el === activeEl;
       return `<button type="button" class="sum-rail-slot el-${el}${on ? " is-active" : ""}" data-select-summoner="${el}" role="option" aria-selected="${on ? "true" : "false"}" title="${escapeHtml(elementLabel(el))}">
-        <img class="sum-rail-img" src="${summonerArtSrc(el)}" width="56" height="56" alt="" draggable="false" decoding="async" />
+        <img class="sum-rail-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
         <span class="sum-rail-lv">Lv.${p.level}</span>
-        ${p.awaken > 0 ? `<span class="sum-rail-aw">+${p.awaken}</span>` : ""}
+        <span class="sum-rail-aw">${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--rail")}</span>
       </button>`;
     }).join("")}
   </div>`;
@@ -11334,21 +12086,27 @@ function renderSummonerBook(): string {
 }
 
 function ensureSelectedEnhanceUid(): void {
+  const firstSlot = sortRosterForSlots(save.roster, rosterSortMode)[0]?.uid ?? null;
   if (
     !selectedEnhanceUid ||
     !save.roster.some((m) => m.uid === selectedEnhanceUid)
   ) {
-    const nextUid = save.roster[0]?.uid ?? null;
-    if (nextUid !== selectedEnhanceUid) clearEnhanceSymbolUi();
-    selectedEnhanceUid = nextUid;
+    if (firstSlot !== selectedEnhanceUid) clearEnhanceSymbolUi();
+    selectedEnhanceUid = firstSlot;
   }
+}
+
+/** When opening the monster book, select the first roster rail slot. */
+function selectFirstEnhanceRosterSlot(): void {
+  const firstSlot = sortRosterForSlots(save.roster, rosterSortMode)[0]?.uid ?? null;
+  if (firstSlot !== selectedEnhanceUid) clearEnhanceSymbolUi();
+  selectedEnhanceUid = firstSlot;
 }
 
 function monRiteCostChip(src: string, need: number, have: number): string {
   return `<div class="mon-rite-cost${have < need ? " is-short" : ""}">
     <img src="${src}" width="22" height="22" alt="" draggable="false" />
     <span>${fmtRes(need)}</span>
-    <small>${fmtRes(have)}</small>
   </div>`;
 }
 
@@ -11479,6 +12237,24 @@ function renderMonRitePerksHtml(
   </ul>`;
 }
 
+function renderMonRiteStepHtml(
+  kind: MonRiteKind,
+  rite: ReturnType<typeof monRiteState>,
+): string {
+  if (kind === "awaken") {
+    return `<span class="mon-rite-step mon-rite-step--stars" aria-label="${rite.starsNow} ${ARROW_RIGHT} ${rite.starsNext}">
+      <span class="mon-rite-step-stars">${monStarsHtml(rite.starsNow)}</span>
+      <span class="mon-rite-step-arrow" aria-hidden="true">${ARROW_RIGHT}</span>
+      <span class="mon-rite-step-stars">${monStarsHtml(rite.starsNext)}</span>
+    </span>`;
+  }
+  return `<span class="mon-rite-step mon-rite-step--cap" aria-label="Lv.${rite.maxLvNow} ${ARROW_RIGHT} Lv.${rite.maxLvNext}">
+    <strong>Lv.${rite.maxLvNow}</strong>
+    <span class="mon-rite-step-arrow" aria-hidden="true">${ARROW_RIGHT}</span>
+    <strong>Lv.${rite.maxLvNext}</strong>
+  </span>`;
+}
+
 function renderMonRiteCompactCard(
   kind: MonRiteKind,
   m: (typeof save.roster)[number],
@@ -11487,10 +12263,6 @@ function renderMonRiteCompactCard(
   const maxed = kind === "awaken" ? rite.awakenMax : rite.evoMax;
   const title =
     kind === "awaken" ? t("ui.a2d1ab7b28") : t("ui.monEvolveRite");
-  const step =
-    kind === "awaken"
-      ? `+${rite.awaken} ${ARROW_RIGHT} +${rite.awakenNext}`
-      : `E${rite.evo} ${ARROW_RIGHT} E${rite.evoNext}`;
   const openLabel = maxed
     ? kind === "awaken"
       ? t("ui.monBookAwakenMax")
@@ -11499,7 +12271,7 @@ function renderMonRiteCompactCard(
   return `<article class="mon-rite mon-rite--compact mon-rite--${kind}${maxed ? " is-max" : ""}">
     <header class="mon-rite-head">
       <span>${escapeHtml(title)}</span>
-      <strong>${step}</strong>
+      ${renderMonRiteStepHtml(kind, rite)}
     </header>
     ${renderMonRiteConditionHtml(kind, rite)}
     ${
@@ -11541,8 +12313,14 @@ function renderMonRiteModal(): string {
           : t("ui.monBookEvolveBtn", { n: rite.evo + 1 });
   const badge =
     kind === "awaken"
-      ? { now: `+${rite.awaken}`, next: `+${rite.awakenNext}` }
-      : { now: `E${rite.evo}`, next: `E${rite.evoNext}` };
+      ? {
+          now: `<span class="mon-rite-step-stars">${monStarsHtml(rite.starsNow)}</span>`,
+          next: `<span class="mon-rite-step-stars">${monStarsHtml(rite.starsNext)}</span>`,
+        }
+      : {
+          now: `Lv.${rite.maxLvNow}`,
+          next: `Lv.${rite.maxLvNext}`,
+        };
   const art = monsterArtImg(m.monsterId, "mon-rite-art", 56);
   const bonus =
     kind === "awaken" ? t("ui.monBookAwakenBonus") : t("ui.monEvolveBonus");
@@ -11555,12 +12333,12 @@ function renderMonRiteModal(): string {
       <div class="mon-rite-forms">
         <div class="mon-rite-form">
           <span>${escapeHtml(t("ui.sumAwakenCurrent"))}</span>
-          <div class="mon-rite-portrait">${art}<strong>${badge.now}</strong></div>
+          <div class="mon-rite-portrait">${art}<strong class="mon-rite-badge">${badge.now}</strong></div>
         </div>
         <span class="mon-rite-arrow" aria-hidden="true">${ARROW_RIGHT}</span>
         <div class="mon-rite-form mon-rite-form--next">
           <span>${escapeHtml(t("ui.sumAwakenNext"))}</span>
-          <div class="mon-rite-portrait">${art}<strong>${badge.next}</strong></div>
+          <div class="mon-rite-portrait">${art}<strong class="mon-rite-badge">${badge.next}</strong></div>
         </div>
       </div>
       <p class="mon-rite-bonus">${escapeHtml(bonus)}</p>
@@ -11621,16 +12399,271 @@ function bindMonRiteModal(): void {
         const kind = btn.dataset.monRiteConfirm;
         const uid = btn.dataset.monRiteUid;
         if ((kind !== "awaken" && kind !== "evolve") || !uid) return;
-        const r =
-          kind === "awaken" ? runAwakenMonster(save, uid) : runEvolve(save, uid);
-        save = r.save;
-        persist();
-        flash(r.message);
-        monRiteModal = null;
-        render();
+        confirmMonRite(kind, uid);
       },
       opts,
     );
+}
+
+function ownedSkillLevels(
+  monster: (typeof save.roster)[number] | null | undefined,
+): [number, number, number] {
+  const levels = monster?.skillLevels ?? [1, 1, 1];
+  return [levels[0] ?? 1, levels[1] ?? 1, levels[2] ?? 1];
+}
+
+function growthCombatDeltas(
+  beforeSave: PlayerSave,
+  afterSave: PlayerSave,
+  uid: string,
+): GrowthStatDelta[] {
+  const before = previewOwnedCombatStats(beforeSave, uid);
+  const after = previewOwnedCombatStats(afterSave, uid);
+  if (!before || !after) return [];
+  const rows: GrowthStatDelta[] = [
+    { id: "hp", label: t("ui.statHp"), from: before.final.hp, to: after.final.hp },
+    { id: "atk", label: t("ui.statAtk"), from: before.final.atk, to: after.final.atk },
+    { id: "def", label: t("ui.statDef"), from: before.final.def, to: after.final.def },
+    { id: "spd", label: t("ui.statSpd"), from: before.final.spd, to: after.final.spd },
+    {
+      id: "cri-rate",
+      label: t("ui.statCriRate"),
+      from: before.final.critRate,
+      to: after.final.critRate,
+      percent: true,
+    },
+    {
+      id: "cri-dmg",
+      label: t("ui.statCriDmg"),
+      from: before.final.critDmg,
+      to: after.final.critDmg,
+      percent: true,
+    },
+  ];
+  return rows.filter((row) => row.from !== row.to);
+}
+
+function growthSkillDeltas(
+  monsterId: string,
+  beforeLevels: [number, number, number],
+  afterLevels: [number, number, number],
+): GrowthSkillDelta[] {
+  const def = getMonster(monsterId);
+  const out: GrowthSkillDelta[] = [];
+  for (let i = 0; i < 3; i++) {
+    const from = beforeLevels[i] ?? 1;
+    const to = afterLevels[i] ?? 1;
+    if (to <= from) continue;
+    const skill = def?.skills[i];
+    out.push({
+      name: skill?.nameKo ?? `S${i + 1}`,
+      iconHtml: monsterSkillArtImg(monsterId, i, skill, "growth-skill-img", 44),
+      from,
+      to,
+      effect: monsterSkillLevelEffect(skill, to),
+    });
+  }
+  return out;
+}
+
+function buildOwnedGrowthPayload(opts: {
+  kind: GrowthRevealKind;
+  before: (typeof save.roster)[number];
+  after: (typeof save.roster)[number];
+  beforeSave: PlayerSave;
+  afterSave: PlayerSave;
+  expGain?: number;
+  extraNotes?: string[];
+}): GrowthRevealPayload {
+  const { kind, before, after, beforeSave, afterSave } = opts;
+  const afterDef = getMonster(after.monsterId);
+  const beforeDef = getMonster(before.monsterId);
+  const notes = [...(opts.extraNotes ?? [])];
+  const beforeMax = monsterMaxLevel(before);
+  const afterMax = monsterMaxLevel(after);
+  if (afterMax !== beforeMax) {
+    notes.push(t("ui.monBookEvolvePerkCap", { from: beforeMax, to: afterMax }));
+  }
+  const beforeStars = displayedMonsterStars(
+    beforeDef?.naturalStars ?? 1,
+    before.awaken ?? 0,
+  );
+  const afterStars = displayedMonsterStars(
+    afterDef?.naturalStars ?? 1,
+    after.awaken ?? 0,
+  );
+  if (afterStars !== beforeStars) {
+    notes.push(t("ui.monBookAwakenPerkStars", { from: beforeStars, to: afterStars }));
+  }
+  if (typeof opts.expGain === "number" && opts.expGain > 0) {
+    notes.unshift(t("ui.powerUpPreviewExp", { n: opts.expGain }));
+  }
+  let heroLine: string | undefined;
+  if (kind === "powerUp" || before.level !== after.level) {
+    heroLine = t("ui.powerUpPreviewLevel", {
+      from: String(before.level),
+      to: String(after.level),
+    });
+  }
+  if (kind === "evolve") {
+    heroLine = t("ui.growthEvolveLine", {
+      from: before.evolve ?? 0,
+      to: after.evolve ?? 0,
+    });
+  }
+  if (kind === "awaken") {
+    heroLine = t("ui.growthAwakenLine", {
+      from: before.awaken ?? 0,
+      to: after.awaken ?? 0,
+    });
+  }
+  if (kind === "fusion") {
+    const evoFrom = before.evolve ?? 0;
+    const evoTo = after.evolve ?? 0;
+    heroLine =
+      before.monsterId !== after.monsterId
+        ? `${beforeDef?.nameKo ?? before.monsterId} ${ARROW_RIGHT} ${afterDef?.nameKo ?? after.monsterId}`
+        : evoFrom !== evoTo
+          ? t("ui.growthEvolveLine", { from: evoFrom, to: evoTo })
+          : t("ui.powerUpPreviewLevel", {
+              from: String(before.level),
+              to: String(after.level),
+            });
+  }
+  return {
+    kind,
+    portraitHtml:
+      monsterArtImg(after.monsterId, "growth-rite-img", 128) ||
+      (afterDef?.element?.[0]?.toUpperCase() ?? "?"),
+    name: afterDef?.nameKo ?? after.monsterId,
+    heroLine,
+    stats: growthCombatDeltas(beforeSave, afterSave, after.uid),
+    skills: growthSkillDeltas(
+      after.monsterId,
+      ownedSkillLevels(before),
+      ownedSkillLevels(after),
+    ),
+    notes,
+  };
+}
+
+function syncHudResources(): void {
+  const gold = app.querySelector<HTMLElement>(".res-item--gold .res-val");
+  if (gold) gold.textContent = fmtRes(save.island.mana);
+  const crystal = app.querySelector<HTMLElement>(".res-item--crystal .res-val");
+  if (crystal) crystal.textContent = fmtRes(save.island.crystal);
+  app.querySelectorAll<HTMLElement>(".res-item--mats").forEach((item) => {
+    const title = item.getAttribute("title") ?? "";
+    const val = item.querySelector<HTMLElement>(".res-val");
+    if (!val) return;
+    if (title === t("res.skillMats")) val.textContent = fmtRes(save.skillMats ?? 0);
+    if (title === t("res.awakenMats")) {
+      val.textContent = fmtRes(
+        Object.values(save.awakenMats ?? {}).reduce(
+          (sum, n) => sum + (typeof n === "number" ? n : 0),
+          0,
+        ),
+      );
+    }
+  });
+}
+
+function closeGrowthPickers(): void {
+  skillFeedModalOpen = false;
+  skillFeedFodderUid = null;
+  applySkillFeedOpen();
+  powerUpModalOpen = false;
+  powerUpFodderUids = new Set();
+  applyPowerUpOpen();
+  closeMonRiteModal();
+  fusionReveal = null;
+  const fusionHost = app.querySelector<HTMLElement>("#fusion-reveal-host");
+  if (fusionHost) fusionHost.innerHTML = "";
+  let needSumModals = false;
+  if (sumMagicDetailSlot) {
+    sumMagicDetailSlot = null;
+    needSumModals = true;
+  }
+  if (gearDetailTarget) {
+    closeGearSellConfirm();
+    gearDetailTarget = null;
+    needSumModals = true;
+  }
+  if (needSumModals) refreshSumBookModals();
+}
+
+function refreshEnhanceRosterDockSoft(): void {
+  const dock = app.querySelector<HTMLElement>(".mon-roster-dock");
+  if (!dock) return;
+  const rail = dock.querySelector<HTMLElement>(".mon-book-inv--rail");
+  const keepLeft = rail?.scrollLeft ?? 0;
+  const next = document.createElement("div");
+  next.innerHTML = renderEnhanceRosterDockHtml();
+  const fresh = next.firstElementChild;
+  if (!(fresh instanceof HTMLElement)) return;
+  dock.replaceWith(fresh);
+  const nextRail = fresh.querySelector<HTMLElement>(".mon-book-inv--rail");
+  if (nextRail) nextRail.scrollLeft = keepLeft;
+  dematteArtInTree(fresh);
+  bindEnhanceRosterSelect();
+}
+
+function finishGrowthReveal(): void {
+  syncHudResources();
+  if (view === "enhance") {
+    if (!refreshMonInspectSoft()) render();
+    else refreshEnhanceRosterDockSoft();
+    return;
+  }
+  if (view === "fusion") {
+    if (!refreshFusionSoft()) render();
+    return;
+  }
+  if (view === "summoner") {
+    softRefreshSumBookUi({ gear: true, skills: true, modals: true });
+  }
+}
+
+function beginGrowthReveal(payload: GrowthRevealPayload): void {
+  closeGrowthPickers();
+  syncHudResources();
+  playGrowthReveal(
+    payload,
+    {
+      mount: softMountOverlay,
+      remove: softRemoveOverlay,
+      dematte: (root) => dematteArtInTree(root),
+    },
+    finishGrowthReveal,
+  );
+}
+
+function confirmMonRite(kind: "awaken" | "evolve", uid: string): void {
+  if (growthRevealIsOpen()) return;
+  const before = save.roster.find((monster) => monster.uid === uid);
+  if (!before) return;
+  const beforeSave = save;
+  const r = kind === "awaken" ? runAwakenMonster(save, uid) : runEvolve(save, uid);
+  const after = r.save.roster.find((monster) => monster.uid === uid);
+  const grew =
+    kind === "awaken"
+      ? (after?.awaken ?? 0) > (before.awaken ?? 0)
+      : (after?.evolve ?? 0) > (before.evolve ?? 0);
+  save = r.save;
+  persist();
+  if (!grew || !after) {
+    flash(r.message);
+    return;
+  }
+  beginGrowthReveal(
+    buildOwnedGrowthPayload({
+      kind,
+      before,
+      after,
+      beforeSave,
+      afterSave: r.save,
+    }),
+  );
 }
 
 function renderMonBookDetailHtml(): string {
@@ -11660,10 +12693,6 @@ function renderMonBookDetailHtml(): string {
         if (monSkillPick < 0 || monSkillPick > 2) monSkillPick = 0;
         const focusSk = def?.skills[monSkillPick];
         const focusLv = levels[monSkillPick] ?? 1;
-        monSkillPreviewLv = Math.max(
-          1,
-          Math.min(MAX_SKILL_LEVEL, monSkillPreviewLv || focusLv),
-        );
 
         const skillIcons = [0, 1, 2]
           .map((si) => {
@@ -11690,15 +12719,11 @@ function renderMonBookDetailHtml(): string {
           ${skillFeedBtn}
         </div>
         <div class="mon-skill-main">
-          ${renderMonsterSkillDetailHtml(focusSk, focusLv, monSkillPreviewLv)}
+          ${renderMonsterSkillDetailHtml(focusSk, focusLv)}
         </div>
       </div>`;
 
         const rite = monRiteState(m);
-        const awakenPanel = `<div class="mon-pane mon-pane--awaken" data-mon-pane="awaken"${monDetailTab === "awaken" ? "" : " hidden"}>
-        ${renderMonRiteCompactCard("awaken", m, rite)}
-        ${renderMonRiteCompactCard("evolve", m, rite)}
-      </div>`;
 
         const symbolsPanel = `<div class="mon-pane mon-pane--symbols">
         <div class="mon-sym-viewer mon-sym-viewer--stack">
@@ -11721,6 +12746,10 @@ function renderMonBookDetailHtml(): string {
               ? renderInspectCombatStatsHtml(selectedPreview)
               : `<section class="mon-stats-panel mon-stats-panel--empty" aria-label="${escapeHtml(t("ui.monStatsTitle"))}"><p class="muted">-</p></section>`
           }
+          <div class="mon-info-rite-row" aria-label="${escapeHtml(t("ui.a2d1ab7b28"))}">
+            ${renderMonRiteCompactCard("awaken", m, rite)}
+            ${renderMonRiteCompactCard("evolve", m, rite)}
+          </div>
         </div>`;
 
         const infoPane = infoPanel.replace(
@@ -11731,17 +12760,13 @@ function renderMonBookDetailHtml(): string {
           'class="mon-pane mon-pane--skills"',
           `class="mon-pane mon-pane--skills" data-mon-pane="skills"${monDetailTab === "skills" ? "" : " hidden"}`,
         );
-        const awakenPane = awakenPanel.replace(
-          'class="mon-pane mon-pane--awaken"',
-          `class="mon-pane mon-pane--awaken" data-mon-pane="awaken"${monDetailTab === "awaken" ? "" : " hidden"}`,
-        );
         const symbolsPane = symbolsPanel.replace(
           'class="mon-pane mon-pane--symbols"',
           `class="mon-pane mon-pane--symbols" data-mon-pane="symbols"${monDetailTab === "symbols" ? "" : " hidden"}`,
         );
 
         const previewArt =
-          monsterBattleArtImg(m.monsterId, "mon-preview-img", 120) ||
+          monsterBattleArtImg(m.monsterId, "mon-preview-img", 256) ||
           `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
         const maxLevel = monsterMaxLevel(m);
         const nextExp = monsterExpToNext(m);
@@ -11789,20 +12814,122 @@ function renderMonBookDetailHtml(): string {
             </div>
           </div>`;
 
-        return `<div class="mon-inspect el-${selectedEl}">
+        return `<div class="mon-inspect el-${selectedEl}${monDetailTab === "symbols" ? " mon-inspect--tab-symbols" : ""}">
       ${heroBlock}
       <div class="mon-inspect-shell">
-        <div class="mon-inspect-tabs mon-inspect-tabs--row mon-inspect-tabs--4 mon-inspect-tabs--compact" role="tablist" aria-label="detail">
+        <div class="mon-inspect-tabs mon-inspect-tabs--row mon-inspect-tabs--3 mon-inspect-tabs--compact" role="tablist" aria-label="detail">
           <button type="button" class="mon-side-tab${monDetailTab === "info" ? " is-active" : ""}" data-mon-detail-tab="info" role="tab" aria-selected="${monDetailTab === "info"}">${t("ui.tabInfo")}</button>
           <button type="button" class="mon-side-tab${monDetailTab === "skills" ? " is-active" : ""}" data-mon-detail-tab="skills" role="tab" aria-selected="${monDetailTab === "skills"}">${t("ui.2b47128fd2")}</button>
-          <button type="button" class="mon-side-tab${monDetailTab === "awaken" ? " is-active" : ""}" data-mon-detail-tab="awaken" role="tab" aria-selected="${monDetailTab === "awaken"}">${t("ui.a2d1ab7b28")}</button>
           <button type="button" class="mon-side-tab${monDetailTab === "symbols" ? " is-active" : ""}" data-mon-detail-tab="symbols" role="tab" aria-selected="${monDetailTab === "symbols"}">${t("ui.60fbf51b13")}</button>
         </div>
         <div class="mon-inspect-body mon-inspect-body--full">
-          <div class="mon-inspect-panel">${infoPane}${skillsPane}${awakenPane}${symbolsPane}</div>
+          <div class="mon-inspect-panel">${infoPane}${skillsPane}${symbolsPane}</div>
         </div>
       </div>
     </div>`;
+}
+
+function renderEnhanceRosterDockHtml(): string {
+  const rosterSlotCap = ROSTER_SLOT_CAP;
+  const sortedRoster = sortRosterForSlots(save.roster, rosterSortMode);
+  const rosterFilled = Math.min(sortedRoster.length, rosterSlotCap);
+  const rosterSlots = Array.from(
+    { length: rosterSlotCap },
+    (_, i) => sortedRoster[i] ?? null,
+  );
+  return `<div class="mon-roster-dock">
+      <div class="mon-roster-toolbar">
+        <label class="mon-roster-sort" for="mon-roster-sort">
+          <span class="mon-roster-sort-label">${t("ui.rosterSort")}</span>
+          <select id="mon-roster-sort" class="mon-roster-sort-select" aria-label="${t("ui.rosterSort")}">
+            <option value="default"${rosterSortMode === "default" ? " selected" : ""}>${t("ui.sortDefault")}</option>
+            <option value="level"${rosterSortMode === "level" ? " selected" : ""}>${t("ui.sortLevel")}</option>
+            <option value="stars"${rosterSortMode === "stars" ? " selected" : ""}>${t("ui.sortStars")}</option>
+            <option value="element"${rosterSortMode === "element" ? " selected" : ""}>${t("ui.sortElement")}</option>
+            <option value="party"${rosterSortMode === "party" ? " selected" : ""}>${t("ui.sortParty")}</option>
+          </select>
+        </label>
+        <span class="mon-roster-count" aria-label="${rosterFilled}/${rosterSlotCap}">${rosterFilled}/${rosterSlotCap}</span>
+      </div>
+      <div class="mon-book-inv mon-book-inv--rail" role="listbox" aria-label="${t("ui.fa2390684b")}">
+      ${rosterSlots
+        .map((m) => {
+          if (!m) {
+            return `<div class="mon-slot mon-slot--portrait mon-slot--empty" role="presentation" aria-hidden="true">
+        <span class="mon-slot-art">
+          <img class="mon-slot-img mon-slot-img--empty" src="/art/ui/mon-slot-empty.svg" width="56" height="56" alt="" draggable="false" />
+        </span>
+      </div>`;
+          }
+          const def = getMonster(m.monsterId);
+          const el = def?.element ?? "dark";
+          const on = m.uid === selectedEnhanceUid;
+          const starN = Math.max(1, def?.naturalStars ?? 1);
+          const grade = invGradeFromStars(starN);
+          const starsHtml = monStarsHtml(starN);
+          const art =
+            monsterArtImg(m.monsterId, "mon-slot-img", 56) ||
+            (def?.element?.[0]?.toUpperCase() ?? "?");
+          return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${el}${on ? " is-active" : ""}" data-select-mon="${m.uid}" role="option" aria-selected="${on ? "true" : "false"}" title="${describeOwned(m)}">
+        <span class="mon-slot-art" aria-hidden="true">${art}</span>
+        <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
+        <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
+      </button>`;
+        })
+        .join("")}
+    </div>
+    </div>`;
+}
+
+let enhanceRosterAbort: AbortController | null = null;
+
+function bindEnhanceRosterSelect(): void {
+  enhanceRosterAbort?.abort();
+  const dock = app.querySelector<HTMLElement>(".mon-roster-dock");
+  if (!dock) return;
+  const ac = new AbortController();
+  enhanceRosterAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+  dock.addEventListener(
+    "click",
+    (ev) => {
+      const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-select-mon]");
+      if (!btn || !dock.contains(btn)) return;
+      const uid = btn.dataset.selectMon;
+      if (!uid) return;
+      if (uid === selectedEnhanceUid) return;
+      clearEnhanceSymbolUi();
+      selectedEnhanceUid = uid;
+      monSkillPick = 0;
+      enhanceTab = "monsters";
+      skillFeedModalOpen = false;
+      skillFeedFodderUid = null;
+      applySkillFeedOpen();
+      closeMonRiteModal();
+      if (!refreshMonInspectSoft()) render();
+    },
+    opts,
+  );
+  dock.querySelectorAll<HTMLButtonElement>("[data-select-mon]").forEach((btn) => {
+    btn.addEventListener(
+      "pointerdown",
+      () => {
+        btn.focus({ preventScroll: true });
+      },
+      opts,
+    );
+  });
+  dock.querySelector<HTMLSelectElement>("#mon-roster-sort")?.addEventListener(
+    "change",
+    (ev) => {
+      const raw = (ev.currentTarget as HTMLSelectElement).value;
+      const allowed: RosterSortMode[] = ["default", "level", "stars", "element", "party"];
+      if (!allowed.includes(raw as RosterSortMode)) return;
+      rosterSortMode = raw as RosterSortMode;
+      render();
+    },
+    opts,
+  );
 }
 
 function renderEnhance(): string {
@@ -11811,14 +12938,6 @@ function renderEnhance(): string {
     monBookDock === "symbols" ? "symbols" : "roster";
   ensureSelectedEnhanceUid();
   if (slotEquipPick) monDetailTab = "symbols";
-
-  const rosterSlotCap = ROSTER_SLOT_CAP;
-  const sortedRoster = sortRosterForSlots(save.roster, rosterSortMode);
-  const rosterFilled = Math.min(sortedRoster.length, rosterSlotCap);
-  const rosterSlots = Array.from(
-    { length: rosterSlotCap },
-    (_, i) => sortedRoster[i] ?? null,
-  );
 
   const monBookDetail = renderMonBookDetailHtml();
 
@@ -11861,48 +12980,7 @@ function renderEnhance(): string {
         : `<p class="muted mon-book-empty">${t("ui.43d54a7358")}</p>`}
     </div>`;
 
-  const rosterDock = `<div class="mon-roster-dock">
-      <div class="mon-roster-toolbar">
-        <label class="mon-roster-sort" for="mon-roster-sort">
-          <span class="mon-roster-sort-label">${t("ui.rosterSort")}</span>
-          <select id="mon-roster-sort" class="mon-roster-sort-select" aria-label="${t("ui.rosterSort")}">
-            <option value="default"${rosterSortMode === "default" ? " selected" : ""}>${t("ui.sortDefault")}</option>
-            <option value="level"${rosterSortMode === "level" ? " selected" : ""}>${t("ui.sortLevel")}</option>
-            <option value="stars"${rosterSortMode === "stars" ? " selected" : ""}>${t("ui.sortStars")}</option>
-            <option value="element"${rosterSortMode === "element" ? " selected" : ""}>${t("ui.sortElement")}</option>
-            <option value="party"${rosterSortMode === "party" ? " selected" : ""}>${t("ui.sortParty")}</option>
-          </select>
-        </label>
-        <span class="mon-roster-count" aria-label="${rosterFilled}/${rosterSlotCap}">${rosterFilled}/${rosterSlotCap}</span>
-      </div>
-      <div class="mon-book-inv mon-book-inv--rail" role="listbox" aria-label="${t("ui.fa2390684b")}">
-      ${rosterSlots
-        .map((m) => {
-          if (!m) {
-            return `<div class="mon-slot mon-slot--portrait mon-slot--empty" role="presentation" aria-hidden="true">
-        <span class="mon-slot-art">
-          <img class="mon-slot-img mon-slot-img--empty" src="/art/ui/mon-slot-empty.svg" width="56" height="56" alt="" draggable="false" />
-        </span>
-      </div>`;
-          }
-          const def = getMonster(m.monsterId);
-          const el = def?.element ?? "dark";
-          const on = m.uid === selectedEnhanceUid;
-          const starN = Math.max(1, def?.naturalStars ?? 1);
-          const grade = invGradeFromStars(starN);
-          const starsHtml = monStarsHtml(starN);
-          const art =
-            monsterArtImg(m.monsterId, "mon-slot-img", 56) ||
-            (def?.element?.[0]?.toUpperCase() ?? "?");
-          return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${el}${on ? " is-active" : ""}" data-select-mon="${m.uid}" role="option" aria-selected="${on ? "true" : "false"}" title="${describeOwned(m)}">
-        <span class="mon-slot-art" aria-hidden="true">${art}</span>
-        <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
-        <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
-      </button>`;
-        })
-        .join("")}
-    </div>
-    </div>`;
+  const rosterDock = renderEnhanceRosterDockHtml();
 
   const monstersPanel = `<div class="mon-book">
     <div class="mon-book-viewer">${monBookDetail}</div>
@@ -12256,7 +13334,7 @@ function renderCommunityModal(): string {
 </div>`;
 }
 
-function renderFusion(): string {
+function renderFusionBodyHtml(): string {
   const pairs: string[] = [];
   for (let i = 0; i < save.roster.length; i++) {
     for (let j = i + 1; j < save.roster.length; j++) {
@@ -12297,44 +13375,55 @@ function renderFusion(): string {
     return `<button type="button" class="stage-card${disabled ? " is-maxed" : ""}" data-recipe-id="${recipe.id}" data-recipe-keeper="${keeper?.uid ?? ""}" data-recipe-fodder="${fodderUids.join(",")}" ${disabled ? "disabled" : ""}>
       <span class="stage-card-mark" aria-hidden="true">${Mark.fusion}</span>
       <span class="stage-card-body">
-        <strong>${recipe.nameKo} → ${result?.nameKo ?? recipe.resultMonsterId}</strong>
+        <strong>${recipe.nameKo} ${ARROW_RIGHT} ${result?.nameKo ?? recipe.resultMonsterId}</strong>
         <small>${disabled ? t("ui.fusion.recipeNeed") : needLabel} ${MIDDOT} ${MINUS}${t("ui.dc78e6a251")} ${cost}</small>
       </span>
     </button>`;
   }).join("");
-  return hubShell(
-    t("ui.hubFusion"),
-    `${t('ui.df9d336285')} ${MIDDOT} ${t('ui.d02987ca08')} +1 ${MIDDOT} ${MINUS}${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
-    `<div class="hub-panel">
-    <div id="fusion-reveal-host">${renderFusionReveal()}</div>
-    <div class="guild-panel fusion-panel">
-        <p class="guild-panel-title">${t("ui.hubFusion")}</p>
-      <p class="muted dojo-hint">${t('ui.7882865401')}.</p>
-    </div>
-    <p class="section-label">${t("ui.fusion.recipes")}</p>
-    <div class="stage-list">${recipeRows || `<p class="muted">${t("ui.fusion.recipeNeed")}</p>`}</div>
-    <div class="stage-list">
-      ${pairs.length
-        ? pairs
-            .map((p) => {
-              const [a, b] = p.split(":");
-              const ma = save.roster[Number(a)]!;
-              const mb = save.roster[Number(b)]!;
-              const evo = Math.min(
-                MAX_EVOLVE,
-                Math.max(ma.evolve ?? 0, mb.evolve ?? 0) + 1,
-              );
-              return `<button type="button" class="stage-card" data-fuse-a="${a}" data-fuse-b="${b}">
+  const pairRows = pairs.length
+    ? pairs
+        .map((p) => {
+          const [a, b] = p.split(":");
+          const ma = save.roster[Number(a)]!;
+          const mb = save.roster[Number(b)]!;
+          const evo = Math.min(
+            MAX_EVOLVE,
+            Math.max(ma.evolve ?? 0, mb.evolve ?? 0) + 1,
+          );
+          return `<button type="button" class="stage-card" data-fuse-a="${a}" data-fuse-b="${b}">
                 <span class="stage-card-mark" aria-hidden="true">${Mark.fusion}</span>
                 <span class="stage-card-body">
                   <strong>${describeOwned(ma)} + ${describeOwned(mb)}</strong>
-                  <small>${t('ui.ebc3c5c656')} ${evo} ${MIDDOT} ${MINUS}${t('ui.dc78e6a251')} ${FUSION_MANA_COST}</small>
+                  <small>${t("ui.ebc3c5c656")} ${evo} ${MIDDOT} ${MINUS}${t("ui.dc78e6a251")} ${FUSION_MANA_COST}</small>
                 </span>
               </button>`;
-            })
-            .join("")
-        : `<p class="muted">${t('ui.6b94c9708e')}</p>`}
+        })
+        .join("")
+    : `<p class="muted">${t("ui.6b94c9708e")}</p>`;
+  return `<div class="guild-panel fusion-panel">
+        <p class="guild-panel-title">${t("ui.hubFusion")}</p>
+      <p class="muted dojo-hint">${t("ui.7882865401")}.</p>
     </div>
+    <p class="section-label">${t("ui.fusion.recipes")}</p>
+    <div class="stage-list">${recipeRows || `<p class="muted">${t("ui.fusion.recipeNeed")}</p>`}</div>
+    <div class="stage-list">${pairRows}</div>`;
+}
+
+function refreshFusionSoft(): boolean {
+  const host = app.querySelector<HTMLElement>("#fusion-body-host");
+  if (!host) return false;
+  host.innerHTML = renderFusionBodyHtml();
+  dematteArtInTree(host);
+  return true;
+}
+
+function renderFusion(): string {
+  return hubShell(
+    t("ui.hubFusion"),
+    `${t("ui.df9d336285")} ${MIDDOT} ${t("ui.d02987ca08")} +1 ${MIDDOT} ${MINUS}${t("ui.dc78e6a251")} ${FUSION_MANA_COST}`,
+    `<div class="hub-panel">
+    <div id="fusion-reveal-host">${renderFusionReveal()}</div>
+    <div id="fusion-body-host">${renderFusionBodyHtml()}</div>
   </div>`,
   );
 }
@@ -14478,6 +15567,7 @@ function bind(): void {
       if (nav === "enhance") {
         enhanceTab = "monsters";
         enhanceSkillFeedAllowed = false;
+        selectFirstEnhanceRosterSlot();
       }
       if (nav === "stages") {
         patchOnboard({ openedStages: true });
@@ -14543,7 +15633,7 @@ function bind(): void {
     if (preserveIslandDom) return;
     btn.addEventListener("click", (ev) => {
       const target = ev.target as HTMLElement | null;
-      if (target?.closest?.("[data-spot-enter], [data-spot-info], [data-collect]")) {
+      if (target?.closest?.("[data-spot-enter], [data-spot-up], [data-spot-info], [data-collect]")) {
         return;
       }
       if (app.querySelector("#island-viewport")?.getAttribute("data-pan-moved") === "1") {
@@ -14583,6 +15673,23 @@ function bind(): void {
         enterIslandBuilding(id);
       });
     });
+    app.querySelectorAll<HTMLButtonElement>("[data-spot-up]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (app.querySelector("#island-viewport")?.getAttribute("data-pan-moved") === "1") return;
+        const id = btn.dataset.spotUp;
+        if (!id) return;
+        const buildingId = islandSpotUpgradeableBuildingId(id);
+        if (!buildingId) return;
+        setIslandSpotMenu(null);
+        const r = runUpgradeBuilding(save, buildingId);
+        save = r.save;
+        persist();
+        flash(r.message);
+        render();
+      });
+    });
     app.querySelectorAll<HTMLButtonElement>("[data-spot-info]").forEach((btn) => {
       btn.addEventListener("click", (ev) => {
         ev.preventDefault();
@@ -14597,7 +15704,7 @@ function bind(): void {
     viewport?.addEventListener("click", (ev) => {
       if (islandLayoutEdit || !islandSpotMenuId) return;
       const target = ev.target as HTMLElement | null;
-      if (target?.closest?.("[data-b], [data-spot-enter], [data-spot-info], [data-collect]")) {
+      if (target?.closest?.("[data-b], [data-spot-enter], [data-spot-up], [data-spot-info], [data-collect]")) {
         return;
       }
       if (viewport.getAttribute("data-pan-moved") === "1") return;
@@ -14615,40 +15722,7 @@ function bind(): void {
 
   bindSummonRiteInteractions();
 
-  app.querySelectorAll<HTMLButtonElement>("[data-select-mon]").forEach((btn) => {
-    btn.addEventListener("pointerdown", () => {
-      btn.focus({ preventScroll: true });
-    });
-    btn.addEventListener("click", () => {
-      const uid = btn.dataset.selectMon;
-      if (!uid) return;
-      if (uid === selectedEnhanceUid) return;
-      clearEnhanceSymbolUi();
-      selectedEnhanceUid = uid;
-      monSkillPick = 0;
-      {
-        const picked = save.roster.find((m) => m.uid === uid);
-        monSkillPreviewLv = Math.max(
-          1,
-          Math.min(MAX_SKILL_LEVEL, picked?.skillLevels?.[0] ?? 1),
-        );
-      }
-      enhanceTab = "monsters";
-      skillFeedModalOpen = false;
-      skillFeedFodderUid = null;
-      applySkillFeedOpen();
-      closeMonRiteModal();
-      if (!refreshMonInspectSoft()) render();
-    });
-  });
-
-  app.querySelector<HTMLSelectElement>("#mon-roster-sort")?.addEventListener("change", (ev) => {
-    const raw = (ev.currentTarget as HTMLSelectElement).value;
-    const allowed: RosterSortMode[] = ["default", "level", "stars", "element", "party"];
-    if (!allowed.includes(raw as RosterSortMode)) return;
-    rosterSortMode = raw as RosterSortMode;
-    render();
-  });
+  bindEnhanceRosterSelect();
 
   bindMonInspectInteractions();
   bindMonRiteModal();
@@ -14656,7 +15730,7 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-sum-detail-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const raw = btn.dataset.sumDetailTab;
-      if (raw === "info" || raw === "skills" || raw === "awaken" || raw === "gear") {
+      if (raw === "info" || raw === "skills" || raw === "gear") {
         if (sumDetailTab === raw) return;
         sumDetailTab = raw;
         if (!applySumDetailTabUi()) render();
@@ -14720,19 +15794,41 @@ function bind(): void {
       "#btn-power-up-confirm",
     );
     if (!confirm || !app.contains(confirm) || confirm.disabled) return;
+    if (growthRevealIsOpen()) return;
     const target = selectedEnhanceUid;
     if (!target) return;
+    if (powerUpHasHighStarFodder()) {
+      if (!window.confirm(t("ui.powerUpConfirmHighStar"))) return;
+    }
+    const before = save.roster.find((monster) => monster.uid === target);
+    if (!before) return;
+    const beforeSave = save;
+    const fodderIds = [...powerUpFodderUids];
+    const expGain = fodderIds.reduce((total, uid) => {
+      const fodder = save.roster.find((monster) => monster.uid === uid);
+      return total + (fodder ? monsterPowerUpExp(fodder) : 0);
+    }, 0);
     const beforeCount = save.roster.length;
-    const r = runPowerUpMonster(save, target, [...powerUpFodderUids]);
+    const r = runPowerUpMonster(save, target, fodderIds);
+    const consumed = r.save.roster.length < beforeCount;
     save = r.save;
     persist();
-    // Power-up spends fodder for EXP; early materials rarely grant a full level.
-    // Treat any successful consume as completing the enhance rite.
-    if (save.roster.length < beforeCount) patchOnboard({ enhanced: true });
-    powerUpFodderUids = new Set();
-    powerUpModalOpen = false;
-    flash(r.message);
-    render();
+    if (consumed) patchOnboard({ enhanced: true });
+    const after = r.save.roster.find((monster) => monster.uid === target);
+    if (!consumed || !after) {
+      flash(r.message);
+      return;
+    }
+    beginGrowthReveal(
+      buildOwnedGrowthPayload({
+        kind: "powerUp",
+        before,
+        after,
+        beforeSave,
+        afterSave: r.save,
+        expGain,
+      }),
+    );
   });
 
   const closeSkillFeed = (): void => {
@@ -14762,26 +15858,34 @@ function bind(): void {
       "#btn-skill-feed-confirm",
     );
     if (!confirm || !app.contains(confirm) || confirm.disabled) return;
+    if (growthRevealIsOpen()) return;
     const target = selectedEnhanceUid;
     const fodder = skillFeedFodderUid;
     if (!target || !fodder) return;
+    const before = save.roster.find((monster) => monster.uid === target);
+    if (!before) return;
+    const beforeSave = save;
+    const beforeLevels = ownedSkillLevels(before);
     const r = runFeedSameMonster(save, target, fodder);
+    const after = r.save.roster.find((monster) => monster.uid === target);
+    const afterLevels = ownedSkillLevels(after);
+    const grew = afterLevels.some((lv, i) => lv > (beforeLevels[i] ?? 1));
     save = r.save;
     persist();
-    flash(r.message);
     monDetailTab = "skills";
-    skillFeedFodderUid = null;
-    const owned = save.roster.find((m) => m.uid === target);
-    const levels = (owned?.skillLevels ?? [1, 1, 1]) as [number, number, number];
-    const hasFodder =
-      !!owned &&
-      save.roster.some(
-        (x) => x.monsterId === owned.monsterId && x.uid !== owned.uid,
-      );
-    if (levels.every((lv) => lv >= MAX_SKILL_LEVEL) || !hasFodder) {
-      skillFeedModalOpen = false;
+    if (!grew || !after) {
+      flash(r.message);
+      return;
     }
-    render();
+    beginGrowthReveal(
+      buildOwnedGrowthPayload({
+        kind: "skillFeed",
+        before,
+        after,
+        beforeSave,
+        afterSave: r.save,
+      }),
+    );
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-enhance-tab]").forEach((btn) => {
@@ -14795,6 +15899,8 @@ function bind(): void {
   });
 
   bindSumGearSlotClicks();
+  bindGearBagFilter();
+  syncGearBagFilterMenuUi();
   bindSumMagicNodeClicks();
   bindSumBookModalInteractions();
 
@@ -14880,7 +15986,6 @@ function bind(): void {
 
   mountForgeRevealOverlay();
   bindFusionRevealDismiss();
-  bindWishRevealDismiss();
   bindEnhanceTransientModals();
 
   app.querySelector("#btn-dojo-drill")?.addEventListener("click", () => {
@@ -14945,41 +16050,63 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-fuse-a]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (growthRevealIsOpen()) return;
       const a = save.roster[Number(btn.dataset.fuseA!)];
-      const b = save.roster[Number(btn.dataset.fuseB!)];
-      const materials =
-        a && b ? `${describeOwned(a)} + ${describeOwned(b)}` : "";
       const keepUid = a?.uid;
+      if (!a || !keepUid) return;
+      const beforeSave = save;
+      const beforeCount = save.roster.length;
       const r = runFusion(save, btn.dataset.fuseA!, btn.dataset.fuseB!);
+      const after = r.save.roster.find((monster) => monster.uid === keepUid);
+      const grew = r.save.roster.length < beforeCount && !!after;
       save = r.save;
       persist();
-      if (r.message.startsWith(t('ui.04e75ecf18')) && keepUid) {
-        const kept = save.roster.find((m) => m.uid === keepUid);
-        if (kept && materials) {
-          fusionReveal = {
-            materials,
-            result: describeOwned(kept),
-            cost: `${MINUS}${t('ui.dc78e6a251')} ${FUSION_MANA_COST}`,
-          };
-        }
+      if (!grew || !after) {
+        flash(r.message);
+        return;
       }
-      flash(r.message);
-      softShowFusionReveal();
+      beginGrowthReveal(
+        buildOwnedGrowthPayload({
+          kind: "fusion",
+          before: a,
+          after,
+          beforeSave,
+          afterSave: r.save,
+        }),
+      );
     });
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-recipe-id]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (growthRevealIsOpen()) return;
       const recipeId = btn.dataset.recipeId!;
-      const keeper = btn.dataset.recipeKeeper!;
+      const keeperUid = btn.dataset.recipeKeeper!;
       const fodder = (btn.dataset.recipeFodder ?? "")
         .split(",")
         .filter(Boolean);
-      const r = runRecipeFusion(save, recipeId, keeper, fodder);
+      const before = save.roster.find((monster) => monster.uid === keeperUid);
+      if (!before) return;
+      const beforeSave = save;
+      const beforeCount = save.roster.length;
+      const r = runRecipeFusion(save, recipeId, keeperUid, fodder);
+      const after = r.save.roster.find((monster) => monster.uid === keeperUid);
+      const grew = r.save.roster.length < beforeCount && !!after;
       save = r.save;
       persist();
-      flash(r.message);
-      render();
+      if (!grew || !after) {
+        flash(r.message);
+        return;
+      }
+      beginGrowthReveal(
+        buildOwnedGrowthPayload({
+          kind: "fusion",
+          before,
+          after,
+          beforeSave,
+          afterSave: r.save,
+        }),
+      );
     });
   });
 
@@ -15061,14 +16188,15 @@ function bind(): void {
   });
 
   app.querySelector("#btn-wish-cast")?.addEventListener("click", () => {
+    if (wishRevealIsOpen()) return;
     const r = runDailyWish(save);
+    if (!r.wishReward) {
+      flash(r.message);
+      return;
+    }
     save = r.save;
     persist();
-    if (r.message.startsWith(t('ui.b835657896'))) {
-      wishReveal = r.message.replace(/^\uC18C\uC6D0:\s*/, "");
-    }
-    flash(r.message);
-    softShowWishReveal();
+    beginWishReveal(r.wishReward);
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-equip-sym]").forEach((btn) => {
@@ -15548,12 +16676,14 @@ function bind(): void {
   if (view !== "battle") {
     dematteArtInTree(
       app,
-      "img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.mon-slot-img, img.codex-cell-img",
+      "img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.mon-slot-img, img.codex-cell-img, img.growth-rite-img, img.growth-skill-img",
     );
   }
 
   startEnergyRegenTimer();
   promoteKnownOverlays();
+  if (growthRevealIsOpen()) remountGrowthReveal();
+  if (wishRevealIsOpen()) remountWishReveal();
 }
 
 async function boot(): Promise<void> {

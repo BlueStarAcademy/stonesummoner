@@ -52,3 +52,4 @@ Fallback: `map-01`.
 
 - Magic circles under the go board: [circle-prompts.md](./circle-prompts.md)
 - Element magic stones: [stone-prompts.md](./stone-prompts.md)
+- Board effect relics: [mark-prompts.md](./mark-prompts.md)

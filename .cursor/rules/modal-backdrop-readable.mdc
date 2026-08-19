@@ -1,0 +1,37 @@
+---
+description: Modal backdrops stay light and unblurred so the host screen stays readable
+alwaysApply: true
+---
+
+# Modal backdrops — keep the host screen readable
+
+## Hard rule
+When a modal / sheet / overlay opens, the **background UI must stay clearly visible**.
+Do **not** blur or heavily darken the host screen.
+
+## Approved backdrop
+Shared pattern (already on `.settings-backdrop` / `.facility-backdrop` and stage prep/info backdrops):
+
+```css
+background: #07050c44; /* light dim only */
+backdrop-filter: none;
+-webkit-backdrop-filter: none;
+```
+
+Prefer the shared class `.settings-backdrop` (or the matching facility/stage backdrop class) instead of inventing a new opaque scrim.
+
+## Disallowed
+```css
+backdrop-filter: blur(...);
+-webkit-backdrop-filter: blur(...);
+background: #000a;      /* too opaque */
+background: #07050ccc;  /* too dark */
+```
+
+Do not reintroduce per-modal “strong dim + blur” overrides for shop, mission, community, power-up, skill-feed, settings, or similar sheets.
+
+## Checklist for new modals
+1. Use `.settings-backdrop` (or an existing shared backdrop class).
+2. No `backdrop-filter` / `-webkit-backdrop-filter` blur on the scrim.
+3. Dim stays light (`#07050c44` or equivalent ~25% opacity).
+4. Soft open/close still follows soft-modals (no full `render()` just to toggle the overlay).
