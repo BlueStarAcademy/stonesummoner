@@ -19,6 +19,12 @@ export type SpineClip =
 
 export interface SpinePack {
   id: string;
+  /**
+   * When false, battle/book keep painted WebP stills and do not mount Pixi.
+   * Use for pilot packs whose atlas is only body_front/back regions (looks broken
+   * vs `/art/monster/battle/*` stills) until a real cutup export ships.
+   */
+  enabled?: boolean;
   /** Pixi Assets aliases / public URLs */
   skeletonUrl: string;
   atlasUrl: string;
@@ -53,6 +59,8 @@ const PILOT_CLIPS: SpinePack["clips"] = {
 export const SPINE_PACKS: Record<string, SpinePack> = {
   fire_fang: {
     id: "fire_fang",
+    // 2-region PMA sheet hides painted stills; keep pack assets for later re-enable.
+    enabled: false,
     skeletonUrl: "/art/spine/fire_fang/fire_fang.json",
     atlasUrl: "/art/spine/fire_fang/fire_fang-pma.atlas",
     clips: { ...PILOT_CLIPS },
@@ -65,6 +73,7 @@ export const SPINE_PACKS: Record<string, SpinePack> = {
   /** Pilot clone of fire_fang rig until unique Spine export ships. */
   wolf_fighter: {
     id: "wolf_fighter",
+    enabled: false,
     skeletonUrl: "/art/spine/wolf_fighter/wolf_fighter.json",
     atlasUrl: "/art/spine/wolf_fighter/wolf_fighter-pma.atlas",
     clips: { ...PILOT_CLIPS },
@@ -77,6 +86,7 @@ export const SPINE_PACKS: Record<string, SpinePack> = {
   /** Pilot clone of fire_fang rig until unique Spine export ships. */
   moss_turtle: {
     id: "moss_turtle",
+    enabled: false,
     skeletonUrl: "/art/spine/moss_turtle/moss_turtle.json",
     atlasUrl: "/art/spine/moss_turtle/moss_turtle-pma.atlas",
     clips: { ...PILOT_CLIPS },
@@ -88,27 +98,36 @@ export const SPINE_PACKS: Record<string, SpinePack> = {
   },
 };
 
+function isSpinePackMountable(pack: SpinePack | undefined): pack is SpinePack {
+  return !!pack && pack.enabled !== false;
+}
+
 /**
  * Resolve which Spine pack a catalog / unit id uses.
  * Packs are keyed by artKey (e.g. fire_fang); family variants alias to that pack.
+ * Returns null when the pack is registered but `enabled: false` (use WebP stills).
  */
 export function resolveSpinePackId(
   monsterOrSummonerKey: string | undefined | null,
 ): string | null {
   if (!monsterOrSummonerKey) return null;
-  if (SPINE_PACKS[monsterOrSummonerKey]) return monsterOrSummonerKey;
+  const direct = SPINE_PACKS[monsterOrSummonerKey];
+  if (isSpinePackMountable(direct)) return monsterOrSummonerKey;
   const artKey = getMonsterArtKey(monsterOrSummonerKey);
-  if (artKey && SPINE_PACKS[artKey]) return artKey;
+  if (artKey && isSpinePackMountable(SPINE_PACKS[artKey])) return artKey;
   // Family variants share the family's pilot artKey until per-element Spine skins ship.
-  if (monsterOrSummonerKey.startsWith("seokrang_")) return "fire_fang";
-  if (monsterOrSummonerKey === "fire_fang") return "fire_fang";
-  if (monsterOrSummonerKey.startsWith("wolf_fighter")) return "wolf_fighter";
-  if (monsterOrSummonerKey.startsWith("moss_turtle")) return "moss_turtle";
+  let aliased: string | null = null;
+  if (monsterOrSummonerKey.startsWith("seokrang_")) aliased = "fire_fang";
+  else if (monsterOrSummonerKey === "fire_fang") aliased = "fire_fang";
+  else if (monsterOrSummonerKey.startsWith("wolf_fighter")) aliased = "wolf_fighter";
+  else if (monsterOrSummonerKey.startsWith("moss_turtle")) aliased = "moss_turtle";
+  if (aliased && isSpinePackMountable(SPINE_PACKS[aliased])) return aliased;
   return null;
 }
 
 export function getSpinePack(packId: string): SpinePack | null {
-  return SPINE_PACKS[packId] ?? null;
+  const pack = SPINE_PACKS[packId];
+  return isSpinePackMountable(pack) ? pack : null;
 }
 
 /** Battle-character still for monster book / battle UI (falls back to null). */

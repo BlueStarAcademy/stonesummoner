@@ -112,6 +112,10 @@ export interface BattleConfig {
   enemySummoner: SummonerState;
   /** Optional power-gap amplify cap (default 1.25). */
   powerGapAmplifyCap?: number;
+  /** Extra amplify phase cap from circle inscriptions. */
+  inscriptionAmplifyCapAdd?: number;
+  /** Extra board-item spawn chance from circle inscriptions. */
+  inscriptionItemSpawnBonus?: number;
   rng?: () => number;
   /** Override empowered reset threshold (default 50 on 7×7). */
   resetThreshold?: number;
@@ -201,6 +205,8 @@ export class Battle {
   currentWave: number;
   readonly totalWaves: number;
   private powerGapCap: number;
+  private inscriptionAmplifyAdd: number;
+  private inscriptionItemSpawn: number;
   private rng: () => number;
   private spawnWaveFn?: (wave: number) => Unit[];
 
@@ -247,6 +253,8 @@ export class Battle {
     this.allySummoner = { ...config.allySummoner };
     this.enemySummoner = { ...config.enemySummoner };
     this.powerGapCap = config.powerGapAmplifyCap ?? 1.25;
+    this.inscriptionAmplifyAdd = config.inscriptionAmplifyCapAdd ?? 0;
+    this.inscriptionItemSpawn = config.inscriptionItemSpawnBonus ?? 0;
     this.rng = config.rng ?? Math.random;
     this.modules = config.modules ?? {};
     this.circleElement =
@@ -350,8 +358,13 @@ export class Battle {
     return this.tokens.find((t) => t.x === x && t.y === y);
   }
 
+  /** Amplify ceiling from empowered circle phase + inscriptions. */
+  phaseAmplifyCap(): number {
+    return amplifyCapForPhase(this.circle.boardPhase) + this.inscriptionAmplifyAdd;
+  }
+
   currentAmplify(): number {
-    const phaseCap = amplifyCapForPhase(this.circle.boardPhase);
+    const phaseCap = this.phaseAmplifyCap();
     return clampAmplify(
       this.amplify + this.skillAmplifyBonus,
       phaseCap,
@@ -451,7 +464,7 @@ export class Battle {
     this.manaRaceWinner = team;
     this.amplify = clampAmplify(
       this.amplify + 0.08,
-      amplifyCapForPhase(this.circle.boardPhase),
+      this.phaseAmplifyCap(),
       this.powerGapCap,
     );
     this.log.push(
@@ -577,7 +590,7 @@ export class Battle {
       sm.elementWardCharges = 3;
       this.amplify = clampAmplify(
         this.amplify + 0.05,
-        amplifyCapForPhase(this.circle.boardPhase),
+        this.phaseAmplifyCap(),
         this.powerGapCap,
       );
       this.log.push(
@@ -590,7 +603,7 @@ export class Battle {
       unit.shieldHp = (unit.shieldHp ?? 0) + shield;
       this.amplify = clampAmplify(
         this.amplify + 0.03,
-        amplifyCapForPhase(this.circle.boardPhase),
+        this.phaseAmplifyCap(),
         this.powerGapCap,
       );
       const lure = this.placeBaitLure({ x: token.x, y: token.y }, unit.team);
@@ -603,7 +616,7 @@ export class Battle {
       const flipped = this.applyTransformDust({ x: token.x, y: token.y });
       this.amplify = clampAmplify(
         this.amplify + 0.04 + flipped * 0.02,
-        amplifyCapForPhase(this.circle.boardPhase),
+        this.phaseAmplifyCap(),
         this.powerGapCap,
       );
       this.log.push(
@@ -618,7 +631,7 @@ export class Battle {
     const gains = gainsForBoardEvent("item_magnet", 0, manaMul);
     this.amplify = clampAmplify(
       this.amplify + gains.amplifyDelta,
-      amplifyCapForPhase(this.circle.boardPhase),
+      this.phaseAmplifyCap(),
       this.powerGapCap,
     );
     this.skillAmplifyBonus += gains.skillAmplifyBonus;
@@ -758,7 +771,8 @@ export class Battle {
   }
 
   private trySpawnItem(): void {
-    const bonus = itemSpawnBonusForPhase(this.circle.boardPhase);
+    const bonus =
+      itemSpawnBonusForPhase(this.circle.boardPhase) + this.inscriptionItemSpawn;
     if (!shouldSpawnItem(bonus, this.rng)) return;
 
     const size = this.board.size;
@@ -911,7 +925,7 @@ export class Battle {
 
     this.amplify = clampAmplify(
       this.amplify + ampDelta,
-      amplifyCapForPhase(this.circle.boardPhase),
+      this.phaseAmplifyCap(),
       this.powerGapCap,
     );
     // Capture no longer grants skillAmplifyBonus — N×10% goes to next monster hit.
@@ -939,7 +953,7 @@ export class Battle {
       for (const sh of shapes) {
         this.amplify = clampAmplify(
           this.amplify + sh.amplifyDelta,
-          amplifyCapForPhase(this.circle.boardPhase),
+          this.phaseAmplifyCap(),
           this.powerGapCap,
         );
         if (sh.skillAmplifyBonus) {
@@ -1015,7 +1029,7 @@ export class Battle {
       this.lastEnemyStone = null;
       this.openingBonusPending = true;
       this.log.push(
-        `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${amplifyCapForPhase(this.circle.boardPhase)})`,
+        `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${this.phaseAmplifyCap()})`,
       );
       this.log.push(`진문 붕괴 → 재점화 · 다음 착수 포석 보너스`);
       if (this.modules.moduleF) {
@@ -1101,7 +1115,7 @@ export class Battle {
     } else if (choice === "amplify") {
       this.amplify = clampAmplify(
         this.amplify + 0.08,
-        amplifyCapForPhase(this.circle.boardPhase),
+        this.phaseAmplifyCap(),
         this.powerGapCap,
       );
       this.log.push(`사석상점: Amplify 강화`);
@@ -1147,7 +1161,7 @@ export class Battle {
     if (eventId === "attr_tune") {
       this.amplify = clampAmplify(
         this.amplify + 0.06,
-        amplifyCapForPhase(this.circle.boardPhase),
+        this.phaseAmplifyCap(),
         this.powerGapCap,
       );
       this.log.push(`속성조율: Amplify +0.06`);
@@ -1157,7 +1171,7 @@ export class Battle {
       if (this.board.getKoPoint()) {
         this.amplify = clampAmplify(
           this.amplify + 0.05,
-          amplifyCapForPhase(this.circle.boardPhase),
+          this.phaseAmplifyCap(),
           this.powerGapCap,
         );
         this.log.push(`패왕전: 패점 보너스 Amp`);
@@ -1274,7 +1288,7 @@ export class Battle {
       case "amplify": {
         this.amplify = clampAmplify(
           Math.max(this.amplify, 1.12) + power,
-          amplifyCapForPhase(this.circle.boardPhase),
+          this.phaseAmplifyCap(),
           this.powerGapCap,
         );
         break;
@@ -1293,7 +1307,7 @@ export class Battle {
         if (removed > 0) {
           this.amplify = clampAmplify(
             this.amplify + Math.min(0.08, removed * 0.015),
-            amplifyCapForPhase(this.circle.boardPhase),
+            this.phaseAmplifyCap(),
             this.powerGapCap,
           );
         }
@@ -1470,7 +1484,7 @@ export class Battle {
         (sm.declarePowerBonus ?? 0);
       this.amplify = clampAmplify(
         Math.max(this.amplify, 1.12) + power,
-        amplifyCapForPhase(this.circle.boardPhase),
+        this.phaseAmplifyCap(),
         this.powerGapCap,
       );
       this.log.push(
@@ -1500,7 +1514,7 @@ export class Battle {
       if (ampGain > 0) {
         this.amplify = clampAmplify(
           this.amplify + ampGain,
-          amplifyCapForPhase(this.circle.boardPhase),
+          this.phaseAmplifyCap(),
           this.powerGapCap,
         );
       }
@@ -1539,7 +1553,7 @@ export class Battle {
         this.amplify = clampAmplify(
           Math.max(this.amplify, ult.declareAmpBump ? 1.12 : this.amplify) +
             bump,
-          amplifyCapForPhase(this.circle.boardPhase),
+          this.phaseAmplifyCap(),
           this.powerGapCap,
         );
       }

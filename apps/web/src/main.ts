@@ -27,6 +27,16 @@ import {
 import { BATTLE_STILL_FAMILY_SET } from "./battle/battleStills";
 import { battleSkyHtml } from "./battle/battleBg";
 import {
+  initAudio,
+  bindUiSfx,
+  syncBgmForView,
+  playSfx,
+  cueModalSfx,
+  getAudioPrefs,
+  setAudioPrefs,
+  type AudioScreen,
+} from "./audio";
+import {
   battleCircleIdForStage,
   battleCircleSrc,
   battleStoneSrc,
@@ -49,10 +59,15 @@ import {
 import {
   WISH_REVEAL_LAYER_ID,
   abortWishReveal,
+  closeWishPoolTips,
+  openWishPoolTip,
   playWishReveal,
   remountWishReveal,
+  wishPoolAmtLabel,
   wishRevealIsOpen,
+  wishRewardHint,
   wishRewardIconSrc,
+  wishRewardName,
 } from "./ui/wishReveal";
 import { initUiScale } from "./ui/uiScale";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
@@ -111,6 +126,9 @@ import {
   CAIROS_NECRO_STAGES,
   EQUIP_STAGES,
   FUSION_RECIPES,
+  CIRCLE_INSCRIPTIONS,
+  planFusionRecipe,
+  type CircleInscriptionId,
   GLORY_BUILDINGS,
   GUILD_RAID_STAGES,
   MAIN_QUEST_PIN_LAYOUT,
@@ -169,7 +187,7 @@ import {
   gearLeaderAtkPct,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_GRIND_STONE_COST,
-  SYMBOL_IMPRINT_CRYSTAL_COST,
+  SYMBOL_IMPRINT_STONE_COST,
   type GearPiece,
   type GearQuality,
   type GearSlot,
@@ -179,6 +197,7 @@ import {
 } from "stonesummoner-data";
 import {
   buildingUpgradeManaCost,
+  canUpgradeBuilding,
   collectMana,
   energyRegenRemainingMs,
   ENERGY_REGEN_MS,
@@ -194,6 +213,9 @@ import {
   tickProduction,
   todayKey,
   WISH_REWARD_POOL,
+  canWishNow,
+  wishUsesRemaining,
+  wishCooldownRemainingMs,
   type BuildingId,
 } from "stonesummoner-home";
 import {
@@ -235,6 +257,7 @@ import {
   runSellGearBag,
   runBuyEnergy,
   runBuyGrindstone,
+  runBuyImprintStone,
   runExpandSymbolBag,
   symbolBagCapacity,
   symbolBagExpandCost,
@@ -247,7 +270,11 @@ import {
   runDailyWish,
   ENERGY_CRYSTAL_COST,
   ENERGY_BUY_AMOUNT,
-  GRINDSTONE_BUY_MANA_COST,
+  GRINDSTONE_BUY_CRYSTAL_COST,
+  IMPRINT_STONE_BUY_CRYSTAL_COST,
+  CATALOG_SHOP_DAILY_LIMIT,
+  catalogShopRemaining,
+  type CatalogShopSku,
   ESSENCE_JINMUN_COST,
   ESSENCE_CRYSTAL_GAIN,
   addOwnedMonsterExp,
@@ -267,6 +294,7 @@ import {
   runRecipeFusion,
   runGrindSymbol,
   grindstoneCount,
+  imprintStoneCount,
   unclaimedMailIds,
   runClaimMail,
   DAILY_MISSION_WISH,
@@ -300,6 +328,10 @@ import {
   runClaimSeasonReward,
   SEASON_REWARD_WINS,
   runPracticeDojo,
+  runBuyCircleInscription,
+  DOJO_DAILY_LIMIT,
+  DOJO_DRILL_JINMUN,
+  dojoDayState,
   runSellSymbol,
   runSetArenaBans,
   runSetArenaDefense,
@@ -321,7 +353,7 @@ import {
   runUpgradeBuilding,
   setActiveSummoner,
   SCROLL_BUY_MANA_COST,
-  SCROLL_PREMIUM_BUY_MANA_COST,
+  SCROLL_PREMIUM_BUY_CRYSTAL_COST,
   SCROLL_KIND_BLURB,
   SCROLL_KIND_LABEL,
   SCROLL_KINDS,
@@ -379,6 +411,8 @@ type SessionUser = { id: string; email: string | null; kind: string };
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 initUiScale();
+initAudio();
+bindUiSfx(app);
 /**
  * Core-loop saves intentionally start clean. The preceding UI controller mixed
  * incompatible stage state into account saves, so loading it would recreate
@@ -1387,8 +1421,11 @@ function applyMonSkillPickUi(): boolean {
 let monSkillPick = 0;
 /** Selected monster uid on the monsters book screen. */
 let selectedEnhanceUid: string | null = null;
-/** Skill-feed enhance is only available when entered via island power_circle. */
+/** Skill-feed (fodder skill-up) is available on the monster book (bottom nav / enhance). */
 let enhanceSkillFeedAllowed = false;
+/** Combination circle vs Fusion Star panel inside the shared fusion facility. */
+type FusionPanel = "recipes" | "pair";
+let fusionPanel: FusionPanel = "recipes";
 /** Roster slot sort mode on enhance book. */
 type RosterSortMode = "default" | "level" | "stars" | "element" | "party";
 let rosterSortMode: RosterSortMode = "default";
@@ -1413,7 +1450,6 @@ let enhanceFx: { kind: "node"; id: string } | { kind: "gear"; slot: string } | n
 /** Party editor draft (uid set); null means mirror save.party. */
 let partyDraft: Set<string> | null = null;
 let toast = "";
-let toastPlacement: "top" | "mid" = "top";
 let battleSpeed: 1 | 2 | 3 = 1;
 let autoMode = false;
 type BattleAutoOptions = { stone: boolean; combat: boolean };
@@ -1438,6 +1474,7 @@ type BattleSummonerSkillId = "open" | "declare" | "dual" | "clean" | "guard";
 let selectedSummonerSkill: BattleSummonerSkillId | null = null;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let energyRegenTimer: ReturnType<typeof setInterval> | null = null;
+let wishCooldownTimer: ReturnType<typeof setInterval> | null = null;
 let dmgFloats: {
   id: number;
   text: string;
@@ -1471,6 +1508,12 @@ let shopOpen = false;
 let islandSpotMenuId: string | null = null;
 /** Building info sheet open for this island spot id. */
 let buildingInfoId: string | null = null;
+/** Soft confirm sheet for pond / crystal-mine level-up. */
+let buildingUpgradeId: "mana_pond" | "crystal_mine" | null = null;
+let buildingUpgradeModalAbort: AbortController | null = null;
+/** Soft confirm sheet for circle inscriptions in the dojo. */
+let circleInscConfirmId: CircleInscriptionId | null = null;
+let circleInscUpgradeModalAbort: AbortController | null = null;
 /** Queue of newly unlocked island buildings awaiting modal notice. */
 let pendingBuildingUnlockIds: BuildingId[] = [];
 /** Currently shown building unlock modal id (head of queue). */
@@ -1517,8 +1560,8 @@ let stagesDropSetExpand = false;
 let stagePrepSummonerOpen = false;
 /** Prep inventory dock tab. */
 let stagePrepInvTab: "summoner" | "monster" | "skill" = "monster";
-/** Party hall inventory dock tab (no skills tab). */
-let partyInvTab: "summoner" | "monster" = "monster";
+/** Party hall inventory dock tab. */
+let partyInvTab: "summoner" | "monster" | "skill" = "monster";
 /** Prep roster sort (mirrors hub roster sorts). */
 let stagePrepSortMode: RosterSortMode = "stars";
 /** Long-press unit info overlay on battle prep. */
@@ -1735,6 +1778,7 @@ function islandSpotTitle(id: string, fallback = ""): string {
     practice_dojo: t("ui.hubDojo"),
     guild: t("ui.hubGuild"),
     guild_hall: t("ui.hubGuild"),
+    power_circle: t("ui.hubCombine"),
     fusion: t("ui.hubFusion"),
     fusion_star: t("ui.hubFusion"),
   };
@@ -1892,6 +1936,227 @@ function closeBuildingInfoSoft(): void {
   applyBuildingInfoOpen();
 }
 
+type ProdUpgradeBuildingId = "mana_pond" | "crystal_mine";
+
+function fmtBuildingProdRate(n: number): string {
+  const rounded = Math.round(n * 10) / 10;
+  if (Number.isInteger(rounded)) return fmtRes(rounded);
+  return String(rounded);
+}
+
+function buildingUpgradePreview(id: ProdUpgradeBuildingId): {
+  id: ProdUpgradeBuildingId;
+  title: string;
+  art: string;
+  artFallback: string;
+  resIco: string;
+  lv: number;
+  nextLv: number;
+  cost: number;
+  maxed: boolean;
+  rateNow: number;
+  rateNext: number;
+  capNow: number;
+  capNext: number;
+} {
+  const def = PHASE_BUILDINGS.find((b) => b.id === id)!;
+  const inst = save.island.buildings.find((b) => b.id === id);
+  const lv = inst?.level ?? 1;
+  const nextLv = Math.min(MAX_BUILDING_LEVEL, lv + 1);
+  const cost = buildingUpgradeManaCost(lv);
+  const maxed = lv >= MAX_BUILDING_LEVEL;
+  if (id === "crystal_mine") {
+    return {
+      id,
+      title: t("ui.hubMine"),
+      art: "/art/hub/bldg-mine.webp",
+      artFallback: "/art/hub/emblem-mine.svg",
+      resIco: "/art/ui/res/crystal.svg",
+      lv,
+      nextLv,
+      cost,
+      maxed,
+      rateNow: productionCrystalPerHour(def, lv),
+      rateNext: productionCrystalPerHour(def, nextLv),
+      capNow: productionCrystalCap(def, lv),
+      capNext: productionCrystalCap(def, nextLv),
+    };
+  }
+  const bonus = save.island.manaProdBonus ?? 0;
+  return {
+    id,
+    title: t("ui.hubPond"),
+    art: "/art/hub/bldg-pond.webp",
+    artFallback: "/art/hub/emblem-pond.svg",
+    resIco: "/art/ui/res/gold.svg",
+    lv,
+    nextLv,
+    cost,
+    maxed,
+    rateNow: productionManaPerHour(def, lv, bonus),
+    rateNext: productionManaPerHour(def, nextLv, bonus),
+    capNow: productionStorageCap(def, lv),
+    capNext: productionStorageCap(def, nextLv),
+  };
+}
+
+function buildingUpgradeCompareRowHtml(opts: {
+  label: string;
+  ico: string;
+  fromHtml: string;
+  toHtml: string;
+  delta: number;
+  fmtDelta?: (n: number) => string;
+}): string {
+  const delta = opts.delta;
+  const deltaCls = delta > 0 ? "is-up" : delta < 0 ? "is-down" : "is-flat";
+  const fmt = opts.fmtDelta ?? ((n: number) => fmtRes(n));
+  const deltaText =
+    delta === 0
+      ? EM_DASH
+      : `${delta > 0 ? "+" : "-"}${fmt(Math.abs(delta))}`;
+  return `<div class="bldg-up-stat" role="listitem">
+    <div class="bldg-up-stat-head">
+      <span class="bldg-up-stat-k">${escapeHtml(opts.label)}</span>
+      <em class="bldg-up-delta ${deltaCls}">${deltaText}</em>
+    </div>
+    <div class="bldg-up-stat-pair">
+      <div class="bldg-up-cell">
+        <small>${escapeHtml(t("ui.dojo.now"))}</small>
+        <strong>
+          <img class="res-ico" src="${opts.ico}" width="18" height="18" alt="" draggable="false" />
+          <span>${opts.fromHtml}</span>
+        </strong>
+      </div>
+      <span class="bldg-up-arrow" aria-hidden="true">${ARROW_RIGHT}</span>
+      <div class="bldg-up-cell bldg-up-cell--next">
+        <small>${escapeHtml(t("ui.dojo.next"))}</small>
+        <strong>
+          <img class="res-ico" src="${opts.ico}" width="18" height="18" alt="" draggable="false" />
+          <span>${opts.toHtml}</span>
+        </strong>
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildingUpgradeConfirmBtnHtml(
+  preview: ReturnType<typeof buildingUpgradePreview>,
+): string {
+  const check = canUpgradeBuilding(save.island, preview.id);
+  const disabled = !check.ok;
+  return `<button type="button" class="auth-btn-primary bldg-up-confirm" id="btn-bldg-up-confirm" ${disabled ? "disabled" : ""}>
+    <span class="bldg-up-confirm-price">
+      <img class="res-ico" src="/art/ui/res/gold.svg" width="20" height="20" alt="" draggable="false" />
+      <strong>${fmtRes(preview.cost)}</strong>
+    </span>
+    <span class="bldg-up-confirm-sep" aria-hidden="true"></span>
+    <span class="bldg-up-confirm-label">${escapeHtml(t("ui.bldgUp.confirm"))}</span>
+  </button>`;
+}
+
+function renderBuildingUpgradeBody(
+  preview: ReturnType<typeof buildingUpgradePreview>,
+): string {
+  const rateFmt = (n: number) =>
+    escapeHtml(t("ui.bldgUp.perHour", { n: fmtBuildingProdRate(n) }));
+  return `<div class="bldg-up-body" id="bldg-up-body">
+    <div class="bldg-up-hero">
+      <div class="bldg-up-art" aria-hidden="true">
+        <img src="${preview.art}" width="160" height="120" alt="" draggable="false" onerror="this.onerror=null;this.src='${preview.artFallback}'" />
+      </div>
+      <div class="bldg-up-meta">
+        <strong class="bldg-up-name">${escapeHtml(preview.title)}</strong>
+        <span class="bldg-up-lv">${escapeHtml(
+          t("ui.bldgUp.levelLine", { from: preview.lv, to: preview.nextLv }),
+        )}</span>
+      </div>
+    </div>
+    <div class="bldg-up-stats" role="list">
+      ${buildingUpgradeCompareRowHtml({
+        label: t("ui.bldgUp.rate"),
+        ico: preview.resIco,
+        fromHtml: rateFmt(preview.rateNow),
+        toHtml: rateFmt(preview.rateNext),
+        delta: preview.rateNext - preview.rateNow,
+        fmtDelta: (n) => fmtBuildingProdRate(n),
+      })}
+      ${buildingUpgradeCompareRowHtml({
+        label: t("ui.bldgUp.cap"),
+        ico: preview.resIco,
+        fromHtml: escapeHtml(fmtRes(preview.capNow)),
+        toHtml: escapeHtml(fmtRes(preview.capNext)),
+        delta: preview.capNext - preview.capNow,
+      })}
+    </div>
+    <div class="bldg-up-foot" id="bldg-up-foot">${buildingUpgradeConfirmBtnHtml(preview)}</div>
+  </div>`;
+}
+
+function renderBuildingUpgradeModal(): string {
+  if (!buildingUpgradeId) return "";
+  const preview = buildingUpgradePreview(buildingUpgradeId);
+  return `<div class="settings-layer bldg-up-layer" id="bldg-up-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-bldg-up-close" aria-label="${escapeHtml(t("ui.bldgUp.close"))}"></button>
+    <div class="settings-sheet bldg-up-sheet" role="dialog" aria-modal="true" aria-labelledby="bldg-up-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.bldgUp.close"), "btn-bldg-up-close")}
+      <h2 class="settings-title" id="bldg-up-title">${escapeHtml(t("ui.bldgUp.title"))}</h2>
+      ${renderBuildingUpgradeBody(preview)}
+    </div>
+  </div>`;
+}
+
+function closeBuildingUpgradeSoft(): void {
+  if (!buildingUpgradeId && !app.querySelector("#bldg-up-layer")) return;
+  buildingUpgradeId = null;
+  buildingUpgradeModalAbort?.abort();
+  buildingUpgradeModalAbort = null;
+  softRemoveOverlay("bldg-up-layer");
+}
+
+function bindBuildingUpgradeModal(): void {
+  const layer = app.querySelector<HTMLElement>("#bldg-up-layer");
+  if (!layer || !buildingUpgradeId) return;
+  buildingUpgradeModalAbort?.abort();
+  const ac = new AbortController();
+  buildingUpgradeModalAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+  const close = (): void => {
+    closeBuildingUpgradeSoft();
+  };
+  layer.querySelector("#btn-bldg-up-close")?.addEventListener("click", close, opts);
+  layer.querySelector(".settings-backdrop")?.addEventListener("click", close, opts);
+  layer
+    .querySelector<HTMLButtonElement>("#btn-bldg-up-confirm")
+    ?.addEventListener(
+      "click",
+      () => {
+        const id = buildingUpgradeId;
+        if (!id) return;
+        const r = runUpgradeBuilding(save, id);
+        save = r.save;
+        persist();
+        flash(r.message);
+        closeBuildingUpgradeSoft();
+        renderPreservingIsland();
+      },
+      opts,
+    );
+}
+
+function openBuildingUpgradeSoft(id: ProdUpgradeBuildingId): void {
+  const preview = buildingUpgradePreview(id);
+  if (preview.maxed) {
+    flash(t("ui.cc24e86471"));
+    return;
+  }
+  buildingUpgradeId = id;
+  closeBuildingInfoSoft();
+  const layer = softMountOverlay("bldg-up-layer", renderBuildingUpgradeModal());
+  if (layer) bindBuildingUpgradeModal();
+}
+
 function buildingUnlockLevel(id: BuildingId): number {
   return PHASE_BUILDINGS.find((b) => b.id === id)?.unlockLevel ?? 1;
 }
@@ -1999,6 +2264,8 @@ function setIslandSpotMenu(id: string | null): void {
 function enterIslandBuilding(id: string): void {
   setIslandSpotMenu(null);
   closeBuildingInfoSoft();
+  closeBuildingUpgradeSoft();
+  closeDojoInscUpgradeSoft();
   if (id === "gateway") {
     patchOnboard({ openedStages: true });
     view = "stages";
@@ -2022,17 +2289,16 @@ function enterIslandBuilding(id: string): void {
   } else if (id === "guild") {
     view = "guild";
     renderPreservingIsland();
+  } else if (id === "power_circle") {
+    fusionPanel = "recipes";
+    view = "fusion";
+    renderPreservingIsland();
   } else if (id === "fusion") {
+    fusionPanel = "pair";
     view = "fusion";
     renderPreservingIsland();
   } else if (id === "summon_hearth") {
     view = "summon";
-    renderPreservingIsland();
-  } else if (id === "power_circle") {
-    enhanceSkillFeedAllowed = true;
-    monDetailTab = "skills";
-    view = "enhance";
-    selectFirstEnhanceRosterSlot();
     renderPreservingIsland();
   } else if (id === "shop") {
     view = "shop";
@@ -2432,6 +2698,7 @@ function runOnboardCta(): void {
   if (step === "enhance" || step === "equip") {
     view = "enhance";
     enhanceTab = "monsters";
+    enhanceSkillFeedAllowed = true;
     monBookDock = step === "equip" ? "symbols" : "roster";
     monDetailTab = step === "equip" ? "symbols" : "info";
     selectFirstEnhanceRosterSlot();
@@ -2623,24 +2890,93 @@ async function logout(): Promise<void> {
   render();
 }
 
-function flash(msg: string, placement: "top" | "mid" = "top"): void {
+function clearGuideToasts(): void {
+  document.querySelectorAll(".toast-portal").forEach((el) => el.remove());
+  app.querySelectorAll(":scope > .toast:not(.auth-toast)").forEach((el) => el.remove());
+  app.querySelector("header.app-bar .toast")?.remove();
+  app.querySelector(".side-quick .toast")?.remove();
+}
+
+function mountGuideToast(msg: string): void {
+  clearGuideToasts();
+  const p = document.createElement("p");
+  p.className = "toast toast--mid toast-portal";
+  p.setAttribute("role", "status");
+  p.textContent = msg;
+  document.body.appendChild(p);
+  window.setTimeout(() => {
+    if (toast === msg) toast = "";
+    p.remove();
+  }, 2800);
+}
+
+function flash(msg: string): void {
   toast = msg;
-  toastPlacement = placement;
+  void playSfx("ui-toast");
   if (view === "auth" || app.classList.contains("auth-mode")) {
     showAuthToast(msg);
     return;
   }
-  app.querySelectorAll(":scope > .toast").forEach((el) => el.remove());
-  app.querySelector("header.app-bar .toast")?.remove();
-  const p = document.createElement("p");
-  p.className = placement === "mid" ? "toast toast--mid" : "toast";
-  p.setAttribute("role", "status");
-  p.textContent = msg;
-  app.appendChild(p);
-  setTimeout(() => {
-    if (toast === msg) toast = "";
-    p.remove();
-  }, placement === "mid" ? 2800 : 2200);
+  mountGuideToast(msg);
+}
+
+/** Map the current view to a BGM bed. Facilities stay on the island loop. */
+function audioScreenForView(): AudioScreen {
+  if (view === "auth") return "auth";
+  if (view === "stages") return "stages";
+  if (view === "battle") return "battle";
+  if (view === "result") return "result";
+  return "home";
+}
+
+function syncGameBgm(): void {
+  syncBgmForView(audioScreenForView(), currentStage, {
+    victory: battle?.finishReason !== "enemy_win",
+  });
+}
+
+function settingsAudioHtml(): string {
+  const p = getAudioPrefs();
+  const pct = (n: number) => String(Math.round(n * 100));
+  const row = (id: string, label: string, value: number) =>
+    `<div class="settings-audio-row">
+      <label for="${id}">${escapeHtml(label)}</label>
+      <input type="range" id="${id}" min="0" max="100" step="1" value="${pct(value)}" data-no-sfx="1" />
+      <span class="settings-audio-val" data-audio-val="${id}">${pct(value)}</span>
+    </div>`;
+  return `<section class="settings-audio" aria-labelledby="settings-audio-title">
+    <p class="settings-lang-label" id="settings-audio-title">${escapeHtml(t("settings.audio"))}</p>
+    ${row("audio-master", t("settings.audioMaster"), p.master)}
+    ${row("audio-bgm", t("settings.audioBgm"), p.bgm)}
+    ${row("audio-sfx", t("settings.audioSfx"), p.sfx)}
+    <button type="button" class="settings-audio-mute${p.muted ? " is-on" : ""}" id="btn-audio-mute" data-no-sfx="1">${escapeHtml(
+      p.muted ? t("settings.audioUnmute") : t("settings.audioMute"),
+    )}</button>
+  </section>`;
+}
+
+function bindSettingsAudio(): void {
+  const bindRange = (id: string, key: "master" | "bgm" | "sfx") => {
+    const el = app.querySelector<HTMLInputElement>(`#${id}`);
+    if (!el) return;
+    const valEl = app.querySelector(`[data-audio-val="${id}"]`);
+    const apply = () => {
+      const n = Number(el.value) / 100;
+      setAudioPrefs({ [key]: n });
+      if (valEl) valEl.textContent = String(Math.round(n * 100));
+    };
+    el.addEventListener("input", apply);
+  };
+  bindRange("audio-master", "master");
+  bindRange("audio-bgm", "bgm");
+  bindRange("audio-sfx", "sfx");
+  app.querySelector("#btn-audio-mute")?.addEventListener("click", () => {
+    const next = setAudioPrefs({ muted: !getAudioPrefs().muted });
+    const btn = app.querySelector<HTMLButtonElement>("#btn-audio-mute");
+    if (!btn) return;
+    btn.classList.toggle("is-on", next.muted);
+    btn.textContent = next.muted ? t("settings.audioUnmute") : t("settings.audioMute");
+  });
 }
 
 /** Small overlay toast above the auth panel — does not shift layout. */
@@ -2883,35 +3219,7 @@ function renderStagePrepDock(): string {
       }).join("")}
     </div>`;
   } else if (stagePrepInvTab === "skill") {
-    const el = activeEl;
-    const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
-    const unlocked = unlockedMagicSkills(el, prog);
-    const loadout = save.summonerMagicLoadouts?.[el] ?? [null, null];
-    const equippedIds = new Set(loadout.filter((id): id is string => !!id));
-    const pending = stagePrepMagicPendingId
-      ? unlocked.find((skill) => skill.id === stagePrepMagicPendingId) ?? null
-      : null;
-    if (stagePrepMagicPendingId && !pending) stagePrepMagicPendingId = null;
-    const skillIcons = unlocked
-      .map((skill) => {
-        const rank = magicRank(prog, skill.id);
-        const equipped = equippedIds.has(skill.id);
-        return `<button type="button" class="stage-prep-skill-pick${equipped ? " is-equipped" : ""}${stagePrepMagicPendingId === skill.id ? " is-selected" : ""}" data-stage-prep-magic-skill="${escapeHtml(skill.id)}" data-stage-prep-info="magic" data-stage-prep-magic-id="${escapeHtml(skill.id)}" title="${escapeHtml(skill.nameKo)}">
-          ${summonerSkillArtImg(skill.id, "stage-prep-skill-pick-img", 44)}
-          <span class="stage-prep-skill-pick-lv">+${rank}</span>
-        </button>`;
-      })
-      .join("");
-    dockBody = `<div class="stage-prep-skill-panel">
-      <p class="stage-prep-dock-hint">${escapeHtml(
-        pending
-          ? t("ui.stagePrepSkillChooseSlot", { name: pending.nameKo })
-          : t("ui.stagePrepSkillTapHint"),
-      )}</p>
-      <div class="stage-prep-skill-rail">
-        <div class="stage-prep-skill-picks" role="list" aria-label="${escapeHtml(t("ui.stagePrepTabSkill"))}">${skillIcons}</div>
-      </div>
-    </div>`;
+    dockBody = renderMagicSkillDockBody("stage");
   } else {
     const sorted = sortRosterForSlots(save.roster, stagePrepSortMode);
     const rosterSlots = Array.from(
@@ -2948,19 +3256,16 @@ function renderStagePrepDock(): string {
     </div>`;
   }
 
-  const sortSelect =
-    stagePrepInvTab === "monster"
-      ? `<label class="stage-prep-sort">
+  const sortSelect = `<label class="stage-prep-sort">
           <span class="sr-only">${escapeHtml(t("ui.rosterSort"))}</span>
-          <select id="stage-prep-sort" aria-label="${escapeHtml(t("ui.rosterSort"))}">
+          <select id="stage-prep-sort" aria-label="${escapeHtml(t("ui.rosterSort"))}"${stagePrepInvTab === "monster" ? "" : " disabled"}>
             <option value="stars"${stagePrepSortMode === "stars" ? " selected" : ""}>${escapeHtml(t("ui.sortStars"))}</option>
             <option value="level"${stagePrepSortMode === "level" ? " selected" : ""}>${escapeHtml(t("ui.sortLevel"))}</option>
             <option value="element"${stagePrepSortMode === "element" ? " selected" : ""}>${escapeHtml(t("ui.sortElement"))}</option>
             <option value="default"${stagePrepSortMode === "default" ? " selected" : ""}>${escapeHtml(t("ui.sortDefault"))}</option>
             <option value="party"${stagePrepSortMode === "party" ? " selected" : ""}>${escapeHtml(t("ui.sortParty"))}</option>
           </select>
-        </label>`
-      : "";
+        </label>`;
 
   return `<div class="stage-prep-dock">
         <div class="stage-prep-dock-bar">
@@ -3100,6 +3405,82 @@ function renderLeaderPassiveMarkerChips(markers: string[]): string {
     .join("");
 }
 
+function currentSummonerMagicLoadout(): [string | null, string | null] {
+  const el = save.activeSummoner ?? "light";
+  const raw = save.summonerMagicLoadouts?.[el] ?? [null, null];
+  return [raw[0] ?? null, raw[1] ?? null];
+}
+
+function renderAllyMagicEquipSlots(kind: "stage" | "party"): string {
+  const activeEl = save.activeSummoner ?? "light";
+  const magicProg = save.summonerMagic?.[activeEl] ?? emptyMagicProgress();
+  const unlockedMagic = unlockedMagicSkills(activeEl, magicProg);
+  const magicById = new Map(unlockedMagic.map((skill) => [skill.id, skill]));
+  const loadout = save.summonerMagicLoadouts?.[activeEl] ?? [null, null];
+  const pendingMagic = stagePrepMagicPendingId
+    ? magicById.get(stagePrepMagicPendingId) ?? null
+    : null;
+  if (stagePrepMagicPendingId && !pendingMagic) stagePrepMagicPendingId = null;
+  return loadout
+    .map((skillId, index) => {
+      const skill = skillId ? magicById.get(skillId) : null;
+      const slotAttr =
+        kind === "party"
+          ? `data-party-magic-slot="${index}"`
+          : `data-stage-prep-magic-slot="${index}"`;
+      const infoAttr = skill
+        ? kind === "party"
+          ? `data-party-info="magic" data-party-info-magic="${escapeHtml(skill.id)}"`
+          : `data-stage-prep-info="magic" data-stage-prep-magic-id="${escapeHtml(skill.id)}"`
+        : "";
+      return `<button type="button" class="stage-prep-magic-slot${pendingMagic ? " is-target" : ""}${skill ? "" : " is-empty"}" ${slotAttr} ${infoAttr} title="${escapeHtml(skill?.nameKo ?? t("ui.stagePrepSkillSlot", { n: index + 1 }))}" ${pendingMagic ? "" : skill ? "" : "disabled"}>
+        <span>${escapeHtml(t("ui.stagePrepSkillSlot", { n: index + 1 }))}</span>
+        ${
+          skill
+            ? summonerSkillArtImg(skill.id, "stage-prep-magic-slot-img", 34)
+            : `<i>+</i>`
+        }
+      </button>`;
+    })
+    .join("");
+}
+
+function renderMagicSkillDockBody(kind: "stage" | "party"): string {
+  const el = save.activeSummoner ?? "light";
+  const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
+  const unlocked = unlockedMagicSkills(el, prog);
+  const loadout = save.summonerMagicLoadouts?.[el] ?? [null, null];
+  const equippedIds = new Set(loadout.filter((id): id is string => !!id));
+  const pending = stagePrepMagicPendingId
+    ? unlocked.find((skill) => skill.id === stagePrepMagicPendingId) ?? null
+    : null;
+  if (stagePrepMagicPendingId && !pending) stagePrepMagicPendingId = null;
+  const skillIcons = unlocked
+    .map((skill) => {
+      const rank = magicRank(prog, skill.id);
+      const equipped = equippedIds.has(skill.id);
+      const skillAttr =
+        kind === "party"
+          ? `data-party-magic-skill="${escapeHtml(skill.id)}" data-party-info="magic" data-party-info-magic="${escapeHtml(skill.id)}"`
+          : `data-stage-prep-magic-skill="${escapeHtml(skill.id)}" data-stage-prep-info="magic" data-stage-prep-magic-id="${escapeHtml(skill.id)}"`;
+      return `<button type="button" class="stage-prep-skill-pick${equipped ? " is-equipped" : ""}${stagePrepMagicPendingId === skill.id ? " is-selected" : ""}" ${skillAttr} title="${escapeHtml(skill.nameKo)}">
+          ${summonerSkillArtImg(skill.id, "stage-prep-skill-pick-img", 44)}
+          <span class="stage-prep-skill-pick-lv">+${rank}</span>
+        </button>`;
+    })
+    .join("");
+  return `<div class="stage-prep-skill-panel">
+      <p class="stage-prep-dock-hint">${escapeHtml(
+        pending
+          ? t("ui.stagePrepSkillChooseSlot", { name: pending.nameKo })
+          : t("ui.stagePrepSkillTapHint"),
+      )}</p>
+      <div class="stage-prep-skill-rail">
+        <div class="stage-prep-skill-picks" role="list" aria-label="${escapeHtml(t("ui.stagePrepTabSkill"))}">${skillIcons}</div>
+      </div>
+    </div>`;
+}
+
 function renderStageEntryModal(): string {
   const stage = stageEntryId ? getStage(stageEntryId) : null;
   if (!stage) return "";
@@ -3159,32 +3540,7 @@ function renderStageEntryModal(): string {
     return `<button type="button" class="stage-prep-preset${on ? " is-on" : ""}${filled ? " is-filled" : ""}" data-stage-preset="${i}" aria-pressed="${on}">${i + 1}</button>`;
   }).join("");
 
-  const magicProg =
-    save.summonerMagic?.[save.activeSummoner ?? "light"] ??
-    emptyMagicProgress();
-  const unlockedMagic = unlockedMagicSkills(
-    save.activeSummoner ?? "light",
-    magicProg,
-  );
-  const magicById = new Map(unlockedMagic.map((skill) => [skill.id, skill]));
-  const loadout = save.summonerMagicLoadouts?.[activeEl] ?? [null, null];
-  const pendingMagic = stagePrepMagicPendingId
-    ? magicById.get(stagePrepMagicPendingId) ?? null
-    : null;
-  if (stagePrepMagicPendingId && !pendingMagic) stagePrepMagicPendingId = null;
-  const equipSlots = loadout
-    .map((skillId, index) => {
-      const skill = skillId ? magicById.get(skillId) : null;
-      return `<button type="button" class="stage-prep-magic-slot${pendingMagic ? " is-target" : ""}${skill ? "" : " is-empty"}" data-stage-prep-magic-slot="${index}" title="${escapeHtml(skill?.nameKo ?? t("ui.stagePrepSkillSlot", { n: index + 1 }))}" ${pendingMagic ? "" : skill ? "" : "disabled"}>
-        <span>${escapeHtml(t("ui.stagePrepSkillSlot", { n: index + 1 }))}</span>
-        ${
-          skill
-            ? summonerSkillArtImg(skill.id, "stage-prep-magic-slot-img", 34)
-            : `<i>+</i>`
-        }
-      </button>`;
-    })
-    .join("");
+  const equipSlots = renderAllyMagicEquipSlots("stage");
 
   const titleText = `${stage.nameKo}(${diff.labelKo})`;
   const canStart = selected.size > 0 && energyNow >= cost;
@@ -3298,13 +3654,22 @@ function openStagePrepInfoFromEl(el: HTMLElement): void {
     if (!id) return;
     stagePrepInfo = { kind: "enemy", monsterId: id };
   } else if (infoKind === "magic") {
-    const skillId = el.dataset.stagePrepMagicId;
+    const skillId = el.dataset.stagePrepMagicId ?? el.dataset.partyInfoMagic;
     if (!skillId) return;
     stagePrepInfo = { kind: "magic", skillId };
   } else if (infoKind === "monster" || el.dataset.stagePartyToggle) {
     const uid = el.dataset.stagePartyToggle;
     if (!uid) return;
     stagePrepInfo = { kind: "monster", uid };
+  } else if (el.dataset.partyToggle) {
+    stagePrepInfo = { kind: "monster", uid: el.dataset.partyToggle };
+  } else if (el.dataset.partyInfo === "summoner") {
+    const raw = (save.activeSummoner ?? "light") as SummonerElement;
+    stagePrepInfo = { kind: "summoner", element: raw };
+  } else if (el.dataset.partyMagicSkill || el.dataset.partyInfoMagic) {
+    const skillId = el.dataset.partyMagicSkill ?? el.dataset.partyInfoMagic;
+    if (!skillId) return;
+    stagePrepInfo = { kind: "magic", skillId };
   } else if (el.dataset.stagePrepSummoner) {
     const raw = el.dataset.stagePrepSummoner;
     if (!(SUMMONER_ELEMENTS as readonly string[]).includes(raw)) return;
@@ -3539,7 +3904,7 @@ function bindStagePrepLongPress(host: ParentNode): void {
     const t = ev.target;
     if (!(t instanceof Element)) return null;
     return t.closest<HTMLElement>(
-      "[data-stage-prep-info], [data-stage-party-toggle], [data-stage-prep-summoner], [data-stage-prep-magic-skill]",
+      "[data-stage-prep-info], [data-stage-party-toggle], [data-stage-prep-summoner], [data-stage-prep-magic-skill], [data-party-info], [data-party-toggle], [data-party-pick-summoner], [data-party-magic-skill]",
     );
   };
 
@@ -3723,7 +4088,8 @@ function equipStagePrepMagicToSlot(index: number): void {
   };
   persist();
   stagePrepMagicPendingId = null;
-  applyStagesRegionOpen({ animate: false });
+  if (view === "party") applyPartyHallOpen({ animate: false });
+  else applyStagesRegionOpen({ animate: false });
 }
 
 /** Open/update drop-info overlay without rebuilding the region sheet. */
@@ -3805,6 +4171,7 @@ function bindStageEntryModal(): void {
     const r = runSavePartyPreset(save, idx, {
       summoner: save.activeSummoner ?? "light",
       party: [...draft],
+      magic: currentSummonerMagicLoadout(),
     });
     save = r.save;
     persist();
@@ -5785,7 +6152,7 @@ function facilityTitle(v: View): string {
     case "glory":
       return t("ui.hubGlory");
     case "fusion":
-      return t("ui.hubFusion");
+      return fusionPanel === "pair" ? t("ui.hubFusion") : t("ui.hubCombine");
     case "party":
       return t("ui.108f04ca6e");
     case "guild":
@@ -5804,20 +6171,43 @@ function renderFacilityLayerHtml(manaPct: number): string {
   const kind = view;
   const title = facilityTitle(kind);
   const isBook = kind === "enhance" || kind === "summoner";
+  const isDojo = kind === "dojo";
+  const isFusion = kind === "fusion";
+  const isWish = kind === "wish";
+  const isSummon = kind === "summon";
+  const headerClass = [
+    "facility-modal-header",
+    isBook ? "facility-modal-header--book" : "",
+    isDojo ? "facility-modal-header--dojo" : "",
+    isFusion ? "facility-modal-header--fusion" : "",
+    isWish ? "facility-modal-header--wish" : "",
+    isSummon ? "facility-modal-header--summon" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const headerRight = isBook
+    ? monTopbarCodexBtn()
+    : isDojo
+      ? `<div class="facility-modal-res" title="${escapeHtml(`${t("res.jinmun")} — ${t("res.jinmunHint")}`)}">
+          <img class="res-ico" src="/art/ui/res/jinmun.svg" width="18" height="18" alt="" draggable="false" />
+          <strong id="dojo-jinmun-count">${fmtRes(save.jinmunStones ?? 0)}</strong>
+        </div>`
+      : isFusion
+        ? `<div class="facility-modal-res facility-modal-res--gold" title="${escapeHtml(t("ui.dc78e6a251"))}">
+          <img class="res-ico" src="/art/ui/res/gold.svg" width="18" height="18" alt="" draggable="false" />
+          <strong id="fusion-mana-count">${fmtRes(save.island.mana)}</strong>
+        </div>`
+        : `<span class="facility-modal-header-spacer" aria-hidden="true"></span>`;
   // Stages uses expedition chrome; skip the shared modal header.
   const header =
     kind === "stages"
       ? ""
-      : `<header class="facility-modal-header${isBook ? " facility-modal-header--book" : ""}">
+      : `<header class="${headerClass}">
         <button type="button" class="facility-modal-back" data-nav="home" aria-label="${escapeHtml(t("ui.1a7f31cadb"))}">
           <img src="/art/ui/back-arrow.svg" width="20" height="20" alt="" draggable="false" />
         </button>
         <h1 class="facility-modal-title" id="facility-modal-title">${escapeHtml(title)}</h1>
-        ${
-          isBook
-            ? monTopbarCodexBtn()
-            : `<span class="facility-modal-header-spacer" aria-hidden="true"></span>`
-        }
+        ${headerRight}
       </header>`;
   const labelledBy =
     kind === "stages"
@@ -6061,13 +6451,14 @@ function applyResMoreOpen(): void {
     if (resMoreOpen) panel.removeAttribute("hidden");
     else panel.setAttribute("hidden", "");
   }
+  cueModalSfx("res-more", resMoreOpen);
 }
 
 
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play",
+    ".settings-sheet, .mission-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -6113,6 +6504,8 @@ const APP_ROOT_OVERLAY_IDS = [
   "chat-layer",
   "building-info-layer",
   "building-unlock-layer",
+  "bldg-up-layer",
+  "dojo-insc-up-layer",
   "skill-feed-layer",
   "power-up-layer",
   "gear-detail-layer",
@@ -6280,6 +6673,7 @@ function applySettingsOpen(): void {
       replayModalPop(layer);
     }
   }
+  cueModalSfx("settings", settingsOpen);
 }
 
 /** Toggle mailbox modal without a full screen re-render. */
@@ -6298,6 +6692,7 @@ function applyMailboxOpen(): void {
       replayModalPop(layer);
     }
   }
+  cueModalSfx("mailbox", mailboxOpen);
 }
 
 /** Toggle notification modal without a full screen re-render. */
@@ -6316,6 +6711,7 @@ function applyNotifOpen(): void {
       replayModalPop(layer);
     }
   }
+  cueModalSfx("notif", notifOpen);
 }
 
 /** Toggle mission modal without a full screen re-render. */
@@ -6334,6 +6730,7 @@ function applyMissionOpen(): void {
       replayModalPop(layer);
     }
   }
+  cueModalSfx("mission", missionOpen);
 }
 
 function bindMissionListControls(): void {
@@ -6438,6 +6835,7 @@ function applyCommunityOpen(): void {
       replayModalPop(layer);
     }
   }
+  cueModalSfx("community", communityOpen);
 }
 
 /** Open community modal and close other home overlays. */
@@ -6469,6 +6867,58 @@ function applyShopOpen(): void {
       replayModalPop(layer);
     }
   }
+  cueModalSfx("shop", shopOpen);
+}
+
+function bindShopBuyButtons(root: ParentNode = app): void {
+  const buy = (
+    selector: string,
+    run: () => { save: PlayerSave; message: string },
+    sfx?: "ui-purchase",
+  ) => {
+    root.querySelector(selector)?.addEventListener("click", () => {
+      const r = run();
+      save = r.save;
+      persist();
+      if (sfx) void playSfx(sfx);
+      flash(r.message);
+      softRefreshShopAfterBuy();
+    });
+  };
+  buy("#btn-buy-scroll-1", () => runBuyScroll(save, 1, "normal"), "ui-purchase");
+  buy("#btn-buy-scroll-5", () => runBuyScroll(save, 5, "normal"), "ui-purchase");
+  buy(
+    "#btn-buy-scroll-premium",
+    () => runBuyScroll(save, 1, "premium"),
+    "ui-purchase",
+  );
+  buy("#btn-buy-energy", () => runBuyEnergy(save, 1));
+  buy("#btn-buy-grindstone", () => runBuyGrindstone(save, 1));
+  buy("#btn-buy-imprint-stone", () => runBuyImprintStone(save, 1));
+  root.querySelector("#btn-craft-essence")?.addEventListener("click", () => {
+    const r = runCraftEssence(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    softRefreshShopAfterBuy();
+  });
+}
+
+/** Patch shop product grid + HUD after a catalog purchase (no hub-sky flash). */
+function softRefreshShopAfterBuy(): void {
+  syncHudResources();
+  const bodies = app.querySelectorAll<HTMLElement>(".shop-body");
+  if (bodies.length === 0) {
+    render();
+    return;
+  }
+  const html = renderShopBody();
+  bodies.forEach((body) => {
+    body.outerHTML = html;
+  });
+  const layer = app.querySelector("#shop-layer");
+  if (layer) bindShopBuyButtons(layer);
+  else bindShopBuyButtons(app);
 }
 
 /** Open shop modal and close other home overlays. */
@@ -6496,6 +6946,7 @@ function applySummonerPickerOpen(): void {
       replayModalPop(layer);
     }
   }
+  cueModalSfx("summoner-picker", summonerPickerOpen);
 }
 
 /** Notice lines reused by the notification sheet (not a marquee). */
@@ -6760,6 +7211,7 @@ function openHomeChat(): void {
     const log = app.querySelector("#chat-log");
     if (log) log.scrollTop = log.scrollHeight;
   });
+  cueModalSfx("chat", true);
 }
 
 /** Close chat sheet without remounting the island. */
@@ -6768,6 +7220,7 @@ function closeChatOverlay(): void {
   chatOpen = false;
   app.querySelector("#chat-layer")?.remove();
   applyHomeChatRail();
+  cueModalSfx("chat", false);
 }
 
 function bindChatUi(): void {
@@ -6958,7 +7411,8 @@ function missionRewardChips(reward?: MissionReward): string {
   if (reward.crystal) chips.push({ src: "/art/ui/res/crystal.svg", n: reward.crystal });
   if (reward.energy) chips.push({ src: "/art/ui/res/energy.svg", n: reward.energy });
   if (reward.jinmun) chips.push({ src: "/art/ui/res/jinmun.svg", n: reward.jinmun });
-  if (reward.grindstones) chips.push({ src: "/art/ui/res/jinmun.svg", n: reward.grindstones });
+  if (reward.grindstones) chips.push({ src: "/art/ui/res/grindstone.webp", n: reward.grindstones });
+  if (reward.imprintStones) chips.push({ src: "/art/ui/res/imprint-stone.webp", n: reward.imprintStones });
   if (reward.scrolls) chips.push({ src: "/art/ui/res/scroll.svg", n: reward.scrolls });
   if (reward.scrollsPremium) chips.push({ src: "/art/ui/res/scroll-premium.webp", n: reward.scrollsPremium });
   if (reward.scrollsMystic) chips.push({ src: "/art/ui/res/scroll-mystic.webp", n: reward.scrollsMystic });
@@ -7235,6 +7689,9 @@ function renderPreservingIsland(): void {
 
 function renderScreen(): void {
   clearEnergyRegenTimer();
+  clearWishCooldownTimer();
+  if (view !== "wish") abortWishReveal();
+  closeWishPoolTips();
   gearBagFilterUiAbort?.abort();
   gearBagFilterUiAbort = null;
   clearGearBagFilterMenuPortal();
@@ -7261,7 +7718,7 @@ function renderScreen(): void {
     : 0;
   const tabBattle = view === "stages" || view === "battle" || view === "result";
   const tabSummoner = view === "summoner";
-  const tabMonster = view === "enhance" || view === "fusion" || view === "party";
+  const tabMonster = view === "enhance" || view === "party";
   const tabMission = missionOpen;
   const tabCommunity = communityOpen;
   const tabShop = shopOpen;
@@ -7310,6 +7767,8 @@ function renderScreen(): void {
       <main class="auth-main auth-main--center">${authPwaInstallBtn()}${renderAuth()}${authFooter()}</main>
     `;
     bind();
+    bindUiSfx(app);
+    syncGameBgm();
 
     if (toast) {
       const toastText = toast;
@@ -7450,8 +7909,12 @@ function renderScreen(): void {
               )}</strong>
             </div>
             <div class="res-item res-item--mats" title="${escapeHtml(t("ui.grindstone"))}">
-              <img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" />
+              <img class="res-ico" src="/art/ui/res/grindstone.webp" width="16" height="16" alt="" draggable="false" />
               <strong class="res-val">${fmtRes(grindstoneCount(save))}</strong>
+            </div>
+            <div class="res-item res-item--mats" title="${escapeHtml(t("ui.imprintStone"))}">
+              <img class="res-ico" src="/art/ui/res/imprint-stone.webp" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(imprintStoneCount(save))}</strong>
             </div>
             <div class="res-item res-item--guild" title="${escapeHtml(t("res.guild"))}">
               <img class="res-ico" src="/art/ui/res/guild.svg" width="16" height="16" alt="" draggable="false" />
@@ -7489,6 +7952,7 @@ function renderScreen(): void {
             ${languageOptionsHtml()}
           </select>
         </label>
+        ${settingsAudioHtml()}
         <button type="button" class="settings-logout settings-reset-save" id="btn-reset-save">${escapeHtml(t("settings.resetSave"))}</button>
         <button type="button" class="settings-logout" id="btn-logout">${escapeHtml(t("settings.logout"))}</button>
       </div>
@@ -7638,20 +8102,20 @@ function renderScreen(): void {
       <button type="button" id="btn-community" class="${tabCommunity ? "active" : ""}" aria-expanded="${communityOpen ? "true" : "false"}" aria-controls="community-layer" title="${escapeHtml(t("nav.community"))}"><span class="seal-badge"><span class="tab-ico tab-ico--community" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/community.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.community"))}</span></span></button>
       <button type="button" id="btn-shop" class="${tabShop ? "active" : ""}" aria-expanded="${shopOpen ? "true" : "false"}" aria-controls="shop-layer" title="${escapeHtml(t("nav.shop"))}"><span class="seal-badge"><span class="tab-ico tab-ico--shop" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/shop.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.shop"))}</span></span></button>
     </nav>
-    ${toast ? `<p class="toast${toastPlacement === "mid" ? " toast--mid" : ""}" role="status">${escapeHtml(toast)}</p>` : ""}
   `;
 
   bind();
   bindOnboardUi();
+  syncGameBgm();
   if (toast) {
     const toastText = toast;
-    toast = "";
-    setTimeout(() => {
-      if (!toast) {
-        const el = app.querySelector(".toast");
-        if (el && el.textContent === toastText) el.remove();
-      }
-    }, 2200);
+    const existing = document.querySelector<HTMLElement>(".toast-portal");
+    if (existing && existing.textContent === toastText) {
+      toast = "";
+    } else {
+      toast = "";
+      mountGuideToast(toastText);
+    }
   }
 }
 
@@ -7798,7 +8262,10 @@ function renderHome(): string {
             : ""
         }
         ${spot("summon_hearth", islandSpotTitle("summon_hearth"), 46.7, 38.8, { tone: "summon", sub: `${t('ui.fa73f3a42f')} ${save.scrolls}${t('ui.b241493768')}` })}
-        ${spot("power_circle", islandSpotTitle("power_circle"), 41.9, 31.2, { tone: "forge", sub: t('ui.1ab42b48a4') })}
+        ${spot("power_circle", islandSpotTitle("power_circle"), 41.9, 31.2, {
+                  tone: "fusion",
+                  sub: t("ui.fusion.spotSub"),
+                })}
         ${spot("gateway", islandSpotTitle("gateway"), 55.5, 33.1, { tone: "gate", sub: t('ui.13c82de693') })}
         ${spot("mana_pond", islandSpotTitle("mana_pond"), 19, 62.2, {
                   tone: "pond",
@@ -7999,27 +8466,54 @@ function softShowFusionReveal(): void {
   if (!softRefreshOverlayReveals()) render();
 }
 
-function softRefreshWishChrome(): void {
-  const day = todayKey();
-  const used = save.island.lastWishDay === day;
-  const meta = app.querySelector<HTMLElement>(".hub-meta");
-  if (meta) {
-    meta.textContent = used
-      ? `${t("ui.ecc82466ef")} ${MIDDOT} ${day}`
-      : t("ui.b65d90440e");
+function fmtWishCooldown(ms: number): string {
+  const sec = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function wishCastButtonLabel(now = Date.now()): string {
+  const remaining = wishUsesRemaining(save.island, now);
+  if (remaining <= 0) return t("ui.7898ac8908");
+  const cool = wishCooldownRemainingMs(save.island, now);
+  if (cool > 0) return fmtWishCooldown(cool);
+  return t("ui.7898ac8908");
+}
+
+function softRefreshWishChrome(): void {
+  const now = Date.now();
+  const ready = canWishNow(save.island, now);
   const btn = app.querySelector<HTMLButtonElement>("#btn-wish-cast");
   if (btn) {
-    btn.disabled = used;
-    btn.textContent = used ? t("ui.566fd24305") : t("ui.7898ac8908");
+    btn.disabled = !ready;
+    btn.textContent = wishCastButtonLabel(now);
   }
-  const status = app.querySelector<HTMLElement>("[data-wish-status]");
-  if (status) status.textContent = used ? t("ui.8d8680373c") : t("ui.9614672b56");
-  const lastEl = app.querySelector<HTMLElement>("[data-wish-last]");
-  if (lastEl) lastEl.textContent = save.island.lastWishDay ?? EM_DASH;
-  const scrollsEl = app.querySelector<HTMLElement>("[data-wish-scrolls]");
-  if (scrollsEl) scrollsEl.textContent = String(save.scrolls);
   syncHudResources();
+}
+
+function clearWishCooldownTimer(): void {
+  if (wishCooldownTimer) {
+    clearInterval(wishCooldownTimer);
+    wishCooldownTimer = null;
+  }
+}
+
+function startWishCooldownTimer(): void {
+  clearWishCooldownTimer();
+  if (view !== "wish") return;
+  softRefreshWishChrome();
+  wishCooldownTimer = setInterval(() => {
+    if (view !== "wish") {
+      clearWishCooldownTimer();
+      return;
+    }
+    softRefreshWishChrome();
+  }, 1000);
 }
 
 function beginWishReveal(reward: NonNullable<ReturnType<typeof runDailyWish>["wishReward"]>): void {
@@ -8038,44 +8532,267 @@ function beginWishReveal(reward: NonNullable<ReturnType<typeof runDailyWish>["wi
   );
 }
 
-function renderDojo(): string {
-  const drills = save.dojoDrills ?? 0;
-  const rem = drills % 3;
-  const untilMission = rem === 0 ? 3 : 3 - rem;
-  const nextIsMission = rem === 2;
-  const nextNote = nextIsMission
-    ? t('ui.4ae6a748b6')
-    : `${t('ui.210ca7ad33')} ${untilMission}${t('ui.2fc05c02be')}`;
-  const manaGain = 120 + save.island.summonerLevel * 8;
-  return hubShell(
-    t("ui.hubDojo"),
-    `${t('ui.ca119dd0f6')} ${drills}${t('ui.5d8e2b5c4a')} Lv.${save.island.summonerLevel}`,
-    `<div class="hub-panel">
-      <div class="dojo-panel">
-        <p class="dojo-panel-title">${t('ui.1365952072')}</p>
-        <div class="dojo-stats">
-          <div class="dojo-stat">
-            <span class="dojo-stat-label">${t('ui.c7b8d42347')}</span>
-            <strong>${drills}</strong>
-          </div>
-          <div class="dojo-stat">
-            <span class="dojo-stat-label">${t("ui.dojoNextLabel")}</span>
-            <strong>${nextNote}</strong>
-          </div>
-        </div>
-        <p class="muted dojo-hint">1${t('ui.d975611bf8')} +${manaGain} ${MIDDOT} EXP +15</p>
-        <button type="button" class="primary full" id="btn-dojo-drill">${t('ui.23a04d1293')}</button>
+function circleInscName(id: CircleInscriptionId): string {
+  if (id === "start_mana") return t("ui.circleInsc.start_mana");
+  if (id === "amplify_cap") return t("ui.circleInsc.amplify_cap");
+  return t("ui.circleInsc.item_spawn");
+}
+
+function circleInscArt(id: CircleInscriptionId): { src: string; fallback: string } {
+  if (id === "start_mana") {
+    return { src: "/art/ui/skill/mana.webp", fallback: "/art/ui/skill/mana.svg" };
+  }
+  if (id === "amplify_cap") {
+    return { src: "/art/summoner/skill/fire_amp.webp", fallback: "/art/summoner/skill/fire_amp.svg" };
+  }
+  return { src: "/art/battle/mark/star.webp", fallback: "/art/battle/mark/star.svg" };
+}
+
+function circleInscCompact(id: CircleInscriptionId, lv: number): string {
+  if (id === "start_mana") return lv <= 0 ? "0" : `+${lv}`;
+  if (id === "amplify_cap") {
+    const pct = Math.round(lv * 0.5 * 10) / 10;
+    return `+${pct}%`;
+  }
+  return `+${lv * 3}%`;
+}
+
+function circleInscDeltaPerLevel(id: CircleInscriptionId): number {
+  if (id === "start_mana") return 1;
+  if (id === "amplify_cap") return 0.5;
+  return 3;
+}
+
+function circleInscFmtDelta(id: CircleInscriptionId, n: number): string {
+  if (id === "start_mana") return String(n);
+  const pct = Math.round(n * 10) / 10;
+  return `${pct}%`;
+}
+
+function circleInscUpgradePreview(id: CircleInscriptionId): {
+  id: CircleInscriptionId;
+  title: string;
+  art: { src: string; fallback: string };
+  lv: number;
+  nextLv: number;
+  maxed: boolean;
+  cost: number;
+  canBuy: boolean;
+} | null {
+  const def = CIRCLE_INSCRIPTIONS.find((g) => g.id === id);
+  if (!def) return null;
+  const lv = save.circleInscriptions?.[id] ?? 0;
+  const maxed = lv >= def.maxLevel;
+  const cost = def.jinmunCostPerLevel;
+  return {
+    id,
+    title: circleInscName(id),
+    art: circleInscArt(id),
+    lv,
+    nextLv: Math.min(def.maxLevel, lv + 1),
+    maxed,
+    cost,
+    canBuy: !maxed && (save.jinmunStones ?? 0) >= cost,
+  };
+}
+
+function renderDojoInscUpgradeBody(
+  preview: NonNullable<ReturnType<typeof circleInscUpgradePreview>>,
+): string {
+  const disabled = !preview.canBuy;
+  return `<div class="bldg-up-body" id="dojo-insc-up-body">
+    <div class="bldg-up-hero">
+      <div class="bldg-up-art dojo-insc-up-art" aria-hidden="true">
+        <img class="dojo-insc-up-ring" src="/art/ui/symbol/circle-frame.svg" width="72" height="72" alt="" draggable="false" />
+        <img class="dojo-insc-up-seal" src="${preview.art.src}" width="36" height="36" alt="" draggable="false" onerror="this.onerror=null;this.src='${preview.art.fallback}'" />
       </div>
-    </div>`,
-  );
+      <div class="bldg-up-meta">
+        <strong class="bldg-up-name">${escapeHtml(preview.title)}</strong>
+        <span class="bldg-up-lv">${escapeHtml(
+          t("ui.bldgUp.levelLine", { from: preview.lv, to: preview.nextLv }),
+        )}</span>
+      </div>
+    </div>
+    <div class="bldg-up-stats" role="list">
+      ${buildingUpgradeCompareRowHtml({
+        label: preview.title,
+        ico: preview.art.src,
+        fromHtml: escapeHtml(circleInscCompact(preview.id, preview.lv)),
+        toHtml: escapeHtml(circleInscCompact(preview.id, preview.nextLv)),
+        delta: circleInscDeltaPerLevel(preview.id),
+        fmtDelta: (n) => circleInscFmtDelta(preview.id, n),
+      })}
+    </div>
+    <div class="bldg-up-foot" id="dojo-insc-up-foot">
+      <button type="button" class="auth-btn-primary bldg-up-confirm" id="btn-dojo-insc-up-confirm" ${disabled ? "disabled" : ""}>
+        <span class="bldg-up-confirm-price">
+          <img class="res-ico" src="/art/ui/res/jinmun.svg" width="20" height="20" alt="" draggable="false" />
+          <strong>${preview.cost}</strong>
+        </span>
+        <span class="bldg-up-confirm-sep" aria-hidden="true"></span>
+        <span class="bldg-up-confirm-label">${escapeHtml(t("ui.dojo.inscConfirm"))}</span>
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderDojoInscUpgradeModal(): string {
+  if (!circleInscConfirmId) return "";
+  const preview = circleInscUpgradePreview(circleInscConfirmId);
+  if (!preview) return "";
+  return `<div class="settings-layer dojo-insc-up-layer" id="dojo-insc-up-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-dojo-insc-up-close" aria-label="${escapeHtml(t("ui.bldgUp.close"))}"></button>
+    <div class="settings-sheet bldg-up-sheet dojo-insc-up-sheet" role="dialog" aria-modal="true" aria-labelledby="dojo-insc-up-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.bldgUp.close"), "btn-dojo-insc-up-close")}
+      <h2 class="settings-title" id="dojo-insc-up-title">${escapeHtml(t("ui.dojo.inscTitle"))}</h2>
+      ${renderDojoInscUpgradeBody(preview)}
+    </div>
+  </div>`;
+}
+
+function closeDojoInscUpgradeSoft(): void {
+  if (!circleInscConfirmId && !app.querySelector("#dojo-insc-up-layer")) return;
+  circleInscConfirmId = null;
+  circleInscUpgradeModalAbort?.abort();
+  circleInscUpgradeModalAbort = null;
+  softRemoveOverlay("dojo-insc-up-layer");
+}
+
+function bindDojoInscUpgradeModal(): void {
+  const layer = app.querySelector<HTMLElement>("#dojo-insc-up-layer");
+  if (!layer || !circleInscConfirmId) return;
+  circleInscUpgradeModalAbort?.abort();
+  const ac = new AbortController();
+  circleInscUpgradeModalAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+  const close = (): void => {
+    closeDojoInscUpgradeSoft();
+  };
+  layer.querySelector("#btn-dojo-insc-up-close")?.addEventListener("click", close, opts);
+  layer.querySelector(".settings-backdrop")?.addEventListener("click", close, opts);
+  layer
+    .querySelector<HTMLButtonElement>("#btn-dojo-insc-up-confirm")
+    ?.addEventListener(
+      "click",
+      () => {
+        const id = circleInscConfirmId;
+        if (!id) return;
+        const r = runBuyCircleInscription(save, id);
+        save = r.save;
+        persist();
+        flash(r.message);
+        closeDojoInscUpgradeSoft();
+        if (!refreshDojoSoft()) render();
+        else bindDojoActions();
+      },
+      opts,
+    );
+  dematteArtInTree(layer, "img.dojo-insc-up-seal, img.dojo-insc-up-ring, img.bldg-up-cell .res-ico");
+}
+
+function openDojoInscUpgradeSoft(id: CircleInscriptionId): void {
+  const preview = circleInscUpgradePreview(id);
+  if (!preview) return;
+  if (preview.maxed) {
+    flash(t("ui.cc24e86471"));
+    return;
+  }
+  circleInscConfirmId = id;
+  const layer = softMountOverlay("dojo-insc-up-layer", renderDojoInscUpgradeModal());
+  if (layer) bindDojoInscUpgradeModal();
+}
+
+function renderDojoInscListHtml(): string {
+  const jinmun = save.jinmunStones ?? 0;
+  return CIRCLE_INSCRIPTIONS.map((g) => {
+    const lv = save.circleInscriptions?.[g.id] ?? 0;
+    const maxed = lv >= g.maxLevel;
+    const canBuy = !maxed && jinmun >= g.jinmunCostPerLevel;
+    const pct = g.maxLevel > 0 ? Math.round((lv / g.maxLevel) * 100) : 0;
+    const art = circleInscArt(g.id);
+    const now = circleInscCompact(g.id, lv);
+    const nextBonus = maxed ? "MAX" : circleInscCompact(g.id, lv + 1);
+    return `<button type="button" class="dojo-insc${maxed ? " is-maxed" : ""}${!canBuy && !maxed ? " is-locked" : ""}" data-circle-insc="${g.id}" ${maxed ? "disabled" : ""}>
+      <span class="dojo-insc-seal" aria-hidden="true" style="--insc-pct:${pct}">
+        <img class="dojo-insc-seal-ring-art" src="/art/ui/symbol/circle-frame.svg" width="56" height="56" alt="" draggable="false" />
+        <span class="dojo-insc-seal-ring"></span>
+        <img class="dojo-insc-seal-art" src="${art.src}" width="28" height="28" alt="" draggable="false" onerror="this.onerror=null;this.src='${art.fallback}'" />
+        <span class="dojo-insc-lv">${lv}</span>
+      </span>
+      <span class="dojo-insc-body">
+        <span class="dojo-insc-head">
+          <strong class="dojo-insc-name">${escapeHtml(circleInscName(g.id))}</strong>
+          <span class="dojo-insc-delta">
+            <strong>${escapeHtml(now)}</strong>
+            <span aria-hidden="true">${ARROW_RIGHT}</span>
+            <em>${escapeHtml(nextBonus)}</em>
+          </span>
+        </span>
+        <span class="dojo-insc-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${g.maxLevel}" aria-valuenow="${lv}">
+          <span style="width:${pct}%"></span>
+        </span>
+      </span>
+      <span class="dojo-insc-cost">
+        ${
+          maxed
+            ? `<span class="dojo-insc-max">MAX</span>`
+            : `<span class="res-cost-chip" title="${escapeHtml(t("res.jinmun"))}"><img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" /><strong>${g.jinmunCostPerLevel}</strong></span>`
+        }
+      </span>
+    </button>`;
+  }).join("");
+}
+
+function renderDojo(): string {
+  const { drillsToday } = dojoDayState(save);
+  const capped = drillsToday >= DOJO_DAILY_LIMIT;
+  const goldGain = 40 + getActiveSummoner(save).level * 2;
+  const trainLabel = capped
+    ? t("ui.dojo.trainDoneCount", { n: drillsToday, max: DOJO_DAILY_LIMIT })
+    : t("ui.dojo.trainBtnCount", { n: drillsToday, max: DOJO_DAILY_LIMIT });
+  return `<div class="dojo-sheet" id="dojo-body-host">
+    <section class="dojo-train-hero" aria-labelledby="dojo-train-title">
+      <div class="dojo-train-stage">
+        <div class="dojo-train-aura" aria-hidden="true"></div>
+        <img class="dojo-train-circle" src="/art/hub/summon-circle.webp" width="240" height="240" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/summon-circle.svg'" />
+        <img class="dojo-train-bldg" src="/art/hub/bldg-dojo.webp" width="360" height="220" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/emblem-dojo.svg'" />
+        <div class="dojo-train-veil" aria-hidden="true"></div>
+        <h2 class="dojo-train-title" id="dojo-train-title">${escapeHtml(t("ui.dojo.trainTitle"))}</h2>
+        <div class="dojo-train-gains" aria-label="${escapeHtml(t("ui.dojo.rewardLabel"))}">
+          <span class="res-cost-chip" title="${escapeHtml(t("res.jinmun"))}">
+            <img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" />
+            <strong>+${DOJO_DRILL_JINMUN}</strong>
+          </span>
+          <span class="res-cost-chip" title="${escapeHtml(t("res.gold"))}">
+            <img class="res-ico" src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" />
+            <strong>+${fmtRes(goldGain)}</strong>
+          </span>
+        </div>
+      </div>
+      <div class="dojo-train-cta">
+        <button type="button" class="primary dojo-train-btn" id="btn-dojo-drill" ${capped ? "disabled" : ""}>${escapeHtml(trainLabel)}</button>
+      </div>
+    </section>
+    <section class="dojo-block dojo-block--insc" aria-labelledby="dojo-insc-title">
+      <header class="dojo-block-head dojo-block-head--plain">
+        <span class="dojo-block-seal dojo-block-seal--insc" aria-hidden="true">
+          <img class="dojo-block-seal-ring" src="/art/ui/symbol/circle-frame.svg" width="40" height="40" alt="" draggable="false" />
+          <img class="dojo-block-seal-img" src="/art/ui/res/jinmun.svg" width="20" height="20" alt="" draggable="false" />
+        </span>
+        <h2 class="dojo-block-title" id="dojo-insc-title">${escapeHtml(t("ui.dojo.inscTitle"))}</h2>
+      </header>
+      <div class="dojo-insc-list">${renderDojoInscListHtml()}</div>
+    </section>
+  </div>`;
 }
 
 function renderPond(): string {
   const pond = save.island.buildings.find((b) => b.id === "mana_pond");
-  const def = PHASE1_BUILDINGS.find((b) => b.id === "mana_pond")!;
+  const def = PHASE_BUILDINGS.find((b) => b.id === "mana_pond")!;
   const lv = pond?.level ?? 1;
   const cap = productionStorageCap(def, lv);
-  const rate = productionManaPerHour(def, lv);
+  const rate = productionManaPerHour(def, lv, save.island.manaProdBonus ?? 0);
   const maxed = lv >= MAX_BUILDING_LEVEL;
   const cost = buildingUpgradeManaCost(lv);
   const stored = Math.floor(pond?.storedMana ?? 0);
@@ -8116,7 +8833,7 @@ function renderPond(): string {
 
 function renderMine(): string {
   const mine = save.island.buildings.find((b) => b.id === "crystal_mine");
-  const def = PHASE1_BUILDINGS.find((b) => b.id === "crystal_mine")!;
+  const def = PHASE_BUILDINGS.find((b) => b.id === "crystal_mine")!;
   const lv = mine?.level ?? 1;
   const cap = productionCrystalCap(def, lv);
   const rate = productionCrystalPerHour(def, lv);
@@ -8159,25 +8876,32 @@ function renderMine(): string {
 }
 
 function renderWish(): string {
-  const day = todayKey();
-  const last = save.island.lastWishDay ?? null;
-  const used = last === day;
+  const now = Date.now();
+  const ready = canWishNow(save.island, now);
   const poolRows = WISH_REWARD_POOL.map((row) => {
-    const name =
-      row.kind === "mana"
-        ? t("ui.wishPoolGold", { min: row.min, max: row.max })
-        : row.kind === "crystal"
-          ? t("ui.wishPoolCrystal", { min: row.min, max: row.max })
-          : t("ui.wishPoolScroll", { min: row.min, max: row.max });
-    return `<li class="wish-pool-row" data-kind="${row.kind}">
-      <img class="wish-pool-ico" src="${wishRewardIconSrc(row.kind)}" width="36" height="36" alt="" draggable="false" />
-      <strong class="wish-pool-name">${escapeHtml(name)}</strong>
-      <em class="wish-pool-rate">${escapeHtml(t("ui.wishPoolRate", { pct: row.weightPct }))}</em>
+    const amt = wishPoolAmtLabel(row);
+    const name = wishRewardName(row.kind);
+    const hint = wishRewardHint(row.kind);
+    const ico = wishRewardIconSrc(row.kind);
+    return `<li>
+      <button type="button" class="wish-pool-chip wish-pool-chip--ico" data-wish-kind="${row.kind}" data-amt-label="${escapeHtml(amt)}" aria-expanded="false" aria-label="${escapeHtml(name)}">
+        <img class="wish-pool-ico" src="${ico}" width="40" height="40" alt="" draggable="false" />
+        <strong class="wish-pool-amt">${escapeHtml(amt)}</strong>
+        <span class="wish-pool-tip" hidden role="tooltip">
+          <strong>${escapeHtml(name)}</strong>
+          <span class="wish-pool-tip-amt res-cost-chip">
+            <img class="res-ico" src="${ico}" width="16" height="16" alt="" draggable="false" />
+            <strong>${escapeHtml(amt)}</strong>
+          </span>
+          <small>${escapeHtml(hint)}</small>
+        </span>
+      </button>
     </li>`;
   }).join("");
+  queueMicrotask(() => startWishCooldownTimer());
   return hubShell(
     t("ui.hubWish"),
-    used ? `${t("ui.ecc82466ef")} ${MIDDOT} ${last}` : t("ui.b65d90440e"),
+    "",
     `<div class="hub-panel wish-hub">
       <div id="wish-reveal-host" hidden></div>
       <section class="wish-shrine" aria-label="${escapeHtml(t("ui.hubWish"))}">
@@ -8191,24 +8915,13 @@ function renderWish(): string {
             onerror="this.onerror=null;this.src='/art/hub/emblem-wish.svg'"
           />
         </div>
-        <p class="wish-shrine-caption">${escapeHtml(t("ui.wishShrineCaption"))}</p>
+        <button type="button" class="auth-btn-primary full wish-cast-btn" id="btn-wish-cast" ${ready ? "" : "disabled"}>
+          ${escapeHtml(wishCastButtonLabel(now))}
+        </button>
       </section>
       <section class="wish-pool guild-panel wish-panel" aria-label="${escapeHtml(t("ui.wishPoolTitle"))}">
-        <p class="guild-panel-title">${escapeHtml(t("ui.wishPoolTitle"))}</p>
-        <ul class="wish-pool-list">${poolRows}</ul>
-        <p class="muted dojo-hint">${escapeHtml(t("ui.7e6bcf70a0"))}</p>
+        <ul class="wish-pool-list wish-pool-list--icos">${poolRows}</ul>
       </section>
-      <div class="guild-panel wish-panel wish-status">
-        <p class="guild-panel-title">${t("ui.6667aae26a")}</p>
-        <div class="guild-stats">
-          <div class="guild-stat"><span>${t("ui.2bdce5e8cc")}</span><strong data-wish-status>${used ? t("ui.8d8680373c") : t("ui.9614672b56")}</strong></div>
-          <div class="guild-stat"><span>${t("ui.0f8cd87cd5")}</span><strong data-wish-last>${last ?? EM_DASH}</strong></div>
-          <div class="guild-stat"><span>${t("ui.fa73f3a42f")}</span><strong data-wish-scrolls>${save.scrolls}</strong></div>
-        </div>
-      </div>
-      <button type="button" class="auth-btn-primary full" id="btn-wish-cast" ${used ? "disabled" : ""}>
-        ${used ? t("ui.566fd24305") : t("ui.7898ac8908")}
-      </button>
     </div>`,
   );
 }
@@ -8222,6 +8935,9 @@ function ensurePartyDraft(): Set<string> {
 function preparePartyHall(): void {
   partyInvTab = "monster";
   stagePrepInfo = null;
+  stagePrepMagicPendingId = null;
+  clearStagePrepLongPress();
+  stagePrepSuppressClick = false;
   const presets = normalizePartyPresets(save, save.partyPresets);
   const idx = clampPartyPresetIndex(save.activePartyPreset);
   save = {
@@ -8251,6 +8967,7 @@ function commitPartyDraftOnLeave(): void {
   }
   partyDraft = null;
   stagePrepInfo = null;
+  stagePrepMagicPendingId = null;
 }
 
 function renderPartyDock(): string {
@@ -8263,7 +8980,7 @@ function renderPartyDock(): string {
       ${SUMMONER_ELEMENTS.map((el) => {
         const on = el === activeEl;
         const p = save.summoners?.[el] ?? { level: 1, exp: 0, awaken: 0 };
-        return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${on ? " is-active" : ""}" data-party-pick-summoner="${el}" role="option" aria-selected="${on}" title="${escapeHtml(elementLabel(el))}">
+        return `<button type="button" class="mon-slot mon-slot--portrait el-${el}${on ? " is-active" : ""}" data-party-pick-summoner="${el}" data-party-info="summoner" role="option" aria-selected="${on}" title="${escapeHtml(elementLabel(el))}">
           <span class="mon-slot-art" aria-hidden="true">
             <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
           </span>
@@ -8271,6 +8988,8 @@ function renderPartyDock(): string {
         </button>`;
       }).join("")}
     </div>`;
+  } else if (partyInvTab === "skill") {
+    dockBody = renderMagicSkillDockBody("party");
   } else {
     const sorted = sortRosterForSlots(save.roster, stagePrepSortMode);
     const rosterSlots = Array.from(
@@ -8307,25 +9026,23 @@ function renderPartyDock(): string {
     </div>`;
   }
 
-  const sortSelect =
-    partyInvTab === "monster"
-      ? `<label class="stage-prep-sort">
+  const sortSelect = `<label class="stage-prep-sort">
           <span class="sr-only">${escapeHtml(t("ui.rosterSort"))}</span>
-          <select id="party-inv-sort" aria-label="${escapeHtml(t("ui.rosterSort"))}">
+          <select id="party-inv-sort" aria-label="${escapeHtml(t("ui.rosterSort"))}"${partyInvTab === "monster" ? "" : " disabled"}>
             <option value="stars"${stagePrepSortMode === "stars" ? " selected" : ""}>${escapeHtml(t("ui.sortStars"))}</option>
             <option value="level"${stagePrepSortMode === "level" ? " selected" : ""}>${escapeHtml(t("ui.sortLevel"))}</option>
             <option value="element"${stagePrepSortMode === "element" ? " selected" : ""}>${escapeHtml(t("ui.sortElement"))}</option>
             <option value="default"${stagePrepSortMode === "default" ? " selected" : ""}>${escapeHtml(t("ui.sortDefault"))}</option>
             <option value="party"${stagePrepSortMode === "party" ? " selected" : ""}>${escapeHtml(t("ui.sortParty"))}</option>
           </select>
-        </label>`
-      : "";
+        </label>`;
 
   return `<div class="stage-prep-dock party-dock">
     <div class="stage-prep-dock-bar">
       <div class="stage-prep-tabs" role="tablist">
         <button type="button" class="stage-prep-tab${partyInvTab === "summoner" ? " is-on" : ""}" data-party-inv-tab="summoner" role="tab" aria-selected="${partyInvTab === "summoner"}">${escapeHtml(t("ui.stagePrepTabSummoner"))}</button>
         <button type="button" class="stage-prep-tab${partyInvTab === "monster" ? " is-on" : ""}" data-party-inv-tab="monster" role="tab" aria-selected="${partyInvTab === "monster"}">${escapeHtml(t("ui.stagePrepTabMonster"))}</button>
+        <button type="button" class="stage-prep-tab${partyInvTab === "skill" ? " is-on" : ""}" data-party-inv-tab="skill" role="tab" aria-selected="${partyInvTab === "skill"}">${escapeHtml(t("ui.stagePrepTabSkill"))}</button>
       </div>
       ${sortSelect}
     </div>
@@ -8333,7 +9050,7 @@ function renderPartyDock(): string {
   </div>`;
 }
 
-function renderParty(): string {
+function renderPartyBoardHtml(): string {
   const selected = ensurePartyDraft();
   const partyUids = [...selected];
   while (partyUids.length < 4) partyUids.push("");
@@ -8342,18 +9059,7 @@ function renderParty(): string {
   const leader = stagePrepLeaderPassive(save);
   const presets = normalizePartyPresets(save, save.partyPresets);
   const presetIdx = clampPartyPresetIndex(save.activePartyPreset);
-  const magicProg =
-    save.summonerMagic?.[save.activeSummoner ?? "light"] ??
-    emptyMagicProgress();
-  const skillIcons = unlockedMagicSkills(
-    save.activeSummoner ?? "light",
-    magicProg,
-  )
-    .slice(0, 4)
-    .map((n) => {
-      return `<span class="stage-prep-skill-ico is-on" title="${escapeHtml(n.nameKo)}">${summonerSkillArtImg(n.id, "stage-prep-skill-ico-img", 28)}</span>`;
-    })
-    .join("");
+  const equipSlots = renderAllyMagicEquipSlots("party");
 
   const allyMonSlots = [0, 1, 2, 3]
     .map((i) => {
@@ -8380,17 +9086,14 @@ function renderParty(): string {
     return `<button type="button" class="stage-prep-preset${on ? " is-on" : ""}${filled ? " is-filled" : ""}" data-party-preset="${i}" aria-pressed="${on}">${i + 1}</button>`;
   }).join("");
 
-  return `<div class="party-screen${onboard.step === "party" ? " is-onboard-rite" : ""}">${hubShell(
-    t("ui.108f04ca6e"),
-    `${t("ui.d5e7024eb8")} ${selected.size}/4`,
-    `<div class="hub-panel party-board stage-prep stage-prep--board">
+  return `<div class="hub-panel party-board stage-prep stage-prep--board">
       <section class="stage-prep-team stage-prep-team--ally" aria-label="${escapeHtml(t("ui.stagePrepParty"))}">
         <div class="stage-prep-presets">
           ${presetRow}
           <button type="button" class="stage-prep-save-deck" id="btn-party-save-deck">${escapeHtml(t("ui.stagePrepSaveDeck"))}</button>
         </div>
         <div class="stage-prep-slots">
-          <button type="button" class="stage-prep-slot stage-prep-slot--summoner el-${activeEl}" data-party-info="summoner" title="${escapeHtml(t("ui.stagePrepSummoner"))}">
+          <button type="button" class="stage-prep-slot stage-prep-slot--summoner el-${activeEl}" data-party-info="summoner" data-party-inv-tab="summoner" title="${escapeHtml(t("ui.stagePrepChangeSummoner"))}">
             <img class="stage-prep-slot-img" src="${summonerArtSrc(activeEl)}" width="64" height="64" alt="" draggable="false" decoding="async" />
             <span class="stage-prep-slot-tag">${escapeHtml(t("ui.stagePrepSummoner"))}</span>
             <span class="stage-prep-slot-lv">Lv.${activeSum.level}</span>
@@ -8405,12 +9108,182 @@ function renderParty(): string {
               <div class="stage-prep-leader-markers">${renderLeaderPassiveMarkerChips(leader.markers)}</div>
             </div>
           </div>
-          <div class="stage-prep-skill-icos" aria-hidden="true">${skillIcons}</div>
+          <div class="stage-prep-magic-slots" aria-label="${escapeHtml(t("ui.stagePrepSkillSlots"))}">${equipSlots}</div>
         </div>
       </section>
       ${renderPartyDock()}
-    </div>`,
-  )}${renderStagePrepInfoModal()}</div>`;
+    </div>`;
+}
+
+function renderParty(): string {
+  return `<div class="party-screen${onboard.step === "party" ? " is-onboard-rite" : ""}">
+    <div class="party-hall" id="party-board-host">${renderPartyBoardHtml()}</div>
+  </div>`;
+}
+
+function refreshPartyDock(): void {
+  applyPartyHallOpen({ animate: false });
+}
+
+/** Refresh party hall contents without remounting HUD / facility chrome. */
+function applyPartyHallOpen(opts?: { animate?: boolean }): void {
+  if (view !== "party") return;
+  const host = app.querySelector<HTMLElement>("#party-board-host");
+  if (!host) {
+    renderPreservingIsland();
+    return;
+  }
+  host.innerHTML = renderPartyBoardHtml();
+  bindPartyHallControls();
+  if (opts?.animate === false) {
+    const modal = app.querySelector<HTMLElement>(".facility-layer--party .facility-modal");
+    if (modal) modal.style.animation = "none";
+  }
+  if (stagePrepInfo) applyStagePrepInfo({ animate: false });
+}
+
+function bindPartyHallControls(): void {
+  const root = app.querySelector(".party-screen");
+  if (!root || view !== "party") return;
+  dematteArtInTree(root, "img.mon-slot-img, img.stage-prep-slot-img");
+  bindStagePrepLongPress(root);
+  if (stagePrepInfo) applyStagePrepInfo({ animate: false });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-party-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
+      const draft = ensurePartyDraft();
+      const uid = btn.dataset.partyToggle!;
+      if (draft.has(uid)) draft.delete(uid);
+      else if (draft.size < 4) draft.add(uid);
+      else {
+        flash(t("ui.e44dd9cad3"));
+        return;
+      }
+      applyPartyHallOpen({ animate: false });
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-party-pick-summoner]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
+      const el = btn.dataset.partyPickSummoner as SummonerElement | undefined;
+      if (!el) return;
+      if (el !== (save.activeSummoner ?? "light")) {
+        save = setActiveSummoner(save, el);
+        persist();
+        flash(t("summonerPicker.switched", { element: elementLabel(el) }));
+      }
+      partyInvTab = "summoner";
+      stagePrepMagicPendingId = null;
+      applyPartyHallOpen({ animate: false });
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-party-inv-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
+      const tab = btn.dataset.partyInvTab;
+      if (tab !== "summoner" && tab !== "monster" && tab !== "skill") return;
+      if (partyInvTab === tab) return;
+      partyInvTab = tab;
+      refreshPartyDock();
+    });
+  });
+
+  root.querySelector("#party-inv-sort")?.addEventListener("change", (ev) => {
+    const raw = (ev.target as HTMLSelectElement).value;
+    const allowed: RosterSortMode[] = [
+      "default",
+      "level",
+      "stars",
+      "element",
+      "party",
+    ];
+    if (!allowed.includes(raw as RosterSortMode)) return;
+    stagePrepSortMode = raw as RosterSortMode;
+    refreshPartyDock();
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-party-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = clampPartyPresetIndex(Number(btn.dataset.partyPreset));
+      const r = runLoadPartyPreset(save, idx);
+      save = r.save;
+      partyDraft = new Set(save.party);
+      persist();
+      flash(t("ui.stagePrepDeckLoaded", { n: idx + 1 }));
+      applyPartyHallOpen({ animate: false });
+    });
+  });
+
+  root.querySelector("#btn-party-save-deck")?.addEventListener("click", () => {
+    const draft = ensurePartyDraft();
+    const idx = clampPartyPresetIndex(save.activePartyPreset);
+    const r = runSavePartyPreset(save, idx, {
+      summoner: save.activeSummoner ?? "light",
+      party: [...draft],
+      magic: currentSummonerMagicLoadout(),
+    });
+    save = r.save;
+    persist();
+    if (onboard.step === "party") {
+      patchOnboard({ partySet: true });
+    }
+    flash(t("ui.stagePrepDeckSaved", { n: idx + 1 }));
+    applyPartyHallOpen({ animate: false });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-party-magic-skill]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
+      const skillId = btn.dataset.partyMagicSkill;
+      if (!skillId) return;
+      stagePrepMagicPendingId =
+        stagePrepMagicPendingId === skillId ? null : skillId;
+      applyPartyHallOpen({ animate: false });
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-party-magic-slot]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
+      if (!stagePrepMagicPendingId) {
+        partyInvTab = "skill";
+        applyPartyHallOpen({ animate: false });
+        return;
+      }
+      equipStagePrepMagicToSlot(Number(btn.dataset.partyMagicSlot));
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-party-info]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (consumeStagePrepSuppressClick()) return;
+      if (btn.hasAttribute("data-party-toggle")) return;
+      if (btn.hasAttribute("data-party-pick-summoner")) return;
+      if (btn.hasAttribute("data-party-magic-skill")) return;
+      if (btn.hasAttribute("data-party-magic-slot") && stagePrepMagicPendingId) {
+        return;
+      }
+      const kind = btn.dataset.partyInfo;
+      if (kind === "summoner") {
+        partyInvTab = "summoner";
+        refreshPartyDock();
+        return;
+      }
+      if (kind === "monster") {
+        const uid = btn.dataset.partyInfoUid;
+        if (!uid) return;
+        stagePrepInfo = { kind: "monster", uid };
+        applyStagePrepInfo({ animate: true });
+      }
+      if (kind === "magic") {
+        partyInvTab = "skill";
+        applyPartyHallOpen({ animate: false });
+      }
+    });
+  });
 }
 
 function monsterElementLabel(el: string | undefined): string {
@@ -10360,7 +11233,7 @@ function bindSymbolInventoryInteractions(): void {
             kind: "imprint",
             before,
             after: describeSymbol(next),
-            cost: `${MINUS}${t("ui.5d0bf3b101")} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
+            cost: `<span class="res-cost-chip"><img class="res-ico" src="/art/ui/res/imprint-stone.webp" width="16" height="16" alt="" draggable="false" /><strong>${SYMBOL_IMPRINT_STONE_COST}</strong></span>`,
           };
         }
         rematchSymbolModalIndices(detailId, compareId);
@@ -12557,6 +13430,8 @@ function syncHudResources(): void {
     const val = item.querySelector<HTMLElement>(".res-val");
     if (!val) return;
     if (title === t("res.skillMats")) val.textContent = fmtRes(save.skillMats ?? 0);
+    if (title === t("ui.grindstone")) val.textContent = fmtRes(grindstoneCount(save));
+    if (title === t("ui.imprintStone")) val.textContent = fmtRes(imprintStoneCount(save));
     if (title === t("res.awakenMats")) {
       val.textContent = fmtRes(
         Object.values(save.awakenMats ?? {}).reduce(
@@ -12617,6 +13492,7 @@ function finishGrowthReveal(): void {
   }
   if (view === "fusion") {
     if (!refreshFusionSoft()) render();
+    else bindFusionActions();
     return;
   }
   if (view === "summoner") {
@@ -13035,14 +13911,21 @@ function renderShopProductCard(opts: {
   title: string;
   desc: string;
   priceHtml: string;
+  disabled?: boolean;
+  limitHtml?: string;
 }): string {
   const idAttr = opts.id ? ` id="${opts.id}"` : "";
   const data = opts.dataAttr ?? "";
-  return `<button type="button" class="shop-product shop-product--${opts.tone}"${idAttr} ${data}>
+  const disabled = opts.disabled ? " disabled" : "";
+  const limit = opts.limitHtml
+    ? `<small class="shop-product-limit">${opts.limitHtml}</small>`
+    : "";
+  return `<button type="button" class="shop-product shop-product--${opts.tone}${opts.disabled ? " is-sold-out" : ""}"${idAttr} ${data}${disabled}>
     <span class="shop-product-seal" aria-hidden="true">${opts.art}</span>
     <span class="shop-product-meta">
       <strong class="shop-product-title">${opts.title}</strong>
       <small class="shop-product-desc">${opts.desc}</small>
+      ${limit}
     </span>
     <span class="shop-product-price">${opts.priceHtml}</span>
   </button>`;
@@ -13060,12 +13943,44 @@ function shopPriceJinmun(n: number): string {
   return `<span class="shop-price-chip shop-price-chip--jinmun"><img src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(n)}</strong></span>`;
 }
 
+function shopDailyLimitHtml(sku: CatalogShopSku): string {
+  const limit = CATALOG_SHOP_DAILY_LIMIT[sku];
+  const left = catalogShopRemaining(save, sku);
+  if (left <= 0) return escapeHtml(t("ui.shop.soldOut"));
+  return escapeHtml(t("ui.shop.dailyLeft", { left, limit }));
+}
+
 function renderShopBody(): string {
   const scrollArt = (kind: "normal" | "premium") =>
     `<img class="shop-product-art" src="${scrollArtSrc(kind)}" width="56" height="56" alt="" draggable="false" />`;
   const energyArt = `<img class="shop-product-art" src="/art/ui/res/energy.svg" width="48" height="48" alt="" draggable="false" />`;
-  const grindArt = `<span class="shop-product-mark">${Mark.grind}</span>`;
+  const grindArt = `<img class="shop-product-art" src="/art/ui/res/grindstone.webp" width="48" height="48" alt="" draggable="false" />`;
+  const imprintArt = `<img class="shop-product-art" src="/art/ui/res/imprint-stone.webp" width="48" height="48" alt="" draggable="false" />`;
   const essenceArt = `<img class="shop-product-art" src="/art/ui/res/crystal.svg" width="48" height="48" alt="" draggable="false" />`;
+
+  const card = (
+    opts: {
+      id: string;
+      tone: string;
+      art: string;
+      title: string;
+      desc: string;
+      priceHtml: string;
+      sku: CatalogShopSku;
+    },
+  ) => {
+    const left = catalogShopRemaining(save, opts.sku);
+    return renderShopProductCard({
+      id: opts.id,
+      tone: opts.tone,
+      art: opts.art,
+      title: opts.title,
+      desc: opts.desc,
+      priceHtml: opts.priceHtml,
+      disabled: left <= 0,
+      limitHtml: shopDailyLimitHtml(opts.sku),
+    });
+  };
 
   return `<div class="hub-panel shop-body">
     <div id="forge-reveal-host"></div>
@@ -13074,29 +13989,32 @@ function renderShopBody(): string {
         <p class="shop-section-kicker">${escapeHtml(t("ui.shop.sectionSummon"))}</p>
       </header>
       <div class="shop-grid">
-        ${renderShopProductCard({
+        ${card({
           id: "btn-buy-scroll-1",
           tone: "scroll",
           art: scrollArt("normal"),
           title: escapeHtml(t("ui.58c8d4982d")),
           desc: escapeHtml(t("ui.shop.scrollNormalDesc")),
           priceHtml: shopPriceMana(SCROLL_BUY_MANA_COST),
+          sku: "scroll_normal_1",
         })}
-        ${renderShopProductCard({
+        ${card({
           id: "btn-buy-scroll-5",
           tone: "scroll",
           art: scrollArt("normal"),
           title: escapeHtml(t("ui.544ebe1d37")),
           desc: escapeHtml(t("ui.shop.scrollBundleDesc")),
           priceHtml: shopPriceMana(SCROLL_BUY_MANA_COST * 5),
+          sku: "scroll_normal_5",
         })}
-        ${renderShopProductCard({
+        ${card({
           id: "btn-buy-scroll-premium",
           tone: "premium",
           art: scrollArt("premium"),
           title: escapeHtml(t("ui.shop.premiumScroll")),
           desc: escapeHtml(t("ui.shop.scrollPremiumDesc")),
-          priceHtml: shopPriceMana(SCROLL_PREMIUM_BUY_MANA_COST),
+          priceHtml: shopPriceCrystal(SCROLL_PREMIUM_BUY_CRYSTAL_COST),
+          sku: "scroll_premium",
         })}
       </div>
     </section>
@@ -13105,21 +14023,32 @@ function renderShopBody(): string {
         <p class="shop-section-kicker">${escapeHtml(t("ui.shop.sectionSupply"))}</p>
       </header>
       <div class="shop-grid">
-        ${renderShopProductCard({
+        ${card({
           id: "btn-buy-energy",
           tone: "energy",
           art: energyArt,
           title: escapeHtml(t("ui.7154da110a") + ` +${ENERGY_BUY_AMOUNT}`),
           desc: escapeHtml(t("ui.shop.energyDesc")),
           priceHtml: shopPriceCrystal(ENERGY_CRYSTAL_COST),
+          sku: "energy",
         })}
-        ${renderShopProductCard({
+        ${card({
           id: "btn-buy-grindstone",
           tone: "grind",
           art: grindArt,
           title: escapeHtml(t("ui.shop.grindstone")),
           desc: escapeHtml(t("ui.shop.grindstoneDesc")),
-          priceHtml: shopPriceMana(GRINDSTONE_BUY_MANA_COST),
+          priceHtml: shopPriceCrystal(GRINDSTONE_BUY_CRYSTAL_COST),
+          sku: "grindstone",
+        })}
+        ${card({
+          id: "btn-buy-imprint-stone",
+          tone: "imprint",
+          art: imprintArt,
+          title: escapeHtml(t("ui.shop.imprintStone")),
+          desc: escapeHtml(t("ui.shop.imprintStoneDesc")),
+          priceHtml: shopPriceCrystal(IMPRINT_STONE_BUY_CRYSTAL_COST),
+          sku: "imprint_stone",
         })}
       </div>
     </section>
@@ -13335,78 +14264,150 @@ function renderCommunityModal(): string {
 }
 
 function renderFusionBodyHtml(): string {
-  const pairs: string[] = [];
-  for (let i = 0; i < save.roster.length; i++) {
-    for (let j = i + 1; j < save.roster.length; j++) {
-      if (save.roster[i]!.monsterId === save.roster[j]!.monsterId) {
-        pairs.push(`${i}:${j}`);
+  const lv = save.island.summonerLevel;
+  const fusionStarOk =
+    lv >= 17 || save.island.buildings.some((b) => b.id === "fusion_star");
+
+  if (fusionPanel === "pair") {
+    const pairs: string[] = [];
+    if (fusionStarOk) {
+      for (let i = 0; i < save.roster.length; i++) {
+        for (let j = i + 1; j < save.roster.length; j++) {
+          if (save.roster[i]!.monsterId === save.roster[j]!.monsterId) {
+            pairs.push(`${i}:${j}`);
+          }
+        }
       }
     }
-  }
-  const recipeRows = FUSION_RECIPES.map((recipe) => {
-    const needCounts = new Map<string, number>();
-    for (const id of recipe.fodderMonsterIds) {
-      needCounts.set(id, (needCounts.get(id) ?? 0) + 1);
-    }
-    const available = new Map<string, string[]>();
-    for (const m of save.roster) {
-      const list = available.get(m.monsterId) ?? [];
-      list.push(m.uid);
-      available.set(m.monsterId, list);
-    }
-    const fodderUids: string[] = [];
-    let ok = true;
-    for (const [id, need] of needCounts) {
-      const pool = [...(available.get(id) ?? [])];
-      if (pool.length < need) {
-        ok = false;
-        break;
-      }
-      for (let n = 0; n < need; n++) fodderUids.push(pool.shift()!);
-    }
-    const keeper =
-      save.roster.find((m) => !fodderUids.includes(m.uid)) ?? save.roster[0];
-    const result = getMonster(recipe.resultMonsterId);
-    const needLabel = recipe.fodderMonsterIds
-      .map((id) => getMonster(id)?.nameKo ?? id)
-      .join(" + ");
-    const cost = recipe.manaCost ?? FUSION_MANA_COST;
-    const disabled = !ok || !keeper;
-    return `<button type="button" class="stage-card${disabled ? " is-maxed" : ""}" data-recipe-id="${recipe.id}" data-recipe-keeper="${keeper?.uid ?? ""}" data-recipe-fodder="${fodderUids.join(",")}" ${disabled ? "disabled" : ""}>
-      <span class="stage-card-mark" aria-hidden="true">${Mark.fusion}</span>
-      <span class="stage-card-body">
-        <strong>${recipe.nameKo} ${ARROW_RIGHT} ${result?.nameKo ?? recipe.resultMonsterId}</strong>
-        <small>${disabled ? t("ui.fusion.recipeNeed") : needLabel} ${MIDDOT} ${MINUS}${t("ui.dc78e6a251")} ${cost}</small>
-      </span>
-    </button>`;
-  }).join("");
-  const pairRows = pairs.length
-    ? pairs
-        .map((p) => {
-          const [a, b] = p.split(":");
-          const ma = save.roster[Number(a)]!;
-          const mb = save.roster[Number(b)]!;
-          const evo = Math.min(
-            MAX_EVOLVE,
-            Math.max(ma.evolve ?? 0, mb.evolve ?? 0) + 1,
-          );
-          return `<button type="button" class="stage-card" data-fuse-a="${a}" data-fuse-b="${b}">
-                <span class="stage-card-mark" aria-hidden="true">${Mark.fusion}</span>
-                <span class="stage-card-body">
-                  <strong>${describeOwned(ma)} + ${describeOwned(mb)}</strong>
-                  <small>${t("ui.ebc3c5c656")} ${evo} ${MIDDOT} ${MINUS}${t("ui.dc78e6a251")} ${FUSION_MANA_COST}</small>
+    const pairRows = !fusionStarOk
+      ? `<p class="fusion-empty muted">${escapeHtml(t("ui.fusion.sameSpeciesLocked"))}</p>`
+      : pairs.length
+        ? pairs
+            .map((p) => {
+              const [a, b] = p.split(":");
+              const ma = save.roster[Number(a)]!;
+              const mb = save.roster[Number(b)]!;
+              const evo = Math.min(
+                MAX_EVOLVE,
+                Math.max(ma.evolve ?? 0, mb.evolve ?? 0) + 1,
+              );
+              return `<button type="button" class="fusion-pair" data-fuse-a="${a}" data-fuse-b="${b}">
+                <span class="fusion-pair-arts" aria-hidden="true">
+                  <span class="fusion-pair-art">${monsterArtImg(ma.monsterId, "fusion-pair-img", 48)}</span>
+                  <span class="fusion-flow-op">+</span>
+                  <span class="fusion-pair-art">${monsterArtImg(mb.monsterId, "fusion-pair-img", 48)}</span>
+                </span>
+                <span class="fusion-pair-body">
+                  <strong>${escapeHtml(describeOwned(ma))} + ${escapeHtml(describeOwned(mb))}</strong>
+                  <small>${escapeHtml(t("ui.ebc3c5c656"))} ${evo}</small>
+                </span>
+                <span class="fusion-pair-side">
+                  ${shopPriceMana(FUSION_MANA_COST)}
+                  <span class="fusion-recipe-cta">${escapeHtml(t("ui.fusion.fuseCta"))}</span>
                 </span>
               </button>`;
-        })
-        .join("")
-    : `<p class="muted">${t("ui.6b94c9708e")}</p>`;
-  return `<div class="guild-panel fusion-panel">
-        <p class="guild-panel-title">${t("ui.hubFusion")}</p>
-      <p class="muted dojo-hint">${t("ui.7882865401")}.</p>
-    </div>
-    <p class="section-label">${t("ui.fusion.recipes")}</p>
-    <div class="stage-list">${recipeRows || `<p class="muted">${t("ui.fusion.recipeNeed")}</p>`}</div>
-    <div class="stage-list">${pairRows}</div>`;
+            })
+            .join("")
+        : `<p class="fusion-empty muted">${escapeHtml(t("ui.fusion.pairEmpty"))}</p>`;
+
+    return `<section class="fusion-altar" aria-labelledby="fusion-altar-title">
+      <div class="fusion-altar-stage">
+        <div class="fusion-altar-aura" aria-hidden="true"></div>
+        <img class="fusion-altar-circle" src="/art/hub/forge-circle.webp" width="240" height="240" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/forge-circle.svg'" />
+        <img class="fusion-altar-bldg" src="/art/hub/bldg-fusion.webp" width="360" height="220" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/emblem-fusion.svg'" />
+        <div class="fusion-altar-veil" aria-hidden="true"></div>
+        <h2 class="fusion-altar-title" id="fusion-altar-title">${escapeHtml(t("ui.hubFusion"))}</h2>
+        <p class="fusion-altar-lead">${escapeHtml(t("ui.fusion.pairAltarLead"))}</p>
+      </div>
+    </section>
+    <section class="fusion-block fusion-block--pair" aria-labelledby="fusion-pair-title">
+      <header class="fusion-block-head">
+        <span class="fusion-block-seal fusion-block-seal--pair" aria-hidden="true">${Mark.dual}</span>
+        <div class="fusion-block-copy">
+          <h2 class="fusion-block-title" id="fusion-pair-title">${escapeHtml(t("ui.fusion.sameSpecies"))}</h2>
+        </div>
+      </header>
+      <div class="fusion-pair-list">${pairRows}</div>
+    </section>`;
+  }
+
+  const recipeRows = FUSION_RECIPES.map((recipe) => {
+    const result = getMonster(recipe.resultMonsterId);
+    const plan = planFusionRecipe(save.roster, recipe);
+    const needLv = recipe.unlockSummonerLevel ?? 1;
+    const lockedLv = lv < needLv;
+    const cost = recipe.manaCost ?? FUSION_MANA_COST;
+    const ready = plan.ok && !lockedLv && save.island.mana >= cost;
+    const mats = plan.counts
+      .map((c, idx) => {
+        const def = getMonster(c.monsterId);
+        const filled = c.have >= c.need;
+        const plus =
+          idx > 0
+            ? `<span class="fusion-flow-op" aria-hidden="true">+</span>`
+            : "";
+        return `${plus}<span class="fusion-recipe-mat${filled ? " is-ready" : ""}" title="${escapeHtml(def?.nameKo ?? c.monsterId)}">
+          <span class="fusion-recipe-mat-frame">${monsterArtImg(c.monsterId, "fusion-recipe-mat-img", 44)}</span>
+          <em>${c.have}/${c.need}</em>
+        </span>`;
+      })
+      .join("");
+    const status = lockedLv
+      ? `<span class="fusion-recipe-status is-warn">${escapeHtml(t("ui.fusion.lockedLv", { n: needLv }))}</span>`
+      : !plan.ok
+        ? `<span class="fusion-recipe-status is-warn">${escapeHtml(t("ui.fusion.recipeNeed"))}</span>`
+        : `<span class="fusion-recipe-status is-ready">${escapeHtml(t("ui.fusion.ready"))}</span>`;
+    const exclusive = recipe.fusionOnly
+      ? `<span class="fusion-recipe-tag">${escapeHtml(t("ui.fusion.exclusive"))}</span>`
+      : "";
+    const stars = monStarsHtml(Math.max(1, result?.naturalStars ?? 1));
+    return `<button type="button" class="fusion-recipe${ready ? " is-ready" : " is-locked"}" data-recipe-id="${recipe.id}" data-recipe-fodder="${plan.fodderUids.join(",")}" ${ready ? "" : "disabled"}>
+      <span class="fusion-recipe-top">
+        <span class="fusion-recipe-result">
+          <span class="fusion-recipe-result-ring" aria-hidden="true">
+            ${monsterArtImg(recipe.resultMonsterId, "fusion-recipe-result-img", 72)}
+          </span>
+          <span class="fusion-recipe-copy">
+            <strong>${escapeHtml(result?.nameKo ?? recipe.resultMonsterId)}</strong>
+            <span class="fusion-recipe-stars">${stars}</span>
+            <small>${escapeHtml(recipe.nameKo)}</small>
+            ${exclusive}
+          </span>
+        </span>
+        <span class="fusion-recipe-side">
+          ${shopPriceMana(cost)}
+          <span class="fusion-recipe-cta">${escapeHtml(t("ui.fusion.fuseCta"))}</span>
+        </span>
+      </span>
+      <span class="fusion-recipe-flow" aria-hidden="true">
+        <span class="fusion-recipe-mats">${mats}</span>
+        <span class="fusion-flow-op fusion-flow-op--arrow">${ARROW_RIGHT}</span>
+        <span class="fusion-flow-result">${monsterArtImg(recipe.resultMonsterId, "fusion-flow-result-img", 40)}</span>
+      </span>
+      ${status}
+    </button>`;
+  }).join("");
+
+  return `<section class="fusion-altar" aria-labelledby="fusion-altar-title">
+      <div class="fusion-altar-stage">
+        <div class="fusion-altar-aura" aria-hidden="true"></div>
+        <img class="fusion-altar-circle" src="/art/hub/forge-circle.webp" width="240" height="240" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/forge-circle.svg'" />
+        <img class="fusion-altar-bldg" src="/art/hub/bldg-fusion.webp" width="360" height="220" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/emblem-fusion.svg'" />
+        <div class="fusion-altar-veil" aria-hidden="true"></div>
+        <h2 class="fusion-altar-title" id="fusion-altar-title">${escapeHtml(t("ui.hubCombine"))}</h2>
+        <p class="fusion-altar-lead">${escapeHtml(t("ui.fusion.altarLead"))}</p>
+      </div>
+    </section>
+    <section class="fusion-block" aria-labelledby="fusion-recipes-title">
+      <header class="fusion-block-head">
+        <span class="fusion-block-seal" aria-hidden="true">${Mark.fusion}</span>
+        <div class="fusion-block-copy">
+          <h2 class="fusion-block-title" id="fusion-recipes-title">${escapeHtml(t("ui.fusion.recipes"))}</h2>
+          <p class="fusion-block-lead">${escapeHtml(t("ui.fusion.hint"))}</p>
+        </div>
+      </header>
+      <div class="fusion-recipe-list">${recipeRows}</div>
+    </section>`;
 }
 
 function refreshFusionSoft(): boolean {
@@ -13414,20 +14415,116 @@ function refreshFusionSoft(): boolean {
   if (!host) return false;
   host.innerHTML = renderFusionBodyHtml();
   dematteArtInTree(host);
+  const mana = app.querySelector<HTMLElement>("#fusion-mana-count");
+  if (mana) mana.textContent = fmtRes(save.island.mana);
+  syncHudResources();
   return true;
 }
 
-function renderFusion(): string {
-  return hubShell(
-    t("ui.hubFusion"),
-    `${t("ui.df9d336285")} ${MIDDOT} ${t("ui.d02987ca08")} +1 ${MIDDOT} ${MINUS}${t("ui.dc78e6a251")} ${FUSION_MANA_COST}`,
-    `<div class="hub-panel">
-    <div id="fusion-reveal-host">${renderFusionReveal()}</div>
-    <div id="fusion-body-host">${renderFusionBodyHtml()}</div>
-  </div>`,
-  );
+function refreshDojoSoft(): boolean {
+  const host = app.querySelector<HTMLElement>("#dojo-body-host");
+  if (!host) return false;
+  const next = document.createElement("div");
+  next.innerHTML = renderDojo();
+  const sheet = next.firstElementChild;
+  if (!sheet) return false;
+  host.replaceWith(sheet);
+  dematteArtInTree(sheet);
+  const jinmun = app.querySelector<HTMLElement>("#dojo-jinmun-count");
+  if (jinmun) jinmun.textContent = fmtRes(save.jinmunStones ?? 0);
+  syncHudResources();
+  return true;
 }
 
+function bindFusionActions(): void {
+  app.querySelectorAll<HTMLButtonElement>("[data-fuse-a]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (growthRevealIsOpen()) return;
+      const a = save.roster[Number(btn.dataset.fuseA!)];
+      const keepUid = a?.uid;
+      if (!a || !keepUid) return;
+      const beforeSave = save;
+      const beforeCount = save.roster.length;
+      const r = runFusion(save, btn.dataset.fuseA!, btn.dataset.fuseB!);
+      const after = r.save.roster.find((monster) => monster.uid === keepUid);
+      const grew = r.save.roster.length < beforeCount && !!after;
+      save = r.save;
+      persist();
+      if (!grew || !after) {
+        flash(r.message);
+        return;
+      }
+      beginGrowthReveal(
+        buildOwnedGrowthPayload({
+          kind: "fusion",
+          before: a,
+          after,
+          beforeSave,
+          afterSave: r.save,
+        }),
+      );
+    });
+  });
+
+  app.querySelectorAll<HTMLButtonElement>("[data-recipe-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (growthRevealIsOpen()) return;
+      const recipeId = btn.dataset.recipeId!;
+      const fodder = (btn.dataset.recipeFodder ?? "")
+        .split(",")
+        .filter(Boolean);
+      const before = fodder
+        .map((uid) => save.roster.find((monster) => monster.uid === uid))
+        .find(Boolean);
+      const beforeSave = save;
+      const r = runRecipeFusion(save, recipeId, fodder);
+      const after = r.fusedUid
+        ? r.save.roster.find((monster) => monster.uid === r.fusedUid)
+        : undefined;
+      save = r.save;
+      persist();
+      if (!before || !after) {
+        flash(r.message);
+        return;
+      }
+      beginGrowthReveal(
+        buildOwnedGrowthPayload({
+          kind: "fusion",
+          before,
+          after,
+          beforeSave,
+          afterSave: r.save,
+        }),
+      );
+    });
+  });
+}
+
+function bindDojoActions(): void {
+  app.querySelector("#btn-dojo-drill")?.addEventListener("click", () => {
+    const r = runPracticeDojo(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    enqueueBuildingUnlocks(r.unlockedBuildingIds);
+    if (!refreshDojoSoft()) render();
+    else bindDojoActions();
+    showNextBuildingUnlockModal();
+  });
+  app.querySelectorAll<HTMLButtonElement>("[data-circle-insc]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.circleInsc as CircleInscriptionId;
+      openDojoInscUpgradeSoft(id);
+    });
+  });
+}
+
+function renderFusion(): string {
+  return `<div class="fusion-sheet">
+    <div id="fusion-reveal-host">${renderFusionReveal()}</div>
+    <div id="fusion-body-host">${renderFusionBodyHtml()}</div>
+  </div>`;
+}
 
 const STAGE_DIFFICULTIES: {
   id: StageDifficulty;
@@ -15174,6 +16271,7 @@ function bindIslandLayoutEdit(): void {
 
 function bind(): void {
   ensureModalXDelegate();
+  bindSettingsAudio();
 
   if (view === "auth") {
     bindAuth();
@@ -15497,6 +16595,7 @@ function bind(): void {
       applyCommunityOpen();
       applyShopOpen();
       closeChatOverlay();
+      closeDojoInscUpgradeSoft();
       const nav = btn.dataset.nav;
       if (nav === "guild") {
         openCommunityModalSoft();
@@ -15566,7 +16665,7 @@ function bind(): void {
       }
       if (nav === "enhance") {
         enhanceTab = "monsters";
-        enhanceSkillFeedAllowed = false;
+        enhanceSkillFeedAllowed = true;
         selectFirstEnhanceRosterSlot();
       }
       if (nav === "stages") {
@@ -15681,13 +16780,9 @@ function bind(): void {
         const id = btn.dataset.spotUp;
         if (!id) return;
         const buildingId = islandSpotUpgradeableBuildingId(id);
-        if (!buildingId) return;
+        if (buildingId !== "mana_pond" && buildingId !== "crystal_mine") return;
         setIslandSpotMenu(null);
-        const r = runUpgradeBuilding(save, buildingId);
-        save = r.save;
-        persist();
-        flash(r.message);
-        render();
+        openBuildingUpgradeSoft(buildingId);
       });
     });
     app.querySelectorAll<HTMLButtonElement>("[data-spot-info]").forEach((btn) => {
@@ -15976,7 +17071,7 @@ function bind(): void {
           kind: "imprint",
           before,
           after: describeSymbol(next),
-          cost: `${MINUS}${t('ui.5d0bf3b101')} ${SYMBOL_IMPRINT_CRYSTAL_COST}`,
+          cost: `<span class="res-cost-chip"><img class="res-ico" src="/art/ui/res/imprint-stone.webp" width="16" height="16" alt="" draggable="false" /><strong>${SYMBOL_IMPRINT_STONE_COST}</strong></span>`,
         };
       }
       flash(r.message);
@@ -15988,51 +17083,8 @@ function bind(): void {
   bindFusionRevealDismiss();
   bindEnhanceTransientModals();
 
-  app.querySelector("#btn-dojo-drill")?.addEventListener("click", () => {
-    const r = runPracticeDojo(save);
-    save = r.save;
-    persist();
-    flash(r.message);
-    enqueueBuildingUnlocks(r.unlockedBuildingIds);
-    render();
-    showNextBuildingUnlockModal();
-  });
+  bindShopBuyButtons();
 
-  app.querySelector("#btn-buy-scroll-1")?.addEventListener("click", () => {
-    const r = runBuyScroll(save, 1, "normal");
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
-  });
-  app.querySelector("#btn-buy-scroll-5")?.addEventListener("click", () => {
-    const r = runBuyScroll(save, 5, "normal");
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
-  });
-  app.querySelector("#btn-buy-scroll-premium")?.addEventListener("click", () => {
-    const r = runBuyScroll(save, 1, "premium");
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
-  });
-  app.querySelector("#btn-buy-energy")?.addEventListener("click", () => {
-    const r = runBuyEnergy(save, 1);
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
-  });
-  app.querySelector("#btn-buy-grindstone")?.addEventListener("click", () => {
-    const r = runBuyGrindstone(save, 1);
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
-  });
   app.querySelector("#btn-arena-defense")?.addEventListener("click", () => {
     const r = runSetArenaDefense(save);
     save = r.save;
@@ -16040,75 +17092,9 @@ function bind(): void {
     flash(r.message);
     render();
   });
-  app.querySelector("#btn-craft-essence")?.addEventListener("click", () => {
-    const r = runCraftEssence(save);
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
-  });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-fuse-a]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (growthRevealIsOpen()) return;
-      const a = save.roster[Number(btn.dataset.fuseA!)];
-      const keepUid = a?.uid;
-      if (!a || !keepUid) return;
-      const beforeSave = save;
-      const beforeCount = save.roster.length;
-      const r = runFusion(save, btn.dataset.fuseA!, btn.dataset.fuseB!);
-      const after = r.save.roster.find((monster) => monster.uid === keepUid);
-      const grew = r.save.roster.length < beforeCount && !!after;
-      save = r.save;
-      persist();
-      if (!grew || !after) {
-        flash(r.message);
-        return;
-      }
-      beginGrowthReveal(
-        buildOwnedGrowthPayload({
-          kind: "fusion",
-          before: a,
-          after,
-          beforeSave,
-          afterSave: r.save,
-        }),
-      );
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-recipe-id]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (growthRevealIsOpen()) return;
-      const recipeId = btn.dataset.recipeId!;
-      const keeperUid = btn.dataset.recipeKeeper!;
-      const fodder = (btn.dataset.recipeFodder ?? "")
-        .split(",")
-        .filter(Boolean);
-      const before = save.roster.find((monster) => monster.uid === keeperUid);
-      if (!before) return;
-      const beforeSave = save;
-      const beforeCount = save.roster.length;
-      const r = runRecipeFusion(save, recipeId, keeperUid, fodder);
-      const after = r.save.roster.find((monster) => monster.uid === keeperUid);
-      const grew = r.save.roster.length < beforeCount && !!after;
-      save = r.save;
-      persist();
-      if (!grew || !after) {
-        flash(r.message);
-        return;
-      }
-      beginGrowthReveal(
-        buildOwnedGrowthPayload({
-          kind: "fusion",
-          before,
-          after,
-          beforeSave,
-          afterSave: r.save,
-        }),
-      );
-    });
-  });
+  bindFusionActions();
+  bindDojoActions();
 
   app.querySelectorAll<HTMLButtonElement>("[data-glory]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -16151,11 +17137,7 @@ function bind(): void {
     }
   });
   app.querySelector("#btn-pond-upgrade")?.addEventListener("click", () => {
-    const r = runUpgradeBuilding(save, "mana_pond");
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
+    openBuildingUpgradeSoft("mana_pond");
   });
 
   app.querySelector("#btn-mine-collect")?.addEventListener("click", (ev) => {
@@ -16180,15 +17162,12 @@ function bind(): void {
     }
   });
   app.querySelector("#btn-mine-upgrade")?.addEventListener("click", () => {
-    const r = runUpgradeBuilding(save, "crystal_mine");
-    save = r.save;
-    persist();
-    flash(r.message);
-    render();
+    openBuildingUpgradeSoft("crystal_mine");
   });
 
   app.querySelector("#btn-wish-cast")?.addEventListener("click", () => {
     if (wishRevealIsOpen()) return;
+    closeWishPoolTips(app);
     const r = runDailyWish(save);
     if (!r.wishReward) {
       flash(r.message);
@@ -16197,6 +17176,21 @@ function bind(): void {
     save = r.save;
     persist();
     beginWishReveal(r.wishReward);
+  });
+
+  app.querySelectorAll<HTMLButtonElement>(".wish-pool-chip[data-wish-kind]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (wishRevealIsOpen()) return;
+      if (app.querySelector(".wish-pool-list.is-picking")) return;
+      const wasOpen = btn.classList.contains("is-tip-open");
+      closeWishPoolTips(app);
+      if (wasOpen) return;
+      openWishPoolTip(btn);
+    });
+  });
+  app.querySelector(".wish-hub")?.addEventListener("click", () => {
+    closeWishPoolTips(app);
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-equip-sym]").forEach((btn) => {
@@ -16230,114 +17224,7 @@ function bind(): void {
     });
   });
 
-  app.querySelectorAll<HTMLButtonElement>("[data-party-toggle]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const draft = ensurePartyDraft();
-      const uid = btn.dataset.partyToggle!;
-      if (draft.has(uid)) draft.delete(uid);
-      else if (draft.size < 4) draft.add(uid);
-      else {
-        flash(t("ui.e44dd9cad3"));
-        render();
-        return;
-      }
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-party-pick-summoner]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const el = btn.dataset.partyPickSummoner as SummonerElement | undefined;
-      if (!el) return;
-      if (el !== (save.activeSummoner ?? "light")) {
-        save = setActiveSummoner(save, el);
-        persist();
-        flash(t("summonerPicker.switched", { element: elementLabel(el) }));
-      }
-      partyInvTab = "summoner";
-      render();
-    });
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-party-inv-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const tab = btn.dataset.partyInvTab;
-      if (tab !== "summoner" && tab !== "monster") return;
-      if (partyInvTab === tab) return;
-      partyInvTab = tab;
-      render();
-    });
-  });
-
-  app.querySelector("#party-inv-sort")?.addEventListener("change", (ev) => {
-    const raw = (ev.target as HTMLSelectElement).value;
-    const allowed: RosterSortMode[] = [
-      "default",
-      "level",
-      "stars",
-      "element",
-      "party",
-    ];
-    if (!allowed.includes(raw as RosterSortMode)) return;
-    stagePrepSortMode = raw as RosterSortMode;
-    render();
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-party-preset]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = clampPartyPresetIndex(Number(btn.dataset.partyPreset));
-      const r = runLoadPartyPreset(save, idx);
-      save = r.save;
-      partyDraft = new Set(save.party);
-      persist();
-      flash(t("ui.stagePrepDeckLoaded", { n: idx + 1 }));
-      render();
-    });
-  });
-
-  app.querySelector("#btn-party-save-deck")?.addEventListener("click", () => {
-    const draft = ensurePartyDraft();
-    const idx = clampPartyPresetIndex(save.activePartyPreset);
-    const r = runSavePartyPreset(save, idx, {
-      summoner: save.activeSummoner ?? "light",
-      party: [...draft],
-    });
-    save = r.save;
-    persist();
-    if (onboard.step === "party") {
-      patchOnboard({ partySet: true });
-    }
-    flash(t("ui.stagePrepDeckSaved", { n: idx + 1 }));
-    render();
-  });
-
-  app.querySelectorAll<HTMLButtonElement>("[data-party-info]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      // Filled monster slots also carry data-party-toggle for unequip on tap.
-      if (btn.hasAttribute("data-party-toggle")) return;
-      const kind = btn.dataset.partyInfo;
-      if (kind === "summoner") {
-        const el = (save.activeSummoner ?? "light") as SummonerElement;
-        stagePrepInfo = { kind: "summoner", element: el };
-        applyStagePrepInfo({ animate: true });
-        return;
-      }
-      if (kind === "monster") {
-        const uid = btn.dataset.partyInfoUid;
-        if (!uid) return;
-        stagePrepInfo = { kind: "monster", uid };
-        applyStagePrepInfo({ animate: true });
-      }
-    });
-  });
-
-  if (view === "party") {
-    const partyScreen = app.querySelector(".party-screen");
-    if (partyScreen) {
-      dematteArtInTree(partyScreen, "img.mon-slot-img, img.stage-prep-slot-img");
-      if (stagePrepInfo) bindStagePrepInfoControls(partyScreen);
-    }
-  }
+  bindPartyHallControls();
 
   app.querySelectorAll<HTMLButtonElement>("[data-ban-toggle]").forEach((btn) => {
     if (btn.closest("#stages-region-host")) return;
@@ -16676,7 +17563,7 @@ function bind(): void {
   if (view !== "battle") {
     dematteArtInTree(
       app,
-      "img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.mon-slot-img, img.codex-cell-img, img.growth-rite-img, img.growth-skill-img",
+      "img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.mon-slot-img, img.codex-cell-img, img.growth-rite-img, img.growth-skill-img, img.dojo-insc-seal-art, img.dojo-block-seal-img, img.dojo-block-seal-ring, img.dojo-insc-seal-ring-art",
     );
   }
 

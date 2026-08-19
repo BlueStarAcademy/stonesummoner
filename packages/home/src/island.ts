@@ -35,8 +35,8 @@ export const PHASE_BUILDINGS: BuildingDef[] = [
   },
   {
     id: "power_circle",
-    nameKo: "강화진",
-    swName: "Power-Up Circle",
+    nameKo: "조합진",
+    swName: "Fusion Hexagram",
     kind: "function",
     unlockLevel: 1,
   },
@@ -97,7 +97,7 @@ export const PHASE_BUILDINGS: BuildingDef[] = [
   },
   {
     id: "practice_dojo",
-    nameKo: "마법진 도장",
+    nameKo: "진문 수련장",
     swName: "Practice Dojo",
     kind: "function",
     unlockLevel: 8,
@@ -171,9 +171,23 @@ export interface IslandState {
   buildings: BuildingInstance[];
   /** Glory fountain etc. mana production bonus (fraction). */
   manaProdBonus?: number;
-  /** YYYY-MM-DD of last wish. */
+  /**
+   * YYYY-MM-DD of last successful wish (daily mission / legacy).
+   * Prefer wishDayKey + wishUsesToday for limit checks.
+   */
   lastWishDay?: string | null;
+  /** YYYY-MM-DD that wishUsesToday applies to. */
+  wishDayKey?: string | null;
+  /** Successful wishes on wishDayKey (0..WISH_DAILY_LIMIT). */
+  wishUsesToday?: number;
+  /** Epoch ms when the next wish becomes available (cooldown end). */
+  wishCooldownUntil?: number;
 }
+
+/** Max wishes per calendar day. */
+export const WISH_DAILY_LIMIT = 3;
+/** Cooldown after each wish before the next cast. */
+export const WISH_COOLDOWN_MS = 3_600_000;
 
 export function createStarterIsland(now = Date.now()): IslandState {
   return {
@@ -186,6 +200,9 @@ export function createStarterIsland(now = Date.now()): IslandState {
     energyUpdatedAt: now,
     manaProdBonus: 0,
     lastWishDay: null,
+    wishDayKey: null,
+    wishUsesToday: 0,
+    wishCooldownUntil: 0,
     buildings: PHASE_BUILDINGS.filter((b) => b.unlockLevel <= 1).map((b) => ({
       id: b.id,
       level: 1,
@@ -421,21 +438,133 @@ export function todayKey(now = Date.now()): string {
   return new Date(now).toISOString().slice(0, 10);
 }
 
-export type WishRewardKind = "mana" | "crystal" | "scroll";
+export type WishRewardKind =
+  | "mana"
+  | "crystal"
+  | "scroll"
+  | "energy"
+  | "skill_mats"
+  | "jinmun"
+  | "grindstone"
+  | "imprint_stone";
 
 export type WishReward = {
   kind: WishRewardKind;
   amount: number;
 };
 
-/** Display ranges / weights for the wish temple pool UI (matches runWish odds). */
-export const WISH_REWARD_POOL = [
-  { kind: "mana" as const, weightPct: 40, min: 800, max: 1199 },
-  { kind: "crystal" as const, weightPct: 35, min: 5, max: 10 },
-  { kind: "scroll" as const, weightPct: 25, min: 1, max: 2 },
-] as const;
+export type WishPoolEntry = {
+  kind: WishRewardKind;
+  /** Relative roll weight (not shown in UI). */
+  weight: number;
+  min: number;
+  max: number;
+};
 
-/** Daily wish: mana / crystal / scroll roll once per day. */
+/**
+ * Wish temple reward table.
+ * Common: gold / energy / skill mats / crystal / scroll.
+ * Rare: jinmun / grindstone / imprint stone.
+ */
+export const WISH_REWARD_POOL: readonly WishPoolEntry[] = [
+  { kind: "mana", weight: 28, min: 800, max: 1199 },
+  { kind: "energy", weight: 18, min: 10, max: 20 },
+  { kind: "skill_mats", weight: 16, min: 2, max: 5 },
+  { kind: "crystal", weight: 14, min: 5, max: 10 },
+  { kind: "scroll", weight: 10, min: 1, max: 2 },
+  { kind: "jinmun", weight: 6, min: 1, max: 2 },
+  { kind: "grindstone", weight: 5, min: 1, max: 1 },
+  { kind: "imprint_stone", weight: 3, min: 1, max: 1 },
+];
+
+function wishPoolTotalWeight(): number {
+  return WISH_REWARD_POOL.reduce((sum, row) => sum + row.weight, 0);
+}
+
+function pickWishPoolEntry(rng: () => number): WishPoolEntry {
+  const total = wishPoolTotalWeight();
+  let ticket = rng() * total;
+  for (const row of WISH_REWARD_POOL) {
+    ticket -= row.weight;
+    if (ticket < 0) return row;
+  }
+  return WISH_REWARD_POOL[WISH_REWARD_POOL.length - 1]!;
+}
+
+function rollWishAmount(entry: WishPoolEntry, rng: () => number): number {
+  if (entry.max <= entry.min) return entry.min;
+  return entry.min + Math.floor(rng() * (entry.max - entry.min + 1));
+}
+
+function wishRewardMessage(kind: WishRewardKind, amount: number): string {
+  switch (kind) {
+    case "mana":
+      return `소원: 골드 +${amount}`;
+    case "crystal":
+      return `소원: 크리스탈 +${amount}`;
+    case "scroll":
+      return `소원: 소환서 +${amount}`;
+    case "energy":
+      return `소원: 에너지 +${amount}`;
+    case "skill_mats":
+      return `소원: 스킬재료 +${amount}`;
+    case "jinmun":
+      return `소원: 진문석 +${amount}`;
+    case "grindstone":
+      return `소원: 연마석 +${amount}`;
+    case "imprint_stone":
+      return `소원: 각인석 +${amount}`;
+  }
+}
+
+/** Reset daily wish counter when the calendar day changes. */
+export function syncWishDay(island: IslandState, now = Date.now()): IslandState {
+  const day = todayKey(now);
+  if (island.wishDayKey === day) {
+    return {
+      ...island,
+      wishUsesToday: Math.max(0, Math.floor(island.wishUsesToday ?? 0)),
+      wishCooldownUntil: Math.max(0, Math.floor(island.wishCooldownUntil ?? 0)),
+    };
+  }
+  // Legacy: one wish already used today via lastWishDay only.
+  const legacyUsed =
+    island.lastWishDay === day && (island.wishUsesToday == null || island.wishUsesToday <= 0)
+      ? 1
+      : 0;
+  return {
+    ...island,
+    wishDayKey: day,
+    wishUsesToday: legacyUsed,
+    wishCooldownUntil: Math.max(0, Math.floor(island.wishCooldownUntil ?? 0)),
+  };
+}
+
+export function wishUsesToday(island: IslandState, now = Date.now()): number {
+  return syncWishDay(island, now).wishUsesToday ?? 0;
+}
+
+export function wishUsesRemaining(island: IslandState, now = Date.now()): number {
+  return Math.max(0, WISH_DAILY_LIMIT - wishUsesToday(island, now));
+}
+
+/** Ms until cooldown ends; 0 if ready (ignores daily cap). */
+export function wishCooldownRemainingMs(
+  island: IslandState,
+  now = Date.now(),
+): number {
+  const until = Math.max(0, Math.floor(island.wishCooldownUntil ?? 0));
+  return Math.max(0, until - now);
+}
+
+export function canWishNow(island: IslandState, now = Date.now()): boolean {
+  const synced = syncWishDay(island, now);
+  if ((synced.wishUsesToday ?? 0) >= WISH_DAILY_LIMIT) return false;
+  if (wishCooldownRemainingMs(synced, now) > 0) return false;
+  return true;
+}
+
+/** Daily wish: weighted roll, up to WISH_DAILY_LIMIT/day with WISH_COOLDOWN_MS between casts. */
 export function runWish(
   island: IslandState,
   now = Date.now(),
@@ -443,6 +572,7 @@ export function runWish(
 ): {
   island: IslandState;
   message: string;
+  /** @deprecated Prefer reward.amount when kind is scroll. */
   scrollGain: number;
   reward?: WishReward;
 } {
@@ -453,7 +583,7 @@ export function runWish(
       scrollGain: 0,
     };
   }
-  const synced = syncBuildingUnlocks(island, now);
+  let synced = syncBuildingUnlocks(island, now);
   if (!hasBuilding(synced, "wish_temple")) {
     return {
       island: synced,
@@ -461,31 +591,52 @@ export function runWish(
       scrollGain: 0,
     };
   }
+  synced = syncWishDay(synced, now);
+  const used = synced.wishUsesToday ?? 0;
+  if (used >= WISH_DAILY_LIMIT) {
+    return {
+      island: synced,
+      message: `오늘은 기원을 ${WISH_DAILY_LIMIT}회 모두 사용했습니다`,
+      scrollGain: 0,
+    };
+  }
+  const coolMs = wishCooldownRemainingMs(synced, now);
+  if (coolMs > 0) {
+    const mins = Math.ceil(coolMs / 60_000);
+    return {
+      island: synced,
+      message: `기원 쿨타임 ${mins}분 남음`,
+      scrollGain: 0,
+    };
+  }
   const day = todayKey(now);
-  if (synced.lastWishDay === day) {
-    return { island: synced, message: "오늘은 이미 소원을 빌었습니다", scrollGain: 0 };
+  const entry = pickWishPoolEntry(rng);
+  const amount = rollWishAmount(entry, rng);
+  let next: IslandState = {
+    ...synced,
+    lastWishDay: day,
+    wishDayKey: day,
+    wishUsesToday: used + 1,
+    wishCooldownUntil: now + WISH_COOLDOWN_MS,
+  };
+  if (entry.kind === "mana") {
+    next = { ...next, mana: next.mana + amount };
+  } else if (entry.kind === "crystal") {
+    next = { ...next, crystal: next.crystal + amount };
+  } else if (entry.kind === "energy") {
+    const max = next.energyMax ?? ENERGY_MAX;
+    next = {
+      ...next,
+      energy: Math.min(max, next.energy + amount),
+    };
   }
-  const r = rng();
-  let next = { ...synced, lastWishDay: day };
-  let message: string;
-  let scrollGain = 0;
-  let reward: WishReward;
-  if (r < 0.4) {
-    const mana = 800 + Math.floor(rng() * 400);
-    next = { ...next, mana: next.mana + mana };
-    reward = { kind: "mana", amount: mana };
-    message = `소원: 골드 +${mana}`;
-  } else if (r < 0.75) {
-    const crystal = 5 + Math.floor(rng() * 6);
-    next = { ...next, crystal: next.crystal + crystal };
-    reward = { kind: "crystal", amount: crystal };
-    message = `소원: 크리스탈 +${crystal}`;
-  } else {
-    scrollGain = 1 + (rng() < 0.3 ? 1 : 0);
-    reward = { kind: "scroll", amount: scrollGain };
-    message = `소원: 소환서 +${scrollGain}`;
-  }
-  return { island: next, message, scrollGain, reward };
+  const reward: WishReward = { kind: entry.kind, amount };
+  return {
+    island: next,
+    message: wishRewardMessage(entry.kind, amount),
+    scrollGain: entry.kind === "scroll" ? amount : 0,
+    reward,
+  };
 }
 
 export function addSummonerExp(

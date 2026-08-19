@@ -6,6 +6,7 @@ export type MissionReward = {
   energy?: number;
   jinmun?: number;
   grindstones?: number;
+  imprintStones?: number;
   scrolls?: number;
   scrollsPremium?: number;
   scrollsMystic?: number;
@@ -51,13 +52,13 @@ export const MAIN_QUESTS: readonly MainQuestDef[] = [
     id: "forest5",
     stageId: "garen_1_5",
     goRegion: "mq1",
-    reward: { mana: 800, grindstones: 2 },
+    reward: { mana: 800, grindstones: 1 },
   },
   {
     id: "giantB1",
     stageId: "giant_b1",
     goRegion: "depth",
-    reward: { mana: 600, grindstones: 3 },
+    reward: { mana: 600, grindstones: 1 },
   },
   {
     id: "forestBoss",
@@ -75,7 +76,7 @@ export const MAIN_QUESTS: readonly MainQuestDef[] = [
     id: "giantB5",
     stageId: "giant_b5",
     goRegion: "depth",
-    reward: { mana: 1200, grindstones: 5 },
+    reward: { mana: 1200, grindstones: 1, imprintStones: 1 },
   },
   {
     id: "ruinsBoss",
@@ -87,7 +88,7 @@ export const MAIN_QUESTS: readonly MainQuestDef[] = [
     id: "dragonB1",
     stageId: "dragon_b1",
     goRegion: "depth",
-    reward: { mana: 1500, grindstones: 5, jinmun: 3 },
+    reward: { mana: 1500, grindstones: 1, imprintStones: 1, jinmun: 3 },
   },
   {
     id: "flameBoss",
@@ -99,7 +100,7 @@ export const MAIN_QUESTS: readonly MainQuestDef[] = [
     id: "necroB1",
     stageId: "necro_b1",
     goRegion: "depth",
-    reward: { mana: 2000, grindstones: 8 },
+    reward: { mana: 2000, grindstones: 2, imprintStones: 1 },
   },
   {
     id: "giantB10",
@@ -166,6 +167,7 @@ export function grantMissionReward(
     },
     jinmunStones: (save.jinmunStones ?? 0) + (reward.jinmun ?? 0),
     grindstones: (save.grindstones ?? 0) + (reward.grindstones ?? 0),
+    imprintStones: (save.imprintStones ?? 0) + (reward.imprintStones ?? 0),
     scrolls: (save.scrolls ?? 0) + (reward.scrolls ?? 0),
     scrollsPremium: (save.scrollsPremium ?? 0) + (reward.scrollsPremium ?? 0),
     scrollsMystic: (save.scrollsMystic ?? 0) + (reward.scrollsMystic ?? 0),
@@ -179,6 +181,7 @@ export function formatMissionRewardMessage(reward: MissionReward): string {
   if (reward.energy) bits.push(`행동력 +${reward.energy}`);
   if (reward.jinmun) bits.push(`진문석 +${reward.jinmun}`);
   if (reward.grindstones) bits.push(`연마석 +${reward.grindstones}`);
+  if (reward.imprintStones) bits.push(`각인석 +${reward.imprintStones}`);
   if (reward.scrolls) bits.push(`소환서 +${reward.scrolls}`);
   if (reward.scrollsPremium) bits.push(`고급 소환서 +${reward.scrollsPremium}`);
   if (reward.scrollsMystic) bits.push(`신성 소환서 +${reward.scrollsMystic}`);

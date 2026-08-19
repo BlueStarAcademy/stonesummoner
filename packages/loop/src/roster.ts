@@ -1,4 +1,9 @@
-import { getMonster, MONSTERS, type MonsterDef } from "stonesummoner-data";
+import {
+  getMonster,
+  isFusionOnlyFamily,
+  MONSTERS,
+  type MonsterDef,
+} from "stonesummoner-data";
 
 export interface OwnedMonster {
   uid: string;
@@ -89,8 +94,13 @@ export const STARTER_SCROLLS_PREMIUM = 1;
 export const STARTER_SCROLLS_MYSTIC = 0;
 /** Mana to buy one normal summon scroll at the shop stub. */
 export const SCROLL_BUY_MANA_COST = 450;
-/** Mana to buy one premium summon scroll. */
+/**
+ * Legacy gold price for premium scrolls (catalog now uses crystal).
+ * Kept for older saves / docs; do not charge this in `runBuyScroll`.
+ */
 export const SCROLL_PREMIUM_BUY_MANA_COST = 1500;
+/** Crystal to buy one premium summon scroll at the catalog shop. */
+export const SCROLL_PREMIUM_BUY_CRYSTAL_COST = 75;
 /** Crystal to buy one sacred/abyss summon scroll. */
 export const SCROLL_MYSTIC_BUY_CRYSTAL_COST = 100;
 
@@ -268,9 +278,14 @@ function weightedPick(pool: MonsterDef[], rng: () => number): MonsterDef {
   return pool[pool.length - 1]!;
 }
 
+function inScrollPool(m: MonsterDef): boolean {
+  return !isFusionOnlyFamily(m.familyId);
+}
+
 /** 일반: 속성(불·물·바람) 1~3성 */
 const NORMAL_POOL = MONSTERS.filter(
   (m) =>
+    inScrollPool(m) &&
     m.naturalStars >= 1 &&
     m.naturalStars <= 3 &&
     ELEMENTAL.has(m.element),
@@ -278,17 +293,20 @@ const NORMAL_POOL = MONSTERS.filter(
 /** 고급: 속성 2~3성 */
 const PREMIUM_LOW_POOL = MONSTERS.filter(
   (m) =>
+    inScrollPool(m) &&
     m.naturalStars >= 2 &&
     m.naturalStars <= 3 &&
     ELEMENTAL.has(m.element),
 );
 /** 고급: 속성 4성 */
 const PREMIUM_4_POOL = MONSTERS.filter(
-  (m) => m.naturalStars === 4 && ELEMENTAL.has(m.element),
+  (m) =>
+    inScrollPool(m) && m.naturalStars === 4 && ELEMENTAL.has(m.element),
 );
 /** 신성/심연: 빛·어둠 */
 const MYSTIC_POOL = MONSTERS.filter(
-  (m) => m.element === "light" || m.element === "dark",
+  (m) =>
+    inScrollPool(m) && (m.element === "light" || m.element === "dark"),
 );
 
 let uidSeq = 0;

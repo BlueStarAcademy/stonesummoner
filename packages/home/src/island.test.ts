@@ -74,8 +74,29 @@ describe("Phase1 island", () => {
     const wish = runWish(island, Date.UTC(2026, 0, 1), () => 0.1);
     assert.match(wish.message, /소원/);
     assert.equal(wish.island.lastWishDay, "2026-01-01");
+    assert.equal(wish.island.wishUsesToday, 1);
+    assert.ok((wish.island.wishCooldownUntil ?? 0) > Date.UTC(2026, 0, 1));
     assert.ok(wish.reward);
     assert.equal(wish.reward?.kind, "mana");
+
+    const blocked = runWish(wish.island, Date.UTC(2026, 0, 1, 0, 30), () => 0.1);
+    assert.match(blocked.message, /쿨타임/);
+    assert.equal(blocked.reward, undefined);
+
+    const afterCool = runWish(
+      wish.island,
+      Date.UTC(2026, 0, 1, 1, 0),
+      () => 0.1,
+    );
+    assert.ok(afterCool.reward);
+    assert.equal(afterCool.island.wishUsesToday, 2);
+
+    const third = runWish(afterCool.island, Date.UTC(2026, 0, 1, 2, 0), () => 0.1);
+    assert.ok(third.reward);
+    assert.equal(third.island.wishUsesToday, 3);
+    const capped = runWish(third.island, Date.UTC(2026, 0, 1, 5, 0), () => 0.1);
+    assert.match(capped.message, /3회/);
+    assert.equal(capped.reward, undefined);
   });
 
   it("regens energy 1 per 3 minutes up to max", () => {

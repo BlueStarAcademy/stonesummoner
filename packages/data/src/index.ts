@@ -44,14 +44,17 @@ export {
   canGrindSymbol,
   imprintSymbolMain,
   grindSymbolPrefix,
+  listImprintMainOutcomes,
+  listGrindPrefixOutcomes,
   getSymbolSet,
   symbolSetForMap,
   isSymbolSetId,
   normalizeSymbol,
   refreshMainValue,
-  SYMBOL_IMPRINT_CRYSTAL_COST,
+  SYMBOL_IMPRINT_STONE_COST,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_GRIND_STONE_COST,
+  SYMBOL_GRIND_PREFIX_POOL,
   IMPRINTABLE_SLOTS,
   QUALITY_SUBSTAT_COUNT,
   qualityToPlateId,
@@ -187,10 +190,27 @@ export type {
   GloryCombatBuff,
 } from "./glory.js";
 export {
+  CIRCLE_INSCRIPTIONS,
+  circleInscriptionBuffFromLevels,
+  getCircleInscription,
+} from "./circleInscriptions.js";
+export type {
+  CircleInscriptionBuff,
+  CircleInscriptionDef,
+  CircleInscriptionId,
+} from "./circleInscriptions.js";
+export {
+  FUSION_ONLY_FAMILY_IDS,
   FUSION_RECIPES,
   getFusionRecipe,
+  isFusionOnlyFamily,
+  planFusionRecipe,
 } from "./fusion.js";
-export type { FusionRecipeDef } from "./fusion.js";
+export type {
+  FusionFodderCount,
+  FusionFodderPlan,
+  FusionRecipeDef,
+} from "./fusion.js";
 export {
   ARENA_RIVAL_DECKS,
   getArenaRivalDeck,

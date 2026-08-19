@@ -266,7 +266,7 @@ export function onboardFocusSpotId(step: OnboardStep): string | null {
       return "summon_hearth";
     case "enhance":
     case "equip":
-      return "power_circle";
+      return null;
     case "party":
       return "party";
     default:

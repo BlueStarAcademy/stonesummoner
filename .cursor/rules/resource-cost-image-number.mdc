@@ -1,0 +1,44 @@
+---
+description: Consumed / displayed resources use icon image + number, never text-only costs
+alwaysApply: true
+---
+
+# Resource costs — image + number
+
+## Hard rule
+Whenever UI shows a **resource amount being spent, held, rewarded, or priced**, render it as **icon image + number**. Do not use text-only labels like `−골드 150` or `크리스탈 8` as the primary cost display.
+
+## Approved pattern
+```html
+<span class="res-cost-chip">
+  <img class="res-ico" src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" />
+  <strong>150</strong>
+</span>
+```
+
+Prefer shared helpers (`resCostChip`, `shopPriceMana`, `shopPriceCrystal`, mission reward chips) over one-off markup.
+
+## Asset map (common)
+| Resource | Path |
+|----------|------|
+| Gold | `/art/ui/res/gold.svg` |
+| Crystal | `/art/ui/res/crystal.svg` |
+| Energy | `/art/ui/res/energy.svg` |
+| Grindstone | `/art/ui/res/grindstone.webp` |
+| Imprint stone | `/art/ui/res/imprint-stone.webp` |
+| Jinmun | `/art/ui/res/jinmun.svg` |
+| Skill mat | `/art/ui/res/skill-mat.svg` |
+
+## Disallowed
+```ts
+cost: `${MINUS}${t("ui.gold")} ${n}` // text-only primary cost
+```
+```html
+<p>−연마석 1 · −골드 150</p> <!-- no icons -->
+```
+
+## Checklist
+1. Cost / reward / stock chips use `<img>` + numeric amount.
+2. Multiple costs = multiple chips side by side (not a prose sentence).
+3. Confirm / forge / shop / mission UIs follow the same pattern.
+4. Accessible name can stay on `title` / parent label; the visible cost is still image + number.

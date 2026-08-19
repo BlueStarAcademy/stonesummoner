@@ -88,8 +88,8 @@
     "en": "Temper your summon"
   },
   "ui.onboard.enhanceDetail": {
-    "ko": "강화진에서 소환수를 성장시켜 다음 전투를 준비하세요.",
-    "en": "Raise a summon in the forge so the next fight hits harder."
+    "ko": "소환수 화면에서 강화해 다음 전투를 준비하세요.",
+    "en": "Power up a summon on the monster screen so the next fight hits harder."
   },
   "ui.onboard.enhanceCta": {
     "ko": "강화하기",
@@ -428,8 +428,8 @@
     "en": "Same-species fusion"
   },
   "ui.81e2301960": {
-    "ko": "마법진 도장",
-    "en": "마법진 도장"
+    "ko": "진문 수련장",
+    "en": "Circle Training Hall"
   },
   "ui.6686a68a3f": {
     "ko": "파티에 넣기",
@@ -644,8 +644,8 @@
     "en": "선택중"
   },
   "ui.4c54b67262": {
-    "ko": "강화진",
-    "en": "강화진"
+    "ko": "조합진",
+    "en": "Combination Circle"
   },
   "ui.262553905b": {
     "ko": "아레나",
@@ -880,8 +880,8 @@
     "en": "연마할 상징이 없습니다"
   },
   "ui.bbef9e1b47": {
-    "ko": "강화진 가방에서 장착",
-    "en": "Equip from forge bag"
+    "ko": "소환수 가방에서 장착",
+    "en": "Equip from the summon bag"
   },
   "ui.290a3fb982": {
     "ko": "소환진이 고요합니다",
@@ -896,8 +896,8 @@
     "en": "회 수련 · 마나"
   },
   "ui.7533294263": {
-    "ko": "강화진에서 장착",
-    "en": "Equip at forge"
+    "ko": "소환수 화면에서 장착",
+    "en": "Equip on the monster screen"
   },
   "ui.d3d3707997": {
     "ko": "장착 대상 선택",
@@ -1016,8 +1016,8 @@
     "en": "편성 저장"
   },
   "ui.91c120d564": {
-    "ko": "강화진으로",
-    "en": "강화진으로"
+    "ko": "소환수로",
+    "en": "To summons"
   },
   "ui.4150cda5a2": {
     "ko": "소환 성공",
@@ -1859,25 +1859,65 @@
     "ko": "연마석",
     "en": "Grindstone"
   },
+  "ui.imprintStone": {
+    "ko": "각인석",
+    "en": "Imprint stone"
+  },
   "ui.grindstoneHeld": {
     "ko": "보유 {n}",
     "en": "Owned {n}"
+  },
+  "ui.forgeConfirm.grindTitle": {
+    "ko": "연마 확인",
+    "en": "Confirm grind"
+  },
+  "ui.forgeConfirm.imprintTitle": {
+    "ko": "각인 확인",
+    "en": "Confirm imprint"
+  },
+  "ui.forgeConfirm.grindOutcomes": {
+    "ko": "가능한 결과 (무작위)",
+    "en": "Possible results (random)"
+  },
+  "ui.forgeConfirm.imprintOutcomes": {
+    "ko": "가능한 주옵션 (무작위)",
+    "en": "Possible main stats (random)"
+  },
+  "ui.forgeConfirm.subPickHint": {
+    "ko": "부옵션 중 하나가 강화됩니다.",
+    "en": "One substat will be powered up."
+  },
+  "ui.forgeConfirm.prefixPickHint": {
+    "ko": "접두어가 아래 중 하나로 부여됩니다.",
+    "en": "A prefix will be chosen from the list below."
+  },
+  "ui.forgeConfirm.subBoost": {
+    "ko": "{line} 강화",
+    "en": "Boost {line}"
+  },
+  "ui.forgeConfirm.go": {
+    "ko": "실행",
+    "en": "Proceed"
+  },
+  "ui.forgeConfirm.missing": {
+    "ko": "상징을 찾을 수 없습니다",
+    "en": "Symbol not found"
   },
   "mission.daily.wish.title": {
     "ko": "일일 소원",
     "en": "Daily wish"
   },
   "mission.daily.wish.desc": {
-    "ko": "소원의 사당에서 오늘 소원을 빌으세요",
-    "en": "Make today's wish at the temple"
+    "ko": "소원의 사당에서 오늘 한 번 이상 기원하세요",
+    "en": "Make at least one wish at the temple today"
   },
   "mission.daily.dojo.title": {
-    "ko": "도장 수련",
-    "en": "Dojo drill"
+    "ko": "진문 수련",
+    "en": "Circle training"
   },
   "mission.daily.dojo.desc": {
-    "ko": "마법진 도장에서 수련을 진행하세요",
-    "en": "Train at the magic circle dojo"
+    "ko": "진문 수련장에서 오늘 한 번 수련하세요",
+    "en": "Train once today at the Circle Training Hall"
   },
   "mission.daily.collect.title": {
     "ko": "재화 수집",
@@ -2195,6 +2235,10 @@
     "ko": "진화재료",
     "en": "Evolve mats"
   },
+  "res.jinmunHint": {
+    "ko": "마법진 각인에 씁니다",
+    "en": "Used to inscribe the magic circle"
+  },
   "ui.islandIsletHome": {
     "ko": "생활 섬",
     "en": "Home islet"
@@ -2248,8 +2292,208 @@
     "en": "Mana +{n}"
   },
   "ui.hubDojo": {
-    "ko": "마법진 도장",
-    "en": "Magic Circle Dojo"
+    "ko": "진문 수련장",
+    "en": "Circle Training Hall"
+  },
+  "ui.dojo.trainTitle": {
+    "ko": "착수 수련",
+    "en": "Opening drill"
+  },
+  "ui.dojo.drill.life": {
+    "ko": "활로 수련",
+    "en": "Liberty drill"
+  },
+  "ui.dojo.drill.capture": {
+    "ko": "따내기 수련",
+    "en": "Capture drill"
+  },
+  "ui.dojo.drill.atari": {
+    "ko": "단수 수련",
+    "en": "Atari drill"
+  },
+  "ui.dojo.drill.movement": {
+    "ko": "행마 수련",
+    "en": "Movement drill"
+  },
+  "ui.dojo.drill.joseki": {
+    "ko": "정석 수련",
+    "en": "Joseki drill"
+  },
+  "ui.dojo.drill.fuseki": {
+    "ko": "포석 수련",
+    "en": "Fuseki drill"
+  },
+  "ui.dojo.drill.tesuji": {
+    "ko": "맥 수련",
+    "en": "Tesuji drill"
+  },
+  "ui.dojo.drill.reading": {
+    "ko": "수읽기 수련",
+    "en": "Reading drill"
+  },
+  "ui.dojo.drill.lifeDeath": {
+    "ko": "사활 수련",
+    "en": "Life-and-death drill"
+  },
+  "ui.dojo.drill.value": {
+    "ko": "가치비교 수련",
+    "en": "Value comparison drill"
+  },
+  "ui.dojo.drill.endgame": {
+    "ko": "끝내기 수련",
+    "en": "Endgame drill"
+  },
+  "ui.dojo.kicker": {
+    "ko": "진문 · 착수 · 각인",
+    "en": "Circle · Opening · Inscribe"
+  },
+  "ui.dojo.trainLead": {
+    "ko": "하루 몇 회만 수련해 진문석을 얻습니다. 얻은 돌은 아래 각인에 씁니다.",
+    "en": "A few daily drills earn jinmun stones for the inscriptions below."
+  },
+  "ui.dojo.leftToday": {
+    "ko": "오늘 {n}회 남음",
+    "en": "{n} left today"
+  },
+  "ui.dojo.rewardLabel": {
+    "ko": "수련 보상",
+    "en": "Drill rewards"
+  },
+  "ui.dojo.inscTitle": {
+    "ko": "진문 각인",
+    "en": "Circle inscriptions"
+  },
+  "ui.dojo.inscConfirm": {
+    "ko": "각인",
+    "en": "Inscribe"
+  },
+  "ui.dojo.inscLead": {
+    "ko": "시작 마나 · 피해 증폭 · 보드 징표. 영광 건물의 공격/체력과는 다른 축입니다.",
+    "en": "Start mana, damage boost, and board marks — separate from glory ATK/HP."
+  },
+  "ui.dojo.now": {
+    "ko": "현재",
+    "en": "Now"
+  },
+  "ui.dojo.next": {
+    "ko": "다음",
+    "en": "Next"
+  },
+  "ui.bldgUp.title": {
+    "ko": "시설 레벨업",
+    "en": "Upgrade facility"
+  },
+  "ui.bldgUp.close": {
+    "ko": "닫기",
+    "en": "Close"
+  },
+  "ui.bldgUp.confirm": {
+    "ko": "레벨업",
+    "en": "Upgrade"
+  },
+  "ui.bldgUp.rate": {
+    "ko": "생산량",
+    "en": "Production"
+  },
+  "ui.bldgUp.cap": {
+    "ko": "저장 한도",
+    "en": "Storage"
+  },
+  "ui.bldgUp.levelLine": {
+    "ko": "Lv.{from} → Lv.{to}",
+    "en": "Lv.{from} → Lv.{to}"
+  },
+  "ui.bldgUp.perHour": {
+    "ko": "{n}/시간",
+    "en": "{n}/hr"
+  },
+  "ui.dojo.bonusNone": {
+    "ko": "없음",
+    "en": "None"
+  },
+  "ui.dojo.bonusMax": {
+    "ko": "최대",
+    "en": "Max"
+  },
+  "ui.dojo.valStartMana": {
+    "ko": "시작 마나 +{n}",
+    "en": "Start mana +{n}"
+  },
+  "ui.dojo.valAmp": {
+    "ko": "피해 증폭 상한 +{n}%",
+    "en": "Damage boost cap +{n}%"
+  },
+  "ui.dojo.valItem": {
+    "ko": "보드 징표 +{n}%",
+    "en": "Board marks +{n}%"
+  },
+  "ui.dojo.todayLabel": {
+    "ko": "오늘 수련",
+    "en": "Today"
+  },
+  "ui.dojo.todayCount": {
+    "ko": "오늘 {n}/{max}",
+    "en": "Today {n}/{max}"
+  },
+  "ui.dojo.trainHint": {
+    "ko": "진문에 착수를 새깁니다. 수련마다 진문석 +1 · 하루 {n}회.",
+    "en": "Inscribe openings on the circle. +1 jinmun stone per drill · {n} per day."
+  },
+  "ui.dojo.trainBtn": {
+    "ko": "수련하기",
+    "en": "Train"
+  },
+  "ui.dojo.trainDone": {
+    "ko": "오늘 수련 완료",
+    "en": "Daily training done"
+  },
+  "ui.dojo.trainBtnCount": {
+    "ko": "수련하기 ({n}/{max})",
+    "en": "Train ({n}/{max})"
+  },
+  "ui.dojo.trainDoneCount": {
+    "ko": "오늘 수련 완료 ({n}/{max})",
+    "en": "Daily training done ({n}/{max})"
+  },
+  "ui.dojo.playing": {
+    "ko": "수련 중",
+    "en": "Training"
+  },
+  "ui.dojo.resultTitle": {
+    "ko": "수련 완료",
+    "en": "Training complete"
+  },
+  "ui.dojo.resultLead": {
+    "ko": "진문석을 획득했습니다",
+    "en": "Jinmun stones earned"
+  },
+  "ui.dojo.inscHint": {
+    "ko": "진문석으로 마법진을 각인합니다. 영광 건물의 전투 스탯과는 다른, 착수·피해 증폭 축입니다.",
+    "en": "Spend jinmun stones on circle inscriptions — board marks and damage boost, not glory ATK/HP."
+  },
+  "ui.circleInsc.start_mana": {
+    "ko": "시작 마나",
+    "en": "Start mana"
+  },
+  "ui.circleInsc.start_manaFx": {
+    "ko": "전투 시작 마나 +1/Lv",
+    "en": "Battle start mana +1/Lv"
+  },
+  "ui.circleInsc.amplify_cap": {
+    "ko": "피해 증폭",
+    "en": "Damage boost"
+  },
+  "ui.circleInsc.amplify_capFx": {
+    "ko": "피해 증폭 상한 +0.5%/Lv",
+    "en": "Damage boost cap +0.5%/Lv"
+  },
+  "ui.circleInsc.item_spawn": {
+    "ko": "보드 징표",
+    "en": "Board marks"
+  },
+  "ui.circleInsc.item_spawnFx": {
+    "ko": "보드 아이템 출현 +3%/Lv",
+    "en": "Board item spawn +3%/Lv"
   },
   "ui.hubPond": {
     "ko": "골드 연못",
@@ -2272,8 +2516,12 @@
     "en": "Guild"
   },
   "ui.hubFusion": {
-    "ko": "합성",
-    "en": "Fusion"
+    "ko": "융합의 별",
+    "en": "Fusion Star"
+  },
+  "ui.hubCombine": {
+    "ko": "조합진",
+    "en": "Combination Circle"
   },
   "ui.weekdayOpenToday": {
     "ko": "오늘 개방",
@@ -3136,8 +3384,8 @@
     "en": "Summon"
   },
   "ui.islandAction.power_circle": {
-    "ko": "강화",
-    "en": "Enhance"
+    "ko": "조합",
+    "en": "Combine"
   },
   "ui.islandAction.gateway": {
     "ko": "출정",
@@ -3161,7 +3409,7 @@
   },
   "ui.islandAction.dojo": {
     "ko": "수련",
-    "en": "Drill"
+    "en": "Train"
   },
   "ui.islandAction.crystal_mine": {
     "ko": "수집",
@@ -3204,8 +3452,8 @@
     "en": "Spend scrolls to summon new monsters|Normal, premium, and mystic scrolls yield different grades|Results are added to your roster and codex"
   },
   "ui.bldgInfo.power_circle": {
-    "ko": "소환수의 레벨·스킬·상징을 관리합니다|소환사 장비와 스킬트리도 확인할 수 있습니다|각성과 성장에 필요한 핵심 시설입니다",
-    "en": "Manage monster levels, skills, and symbols|Also check summoner gear and the skill tree|Core facility for awakening and growth"
+    "ko": "조합식에 맞는 소환수를 바쳐 얻기 힘든 소환수를 만듭니다|스크롤로는 나오지 않는 희귀 소환수가 있습니다|재료가 모이면 조합진에서 제작하세요",
+    "en": "Sacrifice listed summons to craft rare ones from recipes|Some results never appear from scrolls|Combine them here when you have the materials"
   },
   "ui.bldgInfo.gateway": {
     "ko": "시나리오와 각종 전투에 출정합니다|지역을 선택해 스테이지에 도전하세요|승리 시 경험치·드롭·보상을 얻습니다",
@@ -3228,8 +3476,8 @@
     "en": "Draw rewards at the Temple of Wishes|Gain resources and growth rewards|Unlocks at summoner level 7"
   },
   "ui.bldgInfo.dojo": {
-    "ko": "마법진 도장에서 훈련을 진행합니다|훈련으로 골드와 보상을 얻습니다|일정 횟수마다 특별 보상이 준비됩니다|소환사 레벨 8에 해금됩니다",
-    "en": "Train at the Magic Circle Dojo|Earn gold and rewards from drills|Special rewards appear on a set cycle|Unlocks at summoner level 8"
+    "ko": "진문에 착수를 새기는 수련장입니다|하루 몇 회 수련으로 진문석을 얻습니다|진문석으로 시작 마나·증폭 상한·보드 징표를 각인합니다|소환사 레벨 8에 해금됩니다",
+    "en": "Train to inscribe openings on the magic circle|Earn jinmun stones from a few daily drills|Spend them on start mana, Amplify cap, and board marks|Unlocks at summoner level 8"
   },
   "ui.bldgInfo.crystal_mine": {
     "ko": "시간이 지나면 수정을 생산·저장합니다|광맥을 터치해 쌓인 수정을 수거하세요|업그레이드로 생산량과 저장 한도를 늘릴 수 있습니다|소환사 레벨 10에 해금됩니다",
@@ -3271,6 +3519,10 @@
     "ko": "품절",
     "en": "Sold out"
   },
+  "ui.shop.dailyLeft": {
+    "ko": "오늘 {left}/{limit}",
+    "en": "Today {left}/{limit}"
+  },
   "ui.shop.sectionSummon": {
     "ko": "소환",
     "en": "Summon"
@@ -3296,8 +3548,8 @@
     "en": "Bundle of normal summon scrolls."
   },
   "ui.shop.scrollPremiumDesc": {
-    "ko": "고급 소환에 사용합니다.",
-    "en": "Used for premium summons."
+    "ko": "고급 소환에 사용합니다. 크리스탈로 구매합니다.",
+    "en": "Used for premium summons. Bought with crystals."
   },
   "ui.shop.energyDesc": {
     "ko": "출정·스테이지에 필요한 에너지.",
@@ -3308,8 +3560,16 @@
     "en": "Grindstone ×1"
   },
   "ui.shop.grindstoneDesc": {
-    "ko": "상징 연마·강화에 소모합니다.",
-    "en": "Spent to grind and enhance symbols."
+    "ko": "상징 연마에 소모합니다. 희귀 재료입니다.",
+    "en": "Spent to grind symbols. A rare material."
+  },
+  "ui.shop.imprintStone": {
+    "ko": "각인석 1개",
+    "en": "Imprint stone ×1"
+  },
+  "ui.shop.imprintStoneDesc": {
+    "ko": "상징 주옵션 각인에 소모합니다. 매우 희귀합니다.",
+    "en": "Spent to re-roll symbol mains. Very rare."
   },
   "ui.shop.essenceTitle": {
     "ko": "정수 교환",
@@ -3340,12 +3600,56 @@
     "en": "Buff summary"
   },
   "ui.fusion.recipes": {
-    "ko": "합성 레시피",
-    "en": "Fusion recipes"
+    "ko": "조합식",
+    "en": "Recipes"
   },
   "ui.fusion.recipeNeed": {
     "ko": "재료 부족",
     "en": "Missing materials"
+  },
+  "ui.fusion.hint": {
+    "ko": "지정된 소환수를 바치면 얻기 힘든 소환수를 만듭니다. 강화·진화는 소환수 화면에서 합니다.",
+    "en": "Sacrifice the listed summons to craft rare ones. Power-up and evolve stay on the monster screen."
+  },
+  "ui.fusion.spotSub": {
+    "ko": "조합식 · 희귀 소환수",
+    "en": "Recipes · Rare summons"
+  },
+  "ui.fusion.exclusive": {
+    "ko": "조합 전용",
+    "en": "Combine only"
+  },
+  "ui.fusion.lockedLv": {
+    "ko": "소환사 Lv.{n} 해금",
+    "en": "Unlocks at summoner Lv.{n}"
+  },
+  "ui.fusion.sameSpecies": {
+    "ko": "동일 종 융합",
+    "en": "Same-species fusion"
+  },
+  "ui.fusion.sameSpeciesLocked": {
+    "ko": "동일 종 융합은 융합의 별(소환사 Lv.17)에서 해금됩니다",
+    "en": "Same-species fusion unlocks at the Fusion Star (summoner Lv.17)"
+  },
+  "ui.fusion.altarLead": {
+    "ko": "제단에 재료를 바쳐 희귀 소환수를 각성시킵니다",
+    "en": "Offer materials on the altar to awaken rare summons"
+  },
+  "ui.fusion.pairAltarLead": {
+    "ko": "같은 종을 융합해 진화시킵니다",
+    "en": "Fuse same-species summons to evolve"
+  },
+  "ui.fusion.ready": {
+    "ko": "조합 가능",
+    "en": "Ready"
+  },
+  "ui.fusion.fuseCta": {
+    "ko": "조합",
+    "en": "Fuse"
+  },
+  "ui.fusion.pairEmpty": {
+    "ko": "융합할 동일 종 쌍이 없습니다",
+    "en": "No same-species pairs ready"
   },
   "ui.guild.weeklyGoal": {
     "ko": "주간 기여",
@@ -3648,7 +3952,95 @@
     "en": "Close"
   },
   "ui.wishShrineCaption": {
-    "ko": "하루에 한 번, 사당에 소원을 빕니다",
-    "en": "Make one wish at the shrine each day"
+    "ko": "하루 3회, 기원마다 1시간 쿨타임이 있습니다",
+    "en": "Up to 3 wishes per day · 1 hour cooldown between wishes"
+  },
+  "ui.wishHubMeta": {
+    "ko": "오늘 남은 기원 {left}/{max}",
+    "en": "Wishes left today {left}/{max}"
+  },
+  "ui.wishCastBtn": {
+    "ko": "소원 빌기 ({left}/{max})",
+    "en": "Make a wish ({left}/{max})"
+  },
+  "ui.wishCooldownBtn": {
+    "ko": "쿨타임 {time}",
+    "en": "Cooldown {time}"
+  },
+  "ui.wishDailyDone": {
+    "ko": "오늘 기원 완료 ({used}/{max})",
+    "en": "Daily wishes done ({used}/{max})"
+  },
+  "ui.wishCooldownHint": {
+    "ko": "다음 기원까지 {time}",
+    "en": "Next wish in {time}"
+  },
+  "ui.wishReadyHint": {
+    "ko": "지금 기원할 수 있습니다",
+    "en": "Ready to wish"
+  },
+  "ui.wishPoolAmt": {
+    "ko": "{min}–{max}",
+    "en": "{min}–{max}"
+  },
+  "ui.wishPoolAmtFixed": {
+    "ko": "{n}",
+    "en": "{n}"
+  },
+  "ui.wishTipGold": {
+    "ko": "시설 강화와 성장에 쓰는 골드입니다.",
+    "en": "Gold for buildings and growth."
+  },
+  "ui.wishTipEnergy": {
+    "ko": "출정과 스테이지에 쓰는 에너지입니다.",
+    "en": "Energy for sorties and stages."
+  },
+  "ui.wishTipSkillMats": {
+    "ko": "소환수 스킬을 강화할 때 씁니다.",
+    "en": "Used to upgrade monster skills."
+  },
+  "ui.wishTipCrystal": {
+    "ko": "상점 구매에 쓰는 크리스탈입니다.",
+    "en": "Crystals for shop purchases."
+  },
+  "ui.wishTipScroll": {
+    "ko": "일반 소환에 쓰는 소환서입니다.",
+    "en": "Scrolls for normal summons."
+  },
+  "ui.wishTipJinmun": {
+    "ko": "마법진 각인에 쓰는 진문석입니다.",
+    "en": "Rune stones for magic circle inscriptions."
+  },
+  "ui.wishTipGrindstone": {
+    "ko": "상징 연마에 쓰는 희귀 재료입니다.",
+    "en": "Rare material spent to grind symbols."
+  },
+  "ui.wishTipImprint": {
+    "ko": "상징 주옵션 각인에 쓰는 매우 희귀한 재료입니다.",
+    "en": "Very rare material spent to re-roll symbol mains."
+  },
+  "settings.audio": {
+    "ko": "사운드",
+    "en": "Sound"
+  },
+  "settings.audioMaster": {
+    "ko": "전체 음량",
+    "en": "Master"
+  },
+  "settings.audioBgm": {
+    "ko": "배경음",
+    "en": "Music"
+  },
+  "settings.audioSfx": {
+    "ko": "효과음",
+    "en": "Effects"
+  },
+  "settings.audioMute": {
+    "ko": "음소거",
+    "en": "Mute"
+  },
+  "settings.audioUnmute": {
+    "ko": "음소거 해제",
+    "en": "Unmute"
   }
 }

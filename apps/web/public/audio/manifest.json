@@ -1,0 +1,554 @@
+{
+  "generatedAt": "2026-08-19T17:01:00.491Z",
+  "stability": true,
+  "eleven": false,
+  "ffmpeg": true,
+  "files": {
+    "auth": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:29:37.290Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "island": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:35:23.121Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "stages": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:35:39.439Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-01": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:35:55.102Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-02": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:36:10.444Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-03": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:36:24.894Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-04": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:36:39.771Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-05": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:36:54.635Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-06": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:37:10.383Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-07": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:37:25.170Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-08": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:37:39.705Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-09": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:37:55.235Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-10": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:38:10.395Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-11": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:38:25.576Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-12": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:38:40.791Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-map-13": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:38:56.558Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-cairos-giant": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:39:24.420Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-cairos-dragon": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:39:39.693Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-cairos-necro": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:39:54.113Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-arena": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:40:09.669Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-weekday": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:40:24.975Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-equip": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:40:39.194Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "combat-depth": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:40:54.163Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "sting-victory": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:40:57.985Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "sting-defeat": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:41:02.351Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "sting-boss": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:41:06.608Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-tap": {
+      "source": "synth",
+      "upgradedAt": "2026-08-19T17:00:58.985Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-confirm": {
+      "source": "synth",
+      "upgradedAt": "2026-08-19T17:00:59.174Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-cancel": {
+      "source": "synth",
+      "upgradedAt": "2026-08-19T17:00:59.352Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-disabled": {
+      "source": "synth",
+      "upgradedAt": "2026-08-19T17:00:59.529Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-modal-open": {
+      "source": "synth",
+      "upgradedAt": "2026-08-19T17:00:59.732Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-modal-close": {
+      "source": "synth",
+      "upgradedAt": "2026-08-19T17:00:59.946Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-tab": {
+      "source": "synth",
+      "upgradedAt": "2026-08-19T17:01:00.117Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-toast": {
+      "source": "synth",
+      "upgradedAt": "2026-08-19T17:01:00.295Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-claim": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:41:39.949Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-purchase": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:41:43.747Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-error": {
+      "source": "synth",
+      "upgradedAt": "2026-08-19T17:01:00.491Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-collect": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:41:50.602Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ui-unlock": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:41:54.701Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "stone-place": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:41:59.109Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "stone-drop": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:42:05.304Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "capture": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:42:08.962Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "board-reset": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:42:12.932Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "amplify": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:42:16.463Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "mana-ready": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:42:19.834Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "lunge": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:42:23.420Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "hit-soft": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:42:51.279Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "hit-med": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:42:54.764Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "hit-crit": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:42:58.657Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ko": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:02.559Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "wave-clear": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:06.029Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "ult-cutin": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:09.522Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "atk-fire": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:12.637Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "atk-water": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:16.554Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "atk-wind": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:19.746Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "atk-light": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:23.370Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "atk-dark": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:27.187Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "hit-fire": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:30.906Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "hit-water": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:34.041Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "hit-wind": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:37.640Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "hit-holy": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:41.606Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "hit-dark": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:45.208Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "kind-aoe": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:49.148Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "kind-single": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:53.444Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "kind-heal": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:43:57.005Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "kind-shield": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:00.238Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "kind-buff": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:03.413Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "kind-debuff": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:07.077Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "kind-amplify": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:10.608Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "kind-dual-stone": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:14.437Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "kind-board-clean": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:17.919Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "summon-pull": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:21.268Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "summon-reveal": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:26.078Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "summon-reveal-rare": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:29.117Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "fusion-cast": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:33.643Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "wish-reveal": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:36.785Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "enhance-tick": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:40.117Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    },
+    "forge-reveal": {
+      "source": "stability",
+      "upgradedAt": "2026-08-19T16:44:43.721Z",
+      "ogg": true,
+      "mp3": true,
+      "wav": false
+    }
+  }
+}

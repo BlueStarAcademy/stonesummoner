@@ -130,12 +130,16 @@ export function normalizeSymbol(raw: SymbolInstance): SymbolInstance {
 
 export const IMPRINTABLE_SLOTS = [2, 4, 6] as const;
 
-export const SYMBOL_IMPRINT_CRYSTAL_COST = 8;
+/** Imprint stone inventory cost per main-stat re-roll (slots 2/4/6). */
+export const SYMBOL_IMPRINT_STONE_COST = 1;
 export const SYMBOL_GRIND_MANA_COST = 150;
 /** Grindstone inventory cost per grind (prefix or substat enhance). */
 export const SYMBOL_GRIND_STONE_COST = 1;
 
-const GRIND_PREFIX_POOL: { prefixStat: string; prefixValue: number }[] = [
+export const SYMBOL_GRIND_PREFIX_POOL: {
+  prefixStat: string;
+  prefixValue: number;
+}[] = [
   { prefixStat: "ATK+", prefixValue: 10 },
   { prefixStat: "HP+", prefixValue: 100 },
   { prefixStat: "DEF+", prefixValue: 10 },
@@ -152,15 +156,35 @@ export function canGrindSymbol(_s: SymbolInstance): boolean {
   return true;
 }
 
+/** Possible main stats after imprint (excludes current when alternatives exist). */
+export function listImprintMainOutcomes(
+  s: SymbolInstance,
+): SymbolStatId[] {
+  if (!canImprintSymbol(s)) return [];
+  const slot = s.slot as 2 | 4 | 6;
+  const pool = SLOT_MAIN_POOL[slot];
+  const others = pool.filter((p) => p !== s.mainStat);
+  return others.length > 0 ? others : [...pool];
+}
+
+/** Possible grind prefix rolls when the symbol has no substats. */
+export function listGrindPrefixOutcomes(
+  s: SymbolInstance,
+): { prefixStat: string; prefixValue: number }[] {
+  const others = SYMBOL_GRIND_PREFIX_POOL.filter(
+    (p) =>
+      !(p.prefixStat === s.prefixStat && p.prefixValue === s.prefixValue),
+  );
+  return others.length > 0 ? others : [...SYMBOL_GRIND_PREFIX_POOL];
+}
+
 export function imprintSymbolMain(
   s: SymbolInstance,
   rng: () => number = Math.random,
 ): SymbolInstance | null {
   if (!canImprintSymbol(s)) return null;
-  const slot = s.slot as 2 | 4 | 6;
-  const pool = SLOT_MAIN_POOL[slot];
-  const others = pool.filter((p) => p !== s.mainStat);
-  const choices = others.length > 0 ? others : pool;
+  const choices = listImprintMainOutcomes(s);
+  if (choices.length === 0) return null;
   const pick = choices[Math.floor(rng() * choices.length) % choices.length]!;
   return {
     ...s,
@@ -174,11 +198,7 @@ export function grindSymbolPrefix(
   rng: () => number = Math.random,
 ): SymbolInstance | null {
   if (!canGrindSymbol(s)) return null;
-  const others = GRIND_PREFIX_POOL.filter(
-    (p) =>
-      !(p.prefixStat === s.prefixStat && p.prefixValue === s.prefixValue),
-  );
-  const choices = others.length > 0 ? others : GRIND_PREFIX_POOL;
+  const choices = listGrindPrefixOutcomes(s);
   const pick = choices[Math.floor(rng() * choices.length) % choices.length]!;
   return {
     ...s,

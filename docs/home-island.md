@@ -42,7 +42,7 @@
 | 소환사 탑 | Summoner's Tower | 시작 | 방어덱·기록·각성재료 |
 | 소환진 | Summonhenge | 시작 | 소환 |
 | 출정문 | Gateway | 시작 | 시나리오·전투 |
-| 강화진 | Power-Up Circle | 초반 | 강화·진화·스킬업 |
+| 조합진 | Fusion Hexagram | 시작 | 조합식으로 희귀 소환수 제작 |
 | 마법상점 | Magic Shop | ~6 | 상징/스크롤, 주기 리셋 |
 | 소원의 사당 | Temple of Wishes | ~7 | 일 1회 소원 |
 | 아케인 포탑 | Arcane Tower | ~3 | 아레나 방어 포탑 |
@@ -51,7 +51,7 @@
 | 제작소 | Craft Building | ~19 | 제작 |
 | 보관소 | Monster Storage | 초반 | 슬롯 확장 |
 | 형상 공방 | Transmogrification | 후반 | 외형 |
-| 마법진 도장 | (신규) | 중반 | 연습·묘수 미션 |
+| 진문 수련장 | Practice Dojo | 중반 | 일일 수련(진문석) · 마법진 각인 |
 
 ---
 
@@ -103,7 +103,7 @@ collect() -> addToPlayer(stored); stored = 0
 반드시 구현:
 
 1. **소환진** — 소환 UI 입구  
-2. **강화진** — 레벨업 + 진화(최대 E2) + 스킬업(S1–S3, 최대 Lv3, 마나)  
+2. **소환수 화면** — 레벨업 + 진화(최대 E2) + 스킬업(S1–S3, 최대 Lv3, 마나)  
 3. **출정문** — 시나리오 1챕터  
 4. **진액 연못** — 마나 시간 생산·수집  
 

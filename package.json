@@ -28,7 +28,10 @@
     "i18n:gen": "node apps/web/scripts/gen-i18n-packs.mjs",
     "store:graphics": "node scripts/gen-play-store-graphics.mjs",
     "android:sync": "npm run android:sync -w stonesummoner-web",
-    "cap:open": "npm run cap:open -w stonesummoner-web"
+    "cap:open": "npm run cap:open -w stonesummoner-web",
+    "audio:gen": "npm run audio:gen -w stonesummoner-web",
+    "audio:next": "npm run audio:next -w stonesummoner-web",
+    "audio:status": "npm run audio:status -w stonesummoner-web"
   },
   "engines": {
     "node": ">=20"

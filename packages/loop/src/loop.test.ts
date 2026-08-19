@@ -14,7 +14,10 @@ import {
   listSymbols,
   runBuyEnergy,
   runBuyGrindstone,
-  GRINDSTONE_BUY_MANA_COST,
+  GRINDSTONE_BUY_CRYSTAL_COST,
+  SCROLL_PREMIUM_BUY_CRYSTAL_COST,
+  catalogShopRemaining,
+  catalogShopBoughtToday,
   runExpandSymbolBag,
   symbolBagCapacity,
   symbolBagExpandCost,
@@ -60,10 +63,13 @@ import {
   guildLeaderboard,
   runClaimSeasonReward,
   runPracticeDojo,
+  runBuyCircleInscription,
   runSellSymbol,
   runSetArenaBans,
   runSetArenaDefense,
   runSetParty,
+  runSavePartyPreset,
+  runLoadPartyPreset,
   runSkillUp,
   runSortie,
   runSummon,
@@ -88,7 +94,7 @@ import {
 } from "./mainQuest.js";
 import { migrateSave } from "./migrateSave.js";
 import { expForStage } from "./progress.js";
-import { FUSION_RECIPES } from "stonesummoner-data";
+import { FUSION_RECIPES, isFusionOnlyFamily } from "stonesummoner-data";
 
 describe("game loop", () => {
   it("collects mana from pond", () => {
@@ -421,14 +427,19 @@ describe("game loop", () => {
     };
     const drill = runPracticeDojo(save);
     assert.equal(drill.save.dojoDrills, 1);
+    assert.equal(drill.save.dojoDrillsToday, 1);
+    assert.equal(drill.save.jinmunStones, (save.jinmunStones ?? 0) + 1);
+    assert.match(drill.message, /진문 수련/);
+    assert.ok(drill.save.island.mana > save.island.mana);
     let s = drill.save;
     s = runPracticeDojo(s).save;
     const third = runPracticeDojo(s);
     assert.equal(third.save.dojoDrills, 3);
-    assert.equal(third.save.jinmunStones, (save.jinmunStones ?? 0) + 1);
-    assert.match(third.message, /묘수 미션/);
-    assert.match(drill.message, /도장/);
-    assert.ok(drill.save.island.mana > save.island.mana);
+    assert.equal(third.save.dojoDrillsToday, 3);
+    assert.equal(third.save.jinmunStones, (save.jinmunStones ?? 0) + 3);
+    const blocked = runPracticeDojo(third.save);
+    assert.match(blocked.message, /한도/);
+    assert.equal(blocked.save.jinmunStones, third.save.jinmunStones);
 
     let g = { ...third.save, island: { ...third.save.island, summonerLevel: 12 } };
     const join = runJoinGuild(g, "진문수호");
@@ -453,6 +464,25 @@ describe("game loop", () => {
     assert.equal(claim.save.seasonRewardsClaimed, 1);
     const locked = runClaimSeasonReward(claim.save);
     assert.match(locked.message, /잠김/);
+  });
+
+  it("buys circle inscriptions and raises start mana", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      jinmunStones: 20,
+      island: { ...save.island, summonerLevel: 8 },
+    };
+    const before = createStageBattle(getStage("garen_1_1")!, save);
+    const r = runBuyCircleInscription(save, "start_mana");
+    assert.match(r.message, /각인/);
+    assert.equal(r.save.circleInscriptions.start_mana, 1);
+    assert.equal(r.save.jinmunStones, 18);
+    const after = createStageBattle(getStage("garen_1_1")!, r.save);
+    assert.ok(after.allySummoner.mana > before.allySummoner.mana);
+    const amp = runBuyCircleInscription(r.save, "amplify_cap");
+    const ampBattle = createStageBattle(getStage("garen_1_1")!, amp.save);
+    assert.ok(ampBattle.phaseAmplifyCap() > after.phaseAmplifyCap());
   });
 
   it("sets party from roster indices", () => {
@@ -663,6 +693,7 @@ describe("game loop", () => {
     save = {
       ...save,
       island: { ...save.island, mana: 2000, crystal: 40 },
+      imprintStones: 3,
     };
     const buy = runBuyScroll(save, 2);
     assert.match(buy.message, /소환서 2장/);
@@ -677,7 +708,7 @@ describe("game loop", () => {
 
     const ok = runImprintSymbol(save, "imp_test", () => 0.9);
     assert.match(ok.message, /각인/);
-    assert.equal(ok.save.island.crystal, save.island.crystal - 8);
+    assert.equal(ok.save.imprintStones, save.imprintStones - 1);
     const updated = ok.save.symbols.find((s) => s.id === "imp_test")!;
     assert.ok(
       updated.mainStat !== "CRI Dmg%" || updated.mainValue !== 11,
@@ -685,7 +716,7 @@ describe("game loop", () => {
 
     const ok2 = runImprintSymbol(ok.save, "imp_s2", () => 0.9);
     assert.match(ok2.message, /각인/);
-    assert.equal(ok2.save.island.crystal, ok.save.island.crystal - 8);
+    assert.equal(ok2.save.imprintStones, ok.save.imprintStones - 1);
   });
 
   it("grinds symbol prefix for mana and grindstone", () => {
@@ -797,7 +828,8 @@ describe("game loop", () => {
 
     save = {
       ...blocked.save,
-      dojoDrills: 3,
+      dojoDrillDay: day,
+      dojoDrillsToday: 1,
       claimedMissionKeys: blocked.save.claimedMissionKeys,
       island: { ...blocked.save.island, mana: 100, energy: 40, energyMax: 100 },
     };
@@ -839,7 +871,7 @@ describe("game loop", () => {
     assert.equal(isMainQuestUnlocked(save, "giantB1"), true);
     const giant = runClaimMainQuest(save, "giantB1");
     assert.match(giant.message, /연마석/);
-    assert.equal(giant.save.grindstones, 4);
+    assert.equal(giant.save.grindstones, 2);
   });
 
   it("raises energy max and unlocks buildings on account level-up", () => {
@@ -1368,14 +1400,51 @@ describe("game loop", () => {
     assert.match(again.message, /이미 구매/);
   });
 
-  it("buys grindstones from the shop for mana", () => {
+  it("buys grindstones from the shop for crystal", () => {
     let save = createNewSave(0);
     const before = save.grindstones ?? 0;
-    save = { ...save, island: { ...save.island, mana: 10_000 } };
+    save = { ...save, island: { ...save.island, crystal: 100 } };
     const bought = runBuyGrindstone(save, 2);
     assert.match(bought.message, /연마석/);
     assert.equal(bought.save.grindstones, before + 2);
-    assert.equal(bought.save.island.mana, 10_000 - GRINDSTONE_BUY_MANA_COST * 2);
+    assert.equal(
+      bought.save.island.crystal,
+      100 - GRINDSTONE_BUY_CRYSTAL_COST * 2,
+    );
+  });
+
+  it("sells premium scrolls for crystal and enforces catalog daily limits", () => {
+    const now = Date.parse("2099-07-01T12:00:00Z");
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      island: { ...save.island, mana: 50_000, crystal: 500 },
+    };
+    const premium = runBuyScroll(save, 1, "premium", now);
+    assert.match(premium.message, /크리스탈/);
+    assert.equal(
+      premium.save.island.crystal,
+      500 - SCROLL_PREMIUM_BUY_CRYSTAL_COST,
+    );
+    assert.equal(premium.save.scrollsPremium, (save.scrollsPremium ?? 0) + 1);
+    assert.equal(catalogShopRemaining(premium.save, "scroll_premium", now), 2);
+
+    save = {
+      ...premium.save,
+      shopBuyCounts: { ...premium.save.shopBuyCounts, scroll_premium: 3 },
+    };
+    const blocked = runBuyScroll(save, 1, "premium", now);
+    assert.match(blocked.message, /한도/);
+    assert.equal(blocked.save.island.crystal, save.island.crystal);
+
+    const nextDay = runBuyScroll(
+      blocked.save,
+      1,
+      "premium",
+      Date.parse("2099-07-02T12:00:00Z"),
+    );
+    assert.match(nextDay.message, /크리스탈/);
+    assert.equal(catalogShopBoughtToday(nextDay.save, "scroll_premium", Date.parse("2099-07-02T12:00:00Z")), 1);
   });
 
   it("chains trial floors and grants B3 token", () => {
@@ -1406,19 +1475,45 @@ describe("game loop", () => {
     }));
     save = {
       ...save,
-      island: { ...save.island, mana: 5000, summonerLevel: 17 },
+      island: { ...save.island, mana: 5000, summonerLevel: 1 },
       roster: [keeper, ...fodder],
     };
     const r = runRecipeFusion(
       save,
       recipe.id,
-      keeper.uid,
       fodder.map((m) => m.uid),
     );
-    assert.match(r.message, /레시피 융합/);
-    const kept = r.save.roster.find((m) => m.uid === keeper.uid);
-    assert.equal(kept?.monsterId, recipe.resultMonsterId);
-    assert.equal(r.save.roster.length, 1);
+    assert.match(r.message, /조합/);
+    assert.equal(r.save.roster.length, 2);
+    assert.ok(r.save.roster.some((m) => m.uid === keeper.uid));
+    const made = r.save.roster.find((m) => m.uid === r.fusedUid);
+    assert.equal(made?.monsterId, recipe.resultMonsterId);
+    assert.equal(isFusionOnlyFamily("magma_knight"), true);
+    assert.equal(isFusionOnlyFamily("cinder_imp"), false);
+  });
+
+  it("blocks locked combination recipes until summoner level", () => {
+    const recipe = FUSION_RECIPES.find((x) => x.id === "recipe_dragon_knight")!;
+    let save = createNewSave(0);
+    const keeper = save.roster[0]!;
+    const fodder = recipe.fodderMonsterIds.map((monsterId, i) => ({
+      ...keeper,
+      uid: `fodder_hi_${i}`,
+      monsterId,
+      level: 1,
+      evolve: 0,
+    }));
+    save = {
+      ...save,
+      island: { ...save.island, mana: 20_000, summonerLevel: 8 },
+      roster: [keeper, ...fodder],
+    };
+    const blocked = runRecipeFusion(
+      save,
+      recipe.id,
+      fodder.map((m) => m.uid),
+    );
+    assert.match(blocked.message, /Lv\.17/);
   });
 
   it("tracks guild weekly contrib chest and raid boss hp", () => {
@@ -1577,5 +1672,31 @@ describe("game loop", () => {
     );
     assert.ok(cleared);
     assert.equal(cleared!.onboardRite, null);
+  });
+
+  it("saves summoner magic loadout with a party preset", () => {
+    const base = createNewSave(0);
+    const uid = base.roster[0]?.uid;
+    assert.ok(uid);
+    const saved = runSavePartyPreset(base, 1, {
+      summoner: "light",
+      party: [uid],
+      magic: ["light-bolt", "light-ward"],
+    }).save;
+    assert.deepEqual(saved.partyPresets[1]?.magic, ["light-bolt", "light-ward"]);
+    const cleared = {
+      ...saved,
+      party: [] as string[],
+      summonerMagicLoadouts: {
+        ...saved.summonerMagicLoadouts,
+        light: [null, null] as [string | null, string | null],
+      },
+    };
+    const loaded = runLoadPartyPreset(cleared, 1).save;
+    assert.equal(loaded.party[0], uid);
+    assert.deepEqual(loaded.summonerMagicLoadouts.light, [
+      "light-bolt",
+      "light-ward",
+    ]);
   });
 });

@@ -98,6 +98,7 @@ async function bootRegisteredPacks(): Promise<void> {
   if (!assetsBoot) {
     assetsBoot = (async () => {
       for (const pack of Object.values(SPINE_PACKS)) {
+        if (pack.enabled === false) continue;
         try {
           await ensurePackLoaded(pack);
         } catch (err) {

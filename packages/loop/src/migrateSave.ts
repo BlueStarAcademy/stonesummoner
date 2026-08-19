@@ -146,6 +146,13 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     guildContribution:
       typeof p.guildContribution === "number" ? p.guildContribution : 0,
     dojoDrills: typeof p.dojoDrills === "number" ? p.dojoDrills : 0,
+    dojoDrillDay: typeof p.dojoDrillDay === "string" ? p.dojoDrillDay : null,
+    dojoDrillsToday:
+      typeof p.dojoDrillsToday === "number" ? Math.max(0, Math.floor(p.dojoDrillsToday)) : 0,
+    circleInscriptions:
+      p.circleInscriptions && typeof p.circleInscriptions === "object"
+        ? (p.circleInscriptions as PlayerSave["circleInscriptions"])
+        : {},
     guildName: typeof p.guildName === "string" ? p.guildName : null,
     guildCheckInDay:
       typeof p.guildCheckInDay === "string" ? p.guildCheckInDay : null,
@@ -248,6 +255,17 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     shopSoldIds: Array.isArray(p.shopSoldIds)
       ? p.shopSoldIds.filter((id): id is string => typeof id === "string")
       : [],
+    shopBuyCounts: (() => {
+      const raw = p.shopBuyCounts;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        if (typeof v === "number" && Number.isFinite(v)) {
+          out[k] = Math.max(0, Math.floor(v));
+        }
+      }
+      return out;
+    })(),
     trialTokens:
       typeof p.trialTokens === "number"
         ? Math.max(0, Math.floor(p.trialTokens))
@@ -286,6 +304,10 @@ export function migrateSave(raw: unknown): PlayerSave | null {
       typeof p.grindstones === "number"
         ? Math.max(0, Math.floor(p.grindstones))
         : base.grindstones,
+    imprintStones:
+      typeof p.imprintStones === "number"
+        ? Math.max(0, Math.floor(p.imprintStones))
+        : base.imprintStones,
     claimedMailIds: Array.isArray(p.claimedMailIds)
       ? p.claimedMailIds.filter((id): id is string => typeof id === "string")
       : [],

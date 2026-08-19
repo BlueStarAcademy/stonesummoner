@@ -36,3 +36,4 @@ apps/web/android/local.properties
 apps/web/android/captures/
 # Bulky battle BG PNG masters (WebP shipped)
 apps/web/public/art/battle/_src/
+apps/web/public/audio/_tmp/

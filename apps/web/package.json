@@ -16,7 +16,11 @@
     "spine:fire_fang:verify": "node scripts/_verify-fire-fang-spine.mjs",
     "cap:sync": "npx cap sync android",
     "cap:open": "npx cap open android",
-    "android:sync": "npm run build && npx cap sync android"
+    "android:sync": "npm run build && npx cap sync android",
+    "audio:gen": "node scripts/gen-audio.mjs",
+    "audio:next": "node scripts/gen-audio.mjs --next",
+    "audio:status": "node scripts/gen-audio.mjs --status",
+    "audio:encode": "node scripts/gen-audio.mjs --synth --all"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",

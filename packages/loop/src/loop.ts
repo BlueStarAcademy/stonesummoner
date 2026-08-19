@@ -27,6 +27,8 @@ import {
   GEAR_SET_AFFIX_MANA,
   getGearSet,
   getGloryBuilding,
+  circleInscriptionBuffFromLevels,
+  getCircleInscription,
   getMonster,
   getSkillTreeNode,
   isSkillTreeNodeId,
@@ -50,7 +52,7 @@ import {
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
   symbolEnhanceManaCost,
-  SYMBOL_IMPRINT_CRYSTAL_COST,
+  SYMBOL_IMPRINT_STONE_COST,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_GRIND_STONE_COST,
   summarizeSymbolSets,
@@ -71,6 +73,7 @@ import {
   WEEKDAY_SKILL_MAT_DROP,
   scenarioSymbolDropTable,
   getFusionRecipe,
+  planFusionRecipe,
   pickArenaRival,
   getArenaRivalDeck,
   type Element,
@@ -78,6 +81,7 @@ import {
   type GearSetId,
   type GearSlot,
   type GloryBuildingId,
+  type CircleInscriptionId,
   type SkillTreeNodeId,
   type StageDef,
   type SummonerGear,
@@ -133,6 +137,7 @@ import {
   SKILL_UP_MAT_COST,
   SCROLL_BUY_MANA_COST,
   SCROLL_PREMIUM_BUY_MANA_COST,
+  SCROLL_PREMIUM_BUY_CRYSTAL_COST,
   SCROLL_MYSTIC_BUY_CRYSTAL_COST,
   SCROLL_KIND_BLURB,
   SCROLL_KIND_LABEL,
@@ -179,6 +184,7 @@ export {
   SKILL_UP_MAT_COST,
   SCROLL_BUY_MANA_COST,
   SCROLL_PREMIUM_BUY_MANA_COST,
+  SCROLL_PREMIUM_BUY_CRYSTAL_COST,
   SCROLL_MYSTIC_BUY_CRYSTAL_COST,
   SCROLL_KIND_BLURB,
   SCROLL_KIND_LABEL,
@@ -349,7 +355,8 @@ export type ShopOfferKind =
   | "scroll_premium"
   | "energy"
   | "symbol_roll"
-  | "grindstone";
+  | "grindstone"
+  | "imprint_stone";
 
 export interface ShopOffer {
   id: string;
@@ -401,19 +408,35 @@ export function getDailyShopOffers(dayKey: string): ShopOffer[] {
     () => ({
       id: "",
       kind: "grindstone",
-      qty: 1 + Math.floor(rng() * 2),
-      costMana: 250 + Math.floor(rng() * 150),
-      costCrystal: 0,
+      qty: 1,
+      costMana: 0,
+      costCrystal: 22 + Math.floor(rng() * 10),
       labelKo: "연마석",
+    }),
+    () => ({
+      id: "",
+      kind: "imprint_stone",
+      qty: 1,
+      costMana: 0,
+      costCrystal: 36 + Math.floor(rng() * 12),
+      labelKo: "각인석",
     }),
   ];
   let symbolRolls = 0;
+  let rareStoneRolls = 0;
   for (let i = 0; i < count; i++) {
     let pick = pools[Math.floor(rng() * pools.length)]!;
     let offer = pick();
     if (offer.kind === "symbol_roll") {
       symbolRolls += 1;
       if (symbolRolls > 2) {
+        offer = pools[Math.floor(rng() * 3)]!();
+      }
+    }
+    if (offer.kind === "grindstone" || offer.kind === "imprint_stone") {
+      rareStoneRolls += 1;
+      // Cap rare forge stones in daily shop (at most one of either kind).
+      if (rareStoneRolls > 1 || rng() > 0.35) {
         offer = pools[Math.floor(rng() * 3)]!();
       }
     }
@@ -426,7 +449,85 @@ export function getDailyShopOffers(dayKey: string): ShopOffer[] {
 export function syncShopDay(save: PlayerSave, now = Date.now()): PlayerSave {
   const day = todayKey(now);
   if (save.shopDayKey === day) return save;
-  return { ...save, shopDayKey: day, shopSoldIds: [] };
+  return { ...save, shopDayKey: day, shopSoldIds: [], shopBuyCounts: {} };
+}
+
+/** Always-on catalog shop SKUs (distinct from rotating daily offers). */
+export type CatalogShopSku =
+  | "scroll_normal_1"
+  | "scroll_normal_5"
+  | "scroll_premium"
+  | "scroll_mystic"
+  | "energy"
+  | "grindstone"
+  | "imprint_stone";
+
+/** Daily purchase caps for catalog products (per SKU purchase units). */
+export const CATALOG_SHOP_DAILY_LIMIT: Record<CatalogShopSku, number> = {
+  scroll_normal_1: 10,
+  scroll_normal_5: 5,
+  scroll_premium: 3,
+  scroll_mystic: 2,
+  energy: 5,
+  grindstone: 5,
+  imprint_stone: 3,
+};
+
+export function catalogShopBoughtToday(
+  save: PlayerSave,
+  sku: CatalogShopSku,
+  now = Date.now(),
+): number {
+  const synced = syncShopDay(save, now);
+  return Math.max(0, Math.floor(synced.shopBuyCounts?.[sku] ?? 0));
+}
+
+export function catalogShopRemaining(
+  save: PlayerSave,
+  sku: CatalogShopSku,
+  now = Date.now(),
+): number {
+  const used = catalogShopBoughtToday(save, sku, now);
+  return Math.max(0, CATALOG_SHOP_DAILY_LIMIT[sku] - used);
+}
+
+function tryConsumeCatalogQuota(
+  save: PlayerSave,
+  sku: CatalogShopSku,
+  purchases = 1,
+  now = Date.now(),
+): { ok: true; save: PlayerSave } | { ok: false; save: PlayerSave; message: string } {
+  const working = syncShopDay(save, now);
+  const n = Math.max(1, Math.floor(purchases));
+  const limit = CATALOG_SHOP_DAILY_LIMIT[sku];
+  const bought = Math.max(0, Math.floor(working.shopBuyCounts?.[sku] ?? 0));
+  if (bought + n > limit) {
+    return {
+      ok: false,
+      save: working,
+      message: `오늘 구매 한도 초과 (${Math.min(bought, limit)}/${limit})`,
+    };
+  }
+  return {
+    ok: true,
+    save: {
+      ...working,
+      shopBuyCounts: {
+        ...(working.shopBuyCounts ?? {}),
+        [sku]: bought + n,
+      },
+    },
+  };
+}
+
+function catalogSkuForScrollBuy(
+  kind: ScrollKind,
+  count: number,
+): { sku: CatalogShopSku; purchases: number } {
+  if (kind === "premium") return { sku: "scroll_premium", purchases: count };
+  if (kind === "mystic") return { sku: "scroll_mystic", purchases: count };
+  if (count === 5) return { sku: "scroll_normal_5", purchases: 1 };
+  return { sku: "scroll_normal_1", purchases: count };
 }
 
 export const SUMMONER_ELEMENTS: Element[] = [
@@ -466,18 +567,27 @@ export function withActiveGear(save: PlayerSave, gear: SummonerGear): PlayerSave
   return { ...synced, summoners, gear: nextGear };
 }
 
-/** Saved favorite deck: summoner element + up to 4 monster uids. */
+/** Saved favorite deck: summoner element + up to 4 monster uids + magic slots. */
 export interface PartyPreset {
   summoner: SummonerElement;
   party: string[];
+  magic?: SummonerMagicLoadout;
 }
 
 export const PARTY_PRESET_COUNT = 5;
 
+function normalizeMagicLoadout(raw: unknown): SummonerMagicLoadout {
+  if (!Array.isArray(raw)) return [null, null];
+  return [
+    typeof raw[0] === "string" ? raw[0] : null,
+    typeof raw[1] === "string" ? raw[1] : null,
+  ];
+}
+
 export function emptyPartyPreset(
   summoner: SummonerElement = "light",
 ): PartyPreset {
-  return { summoner, party: [] };
+  return { summoner, party: [], magic: [null, null] };
 }
 
 function isSummonerElement(v: unknown): v is SummonerElement {
@@ -523,7 +633,11 @@ export function normalizePartyPresets(
       party.push(uid);
       if (party.length >= 4) break;
     }
-    out.push({ summoner: el, party });
+    const magicRaw = (src as { magic?: unknown }).magic;
+    const magic = Array.isArray(magicRaw)
+      ? normalizeMagicLoadout(magicRaw)
+      : undefined;
+    out.push(magic ? { summoner: el, party, magic } : { summoner: el, party });
   }
   return out;
 }
@@ -539,7 +653,11 @@ export function clampPartyPresetIndex(index: unknown): number {
 export function runSavePartyPreset(
   save: PlayerSave,
   index: number,
-  opts?: { summoner?: SummonerElement; party?: string[] },
+  opts?: {
+    summoner?: SummonerElement;
+    party?: string[];
+    magic?: SummonerMagicLoadout;
+  },
 ): LoopStepResult {
   const i = clampPartyPresetIndex(index);
   const summoner = isSummonerElement(opts?.summoner)
@@ -559,8 +677,11 @@ export function runSavePartyPreset(
     party.push(uid);
     if (party.length >= 4) break;
   }
+  const magic = normalizeMagicLoadout(
+    opts?.magic ?? save.summonerMagicLoadouts?.[summoner],
+  );
   const presets = normalizePartyPresets(save, save.partyPresets);
-  presets[i] = { summoner, party };
+  presets[i] = { summoner, party, magic };
   return {
     save: {
       ...save,
@@ -579,12 +700,20 @@ export function runLoadPartyPreset(
   const i = clampPartyPresetIndex(index);
   const presets = normalizePartyPresets(save, save.partyPresets);
   const preset = presets[i] ?? emptyPartyPreset();
+  const loadouts = {
+    ...createEmptySummonerMagicLoadouts(),
+    ...(save.summonerMagicLoadouts ?? {}),
+  };
+  if (preset.magic) {
+    loadouts[preset.summoner] = normalizeMagicLoadout(preset.magic);
+  }
   const next = syncSummonerMirrors({
     ...save,
     party: [...preset.party],
     activeSummoner: preset.summoner,
     partyPresets: presets,
     activePartyPreset: i,
+    summonerMagicLoadouts: loadouts,
   });
   return {
     save: next,
@@ -890,8 +1019,14 @@ export interface PlayerSave {
   arenaSeasonWins: number;
   /** Phase 2+: guild raid contribution points. */
   guildContribution: number;
-  /** Phase 2+: practice dojo drill count (묘수 미션 누적). */
+  /** Phase 2+: practice dojo lifetime drill count. */
   dojoDrills: number;
+  /** YYYY-MM-DD of last dojo drill (daily cap). */
+  dojoDrillDay: string | null;
+  /** Dojo drills used on dojoDrillDay. */
+  dojoDrillsToday: number;
+  /** Magic-circle inscription levels (진문석 sink). */
+  circleInscriptions: Partial<Record<CircleInscriptionId, number>>;
   /** Phase 2+: guild name (local stub, not realtime). */
   guildName: string | null;
   /** YYYY-MM-DD of last guild check-in. */
@@ -920,6 +1055,8 @@ export interface PlayerSave {
   shopDayKey: string | null;
   /** Phase 3c: offer ids bought today. */
   shopSoldIds: string[];
+  /** Catalog shop purchase counts for the current `shopDayKey`. */
+  shopBuyCounts: Partial<Record<CatalogShopSku, number>>;
   /** Phase 3d: trial B3 clear tokens. */
   trialTokens: number;
   /** Phase 3d: dojo cosmetic unlock from trial. */
@@ -944,6 +1081,8 @@ export interface PlayerSave {
   raidWeekKey: string | null;
   /** Symbol grindstone bag (consume 1 per grind / substat enhance). */
   grindstones: number;
+  /** Symbol imprint-stone bag (consume 1 per main-stat re-roll on slots 2/4/6). */
+  imprintStones: number;
   /** Claimed mailbox reward ids (persistent). */
   claimedMailIds: string[];
   /** Claimed daily mission keys (`missionId:YYYY-MM-DD`). */
@@ -1001,6 +1140,8 @@ export interface LoopStepResult {
   unlockedBuildingIds?: BuildingId[];
   /** Structured daily wish grant (when runDailyWish succeeds). */
   wishReward?: WishReward;
+  /** New roster uid created by recipe combination. */
+  fusedUid?: string;
 }
 
 function resolveOwned(
@@ -1063,6 +1204,7 @@ function buildSummonerState(
   skillTree: string[] = [],
   magicSkills: SummonerState["magicSkills"] = [],
   summonerElement?: Element,
+  startManaFlat = 0,
 ): SummonerState {
   const g = normalizeSummonerGear(gear, summonerElement);
   const pieces = gearPieces(g);
@@ -1101,7 +1243,7 @@ function buildSummonerState(
     a * 0.025;
   return {
     unitId,
-    mana: Math.min(manaMax, manaMax * startPct),
+    mana: Math.min(manaMax, manaMax * startPct + startManaFlat),
     manaMax,
     manaRegenPerTick: regen,
     boardSense,
@@ -1293,6 +1435,9 @@ export function createNewSave(now = Date.now()): PlayerSave {
     arenaSeasonWins: 0,
     guildContribution: 0,
     dojoDrills: 0,
+    dojoDrillDay: null,
+    dojoDrillsToday: 0,
+    circleInscriptions: {},
     guildName: null,
     guildCheckInDay: null,
     guildRaidBest: 0,
@@ -1307,6 +1452,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     arenaAttackDay: null,
     shopDayKey: null,
     shopSoldIds: [],
+    shopBuyCounts: {},
     trialTokens: 0,
     trialTitleUnlocked: false,
     guildWeekKey: isoWeekKey(now),
@@ -1318,7 +1464,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     raidAttemptDay: null,
     raidMilestonesClaimed: [],
     raidWeekKey: isoWeekKey(now),
-    grindstones: 5,
+    grindstones: 1,
+    imprintStones: 0,
     claimedMailIds: [],
     claimedMissionKeys: [],
     claimedMainQuestIds: [],
@@ -1336,7 +1483,8 @@ export function createDemoSave(now = Date.now()): PlayerSave {
     scrollsMystic: 3,
     gloryPoints: 120,
     jinmunStones: 5,
-    grindstones: Math.max(save.grindstones ?? 0, 12),
+    grindstones: Math.max(save.grindstones ?? 0, 2),
+    imprintStones: Math.max(save.imprintStones ?? 0, 1),
     summoners: createSummonerRoster({ level: 10, exp: 40 }),
     island: {
       ...save.island,
@@ -1402,14 +1550,39 @@ export function runDailyWish(
   rng: () => number = Math.random,
 ): LoopStepResult {
   const r = runWish(save.island, now, rng);
+  const reward = r.reward;
+  let next: PlayerSave = {
+    ...save,
+    island: r.island,
+  };
+  if (reward) {
+    switch (reward.kind) {
+      case "scroll":
+        next = { ...next, scrolls: (next.scrolls ?? 0) + reward.amount };
+        break;
+      case "skill_mats":
+        next = { ...next, skillMats: (next.skillMats ?? 0) + reward.amount };
+        break;
+      case "jinmun":
+        next = { ...next, jinmunStones: (next.jinmunStones ?? 0) + reward.amount };
+        break;
+      case "grindstone":
+        next = { ...next, grindstones: (next.grindstones ?? 0) + reward.amount };
+        break;
+      case "imprint_stone":
+        next = {
+          ...next,
+          imprintStones: (next.imprintStones ?? 0) + reward.amount,
+        };
+        break;
+      default:
+        break;
+    }
+  }
   return {
-    save: {
-      ...save,
-      island: r.island,
-      scrolls: save.scrolls + r.scrollGain,
-    },
+    save: next,
     message: r.message,
-    wishReward: r.reward,
+    wishReward: reward,
   };
 }
 
@@ -1464,9 +1637,12 @@ export function runBuyGlory(
 export const FUSION_MANA_COST = 800;
 export const ENERGY_CRYSTAL_COST = 10;
 export const ENERGY_BUY_AMOUNT = 20;
-/** Shop: buy grindstones for symbol forge (mana). */
-export const GRINDSTONE_BUY_MANA_COST = 300;
+/** Shop: buy grindstones for symbol forge (crystal — rare). */
+export const GRINDSTONE_BUY_CRYSTAL_COST = 28;
 export const GRINDSTONE_BUY_AMOUNT = 1;
+/** Shop: buy imprint stones for symbol main re-roll (crystal — rarer). */
+export const IMPRINT_STONE_BUY_CRYSTAL_COST = 45;
+export const IMPRINT_STONE_BUY_AMOUNT = 1;
 
 /** Symbol bag: start 100, +10 per expand, hard cap 1000. */
 export const SYMBOL_BAG_BASE_SLOTS = 100;
@@ -1629,25 +1805,25 @@ export function runFusion(
   };
 }
 
-/** Recipe fusion: consume fodder matching recipe → transform keeper into result. */
+/**
+ * Recipe combination: consume matching fodder and grant a new result monster.
+ * Available from the island combination circle (power_circle / fusion view).
+ */
 export function runRecipeFusion(
   save: PlayerSave,
   recipeId: string,
-  keeperUid: string,
-  fodderUids: string[],
+  fodderUids?: string[],
 ): LoopStepResult {
   const island = syncBuildingUnlocks(tickProduction(save.island));
-  if (
-    !island.buildings.some((b) => b.id === "fusion_star") &&
-    island.summonerLevel < 17
-  ) {
+  const recipe = getFusionRecipe(recipeId);
+  if (!recipe) return { save, message: `조합 레시피 없음: ${recipeId}` };
+  const needLv = recipe.unlockSummonerLevel ?? 1;
+  if (island.summonerLevel < needLv) {
     return {
       save: { ...save, island },
-      message: "융합의 별 해금 필요 (소환사 Lv.17)",
+      message: `조합 해금 필요 (소환사 Lv.${needLv})`,
     };
   }
-  const recipe = getFusionRecipe(recipeId);
-  if (!recipe) return { save, message: `융합 레시피 없음: ${recipeId}` };
   const cost = recipe.manaCost ?? FUSION_MANA_COST;
   if (island.mana < cost) {
     return {
@@ -1655,21 +1831,24 @@ export function runRecipeFusion(
       message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(island.mana)})`,
     };
   }
-  const keeper = resolveOwned(save, keeperUid);
-  if (!keeper) return { save, message: "키퍼 소환수를 찾을 수 없음" };
-  const fodderSet = new Set(fodderUids);
-  if (fodderSet.has(keeper.uid)) {
-    return { save, message: "키퍼는 재료로 쓸 수 없음" };
+  if (!getMonster(recipe.resultMonsterId)) {
+    return { save, message: `결과 몬스터 없음: ${recipe.resultMonsterId}` };
   }
-  if (fodderUids.length !== recipe.fodderMonsterIds.length) {
+  const planned = planFusionRecipe(save.roster, recipe);
+  const useUids =
+    fodderUids && fodderUids.length > 0 ? fodderUids : planned.fodderUids;
+  if (!planned.ok && (!fodderUids || fodderUids.length === 0)) {
+    return { save, message: `조합 재료 부족 (${recipe.nameKo})` };
+  }
+  if (useUids.length !== recipe.fodderMonsterIds.length) {
     return {
       save,
       message: `재료 수 불일치 (필요 ${recipe.fodderMonsterIds.length})`,
     };
   }
-  const fodderOwned = fodderUids.map((uid) => resolveOwned(save, uid));
+  const fodderOwned = useUids.map((uid) => resolveOwned(save, uid));
   if (fodderOwned.some((m) => !m)) {
-    return { save, message: "융합 재료 소환수를 찾을 수 없음" };
+    return { save, message: "조합 재료 소환수를 찾을 수 없음" };
   }
   const need = [...recipe.fodderMonsterIds].sort();
   const have = fodderOwned
@@ -1679,20 +1858,26 @@ export function runRecipeFusion(
   if (need.length !== have.length || need.some((id, i) => id !== have[i])) {
     return { save, message: `레시피 재료 불일치 (${recipe.nameKo})` };
   }
-  if (!getMonster(recipe.resultMonsterId)) {
-    return { save, message: `결과 몬스터 없음: ${recipe.resultMonsterId}` };
-  }
 
-  const dropUids = new Set(fodderUids);
-  const kept = {
-    ...keeper,
+  const dropUids = new Set(useUids);
+  const created: OwnedMonster = {
+    uid: nextUid("fuse"),
     monsterId: recipe.resultMonsterId,
+    level: 1,
+    exp: 0,
+    symbolSlots: emptySymbolSlots(),
+    evolve: 0,
+    awaken: 0,
+    skillLevels: defaultSkillLevels(),
   };
-  const roster = save.roster
-    .filter((m) => !dropUids.has(m.uid))
-    .map((m) => (m.uid === keeper.uid ? kept : m));
+  const roster = [
+    ...save.roster.filter((m) => !dropUids.has(m.uid)),
+    created,
+  ];
   const party = save.party.filter((uid) => !dropUids.has(uid));
-  const resultName = getMonster(recipe.resultMonsterId)?.nameKo ?? recipe.resultMonsterId;
+  if (party.length < 4) party.push(created.uid);
+  const resultName =
+    getMonster(recipe.resultMonsterId)?.nameKo ?? recipe.resultMonsterId;
   return {
     save: {
       ...save,
@@ -1700,7 +1885,8 @@ export function runRecipeFusion(
       roster,
       party,
     },
-    message: `레시피 융합: ${recipe.nameKo} → ${resultName} (−골드 ${cost})`,
+    message: `조합: ${recipe.nameKo} → ${resultName} (−골드 ${cost})`,
+    fusedUid: created.uid,
   };
 }
 
@@ -1774,6 +1960,11 @@ export function runBuyShopOffer(
       ...next,
       grindstones: (next.grindstones ?? 0) + offer.qty,
     };
+  } else if (offer.kind === "imprint_stone") {
+    next = {
+      ...next,
+      imprintStones: (next.imprintStones ?? 0) + offer.qty,
+    };
   }
 
   const costNote =
@@ -1790,53 +1981,93 @@ export function runBuyShopOffer(
 export function runBuyEnergy(
   save: PlayerSave,
   packs = 1,
+  now = Date.now(),
 ): LoopStepResult {
   const n = Math.max(1, Math.min(10, Math.floor(packs)));
   const cost = ENERGY_CRYSTAL_COST * n;
   const gain = ENERGY_BUY_AMOUNT * n;
-  if (save.island.crystal < cost) {
+  let working = syncShopDay(save, now);
+  if (working.island.crystal < cost) {
     return {
-      save,
-      message: `크리스탈 부족 (필요 ${cost}, 보유 ${save.island.crystal})`,
+      save: working,
+      message: `크리스탈 부족 (필요 ${cost}, 보유 ${working.island.crystal})`,
     };
   }
-  const max = save.island.energyMax ?? 100;
-  const energy = Math.min(max, save.island.energy + gain);
+  const quota = tryConsumeCatalogQuota(working, "energy", n, now);
+  if (!quota.ok) return { save: quota.save, message: quota.message };
+  working = quota.save;
+  const max = working.island.energyMax ?? 100;
+  const energy = Math.min(max, working.island.energy + gain);
   return {
     save: {
-      ...save,
+      ...working,
       island: {
-        ...save.island,
-        crystal: save.island.crystal - cost,
+        ...working.island,
+        crystal: working.island.crystal - cost,
         energy,
       },
     },
-    message: `에너지 +${Math.floor(energy - save.island.energy)} (−크리스탈 ${cost}) · 보유 ${Math.floor(energy)}/${max}`,
+    message: `에너지 +${Math.floor(energy - working.island.energy)} (−크리스탈 ${cost}) · 보유 ${Math.floor(energy)}/${max}`,
   };
 }
 
-/** Buy grindstones with mana (shop stock for symbol forge). */
+/** Buy grindstones with crystal (shop stock for symbol forge). */
 export function runBuyGrindstone(
   save: PlayerSave,
   packs = 1,
+  now = Date.now(),
 ): LoopStepResult {
-  const n = Math.max(1, Math.min(20, Math.floor(packs)));
+  const n = Math.max(1, Math.min(10, Math.floor(packs)));
   const qty = GRINDSTONE_BUY_AMOUNT * n;
-  const cost = GRINDSTONE_BUY_MANA_COST * n;
-  if (save.island.mana < cost) {
+  const cost = GRINDSTONE_BUY_CRYSTAL_COST * n;
+  let working = syncShopDay(save, now);
+  if (working.island.crystal < cost) {
     return {
-      save,
-      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+      save: working,
+      message: `크리스탈 부족 (필요 ${cost}, 보유 ${working.island.crystal})`,
     };
   }
-  const next = (save.grindstones ?? 0) + qty;
+  const quota = tryConsumeCatalogQuota(working, "grindstone", n, now);
+  if (!quota.ok) return { save: quota.save, message: quota.message };
+  working = quota.save;
+  const next = (working.grindstones ?? 0) + qty;
   return {
     save: {
-      ...save,
-      island: { ...save.island, mana: save.island.mana - cost },
+      ...working,
+      island: { ...working.island, crystal: working.island.crystal - cost },
       grindstones: next,
     },
-    message: `연마석 +${qty} (−골드 ${cost}) · 보유 ${next}`,
+    message: `연마석 +${qty} (−크리스탈 ${cost}) · 보유 ${next}`,
+  };
+}
+
+/** Buy imprint stones with crystal (shop stock for symbol main re-roll). */
+export function runBuyImprintStone(
+  save: PlayerSave,
+  packs = 1,
+  now = Date.now(),
+): LoopStepResult {
+  const n = Math.max(1, Math.min(10, Math.floor(packs)));
+  const qty = IMPRINT_STONE_BUY_AMOUNT * n;
+  const cost = IMPRINT_STONE_BUY_CRYSTAL_COST * n;
+  let working = syncShopDay(save, now);
+  if (working.island.crystal < cost) {
+    return {
+      save: working,
+      message: `크리스탈 부족 (필요 ${cost}, 보유 ${working.island.crystal})`,
+    };
+  }
+  const quota = tryConsumeCatalogQuota(working, "imprint_stone", n, now);
+  if (!quota.ok) return { save: quota.save, message: quota.message };
+  working = quota.save;
+  const next = (working.imprintStones ?? 0) + qty;
+  return {
+    save: {
+      ...working,
+      island: { ...working.island, crystal: working.island.crystal - cost },
+      imprintStones: next,
+    },
+    message: `각인석 +${qty} (−크리스탈 ${cost}) · 보유 ${next}`,
   };
 }
 
@@ -1933,7 +2164,22 @@ export function runSellSymbol(
   };
 }
 
-/** Practice dojo: drill → mana/exp; every 3rd drill grants 진문석 (묘수 미션). */
+export const DOJO_DAILY_LIMIT = 3;
+export const DOJO_DRILL_JINMUN = 1;
+export const DOJO_DRILL_EXP = 3;
+
+export function dojoDayState(
+  save: PlayerSave,
+  now = Date.now(),
+): { day: string; drillsToday: number } {
+  const day = todayKey(now);
+  if ((save.dojoDrillDay ?? null) === day) {
+    return { day, drillsToday: save.dojoDrillsToday ?? 0 };
+  }
+  return { day, drillsToday: 0 };
+}
+
+/** Practice hall: limited daily drills that grant 진문석 for circle inscriptions. */
 export function runPracticeDojo(
   save: PlayerSave,
   now = Date.now(),
@@ -1945,33 +2191,78 @@ export function runPracticeDojo(
   ) {
     return {
       save: { ...save, island },
-      message: "마법진 도장 해금 필요 (소환사 Lv.8)",
+      message: "진문 수련장 해금 필요 (소환사 Lv.8)",
+    };
+  }
+  const { day, drillsToday } = dojoDayState(save, now);
+  if (drillsToday >= DOJO_DAILY_LIMIT) {
+    return {
+      save: { ...save, island },
+      message: `오늘 수련 한도 (${DOJO_DAILY_LIMIT}회)`,
     };
   }
   const active = getActiveSummoner({ ...save, island });
-  const manaGain = 120 + active.level * 8;
+  const manaGain = 40 + active.level * 2;
   island = { ...island, mana: island.mana + manaGain };
-  const leveled = addActiveSummonerExp({ ...save, island }, 15);
-  const dojoDrills = (save.dojoDrills ?? 0) + 1;
-  let jinmunStones = save.jinmunStones ?? 0;
-  let missionNote = "";
-  if (dojoDrills % 3 === 0) {
-    jinmunStones += 1;
-    missionNote = " · 묘수 미션 클리어 진문석 +1";
-  }
+  const leveled = addActiveSummonerExp({ ...save, island }, DOJO_DRILL_EXP);
+  const nextDrillsToday = drillsToday + 1;
+  const jinmunGain = DOJO_DRILL_JINMUN;
   const nextActive = getActiveSummoner(leveled.save);
   return {
     save: {
       ...leveled.save,
-      dojoDrills,
-      jinmunStones,
+      dojoDrills: (save.dojoDrills ?? 0) + 1,
+      dojoDrillDay: day,
+      dojoDrillsToday: nextDrillsToday,
+      jinmunStones: (save.jinmunStones ?? 0) + jinmunGain,
     },
-    message: `도장 수련: 골드 +${manaGain} · EXP +15 · 수련 ${dojoDrills}회${
-      leveled.levelsGained > 0
-        ? ` · 소환사 Lv.${nextActive.level}`
-        : ""
-    }${missionNote}`,
+    message: `진문 수련: 진문석 +${jinmunGain} · 골드 +${manaGain} · ${nextDrillsToday}/${DOJO_DAILY_LIMIT}${
+      leveled.levelsGained > 0 ? ` · 소환사 Lv.${nextActive.level}` : ""
+    }`,
     unlockedBuildingIds: leveled.unlockedBuildingIds,
+  };
+}
+
+export function runBuyCircleInscription(
+  save: PlayerSave,
+  inscriptionId: CircleInscriptionId,
+): LoopStepResult {
+  const def = getCircleInscription(inscriptionId);
+  if (!def) return { save, message: `진문 각인 없음: ${inscriptionId}` };
+  let island = syncBuildingUnlocks(tickProduction(save.island));
+  if (
+    !island.buildings.some((b) => b.id === "practice_dojo") &&
+    island.summonerLevel < 8
+  ) {
+    return {
+      save: { ...save, island },
+      message: "진문 수련장 해금 필요 (소환사 Lv.8)",
+    };
+  }
+  const cur = save.circleInscriptions?.[inscriptionId] ?? 0;
+  if (cur >= def.maxLevel) {
+    return { save, message: `${def.nameKo} 이미 최대 Lv.${def.maxLevel}` };
+  }
+  const cost = def.jinmunCostPerLevel;
+  if ((save.jinmunStones ?? 0) < cost) {
+    return {
+      save,
+      message: `진문석 부족 (필요 ${cost}, 보유 ${save.jinmunStones ?? 0})`,
+    };
+  }
+  const nextLv = cur + 1;
+  const circleInscriptions = {
+    ...(save.circleInscriptions ?? {}),
+    [inscriptionId]: nextLv,
+  };
+  return {
+    save: {
+      ...save,
+      island,
+      jinmunStones: (save.jinmunStones ?? 0) - cost,
+      circleInscriptions,
+    },
+    message: `진문 각인: ${def.nameKo} Lv.${nextLv} (−진문석 ${cost}) · ${def.effectKo}`,
   };
 }
 
@@ -2325,7 +2616,7 @@ export function runSummon(
 }
 
 /**
- * Enhance at 강화진 — spend mana, +1 level (up to the current grade cap).
+ * Enhance on the monster screen — spend mana, +1 level (up to the current grade cap).
  * Like Summoners War power-up: also randomly levels one non-max skill.
  */
 export function runEnhance(
@@ -2563,7 +2854,7 @@ export function runFeedSameMonster(
 }
 
 /**
- * Evolve at 강화진 — raise evolve stage (cap MAX_EVOLVE).
+ * Evolve on the monster screen — raise evolve stage (cap MAX_EVOLVE).
  * Requires level gate + mana (+ crystal from 2nd evolve).
  */
 export function runEvolve(
@@ -2696,7 +2987,7 @@ export function runAwakenMonster(
 }
 
 /**
- * Skill-up at 강화진 — raise one of S1/S2/S3 (cap MAX_SKILL_LEVEL).
+ * Skill-up on the monster screen — raise one of S1/S2/S3 (cap MAX_SKILL_LEVEL).
  */
 export function runSkillUp(
   save: PlayerSave,
@@ -3158,35 +3449,48 @@ export function runBuyScroll(
   save: PlayerSave,
   count = 1,
   kind: ScrollKind = "normal",
+  now = Date.now(),
 ): LoopStepResult {
   const n = Math.max(1, Math.min(20, Math.floor(count)));
   const label = SCROLL_KIND_LABEL[kind];
-  if (kind === "mystic") {
-    const cost = SCROLL_MYSTIC_BUY_CRYSTAL_COST * n;
-    if (save.island.crystal < cost) {
+  const { sku, purchases } = catalogSkuForScrollBuy(kind, n);
+  let working = syncShopDay(save, now);
+
+  if (kind === "mystic" || kind === "premium") {
+    const unit =
+      kind === "mystic"
+        ? SCROLL_MYSTIC_BUY_CRYSTAL_COST
+        : SCROLL_PREMIUM_BUY_CRYSTAL_COST;
+    const cost = unit * n;
+    if (working.island.crystal < cost) {
       return {
-        save,
-        message: `크리스탈 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.crystal)})`,
+        save: working,
+        message: `크리스탈 부족 (필요 ${cost}, 보유 ${Math.floor(working.island.crystal)})`,
       };
     }
-    const island = { ...save.island, crystal: save.island.crystal - cost };
-    const next = withScrollDelta({ ...save, island }, kind, n);
+    const quota = tryConsumeCatalogQuota(working, sku, purchases, now);
+    if (!quota.ok) return { save: quota.save, message: quota.message };
+    working = quota.save;
+    const island = { ...working.island, crystal: working.island.crystal - cost };
+    const next = withScrollDelta({ ...working, island }, kind, n);
     return {
       save: next,
       message: `상점: ${label} ${n}장 구매 (−크리스탈 ${cost}) · 보유 ${scrollCount(next, kind)}`,
     };
   }
-  const unit =
-    kind === "premium" ? SCROLL_PREMIUM_BUY_MANA_COST : SCROLL_BUY_MANA_COST;
-  const cost = unit * n;
-  if (save.island.mana < cost) {
+
+  const cost = SCROLL_BUY_MANA_COST * n;
+  if (working.island.mana < cost) {
     return {
-      save,
-      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
+      save: working,
+      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(working.island.mana)})`,
     };
   }
-  const island = { ...save.island, mana: save.island.mana - cost };
-  const next = withScrollDelta({ ...save, island }, kind, n);
+  const quota = tryConsumeCatalogQuota(working, sku, purchases, now);
+  if (!quota.ok) return { save: quota.save, message: quota.message };
+  working = quota.save;
+  const island = { ...working.island, mana: working.island.mana - cost };
+  const next = withScrollDelta({ ...working, island }, kind, n);
   return {
     save: next,
     message: `상점: ${label} ${n}장 구매 (−골드 ${cost}) · 보유 ${scrollCount(next, kind)}`,
@@ -3194,7 +3498,7 @@ export function runBuyScroll(
 }
 
 /**
- * Imprint (각인 스텁): re-roll main option on slots 2/4/6 for crystal.
+ * Imprint (각인): re-roll main option on slots 2/4/6 for 1 imprint stone.
  */
 export function runImprintSymbol(
   save: PlayerSave,
@@ -3211,10 +3515,11 @@ export function runImprintSymbol(
       message: `${describeSymbol(sym)} 슬롯${sym.slot}은 각인 불가 (2/4/6만)`,
     };
   }
-  if (save.island.crystal < SYMBOL_IMPRINT_CRYSTAL_COST) {
+  const stones = save.imprintStones ?? 0;
+  if (stones < SYMBOL_IMPRINT_STONE_COST) {
     return {
       save,
-      message: `크리스탈 부족 (필요 ${SYMBOL_IMPRINT_CRYSTAL_COST}, 보유 ${save.island.crystal})`,
+      message: `각인석 부족 (필요 ${SYMBOL_IMPRINT_STONE_COST}, 보유 ${stones})`,
     };
   }
   const next = imprintSymbolMain(sym, rng);
@@ -3222,13 +3527,13 @@ export function runImprintSymbol(
     return { save, message: "각인 실패" };
   }
   const symbols = save.symbols.map((s) => (s.id === sym.id ? next : s));
-  const island = {
-    ...save.island,
-    crystal: save.island.crystal - SYMBOL_IMPRINT_CRYSTAL_COST,
-  };
   return {
-    save: { ...save, island, symbols },
-    message: `각인: ${describeSymbol(sym)} → ${describeSymbol(next)} (−크리스탈 ${SYMBOL_IMPRINT_CRYSTAL_COST})`,
+    save: {
+      ...save,
+      symbols,
+      imprintStones: stones - SYMBOL_IMPRINT_STONE_COST,
+    },
+    message: `각인: ${describeSymbol(sym)} → ${describeSymbol(next)} (−각인석 ${SYMBOL_IMPRINT_STONE_COST})`,
   };
 }
 
@@ -3287,6 +3592,10 @@ export function runGrindSymbol(
 
 export function grindstoneCount(save: PlayerSave): number {
   return Math.max(0, Math.floor(save.grindstones ?? 0));
+}
+
+export function imprintStoneCount(save: PlayerSave): number {
+  return Math.max(0, Math.floor(save.imprintStones ?? 0));
 }
 
 /** Starter mailbox catalog (claim once). */
@@ -3406,11 +3715,13 @@ export function isDailyMissionComplete(
 ): boolean {
   const day = todayKey(now);
   if (missionId === DAILY_MISSION_WISH) {
-    return (save.island.lastWishDay ?? null) === day;
+    if ((save.island.lastWishDay ?? null) === day) return true;
+    return (
+      (save.island.wishUsesToday ?? 0) > 0 && save.island.wishDayKey === day
+    );
   }
   if (missionId === DAILY_MISSION_DOJO) {
-    const drills = save.dojoDrills ?? 0;
-    return drills > 0 && drills % 3 === 0;
+    return dojoDayState(save, now).drillsToday > 0;
   }
   if (missionId === DAILY_MISSION_COLLECT) {
     const pond = save.island.buildings.find((b) => b.id === "mana_pond");
@@ -3766,6 +4077,7 @@ export function createStageBattle(
     }),
   );
 
+  const ins = circleInscriptionBuffFromLevels(save?.circleInscriptions ?? {});
   return new Battle({
     boardSize: stage.boardSize,
     units: [...allyUnits, ...enemyUnits],
@@ -3777,6 +4089,7 @@ export function createStageBattle(
       treeIds,
       allyMagic,
       activeEl,
+      ins.startManaFlat,
     ),
     enemySummoner: buildSummonerState(
       "e-sum",
@@ -3788,6 +4101,8 @@ export function createStageBattle(
       enemyEl,
     ),
     powerGapAmplifyCap: powerGapCap,
+    inscriptionAmplifyCapAdd: ins.amplifyCapAdd,
+    inscriptionItemSpawnBonus: ins.itemSpawnBonus,
     totalWaves,
     modules,
     rng: opts?.rng,

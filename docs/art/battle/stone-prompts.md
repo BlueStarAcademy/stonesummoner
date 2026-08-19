@@ -8,31 +8,34 @@
 ## Spec
 
 - **Size:** 256×256 (source may be larger then downscale)
-- **Silhouette:** slightly oval “go stone” / magic gem (matches CSS `.magic-stone` oval)
+- **View:** 3/4 seated cabochon — camera ~40° above the floor (same as the tilted battle board)
+- **Silhouette:** chunky round gem in a shallow metal dish; you see the dome top AND the front of the bezel
+- **Setting:** shallow circular metal dish; base near the bottom of the frame with a contact shadow
 - **Alpha:** outer matte punched; gem body opaque
-- **Readability:** strong specular highlight + glowing elemental core; must read at ~28–40px on mobile
+- **Readability:** strong specular on the dome + glowing elemental core; must read at ~28–40px on the tilted board
 - **Style:** Summoners War / dark-fantasy mobile RPG painted icon
-- **No:** characters, UI, text, watermark, square plate frame
+- **No:** characters, UI, text, watermark, square plate frame, flat coin/medallion, top-down orthographic disc, upright egg, gold pedestal stand
 
 ## Master prompt
 
 ```
-Premium Com2uS Summoners War style magic go-stone gem icon,
-slightly oval polished magical stone, glowing elemental core,
-hand-painted 2D mobile RPG inventory-quality icon,
-centered on dark charcoal background for matte punch,
-square composition, no text, no watermark, no UI chrome
+Camera 40 degrees above the ground looking slightly down at a tabletop game piece.
+A chunky round magic cabochon gem with real 3D thickness seated in a shallow circular metal dish.
+You see the curved dome TOP and the front wall of the bezel. Soft contact shadow under the base.
+Compact object filling 80% of the square. Pure black charcoal background for matte punch.
+Square composition, no floor, no magic circle, no text, no watermark, no UI chrome.
+FORBIDDEN: flat coin, medallion, top-down disc, upright egg, standing inventory relic, teardrop pedestal.
 ```
 
 ## Element accents
 
 | id | Accent |
 |----|--------|
-| fire | Ember orange / molten gold core, warm corona |
-| water | Deep sapphire / teal core, cool ripples |
-| wind | Jade / lime-green core, airy spark trails |
-| light | Radiant white-gold core, holy soft bloom |
-| dark | Violet / abyss purple core, shadow rim |
+| fire | Ember orange / molten gold core, warm bronze bezel |
+| water | Deep sapphire / teal core, cool silver bezel |
+| wind | Jade / lime-green core, vine-gold bezel |
+| light | Radiant white-gold core, holy white-gold bezel |
+| dark | Violet / abyss purple core, dark-bronze bezel |
 | enemy | Hostile amethyst / cold violet rival gem (no ally gold rim) |
 
 ## Client mapping
