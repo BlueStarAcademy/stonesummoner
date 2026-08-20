@@ -2407,6 +2407,18 @@
     "ko": "{n}/시간",
     "en": "{n}/hr"
   },
+  "ui.bldgUp.doneTitle": {
+    "ko": "레벨업 완료",
+    "en": "Upgrade complete"
+  },
+  "ui.bldgUp.doneBody": {
+    "ko": "{name}이(가) Lv.{level}이 되었습니다.",
+    "en": "{name} is now Lv.{level}."
+  },
+  "ui.bldgUp.doneOk": {
+    "ko": "확인",
+    "en": "OK"
+  },
   "ui.dojo.bonusNone": {
     "ko": "없음",
     "en": "None"
@@ -3598,6 +3610,42 @@
   "ui.glory.buffSummary": {
     "ko": "버프 합산",
     "en": "Buff summary"
+  },
+  "ui.glory.bldg.mana_fountain": {
+    "ko": "골드 분천",
+    "en": "Gold Fountain"
+  },
+  "ui.glory.bldg.ancient_sword": {
+    "ko": "고대의 검",
+    "en": "Ancient Sword"
+  },
+  "ui.glory.bldg.guardstone": {
+    "ko": "수호의 석",
+    "en": "Guardstone"
+  },
+  "ui.glory.bldg.crystal_altar": {
+    "ko": "수정 제단",
+    "en": "Crystal Altar"
+  },
+  "ui.glory.bldg.sky_totem": {
+    "ko": "하늘부족 토템",
+    "en": "Sky Tribe Totem"
+  },
+  "ui.glory.bldg.fire_sanctuary": {
+    "ko": "불의 성소",
+    "en": "Fire Sanctuary"
+  },
+  "ui.glory.bldg.water_sanctuary": {
+    "ko": "물의 성소",
+    "en": "Water Sanctuary"
+  },
+  "ui.glory.bldg.wind_sanctuary": {
+    "ko": "바람의 성소",
+    "en": "Wind Sanctuary"
+  },
+  "ui.glory.bldg.fairy_tree": {
+    "ko": "요정의 나무",
+    "en": "Fairy Tree"
   },
   "ui.fusion.recipes": {
     "ko": "조합식",

@@ -136,6 +136,8 @@ import {
   planFusionRecipe,
   type CircleInscriptionId,
   GLORY_BUILDINGS,
+  type GloryBuildingDef,
+  type GloryBuildingId,
   GUILD_RAID_STAGES,
   MAIN_QUEST_PIN_LAYOUT,
   MAIN_QUEST_STAGES,
@@ -1529,6 +1531,9 @@ let buildingInfoId: string | null = null;
 /** Soft confirm sheet for pond / crystal-mine level-up. */
 let buildingUpgradeId: "mana_pond" | "crystal_mine" | null = null;
 let buildingUpgradeModalAbort: AbortController | null = null;
+/** Frozen before/after preview while the upgrade-complete confirm is showing. */
+let buildingUpgradeDonePreview: ReturnType<typeof buildingUpgradePreview> | null =
+  null;
 /** Soft confirm sheet for circle inscriptions in the dojo. */
 let circleInscConfirmId: CircleInscriptionId | null = null;
 let circleInscUpgradeModalAbort: AbortController | null = null;
@@ -2077,8 +2082,17 @@ function buildingUpgradeConfirmBtnHtml(
 function renderBuildingUpgradeBody(
   preview: ReturnType<typeof buildingUpgradePreview>,
 ): string {
+  const done = buildingUpgradeDonePreview != null;
   const rateFmt = (n: number) =>
     escapeHtml(t("ui.bldgUp.perHour", { n: fmtBuildingProdRate(n) }));
+  const doneNote = done
+    ? `<p class="bldg-up-done-note">${escapeHtml(
+        t("ui.bldgUp.doneBody", { name: preview.title, level: preview.nextLv }),
+      )}</p>`
+    : "";
+  const foot = done
+    ? `<button type="button" class="auth-btn-primary full" id="btn-bldg-up-ok">${escapeHtml(t("ui.bldgUp.doneOk"))}</button>`
+    : buildingUpgradeConfirmBtnHtml(preview);
   return `<div class="bldg-up-body" id="bldg-up-body">
     <div class="bldg-up-hero">
       <div class="bldg-up-art" aria-hidden="true">
@@ -2091,6 +2105,7 @@ function renderBuildingUpgradeBody(
         )}</span>
       </div>
     </div>
+    ${doneNote}
     <div class="bldg-up-stats" role="list">
       ${buildingUpgradeCompareRowHtml({
         label: t("ui.bldgUp.rate"),
@@ -2108,30 +2123,68 @@ function renderBuildingUpgradeBody(
         delta: preview.capNext - preview.capNow,
       })}
     </div>
-    <div class="bldg-up-foot" id="bldg-up-foot">${buildingUpgradeConfirmBtnHtml(preview)}</div>
+    <div class="bldg-up-foot" id="bldg-up-foot">${foot}</div>
   </div>`;
 }
 
 function renderBuildingUpgradeModal(): string {
   if (!buildingUpgradeId) return "";
-  const preview = buildingUpgradePreview(buildingUpgradeId);
+  const preview =
+    buildingUpgradeDonePreview ?? buildingUpgradePreview(buildingUpgradeId);
+  const title = buildingUpgradeDonePreview
+    ? t("ui.bldgUp.doneTitle")
+    : t("ui.bldgUp.title");
   return `<div class="settings-layer bldg-up-layer" id="bldg-up-layer" aria-hidden="false">
     <button type="button" class="settings-backdrop" id="btn-bldg-up-close" aria-label="${escapeHtml(t("ui.bldgUp.close"))}"></button>
     <div class="settings-sheet bldg-up-sheet" role="dialog" aria-modal="true" aria-labelledby="bldg-up-title">
       <div class="settings-sheet-handle" aria-hidden="true"></div>
       ${modalCloseX(t("ui.bldgUp.close"), "btn-bldg-up-close")}
-      <h2 class="settings-title" id="bldg-up-title">${escapeHtml(t("ui.bldgUp.title"))}</h2>
+      <h2 class="settings-title" id="bldg-up-title">${escapeHtml(title)}</h2>
       ${renderBuildingUpgradeBody(preview)}
     </div>
   </div>`;
 }
 
 function closeBuildingUpgradeSoft(): void {
-  if (!buildingUpgradeId && !app.querySelector("#bldg-up-layer")) return;
+  if (
+    !buildingUpgradeId &&
+    !buildingUpgradeDonePreview &&
+    !app.querySelector("#bldg-up-layer")
+  ) {
+    return;
+  }
   buildingUpgradeId = null;
+  buildingUpgradeDonePreview = null;
   buildingUpgradeModalAbort?.abort();
   buildingUpgradeModalAbort = null;
   softRemoveOverlay("bldg-up-layer");
+}
+
+function dismissBuildingUpgradeSoft(): void {
+  const refreshHub = buildingUpgradeDonePreview != null;
+  closeBuildingUpgradeSoft();
+  if (refreshHub) renderPreservingIsland();
+}
+
+function applyBuildingUpgradeDone(
+  preview: ReturnType<typeof buildingUpgradePreview>,
+): void {
+  buildingUpgradeDonePreview = preview;
+  const layer = app.querySelector<HTMLElement>("#bldg-up-layer");
+  if (!layer) {
+    const mounted = softMountOverlay(
+      "bldg-up-layer",
+      renderBuildingUpgradeModal(),
+    );
+    if (mounted) bindBuildingUpgradeModal();
+    return;
+  }
+  const title = layer.querySelector("#bldg-up-title");
+  if (title) title.textContent = t("ui.bldgUp.doneTitle");
+  const body = layer.querySelector("#bldg-up-body");
+  if (body) body.outerHTML = renderBuildingUpgradeBody(preview);
+  bindBuildingUpgradeModal();
+  replayModalPop(layer);
 }
 
 function bindBuildingUpgradeModal(): void {
@@ -2142,10 +2195,11 @@ function bindBuildingUpgradeModal(): void {
   buildingUpgradeModalAbort = ac;
   const opts: AddEventListenerOptions = { signal: ac.signal };
   const close = (): void => {
-    closeBuildingUpgradeSoft();
+    dismissBuildingUpgradeSoft();
   };
   layer.querySelector("#btn-bldg-up-close")?.addEventListener("click", close, opts);
   layer.querySelector(".settings-backdrop")?.addEventListener("click", close, opts);
+  layer.querySelector("#btn-bldg-up-ok")?.addEventListener("click", close, opts);
   layer
     .querySelector<HTMLButtonElement>("#btn-bldg-up-confirm")
     ?.addEventListener(
@@ -2153,12 +2207,17 @@ function bindBuildingUpgradeModal(): void {
       () => {
         const id = buildingUpgradeId;
         if (!id) return;
+        const preview = buildingUpgradePreview(id);
         const r = runUpgradeBuilding(save, id);
         save = r.save;
         persist();
-        flash(r.message);
-        closeBuildingUpgradeSoft();
-        renderPreservingIsland();
+        const lvNow =
+          save.island.buildings.find((b) => b.id === id)?.level ?? 0;
+        if (lvNow !== preview.nextLv) {
+          flash(r.message);
+          return;
+        }
+        applyBuildingUpgradeDone(preview);
       },
       opts,
     );
@@ -2170,6 +2229,7 @@ function openBuildingUpgradeSoft(id: ProdUpgradeBuildingId): void {
     flash(t("ui.cc24e86471"));
     return;
   }
+  buildingUpgradeDonePreview = null;
   buildingUpgradeId = id;
   closeBuildingInfoSoft();
   const layer = softMountOverlay("bldg-up-layer", renderBuildingUpgradeModal());
@@ -6306,6 +6366,7 @@ function renderFacilityLayerHtml(manaPct: number): string {
   const isBook = kind === "enhance" || kind === "summoner";
   const isDojo = kind === "dojo";
   const isFusion = kind === "fusion";
+  const isGlory = kind === "glory";
   const isWish = kind === "wish";
   const isSummon = kind === "summon";
   const headerClass = [
@@ -6313,6 +6374,7 @@ function renderFacilityLayerHtml(manaPct: number): string {
     isBook ? "facility-modal-header--book" : "",
     isDojo ? "facility-modal-header--dojo" : "",
     isFusion ? "facility-modal-header--fusion" : "",
+    isGlory ? "facility-modal-header--glory" : "",
     isWish ? "facility-modal-header--wish" : "",
     isSummon ? "facility-modal-header--summon" : "",
   ]
@@ -6324,6 +6386,11 @@ function renderFacilityLayerHtml(manaPct: number): string {
       ? `<div class="facility-modal-res" title="${escapeHtml(`${t("res.jinmun")} — ${t("res.jinmunHint")}`)}">
           <img class="res-ico" src="/art/ui/res/jinmun.svg" width="18" height="18" alt="" draggable="false" />
           <strong id="dojo-jinmun-count">${fmtRes(save.jinmunStones ?? 0)}</strong>
+        </div>`
+      : isGlory
+        ? `<div class="facility-modal-res facility-modal-res--glory" title="${escapeHtml(t("res.glory"))}">
+          <img class="res-ico" src="/art/ui/res/glory.svg" width="18" height="18" alt="" draggable="false" />
+          <strong id="glory-points-count">${fmtRes(save.gloryPoints ?? 0)}</strong>
         </div>`
       : isFusion
         ? `<div class="facility-modal-res facility-modal-res--gold" title="${escapeHtml(t("ui.dc78e6a251"))}">
@@ -13939,6 +14006,8 @@ function syncHudResources(): void {
   if (gold) gold.textContent = fmtRes(save.island.mana);
   const crystal = app.querySelector<HTMLElement>(".res-item--crystal .res-val");
   if (crystal) crystal.textContent = fmtRes(save.island.crystal);
+  const gloryHud = app.querySelector<HTMLElement>(".res-item--glory .res-val");
+  if (gloryHud) gloryHud.textContent = fmtRes(save.gloryPoints ?? 0);
   app.querySelectorAll<HTMLElement>(".res-item--mats").forEach((item) => {
     const title = item.getAttribute("title") ?? "";
     const val = item.querySelector<HTMLElement>(".res-val");
@@ -14609,43 +14678,140 @@ function renderShopModal(): string {
 </div>`;
 }
 
-function renderGlory(): string {
+function gloryBldgName(id: GloryBuildingId): string {
+  switch (id) {
+    case "mana_fountain":
+      return t("ui.glory.bldg.mana_fountain");
+    case "ancient_sword":
+      return t("ui.glory.bldg.ancient_sword");
+    case "guardstone":
+      return t("ui.glory.bldg.guardstone");
+    case "crystal_altar":
+      return t("ui.glory.bldg.crystal_altar");
+    case "sky_totem":
+      return t("ui.glory.bldg.sky_totem");
+    case "fire_sanctuary":
+      return t("ui.glory.bldg.fire_sanctuary");
+    case "water_sanctuary":
+      return t("ui.glory.bldg.water_sanctuary");
+    case "wind_sanctuary":
+      return t("ui.glory.bldg.wind_sanctuary");
+    case "fairy_tree":
+      return t("ui.glory.bldg.fairy_tree");
+  }
+}
+
+function gloryBldgArt(id: GloryBuildingId): { src: string; fallback: string } {
+  switch (id) {
+    case "mana_fountain":
+      return { src: "/art/ui/res/gold.svg", fallback: "/art/ui/res/gold.svg" };
+    case "ancient_sword":
+      return { src: "/art/ui/skill/damage.webp", fallback: "/art/ui/skill/damage.svg" };
+    case "guardstone":
+      return { src: "/art/ui/skill/shield.webp", fallback: "/art/ui/skill/shield.svg" };
+    case "crystal_altar":
+      return { src: "/art/ui/skill/heal.webp", fallback: "/art/ui/skill/heal.svg" };
+    case "sky_totem":
+      return { src: "/art/ui/element/light.webp", fallback: "/art/ui/element/light.svg" };
+    case "fire_sanctuary":
+      return { src: "/art/ui/element/fire.webp", fallback: "/art/ui/element/fire.svg" };
+    case "water_sanctuary":
+      return { src: "/art/ui/element/water.webp", fallback: "/art/ui/element/water.svg" };
+    case "wind_sanctuary":
+      return { src: "/art/ui/element/wind.webp", fallback: "/art/ui/element/wind.svg" };
+    case "fairy_tree":
+      return { src: "/art/hub/emblem-glory.svg", fallback: "/art/ui/res/gold.svg" };
+  }
+}
+
+function gloryPctLabel(frac: number): string {
+  const pct = Math.round(frac * 1000) / 10;
+  return `+${Number.isInteger(pct) ? String(pct) : pct.toFixed(1)}%`;
+}
+
+function gloryEffectText(g: GloryBuildingDef, lv: number): string {
+  const n = Math.max(0, lv);
+  if (g.atkPct) return `${t("ui.statAtk")} ${gloryPctLabel(g.atkPct * n)}`;
+  if (g.defPct) return `${t("ui.statDef")} ${gloryPctLabel(g.defPct * n)}`;
+  if (g.hpPct) return `${t("ui.statHp")} ${gloryPctLabel(g.hpPct * n)}`;
+  if (g.spdFlat) return `${t("ui.statSpd")} +${g.spdFlat * n}`;
+  if (g.manaProdPct) return `${t("ui.dc78e6a251")} ${gloryPctLabel(g.manaProdPct * n)}`;
+  return "";
+}
+
+function gloryBuffChip(
+  label: string,
+  src: string,
+  fallback: string,
+  value: string,
+): string {
+  return `<span class="glory-buff" title="${escapeHtml(label)}">
+    <img src="${src}" width="16" height="16" alt="" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />
+    <strong>${escapeHtml(value)}</strong>
+  </span>`;
+}
+
+function renderGloryListHtml(): string {
   const glory = save.gloryPoints ?? 0;
-  const levels = GLORY_BUILDINGS.reduce(
-    (n, g) => n + (save.gloryLevels?.[g.id] ?? 0),
-    0,
-  );
-  const maxTotal = GLORY_BUILDINGS.reduce((n, g) => n + g.maxLevel, 0);
+  return GLORY_BUILDINGS.map((g) => {
+    const lv = save.gloryLevels?.[g.id] ?? 0;
+    const maxed = lv >= g.maxLevel;
+    const canBuy = !maxed && glory >= g.gloryCostPerLevel;
+    const pct = g.maxLevel > 0 ? Math.round((lv / g.maxLevel) * 100) : 0;
+    const art = gloryBldgArt(g.id);
+    const now = gloryEffectText(g, lv);
+    const next = maxed ? "MAX" : gloryEffectText(g, lv + 1);
+    return `<button type="button" class="glory-bldg${maxed ? " is-maxed" : ""}${!canBuy && !maxed ? " is-locked" : ""}" data-glory="${g.id}" ${maxed ? "disabled" : ""}>
+      <span class="glory-bldg-seal" aria-hidden="true" style="--glory-pct:${pct}">
+        <img class="glory-bldg-seal-ring-art" src="/art/ui/symbol/circle-frame.svg" width="56" height="56" alt="" draggable="false" />
+        <span class="glory-bldg-seal-ring"></span>
+        <img class="glory-bldg-seal-art" src="${art.src}" width="28" height="28" alt="" draggable="false" onerror="this.onerror=null;this.src='${art.fallback}'" />
+        <span class="glory-bldg-lv">${lv}</span>
+      </span>
+      <span class="glory-bldg-body">
+        <span class="glory-bldg-head">
+          <strong class="glory-bldg-name">${escapeHtml(gloryBldgName(g.id))}</strong>
+        </span>
+        <span class="glory-bldg-delta">
+          <strong>${escapeHtml(now)}</strong>
+          <span aria-hidden="true">${ARROW_RIGHT}</span>
+          <em>${escapeHtml(next)}</em>
+        </span>
+        <span class="glory-bldg-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${g.maxLevel}" aria-valuenow="${lv}">
+          <span style="width:${pct}%"></span>
+        </span>
+      </span>
+      <span class="glory-bldg-cost">
+        ${
+          maxed
+            ? `<span class="glory-bldg-max">MAX</span>`
+            : `<span class="res-cost-chip" title="${escapeHtml(t("res.glory"))}"><img class="res-ico" src="/art/ui/res/glory.svg" width="16" height="16" alt="" draggable="false" /><strong>${g.gloryCostPerLevel}</strong></span>`
+        }
+      </span>
+    </button>`;
+  }).join("");
+}
+
+function renderGlory(): string {
   const buff = gloryBuffFromLevels(save.gloryLevels ?? {});
-  const buffLine = `${t("ui.glory.buffSummary")}: ATK +${Math.round(buff.atkPct * 100)}% · DEF +${Math.round(buff.defPct * 100)}% · HP +${Math.round(buff.hpPct * 100)}% · SPD +${buff.spdFlat} · ${t("ui.dc78e6a251")} +${Math.round(buff.manaProdPct * 100)}%`;
-  return hubShell(
-    t("ui.hubGlory"),
-    `${t('ui.14b961e9d3')} ${glory}`,
-    `<div class="hub-panel">
-    <div class="guild-panel glory-panel">
-        <p class="guild-panel-title">${t("ui.hubGlory")}</p>
-      <div class="guild-stats">
-        <div class="guild-stat"><span>${t('ui.e41479e637')}</span><strong>${glory}</strong></div>
-        <div class="guild-stat"><span>${t('ui.ad11613bb4')}</span><strong>${levels}/${maxTotal}</strong></div>
-        <div class="guild-stat"><span>${t('ui.29efb69b57')}</span><strong>${GLORY_BUILDINGS.length}</strong></div>
+  return `<div class="glory-sheet" id="glory-body-host">
+    <section class="glory-hero" aria-labelledby="facility-modal-title">
+      <div class="glory-hero-stage">
+        <div class="glory-hero-aura" aria-hidden="true"></div>
+        <img class="glory-hero-circle" src="/art/hub/summon-circle.webp" width="240" height="240" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/summon-circle.svg'" />
+        <img class="glory-hero-bldg" src="/art/hub/bldg-glory.webp" width="360" height="220" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/emblem-glory.svg'" />
+        <div class="glory-hero-veil" aria-hidden="true"></div>
       </div>
-      <p class="muted stages-note">${buffLine}</p>
-    </div>
-    <div class="stage-list">
-      ${GLORY_BUILDINGS.map((g) => {
-        const lv = save.gloryLevels?.[g.id] ?? 0;
-        const maxed = lv >= g.maxLevel;
-        return `<button type="button" class="stage-card${maxed ? " is-maxed" : ""}" data-glory="${g.id}" ${maxed ? "disabled" : ""}>
-          <span class="stage-card-mark" aria-hidden="true">${lv}</span>
-          <span class="stage-card-body">
-            <strong>${g.nameKo} Lv.${lv}/${g.maxLevel}</strong>
-            <small>${g.effectKo} ${MIDDOT} ${maxed ? "MAX" : `${MINUS}${t('ui.ba0c9e096f')} ${g.gloryCostPerLevel}`}</small>
-          </span>
-        </button>`;
-      }).join("")}
-    </div>
-  </div>`,
-  );
+      <div class="glory-buffs" aria-label="${escapeHtml(t("ui.glory.buffSummary"))}">
+        ${gloryBuffChip(t("ui.statAtk"), "/art/ui/skill/damage.webp", "/art/ui/skill/damage.svg", gloryPctLabel(buff.atkPct))}
+        ${gloryBuffChip(t("ui.statDef"), "/art/ui/skill/shield.webp", "/art/ui/skill/shield.svg", gloryPctLabel(buff.defPct))}
+        ${gloryBuffChip(t("ui.statHp"), "/art/ui/skill/heal.webp", "/art/ui/skill/heal.svg", gloryPctLabel(buff.hpPct))}
+        ${gloryBuffChip(t("ui.statSpd"), "/art/ui/element/wind.webp", "/art/ui/element/wind.svg", `+${buff.spdFlat}`)}
+        ${gloryBuffChip(t("ui.dc78e6a251"), "/art/ui/res/gold.svg", "/art/ui/res/gold.svg", gloryPctLabel(buff.manaProdPct))}
+      </div>
+    </section>
+    <div class="glory-list">${renderGloryListHtml()}</div>
+  </div>`;
 }
 
 function renderCaptureShop(): string {
@@ -14950,6 +15116,21 @@ function refreshDojoSoft(): boolean {
   return true;
 }
 
+function refreshGlorySoft(): boolean {
+  const host = app.querySelector<HTMLElement>("#glory-body-host");
+  if (!host) return false;
+  const next = document.createElement("div");
+  next.innerHTML = renderGlory();
+  const sheet = next.firstElementChild;
+  if (!sheet) return false;
+  host.replaceWith(sheet);
+  dematteArtInTree(sheet);
+  const points = app.querySelector<HTMLElement>("#glory-points-count");
+  if (points) points.textContent = fmtRes(save.gloryPoints ?? 0);
+  syncHudResources();
+  return true;
+}
+
 function bindFusionActions(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-fuse-a]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -15029,6 +15210,20 @@ function bindDojoActions(): void {
     btn.addEventListener("click", () => {
       const id = btn.dataset.circleInsc as CircleInscriptionId;
       openDojoInscUpgradeSoft(id);
+    });
+  });
+}
+
+function bindGloryActions(): void {
+  app.querySelectorAll<HTMLButtonElement>("[data-glory]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.glory as GloryBuildingId;
+      const r = runBuyGlory(save, id);
+      save = r.save;
+      persist();
+      flash(r.message);
+      if (!refreshGlorySoft()) render();
+      else bindGloryActions();
     });
   });
 }
@@ -17607,26 +17802,7 @@ function bind(): void {
 
   bindFusionActions();
   bindDojoActions();
-
-  app.querySelectorAll<HTMLButtonElement>("[data-glory]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.glory as
-        | "mana_fountain"
-        | "ancient_sword"
-        | "guardstone"
-        | "crystal_altar"
-        | "sky_totem"
-        | "fire_sanctuary"
-        | "water_sanctuary"
-        | "wind_sanctuary"
-        | "fairy_tree";
-      const r = runBuyGlory(save, id);
-      save = r.save;
-      persist();
-      flash(r.message);
-      render();
-    });
-  });
+  bindGloryActions();
 
   app.querySelector("#btn-pond-collect")?.addEventListener("click", (ev) => {
     const origin = (ev.currentTarget as HTMLElement).getBoundingClientRect();
