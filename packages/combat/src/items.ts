@@ -53,6 +53,19 @@ export function itemDef(id: BoardItemId): BoardItemDef {
   return BOARD_ITEMS.find((i) => i.id === id)!;
 }
 
+/** Board-token pickup chip: crystal-coded items vs gold-coded items. */
+export function tokenBoardResource(id: BoardItemId): "gold" | "crystal" {
+  if (
+    id === "shield_core" ||
+    id === "capture_magnet" ||
+    id === "element_ward" ||
+    id === "transform_dust"
+  ) {
+    return "crystal";
+  }
+  return "gold";
+}
+
 /** Base chance to spawn a token after a stone summon (before phase bonus). */
 export const ITEM_SPAWN_CHANCE = 0.28;
 

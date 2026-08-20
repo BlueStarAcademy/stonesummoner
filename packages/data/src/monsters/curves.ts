@@ -1,22 +1,25 @@
 import type { MonsterRole, Stats } from "./types.js";
 
-/** Base combat stats by natural stars + role bias (Phase 2 curves). */
+/**
+ * Lv1 bases aligned to Summoners War, so SW-scale symbol flats (HP+ 2448)
+ * stay meaningful. Level/evolve multipliers in roster.ts still apply on top.
+ */
 export function baseStatsFor(stars: number, role: MonsterRole): Stats {
   const s = Math.max(1, Math.min(5, stars));
   const tier = {
-    1: { hp: 220, atk: 85, def: 28, spd: 96 },
-    2: { hp: 250, atk: 100, def: 32, spd: 98 },
-    3: { hp: 290, atk: 118, def: 36, spd: 100 },
-    4: { hp: 330, atk: 138, def: 42, spd: 102 },
-    5: { hp: 380, atk: 160, def: 48, spd: 104 },
+    1: { hp: 3000, atk: 155, def: 140, spd: 96 },
+    2: { hp: 3400, atk: 180, def: 160, spd: 98 },
+    3: { hp: 4000, atk: 210, def: 180, spd: 100 },
+    4: { hp: 4600, atk: 250, def: 210, spd: 102 },
+    5: { hp: 5300, atk: 290, def: 240, spd: 104 },
   }[s as 1 | 2 | 3 | 4 | 5]!;
 
   const bias: Record<MonsterRole, Partial<Stats>> = {
-    attacker: { atk: 18, hp: -20, critRate: 8, spd: 2 },
-    support: { atk: -35, hp: 40, def: 6, critRate: -5 },
-    tank: { atk: -25, hp: 55, def: 18, spd: -4, resistance: 10 },
-    debuffer: { atk: -5, accuracy: 20, spd: 3, critRate: 0 },
-    stonesage: { atk: -10, accuracy: 10, spd: 1, def: 4 },
+    attacker: { atk: 32, hp: -250, critRate: 8, spd: 2 },
+    support: { atk: -63, hp: 500, def: 30, critRate: -5 },
+    tank: { atk: -45, hp: 700, def: 90, spd: -4, resistance: 10 },
+    debuffer: { atk: -9, accuracy: 20, spd: 3, critRate: 0 },
+    stonesage: { atk: -18, accuracy: 10, spd: 1, def: 20 },
     capturer: { atk: 0, spd: 6, accuracy: 8, critRate: 5 },
   };
 

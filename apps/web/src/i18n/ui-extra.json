@@ -231,6 +231,10 @@
     "ko": "모두",
     "en": "All"
   },
+  "ui.battleSkip": {
+    "ko": "스킵",
+    "en": "Skip"
+  },
   "ui.boardMarkForbid": {
     "ko": "착수 금지",
     "en": "Cannot place"
@@ -1839,6 +1843,10 @@
     "ko": "수령 완료",
     "en": "Claimed"
   },
+  "mission.rewardTitle": {
+    "ko": "보상 획득",
+    "en": "Reward"
+  },
   "mailbox.badge": {
     "ko": "읽지 않은 우편 {n}",
     "en": "{n} unread mail"
@@ -2435,6 +2443,10 @@
     "ko": "확인",
     "en": "OK"
   },
+  "ui.bldgUp.needAccount": {
+    "ko": "계정 Lv.{n}",
+    "en": "Account Lv.{n}"
+  },
   "ui.dojo.bonusNone": {
     "ko": "없음",
     "en": "None"
@@ -2798,6 +2810,38 @@
   "ui.stagePrepChangeSummoner": {
     "ko": "소환사 변경",
     "en": "Change summoner"
+  },
+  "ui.starterSummoner.title": {
+    "ko": "소환사 선택",
+    "en": "Choose summoner"
+  },
+  "ui.starterSummoner.confirm": {
+    "ko": "선택",
+    "en": "Confirm"
+  },
+  "ui.summonerUnlock.title": {
+    "ko": "소환사 해금",
+    "en": "Unlock summoner"
+  },
+  "ui.summonerUnlock.confirm": {
+    "ko": "해금",
+    "en": "Unlock"
+  },
+  "ui.summonerUnlock.close": {
+    "ko": "닫기",
+    "en": "Close"
+  },
+  "summonerPicker.unlock": {
+    "ko": "해금",
+    "en": "Unlock"
+  },
+  "summonerPicker.needLv": {
+    "ko": "Lv.{n}",
+    "en": "Lv.{n}"
+  },
+  "summonerPicker.unlocked": {
+    "ko": "{element} 소환사 해금",
+    "en": "Unlocked {element} Summoner"
   },
   "ui.stagePrepTapRoster": {
     "ko": "소환수를 탭해 출전 / 해제",
@@ -4154,5 +4198,57 @@
   "ui.profile.nickSetupConfirm": {
     "ko": "확인",
     "en": "Confirm"
+  },
+  "ui.stoneBuffAtk": {
+    "ko": "+공격력 {n}%",
+    "en": "+ATK {n}%"
+  },
+  "ui.stoneBuffDef": {
+    "ko": "+방어력 {n}%",
+    "en": "+DEF {n}%"
+  },
+  "ui.stoneBuffSpd": {
+    "ko": "+속도 {n}%",
+    "en": "+SPD {n}%"
+  },
+  "ui.stoneBuffCrit": {
+    "ko": "+치명타 {n}%",
+    "en": "+Crit {n}%"
+  },
+  "ui.stoneCapture": {
+    "ko": "+피해 {n}%",
+    "en": "+DMG {n}%"
+  },
+  "ui.stoneMana": {
+    "ko": "+{n}",
+    "en": "+{n}"
+  },
+  "ui.stoneVictory": {
+    "ko": "+{n}",
+    "en": "+{n}"
+  },
+  "ui.guild.checkIn": {
+    "ko": "출석",
+    "en": "Check-in"
+  },
+  "ui.guild.rename": {
+    "ko": "개명",
+    "en": "Rename"
+  },
+  "ui.guild.board": {
+    "ko": "기여 순위",
+    "en": "Rankings"
+  },
+  "ui.guild.unjoined": {
+    "ko": "미가입",
+    "en": "No guild"
+  },
+  "ui.guild.checkedIn": {
+    "ko": "출석 완료",
+    "en": "Checked in"
+  },
+  "ui.guild.save": {
+    "ko": "저장",
+    "en": "Save"
   }
 }

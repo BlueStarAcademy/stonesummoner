@@ -1,3 +1,4 @@
+import { SKILL_DMG_MUL } from "./combatTune.js";
 import type { Element } from "./monsters.js";
 
 export type MagicBranch = "A" | "B";
@@ -623,7 +624,13 @@ export function magicSkillPower(
   def: SummonerMagicSkillDef,
   rank: number,
 ): number {
-  return def.power + (def.rankScale ?? 0) * Math.max(0, Math.min(MAX_MAGIC_RANK, rank));
+  const raw =
+    def.power +
+    (def.rankScale ?? 0) * Math.max(0, Math.min(MAX_MAGIC_RANK, rank));
+  if (def.kind === "aoe_damage" || def.kind === "single_damage") {
+    return Math.round(raw * SKILL_DMG_MUL * 100) / 100;
+  }
+  return raw;
 }
 
 export type SummonerMagicProgress = {

@@ -1,3 +1,4 @@
+import { SKILL_DMG_MUL } from "../combatTune.js";
 import type { SkillDef } from "../skills.js";
 import type { Element, ElementKit, MonsterRole } from "./types.js";
 import { basicStrike, dmg, ELEMENTS } from "./types.js";
@@ -14,15 +15,20 @@ function scale(stars: number, base: number): number {
   return Math.round((base + (stars - 3) * 0.08) * 100) / 100;
 }
 
+/** Damage coefficients only — heals/shields stay HP-relative. */
+function dmgCoeff(stars: number, base: number): number {
+  return Math.round(scale(stars, base) * SKILL_DMG_MUL * 100) / 100;
+}
+
 function attackerKits(stars: number): Record<Element, ElementKit> {
   const out = {} as Record<Element, ElementKit>;
   for (const el of ELEMENTS) {
     const p = EL_PREFIX[el];
     const atkBias =
-      el === "fire" ? 12 : el === "light" ? 8 : el === "dark" ? 6 : 0;
+      el === "fire" ? 22 : el === "light" ? 14 : el === "dark" ? 11 : 0;
     const spdBias = el === "wind" ? 8 : 0;
     out[el] = {
-      skillCoeff: scale(stars, 1.15),
+      skillCoeff: dmgCoeff(stars, 1.15),
       baseStats: {
         atk: atkBias || undefined,
         spd: spdBias || undefined,
@@ -30,11 +36,11 @@ function attackerKits(stars: number): Record<Element, ElementKit> {
         accuracy: el === "dark" ? 10 : undefined,
       },
       skills: [
-        basicStrike(`${p.s1}타격`, scale(stars, 1.15)),
-        dmg(`${p.s2}일격`, 3, scale(stars, 1.7)),
+        basicStrike(`${p.s1}타격`, dmgCoeff(stars, 1.15)),
+        dmg(`${p.s2}일격`, 3, dmgCoeff(stars, 1.7)),
         el === "water" || el === "dark"
-          ? dmg(`${p.s3}일격`, 4, scale(stars, 1.85), "single", "s3")
-          : dmg(`${p.s3}난무`, 4, scale(stars, 1.2), "all_enemies", "s3"),
+          ? dmg(`${p.s3}일격`, 4, dmgCoeff(stars, 1.85), "single", "s3")
+          : dmg(`${p.s3}난무`, 4, dmgCoeff(stars, 1.2), "all_enemies", "s3"),
       ],
     };
   }
@@ -47,13 +53,13 @@ function supportKits(stars: number): Record<Element, ElementKit> {
     const p = EL_PREFIX[el];
     const heal = scale(stars, 0.26);
     out[el] = {
-      skillCoeff: scale(stars, 0.9),
+      skillCoeff: dmgCoeff(stars, 0.9),
       baseStats: {
-        hp: el === "water" || el === "light" ? 20 : undefined,
+        hp: el === "water" || el === "light" ? 200 : undefined,
         spd: el === "wind" ? 6 : undefined,
       },
       skills: [
-        basicStrike(`${p.s1}탄`, scale(stars, 0.9)),
+        basicStrike(`${p.s1}탄`, dmgCoeff(stars, 0.9)),
         {
           id: "s2",
           nameKo: `${p.s2}치유`,
@@ -83,17 +89,17 @@ function tankKits(stars: number): Record<Element, ElementKit> {
   for (const el of ELEMENTS) {
     const p = EL_PREFIX[el];
     out[el] = {
-      skillCoeff: scale(stars, 0.95),
+      skillCoeff: dmgCoeff(stars, 0.95),
       role: "tank",
-      baseStats: { def: el === "light" ? 8 : 4, hp: el === "water" ? 25 : 10 },
+      baseStats: { def: el === "light" ? 40 : 20, hp: el === "water" ? 250 : 100 },
       skills: [
-        basicStrike(`${p.s1}강타`, scale(stars, 0.95)),
+        basicStrike(`${p.s1}강타`, dmgCoeff(stars, 0.95)),
         {
           id: "s2",
           nameKo: `${p.s2}도발`,
           cooldown: 3,
           effects: [
-            { kind: "damage", target: "single", coeff: scale(stars, 1.2) },
+            { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.2) },
             { kind: "provoke", target: "single", turns: 1 },
           ],
         },
@@ -133,17 +139,17 @@ function debufferKits(stars: number): Record<Element, ElementKit> {
               ? ("accuracy" as const)
               : ("def" as const);
     out[el] = {
-      skillCoeff: scale(stars, 1.05),
+      skillCoeff: dmgCoeff(stars, 1.05),
       role: "debuffer",
       baseStats: { accuracy: 15 + stars * 2 },
       skills: [
-        basicStrike(`${p.s1}저주`, scale(stars, 1.0)),
+        basicStrike(`${p.s1}저주`, dmgCoeff(stars, 1.0)),
         {
           id: "s2",
           nameKo: `${p.s2}약화`,
           cooldown: 3,
           effects: [
-            { kind: "damage", target: "single", coeff: scale(stars, 1.35) },
+            { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.35) },
             {
               kind: "debuff",
               target: "single",
@@ -161,7 +167,7 @@ function debufferKits(stars: number): Record<Element, ElementKit> {
             {
               kind: "damage",
               target: "all_enemies",
-              coeff: scale(stars, 1.05),
+              coeff: dmgCoeff(stars, 1.05),
             },
             {
               kind: "debuff",
@@ -194,16 +200,16 @@ function stonesageKits(stars: number): Record<Element, ElementKit> {
   for (const el of ELEMENTS) {
     const p = EL_PREFIX[el];
     out[el] = {
-      skillCoeff: scale(stars, 1.0),
+      skillCoeff: dmgCoeff(stars, 1.0),
       role: "stonesage",
       skills: [
-        basicStrike(`${p.s1}각인`, scale(stars, 1.0)),
+        basicStrike(`${p.s1}각인`, dmgCoeff(stars, 1.0)),
         {
           id: "s2",
           nameKo: `${p.s2}착수`,
           cooldown: 3,
           effects: [
-            { kind: "damage", target: "single", coeff: scale(stars, 1.25) },
+            { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.25) },
             { kind: "mana", amount: 8 + stars * 2 },
           ],
         },
@@ -215,7 +221,7 @@ function stonesageKits(stars: number): Record<Element, ElementKit> {
             {
               kind: "damage",
               target: "all_enemies",
-              coeff: scale(stars, 1.1),
+              coeff: dmgCoeff(stars, 1.1),
             },
             { kind: "mana", amount: 12 + stars * 2 },
             {
@@ -238,17 +244,17 @@ function capturerKits(stars: number): Record<Element, ElementKit> {
   for (const el of ELEMENTS) {
     const p = EL_PREFIX[el];
     out[el] = {
-      skillCoeff: scale(stars, 1.1),
+      skillCoeff: dmgCoeff(stars, 1.1),
       role: "capturer",
       baseStats: { spd: 4 + stars },
       skills: [
-        basicStrike(`${p.s1}포획`, scale(stars, 1.1)),
+        basicStrike(`${p.s1}포획`, dmgCoeff(stars, 1.1)),
         {
           id: "s2",
           nameKo: `${p.s2}추적`,
           cooldown: 3,
           effects: [
-            { kind: "damage", target: "single", coeff: scale(stars, 1.5) },
+            { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.5) },
             { kind: "mana", amount: 10 + stars },
           ],
         },
@@ -257,7 +263,7 @@ function capturerKits(stars: number): Record<Element, ElementKit> {
           nameKo: `${p.s3}속박`,
           cooldown: 4,
           effects: [
-            { kind: "damage", target: "single", coeff: scale(stars, 1.6) },
+            { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.6) },
             {
               kind: "debuff",
               target: "single",

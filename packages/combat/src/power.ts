@@ -16,9 +16,10 @@ export function estimateCombatPower(
 /**
  * Amplify hard cap from ally−enemy power delta (before phase cap min).
  * Weak decks cannot wipe strong foes via board alone.
+ * Thresholds follow SW-scale HP (party power ~20k, not ~5k).
  */
 export function amplifyCapFromPowerDelta(delta: number): number {
-  if (delta < -250) return 1.1;
-  if (delta < -100) return 1.18;
+  if (delta < -1400) return 1.1;
+  if (delta < -550) return 1.18;
   return 1.25;
 }

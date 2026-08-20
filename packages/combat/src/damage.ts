@@ -14,8 +14,9 @@ export function elementMultiplier(attacker: Element, defender: Element): number 
   return 1;
 }
 
+/** Summoners War defense reduction. */
 export function defenseMitigation(def: number): number {
-  return 1000 / (1000 + Math.max(0, def));
+  return 1000 / (1140 + 3.5 * Math.max(0, def));
 }
 
 export interface DamageInput {

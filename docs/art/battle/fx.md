@@ -1,33 +1,40 @@
 # Battle skill VFX
 
-**Output:** `apps/web/public/art/battle/fx/` (painted sparks, optional texture)
+**Output:** `apps/web/public/art/battle/fx/` (painted sprites, black matte → dematte → WebP)
+
+Runtime: `playSkillVfx` in `apps/web/src/battle/skillVfx.ts`
+
+Hits play as **layered sprite animation** (flash → slash/burst → debris), not CSS circles or squares.
 
 | File | Use |
 |------|-----|
-| `fx-strike.webp` | Legacy attacker slash (kept as fallback texture) |
-| `fx-hit.webp` | Legacy target impact |
-| `fx-hit-crit.webp` | Legacy critical impact |
-| `fx-strike-ult.webp` | Legacy ult caster burst |
-
-Skill presentation is **CSS choreography**, not a single shared spark.
-
-Runtime: `playSkillVfx` in `apps/web/src/battle/skillVfx.ts`
+| `fx-slash-1/2/3.webp` | Melee slash sequence (contact → full arc → trail) |
+| `fx-slash-fire.webp` / `fx-slash-wind.webp` | Elemental slash mid-frame |
+| `fx-impact-1.webp` / `fx-impact-3.webp` | Hit flash + flying debris |
+| `fx-hit-{fire,water,wind,light,dark}.webp` | Elemental impact peak |
+| `fx-hit-crit.webp` | Critical overlay |
+| `fx-strike-ult.webp` | Ult overlay |
+| `fx-cast.webp` | Caster charge |
+| `fx-heal.webp` / `fx-shield.webp` / `fx-buff.webp` / `fx-hex.webp` | Support |
+| `fx-bolt.webp` / `fx-bolt-water.webp` / `fx-bolt-dark.webp` | Traveling projectile |
+| `fx-shockwave.webp` | AoE field |
+| `fx-strike.webp` / `fx-hit.webp` | Legacy fallback textures |
 
 ## Families
 
 | Family | When | Motion |
 |--------|------|--------|
-| melee | fire / wind single | Lunge + slash trails, then elemental burst on each target |
-| bolt | water / light / dark single | Cast charge, projectile travel, then impact |
-| nova | AoE / ult | Charge, field ring on the group, staggered per-target bursts |
-| support | heal / shield / buff / hex | Cast aura, then bloom / dome / sigil on targets |
+| melee | fire / wind single | Lunge + slash sequence, then elemental burst on target |
+| bolt | water / light / dark single | Cast, painted projectile travel, then impact sequence |
+| nova | AoE / ult | Charge, shockwave field, staggered per-target bursts |
+| support | heal / shield / buff / hex | Cast, then bloom / ward / runes / curse |
 
-## Impact presets (element × kind)
+## Process
 
-Fire burst/nova, ice shards, wind cuts/storm, light beam/burst, dark burst/void, heal orbs, shield dome, buff runes, curse hex.
+```
+node scripts/process-paint-icons.mjs battle-fx
+```
 
-## Rules
+Square painted FX: pure black matte → dematte → 512 WebP. No characters, text, UI, watermark.
 
-- Square painted FX: pure black matte → dematte → WebP
-- No characters, text, UI, watermark
-- Do not open skill FX via full `render()` — spawn/remove overlay nodes only
+Do not open skill FX via full `render()` — spawn/remove overlay nodes only.

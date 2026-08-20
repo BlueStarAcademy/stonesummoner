@@ -1,11 +1,23 @@
 export { Battle, makeUnit, pickAutoSkillIndex } from "./battle.js";
-export type { BattleConfig, SkillResult } from "./battle.js";
-export { computeDamage, clampAmplify, elementMultiplier } from "./damage.js";
+export type {
+  BattleConfig,
+  SkillResult,
+  StoneAura,
+  StoneReport,
+  StoneReportChip,
+  StoneReportChipKind,
+} from "./battle.js";
+export { computeDamage, clampAmplify, elementMultiplier, defenseMitigation } from "./damage.js";
 export {
   amplifyCapFromPowerDelta,
   estimateCombatPower,
 } from "./power.js";
-export { gainsForBoardEvent, classifyCapture, CAPTURE_BONUS_PER_STONE } from "./boardEvents.js";
+export {
+  gainsForBoardEvent,
+  classifyCapture,
+  CAPTURE_BONUS_PER_STONE,
+  rollSafePlaceProc,
+} from "./boardEvents.js";
 export { composeSummonerUlt } from "./summonerUlt.js";
 export type { ComposedSummonerUlt } from "./summonerUlt.js";
 export { detectShapeBonuses, starPoints } from "./shapes.js";
@@ -37,6 +49,7 @@ export {
   BOARD_ITEMS,
   itemDef,
   ITEM_SPAWN_CHANCE,
+  tokenBoardResource,
   weightedItemId,
 } from "./items.js";
 export type {

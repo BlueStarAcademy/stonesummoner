@@ -41,6 +41,16 @@ import {
   runAwakenSummoner,
   runAwakenMonster,
   setActiveSummoner,
+  chooseStarterSummoner,
+  unlockAdditionalSummoner,
+  withUnlockedSummoners,
+  isSummonerUnlocked,
+  unlockedSummonerList,
+  canUnlockAdditionalSummoner,
+  hasSpareSummonerUnlockSlot,
+  summonerUnlockSlotCount,
+  nextSummonerUnlockLevel,
+  SUMMONER_ELEMENTS,
   runUnlockSkillNode,
   awakenManaCost,
   awakenCrystalCost,
@@ -111,7 +121,14 @@ describe("game loop", () => {
 
   it("upgrades mana pond", () => {
     let save = createNewSave(0);
-    save = { ...save, island: { ...save.island, mana: 5000, energy: 50 } };
+    save = {
+      ...save,
+      island: { ...save.island, mana: 8000, energy: 50, summonerLevel: 3 },
+      summoners: {
+        ...save.summoners,
+        light: { ...save.summoners.light, level: 3 },
+      },
+    };
     const up = runUpgradeBuilding(save, "mana_pond");
     assert.match(up.message, /Lv\.2/);
     assert.equal(
@@ -124,6 +141,36 @@ describe("game loop", () => {
     if (r.reward?.victory) {
       assert.equal(r.save.island.crystal, beforeCrystal + (r.reward.crystal ?? 0));
     }
+  });
+
+  it("gates production upgrades on account level, not the active summoner", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      activeSummoner: "light",
+      island: { ...save.island, mana: 8000, summonerLevel: 1 },
+      summoners: {
+        ...save.summoners,
+        light: { ...save.summoners.light, level: 1 },
+        fire: { ...save.summoners.fire, level: 3 },
+      },
+    };
+    const up = runUpgradeBuilding(save, "mana_pond");
+    assert.equal(
+      up.save.island.buildings.find((b) => b.id === "mana_pond")!.level,
+      2,
+    );
+
+    const staleIsland = {
+      ...createNewSave(0),
+      island: { ...createNewSave(0).island, mana: 8000, summonerLevel: 10 },
+    };
+    const blocked = runUpgradeBuilding(staleIsland, "mana_pond");
+    assert.equal(
+      blocked.save.island.buildings.find((b) => b.id === "mana_pond")!.level,
+      1,
+    );
+    assert.match(blocked.message, /계정 Lv\.3/);
   });
 
   it("drops stage crystals rarely like Summoners War extras", () => {
@@ -1281,7 +1328,7 @@ describe("game loop", () => {
   });
 
   it("switches active summoner per element", () => {
-    let save = createNewSave(0);
+    let save = withUnlockedSummoners(createNewSave(0), [...SUMMONER_ELEMENTS]);
     save = {
       ...save,
       summoners: {
@@ -1301,6 +1348,46 @@ describe("game loop", () => {
     )!;
     assert.match(allySum.name, /화염/);
     assert.equal(allySum.element, "fire");
+  });
+
+  it("starts with one summoner and unlocks extras at user lv 5/10/15/20", () => {
+    const fresh = createNewSave(0);
+    assert.equal(fresh.starterSummonerPicked, false);
+    assert.deepEqual(unlockedSummonerList(fresh), ["light"]);
+    assert.equal(summonerUnlockSlotCount(1), 1);
+    assert.equal(summonerUnlockSlotCount(4), 1);
+    assert.equal(summonerUnlockSlotCount(5), 2);
+    assert.equal(summonerUnlockSlotCount(10), 3);
+    assert.equal(summonerUnlockSlotCount(15), 4);
+    assert.equal(summonerUnlockSlotCount(20), 5);
+    assert.equal(nextSummonerUnlockLevel(1), 5);
+    assert.equal(nextSummonerUnlockLevel(4), 20);
+    assert.equal(nextSummonerUnlockLevel(5), null);
+
+    const picked = chooseStarterSummoner(fresh, "fire");
+    assert.equal(picked.starterSummonerPicked, true);
+    assert.equal(picked.activeSummoner, "fire");
+    assert.deepEqual(unlockedSummonerList(picked), ["fire"]);
+    assert.equal(setActiveSummoner(picked, "water").activeSummoner, "fire");
+    assert.equal(canUnlockAdditionalSummoner(picked, "water"), false);
+    assert.equal(hasSpareSummonerUnlockSlot(picked), false);
+
+    const at5 = {
+      ...picked,
+      summoners: {
+        ...picked.summoners,
+        fire: { ...picked.summoners.fire, level: 5 },
+      },
+    };
+    assert.equal(canUnlockAdditionalSummoner(at5, "water"), true);
+    const unlocked = unlockAdditionalSummoner(at5, "water");
+    assert.match(unlocked.message, /해금/);
+    assert.ok(isSummonerUnlocked(unlocked.save, "water"));
+    assert.equal(setActiveSummoner(unlocked.save, "water").activeSummoner, "water");
+    assert.equal(canUnlockAdditionalSummoner(unlocked.save, "wind"), false);
+
+    const blocked = unlockAdditionalSummoner(picked, "water");
+    assert.match(blocked.message, /불가/);
   });
 
   it("unlocks summoner skill tree nodes with gates", () => {
@@ -1389,7 +1476,8 @@ describe("game loop", () => {
     assert.equal(blocked.save.gearBag?.length, 1);
     assert.equal(blocked.save.gear.weapon?.id, save.gear.weapon?.id);
 
-    save = setActiveSummoner(blocked.save, "fire");
+    save = withUnlockedSummoners(blocked.save, ["light", "fire"]);
+    save = setActiveSummoner(save, "fire");
     const ok = runEquipGearBag(save, 0);
     assert.match(ok.message, /장착/);
     assert.equal(ok.save.gear.weapon?.id, "bag_fire_wpn");
@@ -1405,6 +1493,7 @@ describe("game loop", () => {
     });
     assert.equal(save.gear.weapon?.enhance, 3);
 
+    save = withUnlockedSummoners(save, ["light", "water"]);
     save = setActiveSummoner(save, "water");
     assert.equal(save.activeSummoner, "water");
     assert.equal(save.gear.weapon, null);
@@ -1726,6 +1815,27 @@ describe("game loop", () => {
     );
     assert.ok(cleared);
     assert.equal(cleared!.onboardRite, null);
+  });
+
+  it("migrateSave unlocks all summoners for legacy saves", () => {
+    const base = createNewSave(0);
+    const { unlockedSummoners, starterSummonerPicked, ...legacy } = base;
+    const round = migrateSave(JSON.parse(JSON.stringify(legacy)));
+    assert.ok(round);
+    assert.deepEqual(round!.unlockedSummoners, [...SUMMONER_ELEMENTS]);
+    assert.equal(round!.starterSummonerPicked, true);
+    const kept = migrateSave(
+      JSON.parse(
+        JSON.stringify({
+          ...base,
+          unlockedSummoners: ["fire"],
+          starterSummonerPicked: false,
+          activeSummoner: "fire",
+        }),
+      ),
+    );
+    assert.deepEqual(kept!.unlockedSummoners, ["fire"]);
+    assert.equal(kept!.starterSummonerPicked, false);
   });
 
   it("saves summoner magic loadout with a party preset", () => {

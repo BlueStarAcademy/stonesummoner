@@ -12,7 +12,9 @@ import {
   createSummonerRoster,
   MAX_SUMMONER_AWAKEN,
   normalizePartyPresets,
+  normalizeUnlockedSummoners,
   RAID_BOSS_MAX_HP,
+  SUMMONER_ELEMENTS,
   SYMBOL_BAG_BASE_SLOTS,
   SYMBOL_BAG_MAX_SLOTS,
   type OnboardRiteSave,
@@ -336,6 +338,13 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     onboardRite: normalizeOnboardRite(p.onboardRite),
     activeSummoner,
     summoners,
+    unlockedSummoners: Array.isArray(p.unlockedSummoners)
+      ? normalizeUnlockedSummoners(p.unlockedSummoners, [activeSummoner])
+      : [...SUMMONER_ELEMENTS],
+    starterSummonerPicked:
+      typeof p.starterSummonerPicked === "boolean"
+        ? p.starterSummonerPicked
+        : !Array.isArray(p.unlockedSummoners),
   };
   const presets = normalizePartyPresets(mid, p.partyPresets);
   const activePartyPreset =

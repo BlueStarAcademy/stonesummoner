@@ -123,6 +123,62 @@ describe("Battle flow", () => {
     assert.equal(b.lastStoneTeam, "ally");
   });
 
+  it("places a stone on an enemy monster turn (not only summoners)", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("a-m1")!.atb = 100;
+    b.tickUntilReady();
+    assert.equal(b.autoStone(), true);
+    assert.equal(b.lastStoneTeam, "ally");
+    b.useSkill();
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("e-m1")!.atb = 100;
+    const enemyMon = b.tickUntilReady();
+    assert.equal(enemyMon?.id, "e-m1");
+    assert.equal(enemyMon?.kind, "monster");
+    assert.equal(b.phase, "await_stone");
+    assert.equal(b.needsStoneFor("enemy"), true);
+    assert.equal(b.autoStone(), true);
+    assert.equal(b.lastStoneTeam, "enemy");
+    assert.ok(b.lastStoneReport);
+    assert.equal(b.lastStoneReport?.team, "enemy");
+  });
+
+  it("keeps stone aura on a consecutive same-team monster turn", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.1,
+    });
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("a-m1")!.atb = 100;
+    b.tickUntilReady();
+    assert.equal(b.autoStone(), true);
+    const aura = b.stoneAura.ally;
+    assert.ok(aura);
+    assert.ok(
+      (aura.atkPct ?? 0) > 0 ||
+        (aura.defPct ?? 0) > 0 ||
+        (aura.spdPct ?? 0) > 0 ||
+        (aura.critRate ?? 0) > 0,
+    );
+    assert.ok((b.lastStoneReport?.chips.length ?? 0) >= 1);
+    b.useSkill();
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("a-sum")!.atb = 100;
+    b.tickUntilReady();
+    assert.equal(b.phase, "await_skill");
+    assert.equal(b.stoneAura.ally, aura);
+  });
+
   it("summoner skill when mana full hits all enemy summons", () => {
     const b = new Battle({
       boardSize: 5,

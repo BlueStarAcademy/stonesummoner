@@ -69,3 +69,12 @@ export function normalizeBattleStoneId(
   if (element && STONE_ELEMENTS.has(element)) return element as Element;
   return "enemy";
 }
+
+/** Ally stones follow the summoner element; enemy stones always use the rival skin. */
+export function battleStoneIdForTeam(
+  team: "ally" | "enemy",
+  allyElement?: string | null,
+): BattleStoneId {
+  if (team === "enemy") return "enemy";
+  return normalizeBattleStoneId(allyElement);
+}

@@ -88,7 +88,7 @@ export function spawnUnitVfx(
   window.setTimeout(() => img.remove(), Math.max(80, ms));
 }
 
-/** Board cell flash after place / capture. */
+/** Board cell flash after place / capture (pick overlay grid). */
 export function pulseBoardCell(
   root: ParentNode,
   x: number,
@@ -96,15 +96,71 @@ export function pulseBoardCell(
   className: string,
   ms: number,
 ): void {
-  const el = root.querySelector<HTMLElement>(
-    `.board-frame .board .cell[data-x="${x}"][data-y="${y}"]`,
-  );
+  const el =
+    root.querySelector<HTMLElement>(
+      `.stone-pick-board .cell[data-x="${x}"][data-y="${y}"]`,
+    ) ??
+    root.querySelector<HTMLElement>(
+      `.board-frame .board .cell[data-x="${x}"][data-y="${y}"]`,
+    );
   if (!el) return;
   // classList rejects space-separated tokens — split multi-class strings.
   const tokens = className.split(/\s+/).filter(Boolean);
   if (!tokens.length) return;
   el.classList.add(...tokens);
   window.setTimeout(() => el.classList.remove(...tokens), ms);
+}
+
+export type ArenaStoneFxKind = "place" | "capture" | "capture-large" | "shape";
+
+/** Flare a persistent map stone; place/capture also fire a beam at the rival. */
+export function pulseArenaStone(
+  root: ParentNode,
+  team: "ally" | "enemy",
+  kind: ArenaStoneFxKind,
+  ms: number,
+): void {
+  const stone = root.querySelector<HTMLElement>(
+    `.arena-stone[data-arena-stone="${team}"]`,
+  );
+  if (!stone) return;
+  const frame = stone.closest(".board-frame");
+  const tokens = ["is-flare"];
+  if (kind === "capture" || kind === "capture-large") tokens.push("is-capture");
+  if (kind === "capture-large") tokens.push("is-capture-large");
+  if (kind === "shape") tokens.push("is-shape");
+  stone.classList.add(...tokens);
+  const img = stone.querySelector<HTMLElement>(".magic-stone-img");
+  if (img) img.style.animationDuration = `${Math.max(40, ms)}ms`;
+  const beam =
+    kind === "shape"
+      ? null
+      : team === "ally"
+        ? "is-beam-from-ally"
+        : "is-beam-from-enemy";
+  const beamPower =
+    kind === "capture-large"
+      ? "is-beam-capture-large"
+      : kind === "capture"
+        ? "is-beam-capture"
+        : null;
+  if (beam) frame?.classList.add(beam);
+  if (beamPower) frame?.classList.add(beamPower);
+  const rivalTeam = team === "ally" ? "enemy" : "ally";
+  const rival =
+    kind === "capture" || kind === "capture-large"
+      ? root.querySelector<HTMLElement>(
+          `.arena-stone[data-arena-stone="${rivalTeam}"]`,
+        )
+      : null;
+  rival?.classList.add("is-struck");
+  window.setTimeout(() => {
+    stone.classList.remove(...tokens);
+    if (img) img.style.animationDuration = "";
+    if (beam) frame?.classList.remove(beam);
+    if (beamPower) frame?.classList.remove(beamPower);
+    rival?.classList.remove("is-struck");
+  }, ms);
 }
 
 /** Full-screen ult cut-in veil on the battle stage. */

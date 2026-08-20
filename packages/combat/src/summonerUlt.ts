@@ -1,3 +1,4 @@
+import { SKILL_DMG_MUL } from "stonesummoner-data";
 import type { SummonerState } from "./types.js";
 
 /** Composed full-mana summoner signature (진문개방 base + skill-tree modules). */
@@ -47,7 +48,7 @@ export function composeSummonerUlt(sm: SummonerState): ComposedSummonerUlt {
   const modules: string[] = ["base_open"];
   const powerBonus = sm.skillPowerBonus ?? 0;
 
-  let coeff = 1.8 * (1 + powerBonus);
+  let coeff = 1.8 * SKILL_DMG_MUL * (1 + powerBonus);
   let skillAmplifyBonus = 0.15;
   let amplifyDelta = 0;
   let manaRefundFrac = 0;

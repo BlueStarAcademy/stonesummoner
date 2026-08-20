@@ -142,6 +142,33 @@ export const SUMMONER_EXP_TO_NEXT: readonly number[] = [
 export const SUMMONER_EXP_PER_LEVEL = SUMMONER_EXP_TO_NEXT[0];
 export const MAX_BUILDING_LEVEL = 10;
 
+/**
+ * Account level required to raise a production building to this building level.
+ * Index is building level (1–10). Early steps match 3→2, 5→3, 8→4, 12→5;
+ * later gaps grow by +1 each tier.
+ */
+export const PROD_BUILDING_NEED_ACCOUNT: readonly number[] = [
+  0, 1, 3, 5, 8, 12, 17, 23, 30, 38, 47,
+];
+
+/** Account level required to reach this production-building level. */
+export function accountLevelForProdBuilding(buildingLevel: number): number {
+  const lv = Math.max(1, Math.min(MAX_BUILDING_LEVEL, Math.floor(buildingLevel)));
+  return PROD_BUILDING_NEED_ACCOUNT[lv] ?? 1;
+}
+
+/** Highest production-building level allowed at this account level. */
+export function maxProdBuildingLevelForAccount(accountLevel: number): number {
+  const user = Math.max(1, Math.floor(accountLevel));
+  let allowed = 1;
+  for (let b = 1; b <= MAX_BUILDING_LEVEL; b++) {
+    const need = PROD_BUILDING_NEED_ACCOUNT[b] ?? Number.POSITIVE_INFINITY;
+    if (user >= need) allowed = b;
+    else break;
+  }
+  return allowed;
+}
+
 /** EXP required to advance a summoner/account from `level` to `level + 1`. */
 export function summonerExpToNext(level: number): number {
   const lv = Math.max(1, Math.floor(level));
@@ -244,12 +271,14 @@ export function productionCrystalCap(def: BuildingDef, level: number): number {
 }
 
 export function buildingUpgradeManaCost(level: number): number {
-  return 400 + level * 350;
+  const lv = Math.max(1, Math.floor(level));
+  return 2500 * lv + 800 * lv * lv;
 }
 
 export function canUpgradeBuilding(
   island: IslandState,
   buildingId: BuildingId,
+  accountLevel = island.summonerLevel,
 ): { ok: true } | { ok: false; reason: string } {
   const inst = island.buildings.find((b) => b.id === buildingId);
   if (!inst) return { ok: false, reason: "건물 없음" };
@@ -259,6 +288,14 @@ export function canUpgradeBuilding(
   }
   if (inst.level >= MAX_BUILDING_LEVEL) {
     return { ok: false, reason: `최대 레벨(+${MAX_BUILDING_LEVEL})` };
+  }
+  const need = accountLevelForProdBuilding(inst.level + 1);
+  const userLv = Math.max(1, Math.floor(accountLevel));
+  if (userLv < need) {
+    return {
+      ok: false,
+      reason: `계정 Lv.${need}+ 필요 (현재 ${userLv})`,
+    };
   }
   const cost = buildingUpgradeManaCost(inst.level);
   if (island.mana < cost) {
@@ -273,8 +310,9 @@ export function canUpgradeBuilding(
 export function upgradeBuilding(
   island: IslandState,
   buildingId: BuildingId,
+  accountLevel = island.summonerLevel,
 ): { island: IslandState; message: string } {
-  const check = canUpgradeBuilding(island, buildingId);
+  const check = canUpgradeBuilding(island, buildingId, accountLevel);
   if (!check.ok) {
     return { island, message: check.reason };
   }

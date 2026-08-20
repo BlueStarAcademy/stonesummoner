@@ -86,6 +86,16 @@ describe("phase1 data", () => {
     }
   });
 
+  it("uses Summoners War-like HP/ATK and S1 coefficients", () => {
+    const attacker = getMonster("wolf_fighter_fire");
+    assert.ok(attacker);
+    assert.ok(attacker.baseStats.hp >= 3500);
+    assert.ok(attacker.baseStats.hp / attacker.baseStats.atk >= 10);
+    const s1 = attacker.skills[0]!.effects.find((e) => e.kind === "damage");
+    assert.ok(s1 && s1.kind === "damage");
+    assert.ok(s1.coeff >= 3.4 && s1.coeff <= 4.2);
+  });
+
   it("chapter1 boards progress 5 → 7", () => {
     assert.equal(CHAPTER1_STAGES.length, 7);
     assert.equal(getStage("garen_1_1")?.boardSize, 5);

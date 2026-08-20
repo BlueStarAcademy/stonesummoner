@@ -1,8 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { getMonster } from "stonesummoner-data";
 import {
   clampAmplify,
   computeDamage,
+  defenseMitigation,
   elementMultiplier,
 } from "./damage.js";
 
@@ -11,6 +13,12 @@ describe("damage", () => {
     assert.equal(elementMultiplier("fire", "wind"), 1.15);
     assert.equal(elementMultiplier("fire", "water"), 0.85);
     assert.equal(elementMultiplier("fire", "fire"), 1);
+  });
+
+  it("uses Summoners War defense mitigation", () => {
+    assert.ok(Math.abs(defenseMitigation(0) - 1000 / 1140) < 1e-9);
+    const mid = defenseMitigation(180);
+    assert.ok(mid > 0.52 && mid < 0.58);
   });
 
   it("scales with amplify", () => {
@@ -37,6 +45,25 @@ describe("damage", () => {
       rng: () => 0.5,
     });
     assert.ok(high.damage > low.damage);
+  });
+
+  it("takes several S1 hits to KO an even 3-star attacker", () => {
+    const mon = getMonster("wolf_fighter_fire")!;
+    const s1 = mon.skills[0]!.effects.find((e) => e.kind === "damage");
+    assert.ok(s1 && s1.kind === "damage");
+    const hit = computeDamage({
+      atk: mon.baseStats.atk,
+      skillCoeff: s1.coeff,
+      attackerElement: "fire",
+      defenderElement: "fire",
+      defenderDef: mon.baseStats.def,
+      amplify: 1,
+      critRate: 0,
+      critDmg: 50,
+      rng: () => 0.5,
+    });
+    const hitsToKill = mon.baseStats.hp / hit.damage;
+    assert.ok(hitsToKill >= 6 && hitsToKill <= 10, `hitsToKill=${hitsToKill}`);
   });
 
   it("clamps amplify", () => {

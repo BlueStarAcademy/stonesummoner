@@ -72,6 +72,7 @@ import {
   WEEKDAY_EVOLVE_MAT_DROP,
   WEEKDAY_SKILL_MAT_DROP,
   scenarioSymbolDropTable,
+  SKILL_DMG_MUL,
   getFusionRecipe,
   planFusionRecipe,
   pickArenaRival,
@@ -702,6 +703,9 @@ export function runLoadPartyPreset(
   const i = clampPartyPresetIndex(index);
   const presets = normalizePartyPresets(save, save.partyPresets);
   const preset = presets[i] ?? emptyPartyPreset();
+  if (!isSummonerUnlocked(save, preset.summoner)) {
+    return { save, message: "미해금 소환사" };
+  }
   const loadouts = {
     ...createEmptySummonerMagicLoadouts(),
     ...(save.summonerMagicLoadouts ?? {}),
@@ -827,6 +831,12 @@ export function accountSummonerLevel(
   );
 }
 
+/** Account level = highest elemental summoner level. */
+export function accountLevelOf(save: PlayerSave): number {
+  if (save.summoners) return accountSummonerLevel(save.summoners);
+  return Math.max(1, Math.floor(save.island.summonerLevel ?? 1));
+}
+
 export function getActiveSummoner(save: PlayerSave): ElementSummonerProfile {
   const el = save.activeSummoner ?? "light";
   return (
@@ -901,11 +911,139 @@ export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
   };
 }
 
+/** User-level gates for extra summoner slots: 1 at start, then +1 at 5/10/15/20. */
+export const SUMMONER_UNLOCK_LEVELS = [1, 5, 10, 15, 20] as const;
+
+export function summonerUnlockSlotCount(accountLevel: number): number {
+  const lv = Math.max(1, Math.floor(accountLevel));
+  let n = 1;
+  for (let i = 1; i < SUMMONER_UNLOCK_LEVELS.length; i++) {
+    if (lv >= SUMMONER_UNLOCK_LEVELS[i]!) n = i + 1;
+  }
+  return n;
+}
+
+/** Next user level that grants another summoner slot, or null when all 5 are open. */
+export function nextSummonerUnlockLevel(unlockedCount: number): number | null {
+  if (unlockedCount >= SUMMONER_ELEMENTS.length) return null;
+  return SUMMONER_UNLOCK_LEVELS[Math.max(0, unlockedCount)] ?? null;
+}
+
+export function normalizeUnlockedSummoners(
+  raw: unknown,
+  fallback: readonly SummonerElement[] = ["light"],
+): SummonerElement[] {
+  const seen = new Set<SummonerElement>();
+  const out: SummonerElement[] = [];
+  if (Array.isArray(raw)) {
+    for (const v of raw) {
+      if (!isSummonerElement(v) || seen.has(v)) continue;
+      seen.add(v);
+      out.push(v);
+    }
+  }
+  if (out.length > 0) return out;
+  for (const el of fallback) {
+    if (!isSummonerElement(el) || seen.has(el)) continue;
+    seen.add(el);
+    out.push(el);
+  }
+  return out.length > 0 ? out : ["light"];
+}
+
+export function unlockedSummonerList(save: PlayerSave): SummonerElement[] {
+  const active = isSummonerElement(save.activeSummoner)
+    ? save.activeSummoner
+    : "light";
+  return normalizeUnlockedSummoners(save.unlockedSummoners, [active]);
+}
+
+export function isSummonerUnlocked(
+  save: PlayerSave,
+  element: SummonerElement,
+): boolean {
+  return unlockedSummonerList(save).includes(element);
+}
+
+export function hasSpareSummonerUnlockSlot(save: PlayerSave): boolean {
+  return (
+    unlockedSummonerList(save).length <
+    summonerUnlockSlotCount(accountLevelOf(save))
+  );
+}
+
+export function canUnlockAdditionalSummoner(
+  save: PlayerSave,
+  element: SummonerElement,
+): boolean {
+  if (!isSummonerElement(element)) return false;
+  if (isSummonerUnlocked(save, element)) return false;
+  return hasSpareSummonerUnlockSlot(save);
+}
+
+export function withUnlockedSummoners(
+  save: PlayerSave,
+  elements: readonly SummonerElement[],
+): PlayerSave {
+  const list = normalizeUnlockedSummoners(elements, []);
+  const active = list.includes(save.activeSummoner as SummonerElement)
+    ? (save.activeSummoner as SummonerElement)
+    : (list[0] ?? "light");
+  return syncSummonerMirrors({
+    ...save,
+    unlockedSummoners: list,
+    starterSummonerPicked: true,
+    activeSummoner: active,
+  });
+}
+
+/** First-rite pick: replace the default starter with the chosen element. */
+export function chooseStarterSummoner(
+  save: PlayerSave,
+  element: SummonerElement,
+): PlayerSave {
+  if (!isSummonerElement(element)) return save;
+  const synced = syncSummonerMirrors(save);
+  const presets = normalizePartyPresets(
+    { ...synced, activeSummoner: element },
+    synced.partyPresets,
+  ).map((p, i) =>
+    i === 0
+      ? { ...p, summoner: element, party: [...(synced.party ?? [])] }
+      : { ...p, summoner: element },
+  );
+  return syncSummonerMirrors({
+    ...synced,
+    unlockedSummoners: [element],
+    starterSummonerPicked: true,
+    activeSummoner: element,
+    partyPresets: presets,
+  });
+}
+
+export function unlockAdditionalSummoner(
+  save: PlayerSave,
+  element: SummonerElement,
+): LoopStepResult {
+  if (!canUnlockAdditionalSummoner(save, element)) {
+    return { save, message: "소환사 해금 불가" };
+  }
+  const unlocked = [...unlockedSummonerList(save), element];
+  return {
+    save: syncSummonerMirrors({
+      ...save,
+      unlockedSummoners: unlocked,
+    }),
+    message: `${SUMMONER_ELEMENT_LABEL[element]} 소환사 해금`,
+  };
+}
+
 export function setActiveSummoner(
   save: PlayerSave,
   element: SummonerElement,
 ): PlayerSave {
   if (!SUMMONER_ELEMENTS.includes(element)) return save;
+  if (!isSummonerUnlocked(save, element)) return save;
   return syncSummonerMirrors({ ...save, activeSummoner: element });
 }
 
@@ -1003,6 +1141,10 @@ export interface PlayerSave {
   summoners: Record<SummonerElement, ElementSummonerProfile>;
   /** Currently selected summoner element. */
   activeSummoner: SummonerElement;
+  /** Elemental summoners the player has chosen / unlocked. */
+  unlockedSummoners: SummonerElement[];
+  /** True after the opening summoner pick (legacy saves migrate as true). */
+  starterSummonerPicked: boolean;
   /** Unlocked summoner skill-tree node ids (legacy Phase 1 passives). */
   skillTree: string[];
   /** Phase 2 per-element magic skill ranks + branch. */
@@ -1304,7 +1446,7 @@ function skillsForMonster(
       cooldown: Math.max(0, sk.cooldown - cdCut),
       effects: sk.effects.map((e) => {
         if (e.kind === "damage" || e.kind === "heal" || e.kind === "shield") {
-          return { ...e, coeff: e.coeff + evoBump + skBump };
+          return { ...e, coeff: e.coeff * (1 + evoBump + skBump) };
         }
         if (e.kind === "mana") {
           return { ...e, amount: Math.round(e.amount * (1 + skBump)) };
@@ -1360,7 +1502,9 @@ function unitFromOwned(
       accuracy: stats.accuracy,
       resistance: stats.resistance,
     },
-    skillCoeff: m.skillCoeff + (owned.evolve ?? 0) * 0.05 + (skillLevels[0]! - 1) * 0.08,
+    skillCoeff:
+      m.skillCoeff *
+      (1 + (owned.evolve ?? 0) * 0.05 + (skillLevels[0]! - 1) * 0.08),
     skills: skillsForMonster(m, owned.evolve ?? 0, skillLevels),
     stonePassive: m.stonePassiveId,
     startShieldPct: mods.startShieldPct || undefined,
@@ -1433,6 +1577,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     summonerAwaken: 0,
     summoners,
     activeSummoner: "light",
+    unlockedSummoners: ["light"],
+    starterSummonerPicked: false,
     skillTree: [],
     summonerMagic: createEmptySummonerMagic(),
     summonerMagicLoadouts: createEmptySummonerMagicLoadouts(),
@@ -1497,6 +1643,8 @@ export function createDemoSave(now = Date.now()): PlayerSave {
     grindstones: Math.max(save.grindstones ?? 0, 2),
     imprintStones: Math.max(save.imprintStones ?? 0, 1),
     summoners: createSummonerRoster({ level: 10, exp: 40 }),
+    unlockedSummoners: [...SUMMONER_ELEMENTS],
+    starterSummonerPicked: true,
     island: {
       ...save.island,
       mana: 5000,
@@ -1603,7 +1751,7 @@ export function runUpgradeBuilding(
   buildingId: BuildingId = "mana_pond",
 ): LoopStepResult {
   const island = tickProduction(save.island);
-  const r = upgradeBuilding(island, buildingId);
+  const r = upgradeBuilding(island, buildingId, accountLevelOf(save));
   return {
     save: { ...save, island: r.island },
     message: r.message,
@@ -2272,7 +2420,7 @@ export function runPracticeDojo(
       dojoDrillsToday: nextDrillsToday,
       jinmunStones: (save.jinmunStones ?? 0) + jinmunGain,
     },
-    message: `진문 수련: 진문석 +${jinmunGain} · 골드 +${manaGain} · ${nextDrillsToday}/${DOJO_DAILY_LIMIT}${
+    message: `진문 수련: 진문석 +${jinmunGain} · 골드 +${manaGain} · ${DOJO_DAILY_LIMIT - nextDrillsToday}/${DOJO_DAILY_LIMIT}${
       leveled.levelsGained > 0 ? ` · 소환사 Lv.${nextActive.level}` : ""
     }`,
     unlockedBuildingIds: leveled.unlockedBuildingIds,
@@ -4030,23 +4178,23 @@ export function createStageBattle(
     element: activeEl,
     stats: {
       hp:
-        500 +
-        lvl * 20 +
+        5000 +
+        lvl * 200 +
         (gear.shoes?.manaMaxBonus ?? 0) * 2 +
         robeHp +
-        awaken * 30,
-      atk: 85 + lvl * 3,
+        awaken * 300,
+      atk: 155 + lvl * 5,
       def:
-        42 +
+        210 +
         Math.floor(gear.shoes?.enhance ?? 0) +
         Math.floor(lvl / 2) +
         robeDef +
-        awaken * 3,
+        awaken * 15,
       spd: 98 + Math.floor(lvl / 5),
       critRate: 15,
       critDmg: 50,
     },
-    skillCoeff: 1,
+    skillCoeff: SKILL_DMG_MUL,
   });
 
   const banSet = new Set(
@@ -4082,14 +4230,14 @@ export function createStageBattle(
       kind: "summoner",
       element: "dark",
       stats: {
-        hp: 480 + diffBonus * 40,
-        atk: 80 + diffBonus * 8,
-        def: 42 + diffBonus * 4,
+        hp: 4800 + diffBonus * 400,
+        atk: 145 + diffBonus * 14,
+        def: 210 + diffBonus * 20,
         spd: 88,
         critRate: 12,
         critDmg: 50,
       },
-      skillCoeff: 1,
+      skillCoeff: SKILL_DMG_MUL,
     }),
     ...enemyMonsters,
   ];

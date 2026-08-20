@@ -20,8 +20,8 @@ describe("power / amplify cap", () => {
   });
 
   it("tightens amplify cap when underpowered", () => {
-    assert.equal(amplifyCapFromPowerDelta(-300), 1.1);
-    assert.equal(amplifyCapFromPowerDelta(-150), 1.18);
+    assert.equal(amplifyCapFromPowerDelta(-1600), 1.1);
+    assert.equal(amplifyCapFromPowerDelta(-800), 1.18);
     assert.equal(amplifyCapFromPowerDelta(0), 1.25);
   });
 });

@@ -39,6 +39,8 @@ FinalDamage = BaseDamage
 상징 2티어 열세 → Amplify 만점으로도 기대 승률 낮음.  
 상징 동등 → Amplify가 승패·클리어타임·안정성을 가름.
 
+동스펙 S1 기대 타수: **6~10회** (서머너즈워 시나리오 초반과 같은 호흡).
+
 ### 스탯 티어와 Amplify 상한 (권장)
 
 ```text
@@ -156,11 +158,10 @@ if ATB >= 100:
 
 ---
 
-## 7. 방어 경감 (초안)
+## 7. 방어 경감 (서머너즈워)
 
 ```text
-DefenseMitigation = 1000 / (1000 + DEF_effective)
-// 또는 SW식 공식에 맞춰 추후 교체
+DefenseMitigation = 1000 / (1140 + 3.5 × DEF_effective)
 ```
 
 ---

@@ -66,3 +66,21 @@ export function classifyCapture(capturedCount: number): BoardEventKind {
   if (capturedCount >= 1) return "capture_small";
   return "safe_place";
 }
+
+export type SafePlaceProcAxis = "atk" | "def" | "spd" | "critRate";
+
+export interface SafePlaceProc {
+  axis: SafePlaceProcAxis;
+  /** ATK/DEF/SPD as 0.05–0.12; critRate uses the same fraction (×100 when applied). */
+  amount: number;
+}
+
+/** Mild random combat buff on a normal (non-capture) stone. */
+export function rollSafePlaceProc(rng: () => number): SafePlaceProc {
+  const kindRoll = rng();
+  const mag = 0.05 + Math.floor(rng() * 8) * 0.01;
+  if (kindRoll < 0.4) return { axis: "atk", amount: mag };
+  if (kindRoll < 0.65) return { axis: "def", amount: mag };
+  if (kindRoll < 0.85) return { axis: "spd", amount: mag };
+  return { axis: "critRate", amount: mag };
+}

@@ -1,6 +1,6 @@
 /**
- * Skill-matched battle VFX — CSS choreography (cast → travel → impact).
- * Distinct presets per skill kind × element so hits are not one shared spark.
+ * Skill-matched battle VFX — painted sprite playback (flash → slash/burst → debris).
+ * Distinct art per skill kind × element; no CSS circles / squares.
  */
 
 import type { CombatElement, CombatSfxKind } from "../audio";
@@ -35,116 +35,67 @@ export type SkillVfxPreset =
 
 export type SkillVfxFamily = "melee" | "bolt" | "nova" | "support";
 
-const PRESET_PARTS: Record<SkillVfxPreset, readonly string[]> = {
-  slash: [
-    "sfx-slash",
-    "sfx-slash sfx-slash-b",
-    "sfx-core",
-    "sfx-spark sfx-p1",
-    "sfx-spark sfx-p2",
-    "sfx-spark sfx-p3",
-  ],
-  "fire-burst": [
-    "sfx-flare",
-    "sfx-core",
-    "sfx-ring",
-    "sfx-ember sfx-p1",
-    "sfx-ember sfx-p2",
-    "sfx-ember sfx-p3",
-    "sfx-ember sfx-p4",
-    "sfx-ember sfx-p5",
-  ],
-  "fire-nova": [
-    "sfx-ring",
-    "sfx-ring sfx-ring-b",
-    "sfx-flare",
-    "sfx-core",
-    "sfx-ember sfx-p1",
-    "sfx-ember sfx-p2",
-    "sfx-ember sfx-p3",
-    "sfx-ember sfx-p4",
-  ],
-  "ice-burst": [
-    "sfx-ring sfx-frost",
-    "sfx-core",
-    "sfx-shard sfx-p1",
-    "sfx-shard sfx-p2",
-    "sfx-shard sfx-p3",
-    "sfx-shard sfx-p4",
-    "sfx-shard sfx-p5",
-  ],
-  "ice-nova": [
-    "sfx-ring sfx-frost",
-    "sfx-ring sfx-ring-b sfx-frost",
-    "sfx-core",
-    "sfx-shard sfx-p1",
-    "sfx-shard sfx-p2",
-    "sfx-shard sfx-p3",
-    "sfx-crystal",
-  ],
-  "wind-cut": [
-    "sfx-slash sfx-wind",
-    "sfx-slash sfx-slash-b sfx-wind",
-    "sfx-slash sfx-slash-c sfx-wind",
-    "sfx-spark sfx-p1",
-    "sfx-spark sfx-p2",
-    "sfx-spark sfx-p3",
-  ],
-  "wind-storm": [
-    "sfx-swirl",
-    "sfx-ring",
-    "sfx-slash sfx-wind",
-    "sfx-slash sfx-slash-b sfx-wind",
-    "sfx-spark sfx-p1",
-    "sfx-spark sfx-p2",
-  ],
-  "light-beam": [
-    "sfx-beam",
-    "sfx-flare",
-    "sfx-core",
-    "sfx-ray sfx-p1",
-    "sfx-ray sfx-p2",
-    "sfx-ray sfx-p3",
-  ],
-  "light-burst": [
-    "sfx-flare",
-    "sfx-core",
-    "sfx-ring",
-    "sfx-ray sfx-p1",
-    "sfx-ray sfx-p2",
-    "sfx-ray sfx-p3",
-    "sfx-ray sfx-p4",
-  ],
-  "dark-burst": [
-    "sfx-core",
-    "sfx-wisp sfx-p1",
-    "sfx-wisp sfx-p2",
-    "sfx-wisp sfx-p3",
-    "sfx-wisp sfx-p4",
-    "sfx-ring",
-  ],
-  "dark-void": [
-    "sfx-swirl sfx-void",
-    "sfx-core",
-    "sfx-ring",
-    "sfx-wisp sfx-p1",
-    "sfx-wisp sfx-p2",
-    "sfx-wisp sfx-p3",
-  ],
-  heal: [
-    "sfx-ring sfx-soft",
-    "sfx-core sfx-soft",
-    "sfx-orb sfx-p1",
-    "sfx-orb sfx-p2",
-    "sfx-orb sfx-p3",
-    "sfx-orb sfx-p4",
-    "sfx-orb sfx-p5",
-  ],
-  shield: ["sfx-dome", "sfx-ring sfx-soft", "sfx-core sfx-soft"],
-  buff: ["sfx-rune", "sfx-ring sfx-soft", "sfx-core sfx-soft", "sfx-spark sfx-p1", "sfx-spark sfx-p2"],
-  hex: ["sfx-sigil", "sfx-ring", "sfx-wisp sfx-p1", "sfx-wisp sfx-p2", "sfx-wisp sfx-p3"],
-  cast: ["sfx-ring sfx-soft", "sfx-core", "sfx-spark sfx-p1", "sfx-spark sfx-p2"],
-};
+const ART = {
+  slash1: "/art/battle/fx/fx-slash-1.webp",
+  slash2: "/art/battle/fx/fx-slash-2.webp",
+  slash3: "/art/battle/fx/fx-slash-3.webp",
+  slashFire: "/art/battle/fx/fx-slash-fire.webp",
+  slashWind: "/art/battle/fx/fx-slash-wind.webp",
+  flash: "/art/battle/fx/fx-impact-1.webp",
+  debris: "/art/battle/fx/fx-impact-3.webp",
+  hitFire: "/art/battle/fx/fx-hit-fire.webp",
+  hitWater: "/art/battle/fx/fx-hit-water.webp",
+  hitWind: "/art/battle/fx/fx-hit-wind.webp",
+  hitLight: "/art/battle/fx/fx-hit-light.webp",
+  hitDark: "/art/battle/fx/fx-hit-dark.webp",
+  hitCrit: "/art/battle/fx/fx-hit-crit.webp",
+  strikeUlt: "/art/battle/fx/fx-strike-ult.webp",
+  heal: "/art/battle/fx/fx-heal.webp",
+  shield: "/art/battle/fx/fx-shield.webp",
+  buff: "/art/battle/fx/fx-buff.webp",
+  hex: "/art/battle/fx/fx-hex.webp",
+  cast: "/art/battle/fx/fx-cast.webp",
+  bolt: "/art/battle/fx/fx-bolt.webp",
+  boltWater: "/art/battle/fx/fx-bolt-water.webp",
+  boltDark: "/art/battle/fx/fx-bolt-dark.webp",
+  shock: "/art/battle/fx/fx-shockwave.webp",
+} as const;
+
+type SkfxLayer = { src: string; cls: string };
+
+let fxPreloaded = false;
+
+function preloadBattleFx(): void {
+  if (fxPreloaded || typeof Image === "undefined") return;
+  fxPreloaded = true;
+  for (const src of Object.values(ART)) {
+    const img = new Image();
+    img.decoding = "async";
+    img.src = src;
+  }
+}
+
+function hitArt(element: CombatElement): string {
+  if (element === "fire") return ART.hitFire;
+  if (element === "water") return ART.hitWater;
+  if (element === "wind") return ART.hitWind;
+  if (element === "light") return ART.hitLight;
+  return ART.hitDark;
+}
+
+function slashArt(element: CombatElement): string {
+  if (element === "fire") return ART.slashFire;
+  if (element === "wind") return ART.slashWind;
+  return ART.slash2;
+}
+
+function boltArt(element: CombatElement): string {
+  if (element === "water") return ART.boltWater;
+  if (element === "dark") return ART.boltDark;
+  if (element === "fire") return ART.slashFire;
+  if (element === "wind") return ART.slashWind;
+  return ART.bolt;
+}
 
 function uniqueIds(ids: string[]): string[] {
   const seen = new Set<string>();
@@ -216,6 +167,74 @@ function casterPreset(family: SkillVfxFamily, element: CombatElement): SkillVfxP
   return "cast";
 }
 
+function presetLayers(
+  preset: SkillVfxPreset,
+  element: CombatElement,
+  opts?: { crit?: boolean; ult?: boolean; role?: "cast" | "hit" },
+): SkfxLayer[] {
+  const hit = hitArt(element);
+  const slash = slashArt(element);
+  const layers: SkfxLayer[] = [];
+
+  const impactSeq = () => {
+    layers.push({ src: ART.flash, cls: "skfx-img skfx-img--flash" });
+    layers.push({ src: hit, cls: "skfx-img skfx-img--burst" });
+    layers.push({ src: ART.debris, cls: "skfx-img skfx-img--debris" });
+  };
+
+  if (preset === "slash" || preset === "wind-cut") {
+    layers.push({ src: ART.slash1, cls: "skfx-img skfx-img--flash" });
+    layers.push({ src: slash, cls: "skfx-img skfx-img--slash" });
+    if (preset === "wind-cut") {
+      layers.push({ src: ART.slashWind, cls: "skfx-img skfx-img--slash skfx-img--slash-b" });
+    }
+    layers.push({ src: ART.slash3, cls: "skfx-img skfx-img--trail" });
+    if (opts?.role !== "cast") {
+      layers.push({ src: hit, cls: "skfx-img skfx-img--burst" });
+      layers.push({ src: ART.debris, cls: "skfx-img skfx-img--debris" });
+    }
+  } else if (preset === "light-beam") {
+    layers.push({ src: ART.flash, cls: "skfx-img skfx-img--flash" });
+    layers.push({ src: ART.hitLight, cls: "skfx-img skfx-img--beam" });
+    layers.push({ src: hit, cls: "skfx-img skfx-img--burst" });
+    layers.push({ src: ART.debris, cls: "skfx-img skfx-img--debris" });
+  } else if (
+    preset === "fire-nova" ||
+    preset === "ice-nova" ||
+    preset === "wind-storm" ||
+    preset === "dark-void" ||
+    preset === "light-burst"
+  ) {
+    layers.push({ src: ART.shock, cls: "skfx-img skfx-img--shock" });
+    impactSeq();
+    if (preset === "wind-storm") {
+      layers.push({ src: ART.slashWind, cls: "skfx-img skfx-img--slash" });
+    }
+  } else if (preset === "heal") {
+    layers.push({ src: ART.heal, cls: "skfx-img skfx-img--rise" });
+    layers.push({ src: ART.flash, cls: "skfx-img skfx-img--flash skfx-img--soft" });
+  } else if (preset === "shield") {
+    layers.push({ src: ART.shield, cls: "skfx-img skfx-img--ward" });
+  } else if (preset === "buff") {
+    layers.push({ src: ART.buff, cls: "skfx-img skfx-img--rise" });
+  } else if (preset === "hex") {
+    layers.push({ src: ART.hex, cls: "skfx-img skfx-img--hex" });
+    layers.push({ src: ART.hitDark, cls: "skfx-img skfx-img--burst" });
+  } else if (preset === "cast") {
+    layers.push({ src: ART.cast, cls: "skfx-img skfx-img--cast" });
+  } else {
+    impactSeq();
+  }
+
+  if (opts?.crit) {
+    layers.push({ src: ART.hitCrit, cls: "skfx-img skfx-img--crit" });
+  }
+  if (opts?.ult) {
+    layers.push({ src: ART.strikeUlt, cls: "skfx-img skfx-img--ult" });
+  }
+  return layers;
+}
+
 function queryUnit(root: ParentNode, unitId: string): HTMLElement | null {
   return root.querySelector<HTMLElement>(
     `.battle-unit[data-unit="${CSS.escape(unitId)}"]`,
@@ -232,27 +251,44 @@ function skillFxLayer(root: ParentNode): HTMLElement | null {
   );
 }
 
+function appendFxImg(wrap: HTMLElement, layer: SkfxLayer): void {
+  const img = document.createElement("img");
+  img.className = layer.cls;
+  img.src = layer.src;
+  img.alt = "";
+  img.draggable = false;
+  img.decoding = "async";
+  img.setAttribute("aria-hidden", "true");
+  wrap.appendChild(img);
+}
+
 export function spawnSkillFx(
   root: ParentNode,
   unitId: string,
   preset: SkillVfxPreset,
   ms: number,
-  opts?: { element?: CombatElement; crit?: boolean; ult?: boolean },
+  opts?: {
+    element?: CombatElement;
+    crit?: boolean;
+    ult?: boolean;
+    role?: "cast" | "hit";
+  },
 ): void {
   if (reduceMotion) return;
+  preloadBattleFx();
   const el = queryUnit(root, unitId);
   if (!el) return;
+  const element = opts?.element ?? "light";
   const wrap = document.createElement("span");
-  wrap.className = `skill-fx skill-fx--${preset} skill-fx--${opts?.element ?? "light"}`;
+  wrap.className = `skill-fx skill-fx--${preset} skill-fx--${element}`;
+  if (preset === "slash" || preset === "wind-cut") wrap.classList.add("is-melee");
   if (opts?.crit) wrap.classList.add("is-crit");
   if (opts?.ult) wrap.classList.add("is-ult");
   wrap.setAttribute("aria-hidden", "true");
-  for (const cls of PRESET_PARTS[preset]) {
-    const part = document.createElement("i");
-    part.className = cls;
-    wrap.appendChild(part);
-  }
   wrap.style.setProperty("--skfx-ms", `${Math.max(80, ms)}ms`);
+  for (const layer of presetLayers(preset, element, opts)) {
+    appendFxImg(wrap, layer);
+  }
   el.appendChild(wrap);
   window.setTimeout(() => wrap.remove(), Math.max(80, ms));
 }
@@ -278,6 +314,7 @@ export function spawnTravelBolt(
   ms: number,
 ): void {
   if (reduceMotion) return;
+  preloadBattleFx();
   const layer = skillFxLayer(root);
   if (!layer) return;
   const from = unitAnchor(root, fromId);
@@ -298,14 +335,175 @@ export function spawnTravelBolt(
   bolt.style.setProperty("--dy", `${Math.round(dy)}px`);
   bolt.style.setProperty("--rot", `${rot}deg`);
   bolt.style.setProperty("--bolt-ms", `${Math.max(80, ms)}ms`);
-  const core = document.createElement("i");
-  core.className = "skill-bolt-core";
-  const trail = document.createElement("i");
-  trail.className = "skill-bolt-trail";
-  bolt.appendChild(trail);
-  bolt.appendChild(core);
+  const img = document.createElement("img");
+  img.className = "skill-bolt-art";
+  img.src = boltArt(element);
+  img.alt = "";
+  img.draggable = false;
+  img.decoding = "async";
+  img.setAttribute("aria-hidden", "true");
+  bolt.appendChild(img);
   layer.appendChild(bolt);
   window.setTimeout(() => bolt.remove(), Math.max(80, ms + 40));
+}
+
+export type ArenaStoneVfxPower = "place" | "capture" | "capture-large";
+
+function queryArenaStone(
+  root: ParentNode,
+  team: "ally" | "enemy",
+): HTMLElement | null {
+  return root.querySelector<HTMLElement>(
+    `.arena-stone[data-arena-stone="${team}"]`,
+  );
+}
+
+function arenaStoneElement(stone: HTMLElement): CombatElement {
+  if (stone.classList.contains("el-fire")) return "fire";
+  if (stone.classList.contains("el-water")) return "water";
+  if (stone.classList.contains("el-wind")) return "wind";
+  if (stone.classList.contains("el-light")) return "light";
+  return "dark";
+}
+
+function arenaStoneAnchor(
+  root: ParentNode,
+  team: "ally" | "enemy",
+): { x: number; y: number } | null {
+  const stone = queryArenaStone(root, team);
+  const art =
+    stone?.querySelector<HTMLElement>(".magic-stone-img") ?? stone;
+  if (!art) return null;
+  const r = art.getBoundingClientRect();
+  if (r.width < 1 && r.height < 1) return null;
+  return { x: r.left + r.width * 0.5, y: r.top + r.height * 0.38 };
+}
+
+function stonePlaceLayers(
+  element: CombatElement,
+  power: ArenaStoneVfxPower,
+): SkfxLayer[] {
+  const hit = hitArt(element);
+  if (power === "place") {
+    return [
+      { src: ART.cast, cls: "skfx-img skfx-img--cast" },
+      { src: ART.flash, cls: "skfx-img skfx-img--flash" },
+      { src: ART.buff, cls: "skfx-img skfx-img--rise" },
+      { src: hit, cls: "skfx-img skfx-img--burst skfx-img--soft" },
+    ];
+  }
+  const layers: SkfxLayer[] = [
+    { src: ART.shock, cls: "skfx-img skfx-img--shock" },
+    { src: ART.flash, cls: "skfx-img skfx-img--flash" },
+    { src: hit, cls: "skfx-img skfx-img--burst" },
+    { src: ART.debris, cls: "skfx-img skfx-img--debris" },
+    { src: ART.buff, cls: "skfx-img skfx-img--rise" },
+  ];
+  if (power === "capture-large") {
+    layers.push({ src: ART.hitCrit, cls: "skfx-img skfx-img--crit" });
+    layers.push({ src: ART.strikeUlt, cls: "skfx-img skfx-img--ult" });
+  }
+  return layers;
+}
+
+function stoneRivalHitLayers(
+  element: CombatElement,
+  large: boolean,
+): SkfxLayer[] {
+  const layers: SkfxLayer[] = [
+    { src: ART.hex, cls: "skfx-img skfx-img--hex" },
+    { src: hitArt(element), cls: "skfx-img skfx-img--burst" },
+  ];
+  if (large) {
+    layers.push({ src: ART.debris, cls: "skfx-img skfx-img--debris" });
+    layers.push({ src: ART.hitCrit, cls: "skfx-img skfx-img--crit" });
+  }
+  return layers;
+}
+
+function spawnStoneToStoneBolt(
+  root: ParentNode,
+  fromTeam: "ally" | "enemy",
+  toTeam: "ally" | "enemy",
+  element: CombatElement,
+  ms: number,
+): void {
+  const layer = skillFxLayer(root);
+  if (!layer) return;
+  const from = arenaStoneAnchor(root, fromTeam);
+  const to = arenaStoneAnchor(root, toTeam);
+  if (!from || !to) return;
+  const layerRect = layer.getBoundingClientRect();
+  const x0 = from.x - layerRect.left;
+  const y0 = from.y - layerRect.top;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const rot = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const bolt = document.createElement("span");
+  bolt.className = `skill-bolt skill-bolt--${element} skill-bolt--stone`;
+  bolt.setAttribute("aria-hidden", "true");
+  bolt.style.left = `${Math.round(x0)}px`;
+  bolt.style.top = `${Math.round(y0)}px`;
+  bolt.style.setProperty("--dx", `${Math.round(dx)}px`);
+  bolt.style.setProperty("--dy", `${Math.round(dy)}px`);
+  bolt.style.setProperty("--rot", `${rot}deg`);
+  bolt.style.setProperty("--bolt-ms", `${Math.max(80, ms)}ms`);
+  const img = document.createElement("img");
+  img.className = "skill-bolt-art";
+  img.src = boltArt(element);
+  img.alt = "";
+  img.draggable = false;
+  img.decoding = "async";
+  img.setAttribute("aria-hidden", "true");
+  bolt.appendChild(img);
+  layer.appendChild(bolt);
+  window.setTimeout(() => bolt.remove(), Math.max(80, ms + 40));
+}
+
+/** Painted skill-style burst on a planted arena stone. Capture hits the rival. */
+export function spawnArenaStoneVfx(
+  root: ParentNode,
+  team: "ally" | "enemy",
+  power: ArenaStoneVfxPower,
+  ms: number,
+): void {
+  if (reduceMotion) return;
+  preloadBattleFx();
+  const stone = queryArenaStone(root, team);
+  if (!stone) return;
+  const element = arenaStoneElement(stone);
+  const wrap = document.createElement("span");
+  wrap.className = `arena-stone-fx arena-stone-fx--${power} arena-stone-fx--${element}`;
+  wrap.setAttribute("aria-hidden", "true");
+  wrap.style.setProperty("--skfx-ms", `${Math.max(80, ms)}ms`);
+  for (const layer of stonePlaceLayers(element, power)) {
+    appendFxImg(wrap, layer);
+  }
+  stone.appendChild(wrap);
+  window.setTimeout(() => wrap.remove(), Math.max(80, ms));
+
+  if (power === "place") return;
+
+  const rivalTeam = team === "ally" ? "enemy" : "ally";
+  const rival = queryArenaStone(root, rivalTeam);
+  if (rival) {
+    const hit = document.createElement("span");
+    hit.className = `arena-stone-fx arena-stone-fx--struck arena-stone-fx--${element}`;
+    hit.setAttribute("aria-hidden", "true");
+    hit.style.setProperty("--skfx-ms", `${Math.max(80, ms)}ms`);
+    for (const layer of stoneRivalHitLayers(element, power === "capture-large")) {
+      appendFxImg(hit, layer);
+    }
+    rival.appendChild(hit);
+    window.setTimeout(() => hit.remove(), Math.max(80, ms));
+  }
+  spawnStoneToStoneBolt(
+    root,
+    team,
+    rivalTeam,
+    element,
+    Math.min(Math.max(80, ms), 460),
+  );
 }
 
 function spawnAoeField(
@@ -316,6 +514,7 @@ function spawnAoeField(
   ult?: boolean,
 ): void {
   if (reduceMotion || targetIds.length < 2) return;
+  preloadBattleFx();
   const layer = skillFxLayer(root);
   if (!layer) return;
   const layerRect = layer.getBoundingClientRect();
@@ -336,12 +535,22 @@ function spawnAoeField(
   field.style.left = `${Math.round(sx / n - layerRect.left)}px`;
   field.style.top = `${Math.round(sy / n - layerRect.top)}px`;
   field.style.setProperty("--field-ms", `${Math.max(80, ms)}ms`);
-  const ring = document.createElement("i");
-  ring.className = "skill-field-ring";
-  const ringB = document.createElement("i");
-  ringB.className = "skill-field-ring skill-field-ring-b";
-  field.appendChild(ring);
-  field.appendChild(ringB);
+  const img = document.createElement("img");
+  img.className = "skill-field-art";
+  img.src = ART.shock;
+  img.alt = "";
+  img.draggable = false;
+  img.decoding = "async";
+  img.setAttribute("aria-hidden", "true");
+  field.appendChild(img);
+  const burst = document.createElement("img");
+  burst.className = "skill-field-burst";
+  burst.src = hitArt(element);
+  burst.alt = "";
+  burst.draggable = false;
+  burst.decoding = "async";
+  burst.setAttribute("aria-hidden", "true");
+  field.appendChild(burst);
   layer.appendChild(field);
   window.setTimeout(() => field.remove(), Math.max(80, ms + 40));
 }
@@ -369,6 +578,7 @@ export async function playSkillVfx(
   opts: SkillVfxPlayOpts,
 ): Promise<void> {
   if (!hits.length) return;
+  preloadBattleFx();
   const attackerId = hits[0]!.attackerId;
   const targets = uniqueIds(hits.map((h) => h.targetId));
   const family = skillVfxFamily(opts.kind, opts.element, opts.ult);
@@ -397,6 +607,7 @@ export async function playSkillVfx(
       element: opts.element,
       ult: true,
       crit: opts.crit,
+      role: "cast",
     });
     opts.playCasterClip?.(attackerId, "ult");
     const hitAt = Math.floor(cutMs * 0.42);
@@ -425,6 +636,7 @@ export async function playSkillVfx(
     spawnSkillFx(root, attackerId, cast, lungeMs, {
       element: opts.element,
       crit: opts.crit,
+      role: "cast",
     });
     opts.playCasterClip?.(attackerId, "run", { loop: false });
     const hitAt = Math.floor(lungeMs * 0.38);
@@ -450,7 +662,10 @@ export async function playSkillVfx(
     const flyMs = fxDurationMs(280, opts.speed);
     const impactMs = fxDurationMs(580, opts.speed);
     pulse(attackerId, "fx-cast-skill", chargeMs);
-    spawnSkillFx(root, attackerId, "cast", chargeMs, { element: opts.element });
+    spawnSkillFx(root, attackerId, "cast", chargeMs, {
+      element: opts.element,
+      role: "cast",
+    });
     opts.playCasterClip?.(attackerId, "cast");
     const launchAt = Math.floor(chargeMs * 0.55);
     window.setTimeout(() => {
@@ -481,6 +696,7 @@ export async function playSkillVfx(
     spawnSkillFx(root, attackerId, cast, chargeMs, {
       element: opts.element,
       ult: opts.ult,
+      role: "cast",
     });
     opts.playCasterClip?.(attackerId, "cast");
     const hitAt = Math.floor(chargeMs * 0.62);
@@ -504,7 +720,10 @@ export async function playSkillVfx(
   const chargeMs = fxDurationMs(420, opts.speed);
   const impactMs = fxDurationMs(700, opts.speed);
   pulse(attackerId, "fx-cast-skill", chargeMs);
-  spawnSkillFx(root, attackerId, "cast", chargeMs, { element: opts.element });
+  spawnSkillFx(root, attackerId, "cast", chargeMs, {
+    element: opts.element,
+    role: "cast",
+  });
   if (opts.kind === "buff" || opts.kind === "amplify") {
     spawnSkillFx(root, attackerId, "buff", chargeMs, { element: opts.element });
   }

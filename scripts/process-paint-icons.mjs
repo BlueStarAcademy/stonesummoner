@@ -8,6 +8,7 @@
  *   node scripts/process-paint-icons.mjs summoner-skill
  *   node scripts/process-paint-icons.mjs monster-portrait
  *   node scripts/process-paint-icons.mjs battle-still
+ *   node scripts/process-paint-icons.mjs battle-fx
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -23,6 +24,7 @@ const MAP = {
   "summoner-skill": { dir: "apps/web/public/art/summoner/skill", size: 256 },
   "monster-portrait": { dir: "apps/web/public/art/monster", size: 512, flat: true },
   "battle-still": { dir: "apps/web/public/art/monster/battle", size: 768 },
+  "battle-fx": { dir: "apps/web/public/art/battle/fx", size: 512, fit: "contain", lim: 32 },
 };
 
 const key = process.argv[2];
@@ -46,7 +48,11 @@ for (const f of files) {
   }
   const png = path.join(dir, f);
   const webp = path.join(dir, f.replace(/\.png$/i, ".webp"));
-  await pngToDematteWebp(png, webp, { size: cfg.size });
+  await pngToDematteWebp(png, webp, {
+    size: cfg.size,
+    fit: cfg.fit,
+    lim: cfg.lim,
+  });
   fs.unlinkSync(png);
   n += 1;
   console.log(`wrote ${path.basename(webp)}`);

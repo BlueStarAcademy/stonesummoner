@@ -18,7 +18,11 @@ import {
   type StoneSuggestion,
 } from "./ai.js";
 import { pickExpertStone } from "./stoneTactic.js";
-import { classifyCapture, gainsForBoardEvent } from "./boardEvents.js";
+import {
+  classifyCapture,
+  gainsForBoardEvent,
+  rollSafePlaceProc,
+} from "./boardEvents.js";
 import { composeSummonerUlt } from "./summonerUlt.js";
 import { detectShapeBonuses } from "./shapes.js";
 import {
@@ -36,12 +40,14 @@ import { clampAmplify, computeDamage } from "./damage.js";
 import {
   itemDef,
   shouldSpawnItem,
+  tokenBoardResource,
   weightedItemId,
+  type BoardItemId,
   type BoardToken,
   type BaitLure,
   type TempSeal,
 } from "./items.js";
-import type { SkillDef } from "stonesummoner-data";
+import { SKILL_DMG_MUL, type SkillDef } from "stonesummoner-data";
 import type {
   BattlePhase,
   Element,
@@ -140,6 +146,40 @@ export interface SkillResult {
   usedSummonerSkill: boolean;
 }
 
+export type StoneReportChipKind =
+  | "atk"
+  | "def"
+  | "spd"
+  | "crit"
+  | "mana"
+  | "capture"
+  | "gold"
+  | "crystal"
+  | "victory";
+
+export interface StoneReportChip {
+  kind: StoneReportChipKind;
+  n?: number;
+}
+
+export interface StoneReport {
+  team: TeamId;
+  x: number;
+  y: number;
+  event: "safe_place" | "capture" | "special";
+  capturedCount: number;
+  chips: StoneReportChip[];
+}
+
+/** Team-wide combat aura from the last stone; lasts until that team places again. */
+export interface StoneAura {
+  atkPct: number;
+  defPct: number;
+  spdPct: number;
+  /** Flat crit rate points (8 = +8%). */
+  critRate: number;
+}
+
 export class Battle {
   /**
    * Last team that placed a stone. Go-like alternation: if the same team
@@ -151,6 +191,16 @@ export class Battle {
    * circle rebuild or when that stone is captured / overwritten.
    */
   lastEnemyStone: { x: number; y: number; boardIndex: number } | null = null;
+  /** UI readout for the stone that just landed. */
+  lastStoneReport: StoneReport | null = null;
+  /**
+   * Combat aura from the team's last stone. Cleared/replaced on that team's
+   * next stone so consecutive same-team ATB keeps the effect without re-placing.
+   */
+  stoneAura: Record<TeamId, StoneAura | null> = {
+    ally: null,
+    enemy: null,
+  };
   /** One or two boards (쌍국). Prefer `board` getter for the active one. */
   readonly boards: Board[];
   activeBoardIndex = 0;
@@ -350,6 +400,11 @@ export class Battle {
     return this.units.find((u) => u.id === id);
   }
 
+  /** True when this team must place a stone before the current ATB action. */
+  needsStoneFor(team: TeamId): boolean {
+    return this.lastStoneTeam !== team;
+  }
+
   alive(team?: TeamId): Unit[] {
     return this.units.filter((u) => u.alive && (team ? u.team === team : true));
   }
@@ -386,7 +441,9 @@ export class Battle {
       for (const u of this.units) {
         if (!u.alive) continue;
         const spdMul = (u.spdBoostTurns ?? 0) > 0 ? 1.4 : 1;
-        u.atb += u.stats.spd * 0.1 * spdMul;
+        const spdBuff = 1 + (u.spdBuffPct ?? 0);
+        const spdAura = 1 + (this.stoneAura[u.team]?.spdPct ?? 0);
+        u.atb += u.stats.spd * 0.1 * spdMul * spdBuff * spdAura;
       }
       const ready = this.units
         .filter((u) => u.alive && u.atb >= ATB_THRESHOLD)
@@ -431,9 +488,12 @@ export class Battle {
           this.tickStatus(u);
         }
         this.activeUnitId = unit.id;
-        // Go-like stone alternation: same team consecutive ATB skips stone.
-        this.phase =
-          this.lastStoneTeam === unit.team ? "await_skill" : "await_stone";
+        // Go-like stone by TEAM, not by summoner vs monster: if this side
+        // already placed, skip stone (SPD / violent extras). Opponent monster
+        // turns still place.
+        this.phase = this.needsStoneFor(unit.team)
+          ? "await_stone"
+          : "await_skill";
         this.skillAmplifyBonus = 0;
         return unit;
       }
@@ -817,6 +877,11 @@ export class Battle {
       return false;
     }
 
+    this.stoneAura[unit.team] = null;
+    this.lastStoneReport = null;
+    const chips: StoneReportChip[] = [];
+    let claimedVictory = false;
+
     const kind = classifyCapture(result.capturedCount);
     let manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
@@ -825,6 +890,24 @@ export class Battle {
       manaMul *= 1.3;
     }
     const gains = gainsForBoardEvent(kind, result.capturedCount, manaMul);
+
+    if (kind === "safe_place") {
+      const proc = rollSafePlaceProc(this.rng);
+      const aura: StoneAura = {
+        atkPct: proc.axis === "atk" ? proc.amount : 0,
+        defPct: proc.axis === "def" ? proc.amount : 0,
+        spdPct: proc.axis === "spd" ? proc.amount : 0,
+        critRate: proc.axis === "critRate" ? proc.amount * 100 : 0,
+      };
+      this.stoneAura[unit.team] = aura;
+      const pct = Math.round(proc.amount * 100);
+      const chipKind =
+        proc.axis === "critRate"
+          ? "crit"
+          : proc.axis;
+      chips.push({ kind: chipKind, n: pct });
+      this.log.push(`일반 소환: ${proc.axis} +${pct}%`);
+    }
 
     let ampDelta = gains.amplifyDelta;
     let manaGain = gains.mana;
@@ -897,6 +980,7 @@ export class Battle {
       this.manaSealed = false;
       ampDelta += 0.12;
       manaGain += 30;
+      claimedVictory = true;
       this.log.push(`필승점 해금 — 마나봉인 해제`);
     }
 
@@ -934,6 +1018,10 @@ export class Battle {
     const sm = this.summonerOf(unit.team);
     if (gains.captureDamageBonus > 0) {
       this.pendingCaptureDamageBonus[unit.team] = gains.captureDamageBonus;
+      chips.push({
+        kind: "capture",
+        n: Math.round(gains.captureDamageBonus * 100),
+      });
       this.log.push(
         `따냄 버프: 다음 소환수 피해 +${Math.round(gains.captureDamageBonus * 100)}%`,
       );
@@ -959,7 +1047,9 @@ export class Battle {
         if (sh.skillAmplifyBonus) {
           this.skillAmplifyBonus += sh.skillAmplifyBonus;
         }
-        sm.mana = Math.min(sm.manaMax, sm.mana + sh.mana * manaMul);
+        const shapeMana = sh.mana * manaMul;
+        if (shapeMana > 0) manaGain += shapeMana;
+        sm.mana = Math.min(sm.manaMax, sm.mana + shapeMana);
         if (sh.shieldPct) {
           const shield = Math.round(unit.stats.hp * sh.shieldPct);
           unit.shieldHp = (unit.shieldHp ?? 0) + shield;
@@ -1005,7 +1095,13 @@ export class Battle {
     }
 
     const picked = this.tokenAt(point.x, point.y);
-    if (picked) this.applyTokenPickup(unit, picked);
+    if (picked) {
+      this.applyTokenPickup(unit, picked);
+      chips.push({
+        kind: tokenBoardResource(picked.id),
+        n: tokenPickupHighlight(picked.id, unit),
+      });
+    }
 
     if (
       this.modules.moduleD &&
@@ -1061,6 +1157,21 @@ export class Battle {
       `${unit.name} stone (${point.x},${point.y}) cap=${result.capturedCount} amp=${this.currentAmplify().toFixed(2)}`,
     );
     this.lastStoneTeam = unit.team;
+    if (manaGain > 0) chips.push({ kind: "mana", n: Math.round(manaGain) });
+    const event: StoneReport["event"] =
+      result.capturedCount > 0
+        ? "capture"
+        : claimedVictory || picked
+          ? "special"
+          : "safe_place";
+    this.lastStoneReport = {
+      team: unit.team,
+      x: point.x,
+      y: point.y,
+      event,
+      capturedCount: result.capturedCount,
+      chips,
+    };
     if (!prog.shouldReset) {
       if (unit.team === "enemy") {
         this.lastEnemyStone = {
@@ -2020,10 +2131,14 @@ export class Battle {
       incomingMul *= 0.9;
     }
 
+    const aura = this.stoneAura[attacker.team];
+    const defAura = this.stoneAura[target.team];
     const atkMul =
-      (1 + (attacker.atkBuffPct ?? 0)) * (1 - (attacker.atkDebuffPct ?? 0));
+      (1 + (attacker.atkBuffPct ?? 0) + (aura?.atkPct ?? 0)) *
+      (1 - (attacker.atkDebuffPct ?? 0));
     const defMul =
-      (1 + (target.defBuffPct ?? 0)) * (1 - (target.defDebuffPct ?? 0));
+      (1 + (target.defBuffPct ?? 0) + (defAura?.defPct ?? 0)) *
+      (1 - (target.defDebuffPct ?? 0));
     const { damage, crit } = computeDamage({
       atk: attacker.stats.atk * Math.max(0.3, atkMul),
       skillCoeff: coeff,
@@ -2034,7 +2149,8 @@ export class Battle {
       critRate:
         attacker.stats.critRate +
         critBonus +
-        (attacker.critRateBuff ?? 0),
+        (attacker.critRateBuff ?? 0) +
+        (aura?.critRate ?? 0),
       critDmg:
         attacker.stats.critDmg +
         critDmgExtra +
@@ -2137,7 +2253,9 @@ export class Battle {
       this.rng() * 100 < (target.counterChance ?? 0)
     ) {
       this.log.push(`${target.name} 반격`);
-      this.applyHit(target, attacker, 0.75, false, { fromCounter: true });
+      this.applyHit(target, attacker, 0.75 * SKILL_DMG_MUL, false, {
+        fromCounter: true,
+      });
     }
 
     return {
@@ -2291,6 +2409,19 @@ export class Battle {
       skillIndex: pickAutoSkillIndex(unit, this.units),
     });
   }
+}
+
+function tokenPickupHighlight(id: BoardItemId, unit: Unit): number {
+  if (id === "crit_charm") {
+    return unit.stonePassive === "crit_charm_plus" ? 110 : 55;
+  }
+  if (id === "shield_core") return Math.round(unit.stats.hp * 0.18);
+  if (id === "capture_magnet") return 35;
+  if (id === "stride_sand") return 35;
+  if (id === "element_ward") return 3;
+  if (id === "bait_stone") return Math.round(unit.stats.hp * 0.1);
+  if (id === "seal_nail") return 3;
+  return 1;
 }
 
 export function makeUnit(

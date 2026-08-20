@@ -10,6 +10,7 @@ import {
   energyMaxForLevel,
   energyRegenRemainingMs,
   hasBuilding,
+  maxProdBuildingLevelForAccount,
   productionStorageCap,
   runWish,
   spendEnergy,
@@ -50,11 +51,11 @@ describe("Phase1 island", () => {
 
   it("upgrades mana pond rate and storage cap", () => {
     let island = createStarterIsland(0);
-    island = { ...island, mana: 5000 };
+    island = { ...island, mana: 8000, summonerLevel: 3 };
     const cost = buildingUpgradeManaCost(1);
     const r = upgradeBuilding(island, "mana_pond");
     assert.match(r.message, /골드 연못 Lv\.2/);
-    assert.equal(r.island.mana, 5000 - cost);
+    assert.equal(r.island.mana, 8000 - cost);
     const pond = r.island.buildings.find((b) => b.id === "mana_pond")!;
     assert.equal(pond.level, 2);
     const def = PHASE1_BUILDINGS.find((b) => b.id === "mana_pond")!;
@@ -63,6 +64,31 @@ describe("Phase1 island", () => {
     island = tickProduction(r.island, 3_600_000 * 100);
     const full = island.buildings.find((b) => b.id === "mana_pond")!;
     assert.equal(full.storedMana, 8000);
+  });
+
+  it("caps production upgrades to account level", () => {
+    assert.equal(buildingUpgradeManaCost(1), 3300);
+    assert.equal(buildingUpgradeManaCost(2), 8200);
+    assert.equal(maxProdBuildingLevelForAccount(1), 1);
+    assert.equal(maxProdBuildingLevelForAccount(2), 1);
+    assert.equal(maxProdBuildingLevelForAccount(3), 2);
+    assert.equal(maxProdBuildingLevelForAccount(5), 3);
+    assert.equal(maxProdBuildingLevelForAccount(8), 4);
+    assert.equal(maxProdBuildingLevelForAccount(12), 5);
+    assert.equal(maxProdBuildingLevelForAccount(17), 6);
+    assert.equal(maxProdBuildingLevelForAccount(20), 6);
+    assert.equal(maxProdBuildingLevelForAccount(47), 10);
+    let island = createStarterIsland(0);
+    island = { ...island, mana: 20_000 };
+    const blocked = upgradeBuilding(island, "mana_pond");
+    assert.equal(
+      island.buildings.find((b) => b.id === "mana_pond")!.level,
+      1,
+    );
+    assert.match(blocked.message, /계정 Lv\.3/);
+    island = { ...island, summonerLevel: 3 };
+    const r = upgradeBuilding(island, "mana_pond");
+    assert.equal(r.island.buildings.find((b) => b.id === "mana_pond")!.level, 2);
   });
 
   it("unlocks crystal mine and wish at high summoner level", () => {

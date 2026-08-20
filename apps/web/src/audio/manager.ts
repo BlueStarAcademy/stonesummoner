@@ -34,18 +34,87 @@ const bufferCache = new Map<string, AudioBuffer | null>();
 const missing = new Set<MissingKey>();
 const resolving = new Map<string, Promise<string | null>>();
 
-function bgmGainValue(): number {
+function clamp01(n: number): number {
+  return Math.min(1, Math.max(0, n));
+}
+
+/** BGM output lives entirely on a fresh GainNode so slider moves actually take effect. */
+function bgmOutValue(): number {
   if (prefs.muted) return 0;
-  return Math.min(1, Math.max(0, prefs.bgm * (ducking ? DUCK_BGM : 1)));
+  return clamp01(prefs.master * prefs.bgm * (ducking ? DUCK_BGM : 1));
+}
+
+function sfxVoiceValue(extra = 1): number {
+  if (prefs.muted) return 0;
+  return clamp01(prefs.master * prefs.sfx * extra);
+}
+
+function snapGain(node: GainNode, value: number): void {
+  const v = clamp01(value);
+  node.gain.value = v;
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  try {
+    node.gain.cancelScheduledValues(t);
+    node.gain.setValueAtTime(v, t);
+    node.gain.setValueAtTime(v, t + 0.05);
+  } catch {
+    node.gain.value = v;
+  }
+}
+
+function makeGain(value: number): GainNode {
+  if (!ctx) throw new Error("audio ctx");
+  const v = clamp01(value);
+  try {
+    const node = new GainNode(ctx, { gain: v });
+    snapGain(node, v);
+    return node;
+  } catch {
+    const node = ctx.createGain();
+    snapGain(node, v);
+    return node;
+  }
+}
+
+/**
+ * Live AudioParam updates are ignored in some Chromium/WebViews.
+ * Swap in a new GainNode (constructor gain applies) and reattach the playing bed.
+ */
+function replaceBgmGain(): void {
+  if (!ctx || !masterGain) return;
+  const next = makeGain(bgmOutValue());
+  if (bgmSource) {
+    try {
+      bgmSource.disconnect();
+    } catch {
+      /* ignore */
+    }
+    bgmSource.connect(next);
+  }
+  if (bgmGain) {
+    try {
+      bgmGain.disconnect();
+    } catch {
+      /* ignore */
+    }
+  }
+  next.connect(masterGain);
+  bgmGain = next;
 }
 
 function applyGains(): void {
-  if (masterGain && sfxBus) {
-    const mute = prefs.muted ? 0 : 1;
-    masterGain.gain.value = prefs.master * mute;
-    sfxBus.gain.value = prefs.sfx;
+  replaceBgmGain();
+}
+
+/** Mute must actually stop the bed — GainNode.value is ignored in some WebViews. */
+function syncBgmMutePlayback(): void {
+  if (prefs.muted) {
+    if (bgmSource) stopBgmSource(true);
+    return;
   }
-  if (bgmGain) bgmGain.gain.value = bgmGainValue();
+  if (!currentBgm || bgmSource || !bgmBuffer || !ctx || !unlocked) return;
+  startBgmSource(bgmBuffer, bgmOffset);
 }
 
 function clearMediaSession(): void {
@@ -80,6 +149,7 @@ async function ensureCtx(): Promise<AudioContext | null> {
     }
     if (ctx.state === "suspended") {
       await ctx.resume().catch(() => undefined);
+      applyGains();
     }
     return ctx;
   } catch {
@@ -168,16 +238,21 @@ function stopBgmSource(preserveOffset: boolean): void {
 }
 
 function startBgmSource(buf: AudioBuffer, offsetSec: number): void {
-  if (!ctx || !bgmGain) return;
+  if (!ctx || !masterGain) return;
   stopBgmSource(true);
   bgmBuffer = buf;
   const dur = buf.duration;
   const offset = dur > 0 ? ((offsetSec % dur) + dur) % dur : 0;
   bgmOffset = offset;
+  replaceBgmGain();
+  if (prefs.muted) {
+    clearMediaSession();
+    return;
+  }
   const src = ctx.createBufferSource();
   src.buffer = buf;
   src.loop = true;
-  src.connect(bgmGain);
+  src.connect(bgmGain!);
   bgmStartedAt = ctx.currentTime;
   try {
     src.start(0, offset);
@@ -186,7 +261,6 @@ function startBgmSource(buf: AudioBuffer, offsetSec: number): void {
     return;
   }
   bgmSource = src;
-  applyGains();
   clearMediaSession();
 }
 
@@ -207,12 +281,15 @@ export function setAudioPrefs(patch: Partial<AudioPrefs>): AudioPrefs {
   };
   writeAudioPrefs(prefs);
   applyGains();
+  syncBgmMutePlayback();
   return getAudioPrefs();
 }
 
 export async function unlockAudio(): Promise<void> {
   unlocked = true;
   await ensureCtx();
+  applyGains();
+  if (prefs.muted) return;
   if (bgmSource && ctx?.state === "running") return;
   const want = pendingBgm ?? currentBgm;
   if (!want) return;
@@ -238,11 +315,11 @@ export function initAudio(): void {
       void ctx.suspend().catch(() => undefined);
     } else {
       void ctx.resume().catch(() => undefined);
-      if (hiddenPaused && currentBgm) {
+      applyGains();
+      if (hiddenPaused && currentBgm && !prefs.muted) {
         if (!bgmSource) {
           void playBgm(currentBgm, { resumeOffset: bgmOffset });
         } else {
-          applyGains();
           clearMediaSession();
         }
       }
@@ -270,6 +347,11 @@ export async function playBgm(
   if (sameTrack && bgmSource) {
     applyGains();
     clearMediaSession();
+    return;
+  }
+  if (sameTrack && bgmBuffer) {
+    startBgmSource(bgmBuffer, opts?.resumeOffset ?? bgmOffset);
+    pendingBgm = null;
     return;
   }
 
@@ -321,18 +403,28 @@ export async function playSfx(
   id: SfxId | StingId,
   opts?: { gain?: number },
 ): Promise<void> {
+  if (prefs.muted) return;
   const audio = await ensureCtx();
-  if (!audio || !sfxBus) return;
+  if (!audio || !sfxBus || prefs.muted) return;
   const url = await firstExisting(sfxSrcCandidates(id));
-  if (!url) return;
+  if (!url || prefs.muted) return;
   const buf = await decodeAudio(url);
-  if (!buf) return;
+  if (!buf || prefs.muted) return;
+  const voice = sfxVoiceValue(opts?.gain ?? 1);
+  if (voice <= 0) return;
   try {
     const src = audio.createBufferSource();
     src.buffer = buf;
-    const g = audio.createGain();
-    const gain = opts?.gain ?? 1;
-    g.gain.value = gain;
+    const g = (() => {
+      try {
+        return new GainNode(audio, { gain: voice });
+      } catch {
+        const node = audio.createGain();
+        node.gain.value = voice;
+        return node;
+      }
+    })();
+    snapGain(g, voice);
     src.connect(g);
     g.connect(sfxBus);
     src.start();
@@ -340,7 +432,7 @@ export async function playSfx(
     if (cap != null && buf.duration > cap) {
       const t = audio.currentTime;
       const fade = Math.min(0.04, cap * 0.25);
-      g.gain.setValueAtTime(gain, t + Math.max(0, cap - fade));
+      g.gain.setValueAtTime(voice, t + Math.max(0, cap - fade));
       g.gain.linearRampToValueAtTime(0, t + cap);
       src.stop(t + cap + 0.02);
     }
