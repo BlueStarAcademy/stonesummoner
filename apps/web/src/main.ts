@@ -13,12 +13,11 @@ import {
   battlePace,
   fxDurationMs,
   mountUnitAnimHooks,
-  playUltCutin,
   pulseBoardCell,
   pulseUnitClass,
-  spawnUnitVfx,
   waitFx,
 } from "./battle/fx";
+import { playSkillVfx } from "./battle/skillVfx";
 import { destroyAllSpine, mountBattleSpines, playSpineClip } from "./battle/spinePilot";
 import {
   getBattleStillSrc,
@@ -151,6 +150,12 @@ import {
   pickArenaRival,
   canGrindSymbol,
   canImprintSymbol,
+  listImprintMainOutcomes,
+  listGrindPrefixOutcomes,
+  mainStatAtEnhance,
+  symbolEnhanceManaCost,
+  MAX_SYMBOL_SUBSTATS,
+  SYMBOL_SUBSTAT_PROC_LEVELS,
   canEquipGearOnElement,
   describeGear,
   describeSymbol,
@@ -201,7 +206,9 @@ import {
   type GearSlot,
   type MainQuestPinId,
   type StageDef,
+  type SymbolInstance,
   type SymbolSetId,
+  type SymbolStatId,
 } from "stonesummoner-data";
 import {
   buildingUpgradeManaCost,
@@ -407,11 +414,12 @@ type View =
   | "battle"
   | "result";
 
+type ForgeKind = "grind" | "imprint" | "enhance";
+
 type ForgeReveal = {
-  kind: "grind" | "imprint";
-  before: string;
-  after: string;
-  cost: string;
+  kind: ForgeKind;
+  beforeHtml: string;
+  afterHtml: string;
 };
 
 type FusionReveal = {
@@ -789,8 +797,11 @@ let gearBagFilterOpen = false;
 let gearBagFilterUiAbort: AbortController | null = null;
 /** Magic skill slot open in the summoner skill detail modal. */
 let sumMagicDetailSlot: MagicSkillSlot | null = null;
-/** Grind/imprint before/after reveal card. */
+/** Grind/imprint/enhance before/after reveal card. */
 let forgeReveal: ForgeReveal | null = null;
+/** Pending grind/imprint/enhance confirmation (symbol id). */
+let forgeConfirm: { kind: ForgeKind; symbolId: string } | null = null;
+let forgeConfirmModalAbort: AbortController | null = null;
 /** Fusion success reveal card. */
 let fusionReveal: FusionReveal | null = null;
 /** Enhance hub section tab. */
@@ -4829,25 +4840,12 @@ function pulseShapeBonusesAfterStone(
   return shapeMs;
 }
 
-function isGrindSuccessMessage(message: string): boolean {
-  // Loop success: "\uC5F0\uB9C8(...):" — not shortage / fail copy that also mentions grind.
-  return (
-    message.startsWith("\uC5F0\uB9C8(") ||
-    /^Grind\s*\(/i.test(message)
-  );
-}
-
-function isImprintSuccessMessage(message: string): boolean {
-  // Loop success: "\uAC01\uC778: …" — not fail / unavailable imprint messages.
-  return (
-    message.startsWith("\uAC01\uC778:") ||
-    /^Imprint\s*:/i.test(message)
-  );
-}
-
 /** Dismiss forge result + symbol detail when leaving the current monster context. */
 function clearEnhanceSymbolUi(opts?: { keepDock?: boolean }): void {
   forgeReveal = null;
+  forgeConfirm = null;
+  forgeConfirmModalAbort?.abort();
+  forgeConfirmModalAbort = null;
   symbolDetailIndex = null;
   symbolCompareIndex = null;
   slotEquipPick = null;
@@ -5464,54 +5462,16 @@ async function playStrikeFx(
   const element = combatElementOf(attacker);
   const kind = opts?.sfxKind ?? inferCombatSfxKind(hits);
   playCombatCastSfx(element, kind, { ult: opts?.ult });
-
-  if (opts?.ult) {
-    const cutMs = fxDurationMs(520, battleSpeed);
-    playUltCutin(app, cutMs);
-    const caster = hits[0]?.attackerId;
-    if (caster) {
-      pulseUnitClass(app, caster, "fx-ult", cutMs);
-      spawnUnitVfx(app, caster, "strike-ult", cutMs);
-      playSpineClip(caster, "ult");
-    }
-    const firstTarget = hits[0]?.targetId;
-    if (firstTarget) {
-      const crit = hits.some((h) => h.crit);
-      const hitAt = Math.floor(cutMs * 0.45);
-      window.setTimeout(() => {
-        pulseUnitClass(app, firstTarget, "fx-hit", fxDurationMs(320, battleSpeed));
-        spawnUnitVfx(
-          app,
-          firstTarget,
-          crit ? "hit-crit" : "hit",
-          fxDurationMs(360, battleSpeed),
-        );
-        playCombatHitSfxForHits(hits, element);
-      }, hitAt);
-    }
-    await waitFx(cutMs);
-  } else {
-    const attackerId = hits[0]!.attackerId;
-    const targetId = hits[0]!.targetId;
-    const crit = hits.some((h) => h.crit);
-    const lungeMs = fxDurationMs(380, battleSpeed);
-    pulseUnitClass(app, attackerId, "fx-lunge", lungeMs);
-    spawnUnitVfx(app, attackerId, "strike", lungeMs);
-    playSpineClip(attackerId, "run", { loop: false });
-    const hitAt = Math.floor(lungeMs * 0.35);
-    window.setTimeout(() => {
-      playSpineClip(attackerId, "attack");
-      pulseUnitClass(app, targetId, "fx-hit", fxDurationMs(320, battleSpeed));
-      spawnUnitVfx(
-        app,
-        targetId,
-        crit ? "hit-crit" : "hit",
-        fxDurationMs(360, battleSpeed),
-      );
-      playCombatHitSfxForHits(hits, element);
-    }, hitAt);
-    await waitFx(lungeMs);
-  }
+  const crit = hits.some((h) => h.crit);
+  await playSkillVfx(app, hits, {
+    kind,
+    element,
+    speed: battleSpeed,
+    ult: opts?.ult,
+    crit,
+    onImpact: () => playCombatHitSfxForHits(hits, element),
+    playCasterClip: (id, clip, clipOpts) => playSpineClip(id, clip, clipOpts),
+  });
   pushDamageFloats(hits);
 }
 
@@ -5541,19 +5501,7 @@ async function castSkillAsync(
     ) => {
       clearBattleSkillSelection();
       selectedTargetId = null;
-      if (opts?.ult || hits.some((h) => h.damage !== 0 || h.crit)) {
-        await playStrikeFx(hits, opts);
-      } else {
-        const attacker = hits[0]
-          ? battle?.getUnit(hits[0].attackerId) ?? null
-          : null;
-        playCombatCastSfx(
-          combatElementOf(attacker),
-          opts?.sfxKind ?? inferCombatSfxKind(hits),
-          { ult: opts?.ult },
-        );
-        pushDamageFloats(hits);
-      }
+      await playStrikeFx(hits, opts);
       await resolveCombatUntilAllyInput({ holdBusy: true });
     };
 
@@ -7896,8 +7844,18 @@ function renderChatModal(): string {
 
 
 
-function grindCostLabel(): string {
-  return `${MINUS}${t("ui.grindstone")} ${SYMBOL_GRIND_STONE_COST} ${MIDDOT} ${MINUS}${t("ui.dc78e6a251")} ${SYMBOL_GRIND_MANA_COST}`;
+function resChip(src: string, n: number, title: string): string {
+  return `<span class="res-cost-chip" title="${escapeHtml(title)}"><img class="res-ico" src="${src}" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(n)}</strong></span>`;
+}
+
+function forgeCostChips(kind: ForgeKind, enhanceLv = 0): string {
+  if (kind === "grind") {
+    return `${resChip("/art/ui/res/grindstone.webp", SYMBOL_GRIND_STONE_COST, t("ui.grindstone"))}${resChip("/art/ui/res/gold.svg", SYMBOL_GRIND_MANA_COST, t("ui.dc78e6a251"))}`;
+  }
+  if (kind === "imprint") {
+    return resChip("/art/ui/res/imprint-stone.webp", SYMBOL_IMPRINT_STONE_COST, t("ui.imprintStone"));
+  }
+  return resChip("/art/ui/res/gold.svg", symbolEnhanceManaCost(enhanceLv), t("ui.dc78e6a251"));
 }
 
 function canAffordGrind(): boolean {
@@ -7905,6 +7863,12 @@ function canAffordGrind(): boolean {
     grindstoneCount(save) >= SYMBOL_GRIND_STONE_COST &&
     Math.floor(save.island.mana) >= SYMBOL_GRIND_MANA_COST
   );
+}
+
+function canAffordForge(kind: ForgeKind, enhanceLv = 0): boolean {
+  if (kind === "grind") return canAffordGrind();
+  if (kind === "imprint") return imprintStoneCount(save) >= SYMBOL_IMPRINT_STONE_COST;
+  return Math.floor(save.island.mana) >= symbolEnhanceManaCost(enhanceLv);
 }
 
 function missionItemHtml(opts: {
@@ -8944,20 +8908,19 @@ function hubShell(title: string, subtitle: string, body: string): string {
 
 function renderForgeReveal(): string {
   if (!forgeReveal) return "";
-  const title = forgeReveal.kind === "grind" ? t('ui.d8680bb7b3') : t('ui.27cf021299');
-  const mark = forgeReveal.kind === "grind" ? Mark.grind : Mark.imprint;
+  const title = forgeKindTitle(forgeReveal.kind, true);
+  const mark = forgeKindMark(forgeReveal.kind);
   return `<div class="settings-layer forge-reveal-layer" id="forge-reveal-layer" aria-hidden="false">
-    <button type="button" class="settings-backdrop" id="btn-forge-dismiss" aria-label="close"></button>
+    <button type="button" class="settings-backdrop" id="btn-forge-dismiss" aria-label="${escapeHtml(t("ui.468266d639"))}"></button>
     <div class="forge-reveal forge-reveal--${forgeReveal.kind}" role="dialog" aria-modal="true" aria-labelledby="forge-reveal-title">
-      ${modalCloseX("close", "btn-forge-dismiss")}
-      <p class="forge-reveal-kicker" id="forge-reveal-title"><span class="forge-reveal-mark" aria-hidden="true">${mark}</span>${title}</p>
+      ${modalCloseX(t("ui.468266d639"), "btn-forge-dismiss")}
+      <p class="forge-reveal-kicker" id="forge-reveal-title"><span class="forge-reveal-mark" aria-hidden="true">${mark}</span>${escapeHtml(title)}</p>
       <div class="forge-reveal-diff">
-        <p class="forge-before">${forgeReveal.before}</p>
+        <div class="forge-before">${forgeReveal.beforeHtml}</div>
         <p class="forge-arrow" aria-hidden="true">${ARROW_DOWN}</p>
-        <p class="forge-after">${forgeReveal.after}</p>
+        <div class="forge-after">${forgeReveal.afterHtml}</div>
       </div>
-      <p class="forge-reveal-cost muted">${forgeReveal.cost}</p>
-      <button type="button" class="secondary full auth-btn-ghost" id="btn-forge-confirm">${t('ui.468266d639')}</button>
+      <button type="button" class="secondary full auth-btn-ghost" id="btn-forge-confirm">${t("ui.468266d639")}</button>
     </div>
   </div>`;
 }
@@ -8991,6 +8954,261 @@ function mountForgeRevealOverlay(): void {
   if (!forgeReveal) return;
   if (softMountOverlay("forge-reveal-layer", renderForgeReveal())) {
     bindForgeRevealDismiss();
+    promoteOverlayToAppRoot(app.querySelector("#forge-reveal-layer"));
+  }
+}
+
+function forgeKindTitle(kind: ForgeKind, done: boolean): string {
+  if (done) {
+    return kind === "grind"
+      ? t("ui.d8680bb7b3")
+      : kind === "imprint"
+        ? t("ui.27cf021299")
+        : t("ui.forgeConfirm.enhanceDone");
+  }
+  return kind === "grind"
+    ? t("ui.forgeConfirm.grindTitle")
+    : kind === "imprint"
+      ? t("ui.forgeConfirm.imprintTitle")
+      : t("ui.forgeConfirm.enhanceTitle");
+}
+
+function forgeKindMark(kind: ForgeKind): string {
+  return kind === "grind" ? Mark.grind : kind === "imprint" ? Mark.imprint : Mark.enhance;
+}
+
+function renderForgeSymbolSummary(sym: SymbolInstance): string {
+  const set = SYMBOL_SETS.find((x) => x.id === sym.setId);
+  const rarity = symbolQualityMeta(sym.quality);
+  const prefix =
+    sym.prefixStat && sym.prefixValue
+      ? `<p class="forge-sum-line forge-sum-line--prefix">${escapeHtml(
+          t("ui.symPrefixLabel", {
+            line: formatSymbolStatLine(sym.prefixStat, sym.prefixValue),
+          }),
+        )}</p>`
+      : "";
+  const subs = (sym.substats ?? [])
+    .map(
+      (sub) =>
+        `<p class="forge-sum-line">${escapeHtml(formatSymbolStatLine(sub.stat, sub.value))}</p>`,
+    )
+    .join("");
+  return `<div class="forge-sum">
+    ${renderSymIco({
+      setId: sym.setId,
+      slot: sym.slot,
+      enhance: sym.enhance,
+      rarityId: rarity.id,
+      stars: sym.stars,
+      size: "md",
+    })}
+    <div class="forge-sum-body">
+      <strong>${escapeHtml(set?.nameKo ?? sym.setId)} +${sym.enhance}</strong>
+      <p class="forge-sum-line forge-sum-line--main">${escapeHtml(formatSymbolStatLine(sym.mainStat, sym.mainValue))}</p>
+      ${prefix}
+      ${subs}
+    </div>
+  </div>`;
+}
+
+function renderForgeOutcomesHtml(kind: ForgeKind, sym: SymbolInstance): string {
+  const items: string[] = [];
+  if (kind === "grind") {
+    const subs = sym.substats ?? [];
+    if (subs.length > 0) {
+      for (const sub of subs) {
+        items.push(
+          escapeHtml(
+            t("ui.forgeConfirm.subBoost", {
+              line: formatSymbolStatLine(sub.stat, sub.value),
+            }),
+          ),
+        );
+      }
+    } else {
+      for (const p of listGrindPrefixOutcomes(sym)) {
+        items.push(
+          escapeHtml(
+            t("ui.symPrefixLabel", {
+              line: formatSymbolStatLine(p.prefixStat, p.prefixValue),
+            }),
+          ),
+        );
+      }
+    }
+  } else if (kind === "imprint") {
+    for (const stat of listImprintMainOutcomes(sym)) {
+      const v = mainStatAtEnhance(stat, sym.stars, sym.enhance);
+      items.push(escapeHtml(formatSymbolStatLine(stat, v)));
+    }
+  } else {
+    const nextLv = sym.enhance + 1;
+    items.push(escapeHtml(`+${sym.enhance} ${ARROW_RIGHT} +${nextLv}`));
+    const nextMain = mainStatAtEnhance(
+      sym.mainStat as SymbolStatId,
+      sym.stars,
+      nextLv,
+    );
+    items.push(
+      escapeHtml(
+        `${formatSymbolStatLine(sym.mainStat, sym.mainValue)} ${ARROW_RIGHT} ${formatSymbolStatLine(sym.mainStat, nextMain)}`,
+      ),
+    );
+    if ((SYMBOL_SUBSTAT_PROC_LEVELS as readonly number[]).includes(nextLv)) {
+      const subs = sym.substats ?? [];
+      if (subs.length < MAX_SYMBOL_SUBSTATS) {
+        items.push(escapeHtml(t("ui.forgeConfirm.newSub")));
+      } else {
+        for (const sub of subs) {
+          items.push(
+            escapeHtml(
+              t("ui.forgeConfirm.subBoost", {
+                line: formatSymbolStatLine(sub.stat, sub.value),
+              }),
+            ),
+          );
+        }
+      }
+    }
+  }
+  const label =
+    kind === "grind"
+      ? t("ui.forgeConfirm.grindOutcomes")
+      : kind === "imprint"
+        ? t("ui.forgeConfirm.imprintOutcomes")
+        : t("ui.forgeConfirm.enhanceOutcomes");
+  return `<p class="forge-confirm-outcomes-label">${escapeHtml(label)}</p>
+    <ul class="forge-confirm-outcomes">${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+}
+
+function forgeActionLabel(kind: ForgeKind): string {
+  return kind === "grind"
+    ? t("ui.forgeOkGrind")
+    : kind === "imprint"
+      ? t("ui.forgeOkImprint")
+      : t("ui.3e1a337d93");
+}
+
+function renderForgeConfirmModal(): string {
+  if (!forgeConfirm) return "";
+  const idx = findSymbolIndexById(forgeConfirm.symbolId);
+  const sym = idx >= 0 ? save.symbols[idx] : undefined;
+  if (!sym) return "";
+  const kind = forgeConfirm.kind;
+  const disabled = !canAffordForge(kind, sym.enhance);
+  return `<div class="settings-layer forge-confirm-layer" id="forge-confirm-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-forge-confirm-close" aria-label="${escapeHtml(t("ui.bldgUp.close"))}"></button>
+    <div class="settings-sheet forge-confirm" role="dialog" aria-modal="true" aria-labelledby="forge-confirm-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.bldgUp.close"), "btn-forge-confirm-close")}
+      <h2 class="settings-title" id="forge-confirm-title">${escapeHtml(forgeKindTitle(kind, false))}</h2>
+      <div class="forge-confirm-current">${renderForgeSymbolSummary(sym)}</div>
+      ${renderForgeOutcomesHtml(kind, sym)}
+      <button type="button" class="auth-btn-primary bldg-up-confirm" id="btn-forge-confirm-ok" ${disabled ? "disabled" : ""}>
+        <span class="bldg-up-confirm-price forge-confirm-price">${forgeCostChips(kind, sym.enhance)}</span>
+        <span class="bldg-up-confirm-sep" aria-hidden="true"></span>
+        <span class="bldg-up-confirm-label">${escapeHtml(forgeActionLabel(kind))}</span>
+      </button>
+    </div>
+  </div>`;
+}
+
+function closeForgeConfirmSoft(): void {
+  forgeConfirm = null;
+  forgeConfirmModalAbort?.abort();
+  forgeConfirmModalAbort = null;
+  softRemoveOverlay("forge-confirm-layer");
+}
+
+function bindForgeConfirmModal(): void {
+  const layer = app.querySelector<HTMLElement>("#forge-confirm-layer");
+  if (!layer || !forgeConfirm) return;
+  forgeConfirmModalAbort?.abort();
+  const ac = new AbortController();
+  forgeConfirmModalAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+  layer.querySelector("#btn-forge-confirm-close")?.addEventListener("click", () => closeForgeConfirmSoft(), opts);
+  layer.querySelector(".settings-backdrop")?.addEventListener("click", () => closeForgeConfirmSoft(), opts);
+  layer
+    .querySelector<HTMLButtonElement>("#btn-forge-confirm-ok")
+    ?.addEventListener("click", () => executeForgeConfirm(), opts);
+}
+
+function openForgeConfirmSoft(kind: ForgeKind, index: number): void {
+  const sym = save.symbols[index];
+  if (!sym) return;
+  forgeReveal = null;
+  softRemoveOverlay("forge-reveal-layer");
+  forgeConfirm = { kind, symbolId: sym.id };
+  const layer = softMountOverlay("forge-confirm-layer", renderForgeConfirmModal());
+  if (layer) {
+    promoteOverlayToAppRoot(layer);
+    bindForgeConfirmModal();
+    replayModalPop(layer);
+  }
+}
+
+function executeForgeConfirm(): void {
+  if (!forgeConfirm) return;
+  const { kind, symbolId } = forgeConfirm;
+  const idx = findSymbolIndexById(symbolId);
+  if (idx < 0) {
+    flash(t("ui.forgeConfirm.missing"));
+    closeForgeConfirmSoft();
+    return;
+  }
+  const prev = save.symbols[idx]!;
+  if (!canAffordForge(kind, prev.enhance)) return;
+  const beforeHtml = renderForgeSymbolSummary(prev);
+  const detailId =
+    symbolDetailIndex != null ? (save.symbols[symbolDetailIndex]?.id ?? null) : null;
+  const compareId =
+    symbolCompareIndex != null ? (save.symbols[symbolCompareIndex]?.id ?? null) : null;
+  const r =
+    kind === "grind"
+      ? runGrindSymbol(save, String(idx))
+      : kind === "imprint"
+        ? runImprintSymbol(save, String(idx))
+        : runEnhanceSymbol(save, String(idx));
+  if (r.save === save) {
+    flash(r.message);
+    return;
+  }
+  save = r.save;
+  persist();
+  syncHudResources();
+  const next = save.symbols.find((s) => s.id === symbolId);
+  closeForgeConfirmSoft();
+  rematchSymbolModalIndices(detailId, compareId);
+  if (symbolDetailIndex == null && next) {
+    const ni = findSymbolIndexById(next.id);
+    symbolDetailIndex = ni >= 0 ? ni : null;
+  }
+  if (next) {
+    forgeReveal = {
+      kind,
+      beforeHtml,
+      afterHtml: renderForgeSymbolSummary(next),
+    };
+  }
+  if (symbolDetailIndex != null || symbolCompareIndex != null) {
+    softRefreshAfterSymbolModalAction();
+  } else {
+    if (!refreshMonsterSymbolsPane()) render();
+    else mountForgeRevealOverlay();
+  }
+}
+
+function mountForgeConfirmOverlay(): void {
+  if (!forgeConfirm) {
+    softRemoveOverlay("forge-confirm-layer");
+    return;
+  }
+  const layer = softMountOverlay("forge-confirm-layer", renderForgeConfirmModal());
+  if (layer) {
+    promoteOverlayToAppRoot(layer);
+    bindForgeConfirmModal();
   }
 }
 
@@ -11764,25 +11982,7 @@ function bindSymbolInventoryInteractions(): void {
       () => {
         const idx = Number(btn.dataset.symIdx);
         if (!Number.isFinite(idx) || !save.symbols[idx]) return;
-        const detailId =
-          symbolDetailIndex != null
-            ? (save.symbols[symbolDetailIndex]?.id ?? null)
-            : null;
-        const compareId =
-          symbolCompareIndex != null
-            ? (save.symbols[symbolCompareIndex]?.id ?? null)
-            : null;
-        const id = save.symbols[idx]?.id;
-        const r = runEnhanceSymbol(save, String(idx));
-        save = r.save;
-        persist();
-        rematchSymbolModalIndices(detailId, compareId);
-        if (symbolDetailIndex == null && id) {
-          const next = findSymbolIndexById(id);
-          symbolDetailIndex = next >= 0 ? next : null;
-        }
-        flash(r.message);
-        softRefreshAfterSymbolModalAction();
+        openForgeConfirmSoft("enhance", idx);
       },
       opts,
     );
@@ -11794,36 +11994,7 @@ function bindSymbolInventoryInteractions(): void {
       () => {
         const idx = Number(btn.dataset.symIdx);
         if (!Number.isFinite(idx) || !save.symbols[idx]) return;
-        const detailId =
-          symbolDetailIndex != null
-            ? (save.symbols[symbolDetailIndex]?.id ?? null)
-            : null;
-        const compareId =
-          symbolCompareIndex != null
-            ? (save.symbols[symbolCompareIndex]?.id ?? null)
-            : null;
-        const prev = save.symbols[idx];
-        const before = prev ? describeSymbol(prev) : "";
-        const id = prev?.id;
-        const r = runImprintSymbol(save, String(idx));
-        save = r.save;
-        persist();
-        const next = id ? save.symbols.find((x) => x.id === id) : undefined;
-        if (next && before && isImprintSuccessMessage(r.message)) {
-          forgeReveal = {
-            kind: "imprint",
-            before,
-            after: describeSymbol(next),
-            cost: `<span class="res-cost-chip"><img class="res-ico" src="/art/ui/res/imprint-stone.webp" width="16" height="16" alt="" draggable="false" /><strong>${SYMBOL_IMPRINT_STONE_COST}</strong></span>`,
-          };
-        }
-        rematchSymbolModalIndices(detailId, compareId);
-        if (symbolDetailIndex == null && id) {
-          const ni = findSymbolIndexById(id);
-          symbolDetailIndex = ni >= 0 ? ni : null;
-        }
-        flash(r.message);
-        softRefreshAfterSymbolModalAction();
+        openForgeConfirmSoft("imprint", idx);
       },
       opts,
     );
@@ -11835,36 +12006,7 @@ function bindSymbolInventoryInteractions(): void {
       () => {
         const idx = Number(btn.dataset.symIdx);
         if (!Number.isFinite(idx) || !save.symbols[idx]) return;
-        const detailId =
-          symbolDetailIndex != null
-            ? (save.symbols[symbolDetailIndex]?.id ?? null)
-            : null;
-        const compareId =
-          symbolCompareIndex != null
-            ? (save.symbols[symbolCompareIndex]?.id ?? null)
-            : null;
-        const prev = save.symbols[idx];
-        const before = prev ? describeSymbol(prev) : "";
-        const id = prev?.id;
-        const r = runGrindSymbol(save, String(idx));
-        save = r.save;
-        persist();
-        const next = id ? save.symbols.find((x) => x.id === id) : undefined;
-        if (next && before && isGrindSuccessMessage(r.message)) {
-          forgeReveal = {
-            kind: "grind",
-            before,
-            after: describeSymbol(next),
-            cost: grindCostLabel(),
-          };
-        }
-        rematchSymbolModalIndices(detailId, compareId);
-        if (symbolDetailIndex == null && id) {
-          const ni = findSymbolIndexById(id);
-          symbolDetailIndex = ni >= 0 ? ni : null;
-        }
-        flash(r.message);
-        softRefreshAfterSymbolModalAction();
+        openForgeConfirmSoft("grind", idx);
       },
       opts,
     );
@@ -14702,26 +14844,10 @@ function gloryBldgName(id: GloryBuildingId): string {
 }
 
 function gloryBldgArt(id: GloryBuildingId): { src: string; fallback: string } {
-  switch (id) {
-    case "mana_fountain":
-      return { src: "/art/ui/res/gold.svg", fallback: "/art/ui/res/gold.svg" };
-    case "ancient_sword":
-      return { src: "/art/ui/skill/damage.webp", fallback: "/art/ui/skill/damage.svg" };
-    case "guardstone":
-      return { src: "/art/ui/skill/shield.webp", fallback: "/art/ui/skill/shield.svg" };
-    case "crystal_altar":
-      return { src: "/art/ui/skill/heal.webp", fallback: "/art/ui/skill/heal.svg" };
-    case "sky_totem":
-      return { src: "/art/ui/element/light.webp", fallback: "/art/ui/element/light.svg" };
-    case "fire_sanctuary":
-      return { src: "/art/ui/element/fire.webp", fallback: "/art/ui/element/fire.svg" };
-    case "water_sanctuary":
-      return { src: "/art/ui/element/water.webp", fallback: "/art/ui/element/water.svg" };
-    case "wind_sanctuary":
-      return { src: "/art/ui/element/wind.webp", fallback: "/art/ui/element/wind.svg" };
-    case "fairy_tree":
-      return { src: "/art/hub/emblem-glory.svg", fallback: "/art/ui/res/gold.svg" };
-  }
+  return {
+    src: `/art/hub/glory/${id}.svg`,
+    fallback: "/art/hub/emblem-glory.svg",
+  };
 }
 
 function gloryPctLabel(frac: number): string {
@@ -14735,7 +14861,7 @@ function gloryEffectText(g: GloryBuildingDef, lv: number): string {
   if (g.defPct) return `${t("ui.statDef")} ${gloryPctLabel(g.defPct * n)}`;
   if (g.hpPct) return `${t("ui.statHp")} ${gloryPctLabel(g.hpPct * n)}`;
   if (g.spdFlat) return `${t("ui.statSpd")} +${g.spdFlat * n}`;
-  if (g.manaProdPct) return `${t("ui.dc78e6a251")} ${gloryPctLabel(g.manaProdPct * n)}`;
+  if (g.manaProdPct) return `${t("res.gold")} ${gloryPctLabel(g.manaProdPct * n)}`;
   return "";
 }
 
@@ -14761,17 +14887,13 @@ function renderGloryListHtml(): string {
     const art = gloryBldgArt(g.id);
     const now = gloryEffectText(g, lv);
     const next = maxed ? "MAX" : gloryEffectText(g, lv + 1);
-    return `<button type="button" class="glory-bldg${maxed ? " is-maxed" : ""}${!canBuy && !maxed ? " is-locked" : ""}" data-glory="${g.id}" ${maxed ? "disabled" : ""}>
-      <span class="glory-bldg-seal" aria-hidden="true" style="--glory-pct:${pct}">
-        <img class="glory-bldg-seal-ring-art" src="/art/ui/symbol/circle-frame.svg" width="56" height="56" alt="" draggable="false" />
-        <span class="glory-bldg-seal-ring"></span>
-        <img class="glory-bldg-seal-art" src="${art.src}" width="28" height="28" alt="" draggable="false" onerror="this.onerror=null;this.src='${art.fallback}'" />
+    return `<button type="button" class="glory-bldg glory-bldg--${g.id}${maxed ? " is-maxed" : ""}${!canBuy && !maxed ? " is-locked" : ""}" data-glory="${g.id}" ${maxed ? "disabled" : ""}>
+      <span class="glory-bldg-stage" aria-hidden="true">
+        <img class="glory-bldg-img" src="${art.src}" width="160" height="120" alt="" draggable="false" onerror="this.onerror=null;this.src='${art.fallback}'" />
         <span class="glory-bldg-lv">${lv}</span>
       </span>
-      <span class="glory-bldg-body">
-        <span class="glory-bldg-head">
-          <strong class="glory-bldg-name">${escapeHtml(gloryBldgName(g.id))}</strong>
-        </span>
+      <span class="glory-bldg-copy">
+        <strong class="glory-bldg-name">${escapeHtml(gloryBldgName(g.id))}</strong>
         <span class="glory-bldg-delta">
           <strong>${escapeHtml(now)}</strong>
           <span aria-hidden="true">${ARROW_RIGHT}</span>
@@ -14807,7 +14929,7 @@ function renderGlory(): string {
         ${gloryBuffChip(t("ui.statDef"), "/art/ui/skill/shield.webp", "/art/ui/skill/shield.svg", gloryPctLabel(buff.defPct))}
         ${gloryBuffChip(t("ui.statHp"), "/art/ui/skill/heal.webp", "/art/ui/skill/heal.svg", gloryPctLabel(buff.hpPct))}
         ${gloryBuffChip(t("ui.statSpd"), "/art/ui/element/wind.webp", "/art/ui/element/wind.svg", `+${buff.spdFlat}`)}
-        ${gloryBuffChip(t("ui.dc78e6a251"), "/art/ui/res/gold.svg", "/art/ui/res/gold.svg", gloryPctLabel(buff.manaProdPct))}
+        ${gloryBuffChip(t("res.gold"), "/art/ui/res/gold.svg", "/art/ui/res/gold.svg", gloryPctLabel(buff.manaProdPct))}
       </div>
     </section>
     <div class="glory-list">${renderGloryListHtml()}</div>
@@ -16020,6 +16142,7 @@ function renderBattle(manaPct: number): string {
     </header>
     <div class="battle-layout battle-layout--framed battle-layout--stage${canPlaceStone ? " is-stone-pick" : ""}${awaitSkill ? " is-skill-pick" : ""}${stoneSummonFx ? " is-stone-summoning" : ""}">
     <div class="dmg-layer" aria-hidden="true">${renderDmgLayer()}</div>
+    <div class="skill-fx-layer" aria-hidden="true"></div>
     ${
       waveBannerText
         ? `<div class="battle-wave-banner" aria-live="polite"><span>${escapeHtml(
@@ -17721,35 +17844,17 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-grind]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const idx = btn.dataset.grind!;
-      const prev = save.symbols[Number(idx)];
-      const before = prev ? describeSymbol(prev) : "";
-      const id = prev?.id;
-      const r = runGrindSymbol(save, idx);
-      save = r.save;
-      persist();
-      const next = id ? save.symbols.find((s) => s.id === id) : undefined;
-      if (next && before && isGrindSuccessMessage(r.message)) {
-        forgeReveal = {
-          kind: "grind",
-          before,
-          after: describeSymbol(next),
-          cost: grindCostLabel(),
-        };
-      }
-      flash(r.message);
-      softShowForgeReveal();
+      const idx = Number(btn.dataset.grind);
+      if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+      openForgeConfirmSoft("grind", idx);
     });
   });
 
   app.querySelectorAll<HTMLButtonElement>("[data-enhance-sym]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const idx = btn.dataset.enhanceSym!;
-      const r = runEnhanceSymbol(save, idx);
-      save = r.save;
-      persist();
-      flash(r.message);
-      render();
+      const idx = Number(btn.dataset.enhanceSym);
+      if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+      openForgeConfirmSoft("enhance", idx);
     });
   });
 
@@ -17765,27 +17870,13 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-imprint]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const idx = btn.dataset.imprint!;
-      const prev = save.symbols[Number(idx)];
-      const before = prev ? describeSymbol(prev) : "";
-      const id = prev?.id;
-      const r = runImprintSymbol(save, idx);
-      save = r.save;
-      persist();
-      const next = id ? save.symbols.find((s) => s.id === id) : undefined;
-      if (next && before && isImprintSuccessMessage(r.message)) {
-        forgeReveal = {
-          kind: "imprint",
-          before,
-          after: describeSymbol(next),
-          cost: `<span class="res-cost-chip"><img class="res-ico" src="/art/ui/res/imprint-stone.webp" width="16" height="16" alt="" draggable="false" /><strong>${SYMBOL_IMPRINT_STONE_COST}</strong></span>`,
-        };
-      }
-      flash(r.message);
-      softShowForgeReveal();
+      const idx = Number(btn.dataset.imprint);
+      if (!Number.isFinite(idx) || !save.symbols[idx]) return;
+      openForgeConfirmSoft("imprint", idx);
     });
   });
 
+  mountForgeConfirmOverlay();
   mountForgeRevealOverlay();
   bindFusionRevealDismiss();
   bindEnhanceTransientModals();

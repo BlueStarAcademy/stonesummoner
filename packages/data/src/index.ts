@@ -78,12 +78,14 @@ export {
   countSymbolSets,
   describeSymbol,
   emptySymbolCombatMods,
+  formatSymbolSetEffect,
   grindEnhanceSubstat,
   MAX_SYMBOL_ENHANCE,
   MAX_SYMBOL_SUBSTATS,
   SYMBOL_SUBSTAT_PROC_LEVELS,
   symbolCombatMods,
   symbolEnhanceManaCost,
+  symbolSetCompletions,
   summarizeSymbolSets,
 } from "./symbolStats.js";
 export type {

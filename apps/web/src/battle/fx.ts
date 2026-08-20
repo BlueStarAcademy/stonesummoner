@@ -52,8 +52,13 @@ export function pulseUnitClass(
     `.battle-unit[data-unit="${CSS.escape(unitId)}"]`,
   );
   if (!el) return;
+  const art = el.querySelector<HTMLElement>(".battle-unit-art");
   el.classList.add(className);
-  window.setTimeout(() => el.classList.remove(className), ms);
+  if (art) art.style.animationDuration = `${Math.max(40, ms)}ms`;
+  window.setTimeout(() => {
+    el.classList.remove(className);
+    if (art) art.style.animationDuration = "";
+  }, ms);
 }
 
 /**

@@ -1,4 +1,9 @@
-import type { SymbolInstance, SymbolSetId, SymbolSubstat } from "./symbols.js";
+import type {
+  SymbolInstance,
+  SymbolSetDef,
+  SymbolSetId,
+  SymbolSubstat,
+} from "./symbols.js";
 import { SYMBOL_SETS } from "./symbols.js";
 import {
   mainStatAtEnhance,
@@ -152,12 +157,13 @@ export function applySymbolsToStats(
 
   const counts = countSymbolSets(equipped);
   const hwalroSets = Math.floor((counts.hwalro ?? 0) / 2);
-  for (let i = 0; i < hwalroSets; i++) stats.hp = Math.round(stats.hp * 1.15);
+  // 2-set bonuses stack additively (4 pieces = 2x the listed effect).
+  if (hwalroSets > 0) stats.hp = Math.round(stats.hp * (1 + 0.15 * hwalroSets));
   if ((counts.yongmaeng ?? 0) >= 4) stats.atk = Math.round(stats.atk * 1.35);
   if ((counts.chimtu ?? 0) >= 4) stats.critDmg = Math.round(stats.critDmg * 1.4);
   if ((counts.haengma ?? 0) >= 4) stats.spd = Math.round(stats.spd * 1.25);
   const gunhimSets = Math.floor((counts.gunhim ?? 0) / 2);
-  for (let i = 0; i < gunhimSets; i++) stats.def = Math.round(stats.def * 1.15);
+  if (gunhimSets > 0) stats.def = Math.round(stats.def * (1 + 0.15 * gunhimSets));
   const yeongyeolSets = Math.floor((counts.yeongyeol ?? 0) / 2);
   stats.resistance += yeongyeolSets * 20;
   const mussangSets = Math.floor((counts.mussang ?? 0) / 2);
@@ -173,8 +179,59 @@ export interface SymbolSetProgress {
   nameKo: string;
   count: number;
   pieces: number;
+  /** Completed 2-sets or 4-sets (`floor(count / pieces)`). */
+  completions: number;
   active: boolean;
   effectKo: string;
+}
+
+export function symbolSetCompletions(count: number, pieces: 2 | 4): number {
+  return Math.max(0, Math.floor(count / pieces));
+}
+
+/** Listed set effect scaled by completed sets (4 of a 2-set = 2x). */
+export function formatSymbolSetEffect(
+  set: SymbolSetDef,
+  completions: number,
+): string {
+  const n = completions;
+  if (n <= 1) return set.effectKo;
+  switch (set.id) {
+    case "hwalro":
+      return `체력 +${15 * n}%`;
+    case "yongmaeng":
+      return `공격력 +${35 * n}%`;
+    case "mussang":
+      return `치명확률 +${12 * n}%`;
+    case "haengma":
+      return `속도 +${25 * n}%`;
+    case "jipjung":
+      return `효과적중 +${20 * n}%`;
+    case "gunhim":
+      return `방어력 +${15 * n}%`;
+    case "yeongyeol":
+      return `효과저항 +${20 * n}%`;
+    case "bogang":
+      return `아군 실드 3턴(체력의 ${15 * n}%)`;
+    case "hwangyeok":
+      return `반격확률 +${15 * n}%`;
+    case "ssangnip":
+      return `면역 ${n}턴`;
+    case "eungjing":
+      return `피격 시 ATB +${4 * n}%(HP 7% 손실마다)`;
+    case "tagae":
+      return `흡혈 +${35 * n}%(데미지)`;
+    case "pamyeol":
+      return `피해의 30%로 적 최대HP 감소(회당 최대 ${4 * n}%)`;
+    case "myosu":
+      return `기절 확률 +${25 * n}%`;
+    case "gyeongno":
+      return `추가턴 +${22 * n}%`;
+    case "chimtu":
+      return `치명피해 +${40 * n}%`;
+    default:
+      return set.effectKo;
+  }
 }
 
 export function summarizeSymbolSets(
@@ -183,13 +240,15 @@ export function summarizeSymbolSets(
   const counts = countSymbolSets(equipped);
   return SYMBOL_SETS.map((set) => {
     const count = counts[set.id] ?? 0;
+    const completions = symbolSetCompletions(count, set.pieces);
     return {
       setId: set.id,
       nameKo: set.nameKo,
       count,
       pieces: set.pieces,
-      active: count >= set.pieces,
-      effectKo: set.effectKo,
+      completions,
+      active: completions >= 1,
+      effectKo: formatSymbolSetEffect(set, completions),
     };
   }).filter((p) => p.count > 0);
 }

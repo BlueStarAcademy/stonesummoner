@@ -97,6 +97,7 @@ export const Mark = {
   starDot: MIDDOT,
   grind: "\uC5F0",
   imprint: "\uAC01",
+  enhance: "\uAC15",
   fusion: "\uC735",
   wish: "\uC6D0",
   open: "\uAC1C",

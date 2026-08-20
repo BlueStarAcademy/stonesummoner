@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   applySymbolsToStats,
   canGrindSymbol,
+  symbolCombatMods,
   canImprintSymbol,
   CHAPTER1_STAGES,
   CAIROS_DRAGON_STAGES,
@@ -249,6 +250,59 @@ describe("phase1 data", () => {
     assert.equal(prog.length, 1);
     assert.equal(prog[0]!.nameKo, "활로");
     assert.equal(prog[0]!.active, true);
+    assert.equal(prog[0]!.completions, 1);
+    assert.equal(prog[0]!.effectKo, "체력 +15%");
+  });
+
+  it("doubles 2-set bonuses at 4 pieces (hwalro +30% hp)", () => {
+    const base = {
+      hp: 1000,
+      atk: 100,
+      def: 50,
+      spd: 100,
+      critRate: 15,
+      critDmg: 50,
+      accuracy: 0,
+      resistance: 15,
+    };
+    const blank = (setId: "hwalro" | "mussang" | "gunhim", slot: 1 | 2 | 3 | 4, id: string) => ({
+      ...createSymbol(setId, slot, id),
+      mainStat: "ATK+",
+      mainValue: 0,
+      substats: [],
+    });
+    const fourHwalro = [1, 2, 3, 4].map((slot) =>
+      blank("hwalro", slot as 1 | 2 | 3 | 4, `h${slot}`),
+    );
+    const hp = applySymbolsToStats(base, fourHwalro);
+    assert.equal(hp.hp, 1300);
+    const hwalroProg = summarizeSymbolSets(fourHwalro);
+    assert.equal(hwalroProg[0]!.completions, 2);
+    assert.equal(hwalroProg[0]!.effectKo, "체력 +30%");
+
+    const fourMussang = [1, 2, 3, 4].map((slot) =>
+      blank("mussang", slot as 1 | 2 | 3 | 4, `m${slot}`),
+    );
+    const crit = applySymbolsToStats(base, fourMussang);
+    assert.equal(crit.critRate, 39);
+    assert.equal(summarizeSymbolSets(fourMussang)[0]!.effectKo, "치명확률 +24%");
+
+    const fourGunhim = [1, 2, 3, 4].map((slot) =>
+      blank("gunhim", slot as 1 | 2 | 3 | 4, `g${slot}`),
+    );
+    const def = applySymbolsToStats(base, fourGunhim);
+    assert.equal(def.def, 65);
+    assert.equal(summarizeSymbolSets(fourGunhim)[0]!.effectKo, "방어력 +30%");
+
+    const fourBogang = [1, 2, 3, 4].map((slot) => ({
+      ...createSymbol("bogang", slot as 1 | 2 | 3 | 4, `b${slot}`),
+      mainStat: "ATK+",
+      mainValue: 0,
+      substats: [],
+    }));
+    const mods = symbolCombatMods(fourBogang);
+    assert.equal(mods.startShieldPct, 0.3);
+    assert.equal(summarizeSymbolSets(fourBogang)[0]!.effectKo, "아군 실드 3턴(체력의 30%)");
   });
 
   it("applies SW set bonuses (mussang/chimtu/jipjung)", () => {
