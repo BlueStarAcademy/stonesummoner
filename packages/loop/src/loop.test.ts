@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createStarterGear, createSymbol, getStage } from "stonesummoner-data";
+import { createStarterGear, createSymbol, getStage, CHAPTER1_STAGES } from "stonesummoner-data";
 import {
   createNewSave,
   createStageBattle,
@@ -8,6 +8,7 @@ import {
   homeCollect,
   isoWeekKey,
   isStageUnlocked,
+  isDifficultyOpen,
   nextStageInProgression,
   listGear,
   listRoster,
@@ -70,6 +71,8 @@ import {
   runSetParty,
   runSavePartyPreset,
   runLoadPartyPreset,
+  runChangeProfileNickname,
+  runSetProfileIcon,
   runSkillUp,
   runSortie,
   runSummon,
@@ -82,6 +85,8 @@ import {
   RAID_ATTEMPTS_DAILY,
   GUILD_WEEK_CONTRIB_GOAL,
   applyRewards,
+  rollStageCrystalDrop,
+  stageCrystalDropChance,
   monsterExpToNext,
   monsterMaxLevel,
   addOwnedMonsterExp,
@@ -104,7 +109,7 @@ describe("game loop", () => {
     assert.match(r.message, /골드 연못/);
   });
 
-  it("upgrades mana pond and grants crystal on clear", () => {
+  it("upgrades mana pond", () => {
     let save = createNewSave(0);
     save = { ...save, island: { ...save.island, mana: 5000, energy: 50 } };
     const up = runUpgradeBuilding(save, "mana_pond");
@@ -117,9 +122,28 @@ describe("game loop", () => {
     const beforeCrystal = save.island.crystal;
     const r = runSortie(save, "garen_1_1", { rng: () => 0.1 });
     if (r.reward?.victory) {
-      assert.ok((r.reward.crystal ?? 0) >= 1);
       assert.equal(r.save.island.crystal, beforeCrystal + (r.reward.crystal ?? 0));
     }
+  });
+
+  it("drops stage crystals rarely like Summoners War extras", () => {
+    const early = getStage("garen_1_1")!;
+    assert.equal(stageCrystalDropChance(early), 0.08);
+    assert.equal(stageCrystalDropChance(getStage("giant_b10")!), 0.05);
+    assert.equal(stageCrystalDropChance(getStage("arena_rookie")!), 0);
+    assert.equal(rollStageCrystalDrop(early, () => 0.99), 0);
+    assert.equal(rollStageCrystalDrop(early, () => 0.1), 0);
+    const hit = rollStageCrystalDrop(early, () => 0.01);
+    assert.equal(hit, 1);
+
+    const miss = applyRewards(createNewSave(0), early, true, () => 0.99);
+    assert.equal(miss.reward.crystal ?? 0, 0);
+    const granted = applyRewards(createNewSave(0), early, true, () => 0.01);
+    assert.equal(granted.reward.crystal, 1);
+    assert.equal(
+      granted.save.island.crystal,
+      createNewSave(0).island.crystal + 1,
+    );
   });
 
   it("runs sortie with energy cost and reward", () => {
@@ -959,6 +983,36 @@ describe("game loop", () => {
     assert.ok((hardClear.reward.summonerExp ?? 0) > (hardLocked.reward.summonerExp ?? 0));
   });
 
+  it("opens scenario hard only after every stage on the map is cleared on normal", () => {
+    const first = getStage("garen_1_1")!;
+    const boss = getStage("garen_1_7")!;
+    const map2 = getStage("tower_2_1")!;
+    let save = createNewSave(0);
+    save = { ...save, island: { ...save.island, energy: 50 } };
+
+    assert.equal(isDifficultyOpen(save, first, "normal"), true);
+    assert.equal(isDifficultyOpen(save, first, "hard"), false);
+    const blocked = runSortie(save, "garen_1_1", {
+      rng: () => 0.1,
+      difficulty: "hard",
+    });
+    assert.match(blocked.message, /난이도/);
+
+    save = { ...save, clearedStages: ["garen_1_1"] };
+    assert.equal(isDifficultyOpen(save, first, "hard"), false);
+
+    const chapter1Ids = CHAPTER1_STAGES.map((s) => s.id);
+    save = { ...save, clearedStages: chapter1Ids };
+    assert.equal(isDifficultyOpen(save, first, "hard"), true);
+    assert.equal(isDifficultyOpen(save, boss, "hard"), true);
+    assert.equal(isDifficultyOpen(save, map2, "hard"), false);
+    assert.equal(isDifficultyOpen(save, first, "hell"), false);
+
+    save = { ...save, clearedHardStages: chapter1Ids };
+    assert.equal(isDifficultyOpen(save, first, "hell"), true);
+    assert.equal(isDifficultyOpen(save, map2, "hell"), false);
+  });
+
   it("scenario normal drops almost only ★1 symbols (rare ★2)", () => {
     const stage = getStage("garen_1_1")!;
     let ones = 0;
@@ -1698,5 +1752,27 @@ describe("game loop", () => {
       "light-bolt",
       "light-ward",
     ]);
+  });
+
+  it("renames the profile for free once, then spends crystal", () => {
+    let save = createNewSave(0);
+    save = { ...save, island: { ...save.island, crystal: 500 } };
+    const first = runChangeProfileNickname(save, "NickA");
+    assert.equal(first.message, "ok");
+    assert.equal(first.save.profileNickname, "NickA");
+    assert.equal(first.save.nicknameChangeCount, 1);
+    assert.equal(first.save.island.crystal, 500);
+    const same = runChangeProfileNickname(first.save, "NickA");
+    assert.equal(same.message, "unchanged");
+    const second = runChangeProfileNickname(first.save, "NickB");
+    assert.equal(second.message, "ok");
+    assert.equal(second.save.island.crystal, 200);
+    const broke = runChangeProfileNickname(
+      { ...second.save, island: { ...second.save.island, crystal: 10 } },
+      "NickC",
+    );
+    assert.equal(broke.message, "crystal_short");
+    const icon = runSetProfileIcon(second.save, second.save.roster[0]!.monsterId);
+    assert.equal(icon.profileIconId, second.save.roster[0]!.monsterId);
   });
 });

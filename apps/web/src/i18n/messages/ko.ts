@@ -1082,7 +1082,19 @@ const messages: MessageDict = {
   "settings.audioBgm": "배경음",
   "settings.audioSfx": "효과음",
   "settings.audioMute": "음소거",
-  "settings.audioUnmute": "음소거 해제"
+  "settings.audioUnmute": "음소거 해제",
+  "ui.profile.title": "프로필",
+  "ui.profile.close": "프로필 닫기",
+  "ui.profile.nick": "닉네임",
+  "ui.profile.change": "변경",
+  "ui.profile.free": "무료",
+  "ui.profile.iconDefault": "기본",
+  "ui.profile.errRequired": "닉네임을 입력해 주세요.",
+  "ui.profile.errFormat": "닉네임은 한글 2~6글자로 입력해 주세요.",
+  "ui.profile.errProfanity": "사용할 수 없는 닉네임입니다.",
+  "ui.profile.errTaken": "이미 사용 중인 닉네임입니다.",
+  "ui.profile.errCrystal": "크리스탈이 부족합니다.",
+  "ui.profile.nickSetupConfirm": "확인"
 };
 
 export default messages;

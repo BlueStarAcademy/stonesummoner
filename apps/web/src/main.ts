@@ -31,10 +31,16 @@ import {
   bindUiSfx,
   syncBgmForView,
   playSfx,
+  playCombatCastSfx,
+  playCombatHitSfx,
+  magicKindFromId,
+  kindFromEffects,
   cueModalSfx,
   getAudioPrefs,
   setAudioPrefs,
   type AudioScreen,
+  type CombatElement,
+  type CombatSfxKind,
 } from "./audio";
 import {
   battleCircleIdForStage,
@@ -237,6 +243,7 @@ import {
   evolveManaCost,
   evolveMinLevel,
   isStageUnlocked,
+  isDifficultyOpen,
   nextStageInProgression,
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
@@ -269,6 +276,9 @@ import {
   runCraftEssence,
   runDailyWish,
   ENERGY_CRYSTAL_COST,
+  nicknameChangeCrystalCost,
+  runSetProfileIcon,
+  runChangeProfileNickname,
   ENERGY_BUY_AMOUNT,
   GRINDSTONE_BUY_CRYSTAL_COST,
   IMPRINT_STONE_BUY_CRYSTAL_COST,
@@ -374,6 +384,7 @@ import {
   type SummonerElement,
 } from "stonesummoner-loop";
 import type { Point } from "stonesummoner-board";
+import { validateNickname } from "./nickname";
 
 type View =
   | "auth"
@@ -407,7 +418,12 @@ type FusionReveal = {
   cost: string;
 };
 
-type SessionUser = { id: string; email: string | null; kind: string };
+type SessionUser = {
+  id: string;
+  email: string | null;
+  kind: string;
+  nickname?: string | null;
+};
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 initUiScale();
@@ -1498,6 +1514,8 @@ let shapeFlashUntil = 0;
 /** Extra currencies drawer under app-bar resources. */
 let resMoreOpen = false;
 let settingsOpen = false;
+let profileOpen = false;
+let nicknameSetupOpen = false;
 let mailboxOpen = false;
 let notifOpen = false;
 let summonerPickerOpen = false;
@@ -1886,6 +1904,7 @@ function applyBuildingInfoOpen(): void {
   const layer = app.querySelector<HTMLElement>("#building-info-layer");
   if (!layer) return;
   const open = !!buildingInfoId;
+  if (open) closeProfileSoft();
   layer.hidden = !open;
   layer.setAttribute("aria-hidden", open ? "false" : "true");
   if (!open) return;
@@ -2505,7 +2524,8 @@ function syncOnboardFromSave(opts?: { offerWelcome?: boolean }): void {
   if (
     opts?.offerWelcome &&
     !onboard.welcomeSeen &&
-    onboard.step !== "done"
+    onboard.step !== "done" &&
+    !needsNicknameSetup()
   ) {
     onboardWelcomeOpen = true;
   }
@@ -2774,6 +2794,7 @@ async function hydrateSession(
       ) ?? defaultOnboardSnapshot();
     onboardWelcomeOpen = false;
     persistOnboard();
+    adoptSessionNickname(user);
     return;
   }
   if (opts?.fresh || needsCoreLoopReset(user)) {
@@ -2792,6 +2813,7 @@ async function hydrateSession(
     onboard = defaultOnboardSnapshot();
     persistOnboard();
     syncOnboardFromSave({ offerWelcome: true });
+    adoptSessionNickname(user);
     return;
   }
   if (!user.id.startsWith("local-")) {
@@ -2816,6 +2838,7 @@ async function hydrateSession(
   syncOnboardFromSave({
     offerWelcome: forcedFresh || (!onboard.welcomeSeen && onboard.step === "gateway"),
   });
+  adoptSessionNickname(user);
 }
 
 async function enterWithUser(
@@ -2874,6 +2897,8 @@ async function logout(): Promise<void> {
     await apiJson("/api/auth/logout", { method: "POST", body: "{}" });
   }
   sessionUser = null;
+  profileOpen = false;
+  nicknameSetupOpen = false;
   battle = null;
   currentStage = null;
   autoMode = false;
@@ -3090,7 +3115,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
     render();
     return;
   }
-  if (!isDifficultyOpen(stage, diff)) {
+  if (!isDifficultyOpen(save, stage, diff)) {
     flash(t('ui.a4d2cdf322'));
     render();
     return;
@@ -3286,7 +3311,7 @@ function openStagePrep(stage: StageDef): void {
     flash(t("ui.b72f5a4752"));
     return;
   }
-  if (!isDifficultyOpen(stage, stageEntryDiff)) {
+  if (!isDifficultyOpen(save, stage, stageEntryDiff)) {
     flash(t("ui.a4d2cdf322"));
     return;
   }
@@ -4959,36 +4984,70 @@ function afterPlayerAction(): void {
 }
 
 /** Auto-pick skill for the active unit (summoner skills preferred when ready). */
-function resolveActiveUnitSkillHits(unit: Unit): SkillResult[] {
-  if (!battle) return [];
+function resolveActiveUnitSkillHits(unit: Unit): {
+  hits: SkillResult[];
+  sfxKind: CombatSfxKind;
+} {
+  if (!battle) return { hits: [], sfxKind: "single" };
   const magics = battle.summonerOf(unit.team).magicSkills ?? [];
   const full = magics.find(
     (s) => s.manaCostFrac >= 0.95 && battle!.canUseMagicSkill(unit, s.id),
   );
-  if (full) return battle.useSkill({ summonerSkill: full.id });
+  if (full) {
+    return {
+      hits: battle.useSkill({ summonerSkill: full.id }),
+      sfxKind: magicKindFromId(full.id),
+    };
+  }
   const any = magics.find((s) => battle!.canUseMagicSkill(unit, s.id));
-  if (any) return battle.useSkill({ summonerSkill: any.id });
-  if (battle.canUseSummonerSkill(unit))
-    return battle.useSkill({ summonerSkill: "open" });
+  if (any) {
+    return {
+      hits: battle.useSkill({ summonerSkill: any.id }),
+      sfxKind: magicKindFromId(any.id),
+    };
+  }
+  if (battle.canUseSummonerSkill(unit)) {
+    return {
+      hits: battle.useSkill({ summonerSkill: "open" }),
+      sfxKind: magicKindFromId("open"),
+    };
+  }
   if (
     battle.canUseSummonerClean(unit) &&
     battle.countEnemyStones(unit.team) >= 4
-  )
-    return battle.useSkill({ summonerSkill: "clean" });
+  ) {
+    return {
+      hits: battle.useSkill({ summonerSkill: "clean" }),
+      sfxKind: magicKindFromId("clean"),
+    };
+  }
   if (
     battle.canUseSummonerGuard(unit) &&
     battle.allyMonstersWounded(unit.team, 0.55)
-  )
-    return battle.useSkill({ summonerSkill: "guard" });
-  if (battle.canUseSummonerDeclare(unit))
-    return battle.useSkill({ summonerSkill: "declare" });
-  if (battle.canUseSummonerDual(unit))
-    return battle.useSkill({ summonerSkill: "dual" });
+  ) {
+    return {
+      hits: battle.useSkill({ summonerSkill: "guard" }),
+      sfxKind: magicKindFromId("guard"),
+    };
+  }
+  if (battle.canUseSummonerDeclare(unit)) {
+    return {
+      hits: battle.useSkill({ summonerSkill: "declare" }),
+      sfxKind: magicKindFromId("declare"),
+    };
+  }
+  if (battle.canUseSummonerDual(unit)) {
+    return {
+      hits: battle.useSkill({ summonerSkill: "dual" }),
+      sfxKind: magicKindFromId("dual"),
+    };
+  }
   const targetId = unit.team === "ally" ? ensureTarget() : undefined;
-  return battle.useSkill({
-    skillIndex: pickAutoSkillIndex(unit, battle.units),
-    targetId,
-  });
+  const skillIndex = pickAutoSkillIndex(unit, battle.units);
+  return {
+    hits: battle.useSkill({ skillIndex, targetId }),
+    sfxKind: kindFromEffects(unit.skills?.[skillIndex]?.effects),
+  };
 }
 
 /**
@@ -5160,7 +5219,7 @@ async function resolveCombatUntilAllyInput(opts?: {
       }
 
       if (battle.phase === "await_skill") {
-        const hits = resolveActiveUnitSkillHits(unit);
+        const { hits, sfxKind } = resolveActiveUnitSkillHits(unit);
         if (battle.phase === "await_skill" && !hits.length) {
           // Skill no-op / soft — end the turn so we never spin.
           battle.phase = "resolved";
@@ -5168,7 +5227,7 @@ async function resolveCombatUntilAllyInput(opts?: {
           continue;
         }
         const ult = hits.some((h) => h.usedSummonerSkill);
-        await playStrikeFx(hits, { ult });
+        await playStrikeFx(hits, { ult, sfxKind });
         refreshLegal();
         render();
         continue;
@@ -5292,14 +5351,60 @@ function castSkill(
   void castSkillAsync(resolved, targetId);
 }
 
+function combatElementOf(unit: Unit | null | undefined): CombatElement {
+  const el = unit?.element;
+  if (
+    el === "fire" ||
+    el === "water" ||
+    el === "wind" ||
+    el === "light" ||
+    el === "dark"
+  ) {
+    return el;
+  }
+  return "light";
+}
+
+function inferCombatSfxKind(hits: SkillResult[]): CombatSfxKind {
+  if (hits.some((h) => h.damage < 0)) return "heal";
+  const dmg = hits.filter((h) => h.damage > 0);
+  if (!dmg.length) return "buff";
+  const targets = new Set(dmg.map((h) => h.targetId));
+  if (targets.size > 1) return "aoe";
+  return "single";
+}
+
+function playCombatHitSfxForHits(
+  hits: SkillResult[],
+  element: CombatElement,
+): void {
+  if (hits.some((h) => h.damage < 0)) {
+    playCombatHitSfx(element, { heal: true });
+    return;
+  }
+  const dmg = hits.filter((h) => h.damage > 0 || h.crit);
+  if (!dmg.length) return;
+  const anyCrit = dmg.some((h) => h.crit);
+  const anyKo = dmg.some((h) => {
+    const target = battle?.getUnit(h.targetId);
+    return Boolean(target && !target.alive);
+  });
+  playCombatHitSfx(element, { crit: anyCrit, ko: anyKo });
+}
+
 async function playStrikeFx(
   hits: SkillResult[],
-  opts?: { ult?: boolean },
+  opts?: { ult?: boolean; sfxKind?: CombatSfxKind },
 ): Promise<void> {
   if (!hits.length) {
     pushDamageFloats(hits);
     return;
   }
+  const attacker = battle?.getUnit(hits[0]!.attackerId) ?? null;
+  const element = combatElementOf(attacker);
+  const kind = opts?.sfxKind ?? inferCombatSfxKind(hits);
+  playCombatCastSfx(element, kind, { ult: opts?.ult });
+
   if (opts?.ult) {
     const cutMs = fxDurationMs(520, battleSpeed);
     playUltCutin(app, cutMs);
@@ -5312,6 +5417,7 @@ async function playStrikeFx(
     const firstTarget = hits[0]?.targetId;
     if (firstTarget) {
       const crit = hits.some((h) => h.crit);
+      const hitAt = Math.floor(cutMs * 0.45);
       window.setTimeout(() => {
         pulseUnitClass(app, firstTarget, "fx-hit", fxDurationMs(320, battleSpeed));
         spawnUnitVfx(
@@ -5320,7 +5426,8 @@ async function playStrikeFx(
           crit ? "hit-crit" : "hit",
           fxDurationMs(360, battleSpeed),
         );
-      }, Math.floor(cutMs * 0.45));
+        playCombatHitSfxForHits(hits, element);
+      }, hitAt);
     }
     await waitFx(cutMs);
   } else {
@@ -5331,6 +5438,7 @@ async function playStrikeFx(
     pulseUnitClass(app, attackerId, "fx-lunge", lungeMs);
     spawnUnitVfx(app, attackerId, "strike", lungeMs);
     playSpineClip(attackerId, "run", { loop: false });
+    const hitAt = Math.floor(lungeMs * 0.35);
     window.setTimeout(() => {
       playSpineClip(attackerId, "attack");
       pulseUnitClass(app, targetId, "fx-hit", fxDurationMs(320, battleSpeed));
@@ -5340,7 +5448,8 @@ async function playStrikeFx(
         crit ? "hit-crit" : "hit",
         fxDurationMs(360, battleSpeed),
       );
-    }, Math.floor(lungeMs * 0.35));
+      playCombatHitSfxForHits(hits, element);
+    }, hitAt);
     await waitFx(lungeMs);
   }
   pushDamageFloats(hits);
@@ -5366,12 +5475,23 @@ async function castSkillAsync(
 
   battleFxBusy = true;
   try {
-    const finish = async (hits: SkillResult[], opts?: { ult?: boolean }) => {
+    const finish = async (
+      hits: SkillResult[],
+      opts?: { ult?: boolean; sfxKind?: CombatSfxKind },
+    ) => {
       clearBattleSkillSelection();
       selectedTargetId = null;
       if (opts?.ult || hits.some((h) => h.damage !== 0 || h.crit)) {
         await playStrikeFx(hits, opts);
       } else {
+        const attacker = hits[0]
+          ? battle?.getUnit(hits[0].attackerId) ?? null
+          : null;
+        playCombatCastSfx(
+          combatElementOf(attacker),
+          opts?.sfxKind ?? inferCombatSfxKind(hits),
+          { ult: opts?.ult },
+        );
         pushDamageFloats(hits);
       }
       await resolveCombatUntilAllyInput({ holdBusy: true });
@@ -5394,7 +5514,10 @@ async function castSkillAsync(
           summonerSkill: full.id,
           targetId,
         });
-        await finish(hits, { ult: true });
+        await finish(hits, {
+          ult: true,
+          sfxKind: magicKindFromId(full.id),
+        });
         return;
       }
       if (!battle.canUseSummonerSkill(unit)) {
@@ -5403,7 +5526,7 @@ async function castSkillAsync(
         return;
       }
       const hits = battle.useSkill({ summonerSkill: "open", targetId });
-      await finish(hits, { ult: true });
+      await finish(hits, { ult: true, sfxKind: magicKindFromId("open") });
       return;
     }
     if (mode === "declare") {
@@ -5412,7 +5535,9 @@ async function castSkillAsync(
         render();
         return;
       }
-      await finish(battle.useSkill({ summonerSkill: "declare" }));
+      await finish(battle.useSkill({ summonerSkill: "declare" }), {
+        sfxKind: magicKindFromId("declare"),
+      });
       return;
     }
     if (mode === "dual") {
@@ -5421,7 +5546,9 @@ async function castSkillAsync(
         render();
         return;
       }
-      await finish(battle.useSkill({ summonerSkill: "dual" }));
+      await finish(battle.useSkill({ summonerSkill: "dual" }), {
+        sfxKind: magicKindFromId("dual"),
+      });
       return;
     }
     if (mode === "clean") {
@@ -5430,7 +5557,9 @@ async function castSkillAsync(
         render();
         return;
       }
-      await finish(battle.useSkill({ summonerSkill: "clean" }));
+      await finish(battle.useSkill({ summonerSkill: "clean" }), {
+        sfxKind: magicKindFromId("clean"),
+      });
       return;
     }
     if (mode === "guard") {
@@ -5439,7 +5568,9 @@ async function castSkillAsync(
         render();
         return;
       }
-      await finish(battle.useSkill({ summonerSkill: "guard" }));
+      await finish(battle.useSkill({ summonerSkill: "guard" }), {
+        sfxKind: magicKindFromId("guard"),
+      });
       return;
     }
 
@@ -5467,7 +5598,9 @@ async function castSkillAsync(
       render();
       return;
     }
-    await finish(hits);
+    await finish(hits, {
+      sfxKind: kindFromEffects(unit.skills?.[skillIndex]?.effects),
+    });
   } finally {
     battleFxBusy = false;
   }
@@ -5818,13 +5951,13 @@ function renderBoard(): string {
   const circleId = battleCircleIdForStage(currentStage);
   const circleSrc = battleCircleSrc(circleId);
   return `<div class="board-frame board-frame--tilted board-frame--circle board-frame--has-art phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}${canClick ? " is-placeable" : ""}" data-element="${battle.circleElement ?? ""}" data-circle="${circleId}">
-    <img class="board-circle-art" src="${circleSrc}" width="512" height="512" alt="" draggable="false" decoding="async" aria-hidden="true" onerror="this.remove();this.parentElement?.classList.remove('board-frame--has-art')"/>
-    <div class="board-circle-aura" aria-hidden="true"></div>
-    <div class="board-circle-ring" aria-hidden="true"></div>
     <div class="board-phase-tag">${rebuildTag}${openingHint}</div>
     <div class="board-phase-meter" aria-hidden="true"><i style="width:${resetPct}%"></i></div>
     <div class="board-stage">
       <div class="board-hit" aria-hidden="false">
+        <img class="board-circle-art" src="${circleSrc}" width="512" height="512" alt="" draggable="false" decoding="async" aria-hidden="true" onerror="this.remove();this.closest('.board-frame')?.classList.remove('board-frame--has-art')"/>
+        <div class="board-circle-aura" aria-hidden="true"></div>
+        <div class="board-circle-ring" aria-hidden="true"></div>
         <div class="board magic-circle size-${size} phase-${Math.min(phase, 3)}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${cells}</div>
       </div>
     </div>
@@ -6423,8 +6556,37 @@ function ensureModalXDelegate(): void {
   );
 }
 
+function adoptSessionNickname(user: SessionUser): void {
+  const nick = user.nickname?.trim();
+  if (!nick) return;
+  if ((save.profileNickname ?? "").trim()) return;
+  save = { ...save, profileNickname: nick };
+  persist();
+}
+
 /** Short display name for profile overlays. */
+function storedProfileNickname(): string {
+  if (!sessionUser) return "";
+  const fromSave = save.profileNickname?.trim();
+  if (fromSave) return fromSave;
+  const fromSession = sessionUser.nickname?.trim();
+  if (fromSession) return fromSession;
+  return "";
+}
+
+function hasValidProfileNickname(): boolean {
+  return validateNickname(storedProfileNickname()).ok;
+}
+
+function needsNicknameSetup(): boolean {
+  if (!sessionUser) return false;
+  if (sessionUser.kind === "demo") return false;
+  return !hasValidProfileNickname();
+}
+
 function displayNickname(): string {
+  const stored = storedProfileNickname();
+  if (stored) return stored;
   const email = sessionUser?.email?.trim();
   if (email) {
     const local = email.split("@")[0] || email;
@@ -6495,6 +6657,8 @@ function promoteOverlayToAppRoot(el: Element | null | undefined): HTMLElement | 
 /** Button-opened overlays that must always paint above HUD / nested screens. */
 const APP_ROOT_OVERLAY_IDS = [
   "settings-layer",
+  "profile-layer",
+  "nick-setup-layer",
   "mailbox-layer",
   "notif-layer",
   "mission-layer",
@@ -6656,8 +6820,346 @@ function bindBattleAutoSettings(): void {
   });
 }
 
+const PROFILE_DEFAULT_ART = "/art/auth/logo-mark-192.png";
+
+function profileIconSrc(): string {
+  const id = save.profileIconId;
+  if (id && ownedMonsterIdSet().has(id)) {
+    return monsterArtSrc(id) ?? PROFILE_DEFAULT_ART;
+  }
+  return PROFILE_DEFAULT_ART;
+}
+
+function profileNickErrorMessage(code: string): string {
+  switch (code) {
+    case "nickname_required":
+      return t("ui.profile.errRequired");
+    case "nickname_format":
+      return t("ui.profile.errFormat");
+    case "nickname_profanity":
+      return t("ui.profile.errProfanity");
+    case "nickname_taken":
+      return t("ui.profile.errTaken");
+    case "crystal_short":
+      return t("ui.profile.errCrystal");
+    default:
+      return t("ui.c17466f9ed");
+  }
+}
+
+function renderProfileNickButtonInner(): string {
+  const cost = nicknameChangeCrystalCost(save);
+  const price =
+    cost > 0
+      ? shopPriceCrystal(cost)
+      : `<span class="profile-nick-free">${escapeHtml(t("ui.profile.free"))}</span>`;
+  return `<span>${escapeHtml(t("ui.profile.change"))}</span>${price}`;
+}
+
+function renderProfileIconGrid(): string {
+  const owned = ownedMonsterIdSet();
+  const selected = save.profileIconId && owned.has(save.profileIconId)
+    ? save.profileIconId
+    : "";
+  const defaultOn = !selected;
+  const cells = MONSTERS.filter((m) => owned.has(m.id))
+    .sort(
+      (a, b) =>
+        a.naturalStars - b.naturalStars || a.nameKo.localeCompare(b.nameKo),
+    )
+    .map((m) => {
+      const art =
+        monsterArtImg(m.id, "profile-icon-img", 48) ||
+        `<span class="codex-cell-fallback">${m.element[0]?.toUpperCase() ?? "?"}</span>`;
+      const on = selected === m.id;
+      return `<button type="button" class="profile-icon-cell el-${m.element}${on ? " is-on" : ""}" data-profile-icon="${m.id}" title="${escapeHtml(m.nameKo)}" aria-pressed="${on ? "true" : "false"}">${art}</button>`;
+    })
+    .join("");
+  return `<div class="profile-icon-grid">
+    <button type="button" class="profile-icon-cell profile-icon-cell--default${defaultOn ? " is-on" : ""}" data-profile-icon="" title="${escapeHtml(t("ui.profile.iconDefault"))}" aria-pressed="${defaultOn ? "true" : "false"}">
+      <img class="profile-icon-img" src="${PROFILE_DEFAULT_ART}" width="48" height="48" alt="" draggable="false" />
+    </button>
+    ${cells}
+  </div>`;
+}
+
+function renderProfileLayer(): string {
+  const nickValue = escapeHtml(storedProfileNickname());
+  return `<div class="settings-layer" id="profile-layer" ${profileOpen ? "" : "hidden"} aria-hidden="${profileOpen ? "false" : "true"}">
+      <button type="button" class="settings-backdrop" id="btn-profile-close" aria-label="${escapeHtml(t("ui.profile.close"))}"></button>
+      <div class="settings-sheet profile-sheet" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+        <div class="settings-sheet-handle" aria-hidden="true"></div>
+        ${modalCloseX(t("ui.profile.close"), "btn-profile-close")}
+        <h2 class="settings-title" id="profile-title">${escapeHtml(t("ui.profile.title"))}</h2>
+        ${renderProfileIconGrid()}
+        <label class="settings-lang" for="profile-nick-input">
+          <span class="settings-lang-label">${escapeHtml(t("ui.profile.nick"))}</span>
+          <input id="profile-nick-input" class="profile-nick-input" type="text" maxlength="6" autocomplete="nickname" value="${nickValue}" />
+        </label>
+        <button type="button" class="settings-reset-save profile-nick-save" id="btn-profile-nick">${renderProfileNickButtonInner()}</button>
+      </div>
+    </div>`;
+}
+
+function syncHudProfile(): void {
+  const img = app.querySelector<HTMLImageElement>(".user-profile-img");
+  if (img) img.src = profileIconSrc();
+  const nickEl = app.querySelector(".user-profile-nick");
+  if (nickEl) {
+    const demoTag =
+      sessionUser?.kind === "demo" ? ` <span class="demo-tag">DEMO</span>` : "";
+    nickEl.innerHTML = `${escapeHtml(displayNickname())}${demoTag}`;
+  }
+  const hud = app.querySelector<HTMLElement>(".hud-profile");
+  if (hud) hud.title = displayNickname();
+  const btn = app.querySelector("#btn-profile-nick");
+  if (btn) btn.innerHTML = renderProfileNickButtonInner();
+  syncHudResources();
+}
+
+function applyProfileOpen(): void {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-profile");
+  const layer = app.querySelector<HTMLElement>("#profile-layer");
+  if (btn) {
+    btn.classList.toggle("is-open", profileOpen);
+    btn.setAttribute("aria-expanded", profileOpen ? "true" : "false");
+  }
+  if (layer) {
+    layer.hidden = !profileOpen;
+    layer.setAttribute("aria-hidden", profileOpen ? "false" : "true");
+    if (profileOpen) {
+      promoteOverlayToAppRoot(layer);
+      replayModalPop(layer);
+      dematteArtInTree(layer, "img.profile-icon-img");
+    }
+  }
+  cueModalSfx("profile", profileOpen);
+}
+
+function closeProfileSoft(): void {
+  if (!profileOpen) return;
+  profileOpen = false;
+  applyProfileOpen();
+}
+
+function openProfileSoft(): void {
+  if (nicknameSetupOpen) return;
+  profileOpen = true;
+  settingsOpen = false;
+  mailboxOpen = false;
+  notifOpen = false;
+  missionOpen = false;
+  communityOpen = false;
+  shopOpen = false;
+  summonerPickerOpen = false;
+  closeChatOverlay();
+  closeBuildingInfoSoft();
+  applySettingsOpen();
+  applyMailboxOpen();
+  applyNotifOpen();
+  applyMissionOpen();
+  applyCommunityOpen();
+  applyShopOpen();
+  applySummonerPickerOpen();
+  if (!app.querySelector("#profile-layer")) {
+    render();
+  }
+  applyProfileOpen();
+}
+
+function renderNickSetupLayer(): string {
+  return `<div class="settings-layer" id="nick-setup-layer" ${nicknameSetupOpen ? "" : "hidden"} aria-hidden="${nicknameSetupOpen ? "false" : "true"}">
+      <div class="settings-backdrop" aria-hidden="true"></div>
+      <div class="settings-sheet nick-setup-sheet" role="dialog" aria-modal="true" aria-labelledby="nick-setup-title">
+        <h2 class="settings-title" id="nick-setup-title">${escapeHtml(t("ui.profile.nick"))}</h2>
+        <input id="nick-setup-input" class="profile-nick-input" type="text" maxlength="6" autocomplete="nickname" aria-labelledby="nick-setup-title" />
+        <button type="button" class="settings-reset-save profile-nick-save" id="btn-nick-setup">${escapeHtml(t("ui.profile.nickSetupConfirm"))}</button>
+      </div>
+    </div>`;
+}
+
+function applyNicknameSetupOpen(): void {
+  app.classList.toggle("nick-setup-open", nicknameSetupOpen);
+  const layer = app.querySelector<HTMLElement>("#nick-setup-layer");
+  if (layer) {
+    layer.hidden = !nicknameSetupOpen;
+    layer.setAttribute("aria-hidden", nicknameSetupOpen ? "false" : "true");
+    if (nicknameSetupOpen) {
+      promoteOverlayToAppRoot(layer);
+      replayModalPop(layer);
+      queueMicrotask(() => {
+        app.querySelector<HTMLInputElement>("#nick-setup-input")?.focus();
+      });
+    }
+  }
+  cueModalSfx("nick-setup", nicknameSetupOpen);
+}
+
+function bindNickSetupUi(): void {
+  app.querySelector("#btn-nick-setup")?.addEventListener("click", () => {
+    void submitNicknameSetup();
+  });
+  app.querySelector("#nick-setup-input")?.addEventListener("keydown", (ev) => {
+    if ((ev as KeyboardEvent).key === "Enter") {
+      ev.preventDefault();
+      void submitNicknameSetup();
+    }
+  });
+}
+
+async function submitNicknameSetup(): Promise<void> {
+  if (!nicknameSetupOpen) return;
+  const btn = app.querySelector<HTMLButtonElement>("#btn-nick-setup");
+  if (btn?.dataset.busy === "1") return;
+  const input = app.querySelector<HTMLInputElement>("#nick-setup-input");
+  const parsed = validateNickname(input?.value ?? "");
+  if (!parsed.ok) {
+    flash(profileNickErrorMessage(parsed.error));
+    return;
+  }
+  if (btn) btn.dataset.busy = "1";
+  const needsAccount =
+    !!sessionUser &&
+    sessionUser.kind === "user" &&
+    !sessionUser.id.startsWith("local-");
+  try {
+    if (needsAccount) {
+      const res = await postAuthNickname(parsed.nickname);
+      if (!res.ok) {
+        flash(profileNickErrorMessage(res.error));
+        return;
+      }
+      sessionUser = {
+        ...sessionUser!,
+        nickname: res.user.nickname ?? parsed.nickname,
+      };
+    }
+    save = { ...save, profileNickname: parsed.nickname };
+    if (sessionUser) sessionUser = { ...sessionUser, nickname: parsed.nickname };
+    persist();
+    nicknameSetupOpen = false;
+    applyNicknameSetupOpen();
+    syncHudProfile();
+    if (!onboard.welcomeSeen && onboard.step !== "done") {
+      onboardWelcomeOpen = true;
+      refreshOnboardChrome();
+    }
+  } finally {
+    if (btn) delete btn.dataset.busy;
+  }
+}
+
+async function postAuthNickname(
+  nickname: string,
+): Promise<{ ok: true; user: SessionUser } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(apiUrl("/api/auth/nickname"), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname }),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      user?: SessionUser;
+      error?: string;
+    };
+    if (res.ok && body.user) return { ok: true, user: body.user };
+    return { ok: false, error: body.error || "server_error" };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
+function bindProfileUi(): void {
+  app.querySelector("#btn-profile")?.addEventListener("click", () => {
+    if (profileOpen) {
+      closeProfileSoft();
+      return;
+    }
+    openProfileSoft();
+  });
+  app.querySelector("#btn-profile-close")?.addEventListener("click", () => {
+    closeProfileSoft();
+  });
+  const layer = app.querySelector("#profile-layer");
+  if (!layer) return;
+  layer.addEventListener("click", (ev) => {
+    const target = ev.target;
+    if (!(target instanceof Element)) return;
+    const cell = target.closest<HTMLButtonElement>("[data-profile-icon]");
+    if (!cell || !layer.contains(cell)) return;
+    const raw = cell.dataset.profileIcon ?? "";
+    save = runSetProfileIcon(save, raw || null);
+    persist();
+    const grid = layer.querySelector(".profile-icon-grid");
+    if (grid) {
+      grid.outerHTML = renderProfileIconGrid();
+      dematteArtInTree(layer, "img.profile-icon-img");
+    }
+    syncHudProfile();
+  });
+  app.querySelector("#btn-profile-nick")?.addEventListener("click", () => {
+    void submitProfileNickname();
+  });
+  app
+    .querySelector("#profile-nick-input")
+    ?.addEventListener("keydown", (ev) => {
+      if ((ev as KeyboardEvent).key === "Enter") {
+        ev.preventDefault();
+        void submitProfileNickname();
+      }
+    });
+}
+
+async function submitProfileNickname(): Promise<void> {
+  const btn = app.querySelector<HTMLButtonElement>("#btn-profile-nick");
+  if (btn?.dataset.busy === "1") return;
+  const input = app.querySelector<HTMLInputElement>("#profile-nick-input");
+  const parsed = validateNickname(input?.value ?? "");
+  if (!parsed.ok) {
+    flash(profileNickErrorMessage(parsed.error));
+    return;
+  }
+  if (parsed.nickname === storedProfileNickname()) return;
+  const cost = nicknameChangeCrystalCost(save);
+  if (cost > 0 && save.island.crystal < cost) {
+    flash(profileNickErrorMessage("crystal_short"));
+    return;
+  }
+  if (btn) btn.dataset.busy = "1";
+  const needsAccount =
+    !!sessionUser &&
+    sessionUser.kind === "user" &&
+    !sessionUser.id.startsWith("local-");
+  try {
+    if (needsAccount) {
+      const res = await postAuthNickname(parsed.nickname);
+      if (!res.ok) {
+        flash(profileNickErrorMessage(res.error));
+        return;
+      }
+      sessionUser = {
+        ...sessionUser!,
+        nickname: res.user.nickname ?? parsed.nickname,
+      };
+    }
+    const r = runChangeProfileNickname(save, parsed.nickname);
+    if (r.message !== "ok") {
+      flash(profileNickErrorMessage(r.message));
+      return;
+    }
+    save = r.save;
+    if (sessionUser) sessionUser = { ...sessionUser, nickname: parsed.nickname };
+    persist();
+    syncHudProfile();
+  } finally {
+    if (btn) delete btn.dataset.busy;
+  }
+}
+
 /** Toggle settings modal without a full screen re-render. */
 function applySettingsOpen(): void {
+  if (settingsOpen) closeProfileSoft();
   const btn = app.querySelector<HTMLButtonElement>("#btn-settings");
   const layer = app.querySelector<HTMLElement>("#settings-layer");
   if (btn) {
@@ -6678,6 +7180,7 @@ function applySettingsOpen(): void {
 
 /** Toggle mailbox modal without a full screen re-render. */
 function applyMailboxOpen(): void {
+  if (mailboxOpen) closeProfileSoft();
   const btn = app.querySelector<HTMLButtonElement>("#btn-mailbox");
   const layer = app.querySelector<HTMLElement>("#mailbox-layer");
   if (btn) {
@@ -6697,6 +7200,7 @@ function applyMailboxOpen(): void {
 
 /** Toggle notification modal without a full screen re-render. */
 function applyNotifOpen(): void {
+  if (notifOpen) closeProfileSoft();
   const btn = app.querySelector<HTMLButtonElement>("#btn-notif");
   const layer = app.querySelector<HTMLElement>("#notif-layer");
   if (btn) {
@@ -6716,6 +7220,7 @@ function applyNotifOpen(): void {
 
 /** Toggle mission modal without a full screen re-render. */
 function applyMissionOpen(): void {
+  if (missionOpen) closeProfileSoft();
   const btn = app.querySelector<HTMLButtonElement>("#btn-mission");
   const layer = app.querySelector<HTMLElement>("#mission-layer");
   if (btn) {
@@ -6821,6 +7326,7 @@ function goFromMission(nav: string): void {
 
 /** Toggle community (guild) modal without a full screen re-render. */
 function applyCommunityOpen(): void {
+  if (communityOpen) closeProfileSoft();
   const btn = app.querySelector<HTMLButtonElement>("#btn-community");
   const layer = app.querySelector<HTMLElement>("#community-layer");
   if (btn) {
@@ -6853,6 +7359,7 @@ function openCommunityModal(): void {
 
 /** Toggle shop modal without a full screen re-render. */
 function applyShopOpen(): void {
+  if (shopOpen) closeProfileSoft();
   const btn = app.querySelector<HTMLButtonElement>("#btn-shop");
   const layer = app.querySelector<HTMLElement>("#shop-layer");
   if (btn) {
@@ -6937,6 +7444,7 @@ function openShopModal(): void {
 
 /** Toggle summoner picker sheet without a full screen re-render. */
 function applySummonerPickerOpen(): void {
+  if (summonerPickerOpen) closeProfileSoft();
   const layer = app.querySelector<HTMLElement>("#summoner-picker-layer");
   if (layer) {
     layer.hidden = !summonerPickerOpen;
@@ -7191,6 +7699,7 @@ function openHomeChat(): void {
   mailboxOpen = false;
   notifOpen = false;
   settingsOpen = false;
+  profileOpen = false;
   summonerPickerOpen = false;
   missionOpen = false;
   communityOpen = false;
@@ -7198,6 +7707,7 @@ function openHomeChat(): void {
   applyMailboxOpen();
   applyNotifOpen();
   applySettingsOpen();
+  applyProfileOpen();
   applySummonerPickerOpen();
   applyMissionOpen();
   applyCommunityOpen();
@@ -7781,6 +8291,8 @@ function renderScreen(): void {
   const activeSum = getActiveSummoner(save);
   const activeEl = save.activeSummoner ?? "light";
   const isHome = view === "home";
+  nicknameSetupOpen = needsNicknameSetup();
+  if (nicknameSetupOpen) onboardWelcomeOpen = false;
   const onIsland = isHome || isFacilityView();
   const isStages = view === "stages";
   const nick = escapeHtml(displayNickname());
@@ -7830,9 +8342,9 @@ function renderScreen(): void {
   app.innerHTML = `
     <header class="app-bar app-bar--hud${onIsland ? " app-bar--home" : ""}${isStages ? " app-bar--expedition" : ""}">
       <div class="app-bar-hud">
-        <div class="hud-profile" title="${nick}">
+        <button type="button" class="hud-profile" id="btn-profile" title="${nick}" aria-expanded="${profileOpen ? "true" : "false"}" aria-controls="profile-layer">
           <div class="user-profile" aria-label="Lv.${userLv}">
-            <img class="user-profile-img" src="/art/auth/logo-mark-192.png" width="40" height="40" alt="" />
+            <img class="user-profile-img" src="${profileIconSrc()}" width="40" height="40" alt="" />
             <span class="user-profile-lv">Lv.${userLv}</span>
             <div class="user-profile-foot">
               <div class="user-profile-exp" role="progressbar" aria-valuenow="${userExp}" aria-valuemin="0" aria-valuemax="${userExpMax}" aria-label="${escapeHtml(t("profile.exp", { n: `${userExp}/${userExpMax}` }))}">
@@ -7841,14 +8353,14 @@ function renderScreen(): void {
             </div>
           </div>
           <div class="user-profile-info">
-            <p class="user-profile-nick">${nick}${demoTag ? ` ${demoTag}` : ""}</p>
+            <span class="user-profile-nick">${nick}${demoTag ? ` ${demoTag}` : ""}</span>
             ${
               onIsland || view === "summoner" || view === "enhance"
                 ? ""
-                : `<p class="user-profile-sub">${escapeHtml(elementLabel(activeEl))} Lv.${activeSum.level} ${summonerAwakenGemsHtml(activeSum.awaken, "sum-awaken-gems-wrap--inline")}</p>`
+                : `<span class="user-profile-sub">${escapeHtml(elementLabel(activeEl))} Lv.${activeSum.level} ${summonerAwakenGemsHtml(activeSum.awaken, "sum-awaken-gems-wrap--inline")}</span>`
             }
           </div>
-        </div>
+        </button>
         <div class="res-wallet" role="group" aria-label="${escapeHtml(t("res.wallet"))}">
           <div class="res-item res-item--energy${Math.floor(island.energy) < (island.energyMax ?? 100) ? " has-timer" : ""}" title="${escapeHtml(t("res.energy"))}">
             <div class="res-energy-row">
@@ -7957,6 +8469,8 @@ function renderScreen(): void {
         <button type="button" class="settings-logout" id="btn-logout">${escapeHtml(t("settings.logout"))}</button>
       </div>
     </div>
+    ${renderProfileLayer()}
+    ${renderNickSetupLayer()}
     ${
       `<div class="settings-layer" id="summoner-picker-layer" ${summonerPickerOpen ? "" : "hidden"} aria-hidden="${summonerPickerOpen ? "false" : "true"}">
       <button type="button" class="settings-backdrop" id="btn-summoner-picker-close" aria-label="${escapeHtml(t("summonerPicker.close"))}"></button>
@@ -14543,12 +15057,6 @@ function stageEnergyCost(stage: StageDef, diff: StageDifficulty): number {
   return Math.max(0, Math.ceil(stage.energyCost * mul));
 }
 
-function isDifficultyOpen(stage: StageDef, diff: StageDifficulty): boolean {
-  if (diff === "normal") return true;
-  if (diff === "hard") return save.clearedStages.includes(stage.id);
-  return (save.clearedHardStages ?? []).includes(stage.id);
-}
-
 function stageDropSlots(stage: StageDef): Array<1 | 2 | 3 | 4 | 5 | 6> {
   if (stage.mode === "scenario") {
     if (stage.stage >= 1 && stage.stage <= 6) {
@@ -14617,7 +15125,7 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
         !isStageUnlocked(save, s.id) ||
         (vaultLeft !== null && vaultLeft <= 0);
       const done = save.clearedStages.includes(s.id);
-      const diffOpen = isDifficultyOpen(s, stageEntryDiff);
+      const diffOpen = isDifficultyOpen(save, s, stageEntryDiff);
       const cost = stageEnergyCost(s, stageEntryDiff);
       // Allow opening prep even when short on energy; Start inside the modal stays gated.
       const canOpen = !locked && diffOpen;
@@ -14752,7 +15260,7 @@ function regionProgress(stages: StageDef[]): {
 
 function regionDifficultyOpen(region: StagesRegion, diff: StageDifficulty): boolean {
   if (diff === "normal") return true;
-  return region.stages.some((s) => isDifficultyOpen(s, diff));
+  return region.stages.some((s) => isDifficultyOpen(save, s, diff));
 }
 
 function bindCoreStageMap(): void {
@@ -15821,7 +16329,7 @@ function focusIslandSpot(spotId: string, _opts?: { zoomMul?: number }): void {
 
 /** Once per onboard step, pull the island camera to the guided building. */
 function maybeFocusOnboardIslandSpot(): void {
-  if (view !== "home" || islandLayoutEdit || onboardWelcomeOpen) return;
+  if (view !== "home" || islandLayoutEdit || onboardWelcomeOpen || nicknameSetupOpen) return;
   if (onboard.step === "done") return;
   const spotId = onboardFocusSpotId(onboard.step);
   if (!spotId) return;
@@ -16287,12 +16795,15 @@ function bind(): void {
     maybeFocusOnboardIslandSpot();
   }
   bindChatUi();
+  bindProfileUi();
+  bindNickSetupUi();
 
   app.querySelector("#btn-nav-summoner")?.addEventListener("click", (ev) => {
     ev.stopPropagation();
     summonerPickerOpen = false;
     applySummonerPickerOpen();
     settingsOpen = false;
+    profileOpen = false;
     mailboxOpen = false;
     notifOpen = false;
     missionOpen = false;
@@ -16506,6 +17017,7 @@ function bind(): void {
     persist();
     resetOnboardProgress({ offerWelcome: true });
     settingsOpen = false;
+    profileOpen = false;
     stageEntryId = null;
     stagesRegion = null;
     partyDraft = null;
@@ -17569,6 +18081,7 @@ function bind(): void {
 
   startEnergyRegenTimer();
   promoteKnownOverlays();
+  applyNicknameSetupOpen();
   if (growthRevealIsOpen()) remountGrowthReveal();
   if (wishRevealIsOpen()) remountWishReveal();
 }

@@ -321,6 +321,18 @@ export function migrateSave(raw: unknown): PlayerSave | null {
           (id): id is string => typeof id === "string",
         )
       : [],
+    profileIconId:
+      typeof p.profileIconId === "string" && p.profileIconId.trim()
+        ? resolveMonsterId(p.profileIconId)
+        : null,
+    profileNickname:
+      typeof p.profileNickname === "string" && p.profileNickname.trim()
+        ? p.profileNickname.trim()
+        : null,
+    nicknameChangeCount:
+      typeof p.nicknameChangeCount === "number"
+        ? Math.max(0, Math.floor(p.nicknameChangeCount))
+        : 0,
     onboardRite: normalizeOnboardRite(p.onboardRite),
     activeSummoner,
     summoners,

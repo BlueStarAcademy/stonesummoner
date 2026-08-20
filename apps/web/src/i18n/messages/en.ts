@@ -1082,7 +1082,19 @@ const messages: MessageDict = {
   "settings.audioBgm": "Music",
   "settings.audioSfx": "Effects",
   "settings.audioMute": "Mute",
-  "settings.audioUnmute": "Unmute"
+  "settings.audioUnmute": "Unmute",
+  "ui.profile.title": "Profile",
+  "ui.profile.close": "Close profile",
+  "ui.profile.nick": "Nickname",
+  "ui.profile.change": "Change",
+  "ui.profile.free": "Free",
+  "ui.profile.iconDefault": "Default",
+  "ui.profile.errRequired": "Enter a nickname.",
+  "ui.profile.errFormat": "Use 2–6 Hangul characters.",
+  "ui.profile.errProfanity": "That nickname is not allowed.",
+  "ui.profile.errTaken": "That nickname is taken.",
+  "ui.profile.errCrystal": "Not enough crystals.",
+  "ui.profile.nickSetupConfirm": "Confirm"
 };
 
 export default messages;

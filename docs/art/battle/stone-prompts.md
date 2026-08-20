@@ -8,40 +8,45 @@
 ## Spec
 
 - **Size:** 256×256 (source may be larger then downscale)
-- **View:** 3/4 seated cabochon — camera ~40° above the floor (same as the tilted battle board)
-- **Silhouette:** chunky round gem in a shallow metal dish; you see the dome top AND the front of the bezel
-- **Setting:** shallow circular metal dish; base near the bottom of the frame with a contact shadow
+- **View:** standing 3/4 — same camera as battle unit sprites (eye-level, slight downward look). Not top-down.
+- **Silhouette:** compact standing gem, like a small crystal chess piece; you see the FRONT face
+- **Setting:** short metal collar and a tiny circular foot; contact shadow under the foot
 - **Alpha:** outer matte punched; gem body opaque
-- **Readability:** strong specular on the dome + glowing elemental core; must read at ~28–40px on the tilted board
+- **Readability:** strong front specular + glowing elemental core; must read at ~28–40px as a standing piece on the 3/4 arena floor
 - **Style:** Summoners War / dark-fantasy mobile RPG painted icon
-- **No:** characters, UI, text, watermark, square plate frame, flat coin/medallion, top-down orthographic disc, upright egg, gold pedestal stand
+- **No:** characters, UI, text, watermark, square plate frame, flat coin/medallion, top-down orthographic disc, tabletop 40° dish, tall inventory relic on a gold pedestal
 
 ## Master prompt
 
 ```
-Camera 40 degrees above the ground looking slightly down at a tabletop game piece.
-A chunky round magic cabochon gem with real 3D thickness seated in a shallow circular metal dish.
-You see the curved dome TOP and the front wall of the bezel. Soft contact shadow under the base.
-Compact object filling 80% of the square. Pure black charcoal background for matte punch.
+Camera matches a Summoners War standing battle sprite: eye-level 3/4 view,
+looking slightly downward at a small object on the ground. The object STANDS
+facing the camera. A compact standing magic gem, like a small crystal chess piece.
+Round faceted cabochon in a short ornate metal collar with a tiny circular foot.
+You see the FRONT FACE of the gem. Vertical silhouette — taller than it is deep.
+Soft oval contact shadow under the foot. Compact object filling 76% of the square.
+Pure black charcoal background for matte punch.
 Square composition, no floor, no magic circle, no text, no watermark, no UI chrome.
-FORBIDDEN: flat coin, medallion, top-down disc, upright egg, standing inventory relic, teardrop pedestal.
+FORBIDDEN: top-down disc, flat coin, medallion, tabletop 40-degree dish, tall pedestal relic.
 ```
 
 ## Element accents
 
 | id | Accent |
 |----|--------|
-| fire | Ember orange / molten gold core, warm bronze bezel |
-| water | Deep sapphire / teal core, cool silver bezel |
-| wind | Jade / lime-green core, vine-gold bezel |
-| light | Radiant white-gold core, holy white-gold bezel |
-| dark | Violet / abyss purple core, dark-bronze bezel |
+| fire | Ember orange / molten gold core, warm bronze collar |
+| water | Deep sapphire / teal core, cool silver collar |
+| wind | Jade / lime-green core, vine-gold collar |
+| light | Radiant white-gold core, holy white-gold collar |
+| dark | Violet / abyss purple core, dark-bronze collar |
 | enemy | Hostile amethyst / cold violet rival gem (no ally gold rim) |
 
 ## Client mapping
 
 - Ally stone (`black`): `/art/battle/stone/{allySummonerElement}.webp`
 - Enemy stone (`white`): `/art/battle/stone/{enemySummonerElement}.webp` or `enemy.webp`
+
+On the battle stage the circle is a **floor projection** of the existing 3/4 map (not a top-down camera). Stones billboard back to the map camera so they stand like units.
 
 ## Pipeline
 

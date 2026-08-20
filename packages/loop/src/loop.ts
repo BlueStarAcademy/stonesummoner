@@ -150,6 +150,7 @@ import {
 } from "./roster.js";
 import {
   expForStage,
+  isDifficultyOpen,
   isStageUnlocked,
   stageUnlockLabel,
   type ScenarioDifficulty,
@@ -194,6 +195,7 @@ export {
 } from "./roster.js";
 export {
   expForStage,
+  isDifficultyOpen,
   isStageUnlocked,
   nextStageInProgression,
   stageUnlockLabel,
@@ -1089,6 +1091,12 @@ export interface PlayerSave {
   claimedMissionKeys: string[];
   /** Claimed one-time main quest ids. */
   claimedMainQuestIds: string[];
+  /** Codex monster id used as the HUD profile portrait. Null = default mark. */
+  profileIconId: string | null;
+  /** Display nickname cached on the save (synced from account when logged in). */
+  profileNickname: string | null;
+  /** Successful profile renames. 0 = next rename is free. */
+  nicknameChangeCount: number;
   /**
    * First-session rite checkpoint (client UI). Null = never written;
    * cloud sync carries it so Capacitor / multi-device stays aligned.
@@ -1469,6 +1477,9 @@ export function createNewSave(now = Date.now()): PlayerSave {
     claimedMailIds: [],
     claimedMissionKeys: [],
     claimedMainQuestIds: [],
+    profileIconId: null,
+    profileNickname: null,
+    nicknameChangeCount: 0,
     onboardRite: null,
   };
 }
@@ -1635,8 +1646,53 @@ export function runBuyGlory(
 }
 
 export const FUSION_MANA_COST = 800;
+/** Crystal cost from the second profile nickname change onward. */
+export const NICKNAME_CHANGE_CRYSTAL_COST = 300;
 export const ENERGY_CRYSTAL_COST = 10;
 export const ENERGY_BUY_AMOUNT = 20;
+
+export function nicknameChangeCrystalCost(save: PlayerSave): number {
+  return (save.nicknameChangeCount ?? 0) > 0
+    ? NICKNAME_CHANGE_CRYSTAL_COST
+    : 0;
+}
+
+export function runSetProfileIcon(
+  save: PlayerSave,
+  monsterId: string | null,
+): PlayerSave {
+  if (!monsterId) return { ...save, profileIconId: null };
+  const id = resolveMonsterId(monsterId);
+  const owned = save.roster.some((m) => resolveMonsterId(m.monsterId) === id);
+  if (!owned) return save;
+  return { ...save, profileIconId: id };
+}
+
+export function runChangeProfileNickname(
+  save: PlayerSave,
+  nickname: string,
+): LoopStepResult {
+  const next = nickname.trim();
+  if (!next || next === (save.profileNickname ?? "").trim()) {
+    return { save, message: "unchanged" };
+  }
+  const cost = nicknameChangeCrystalCost(save);
+  if (cost > 0 && save.island.crystal < cost) {
+    return { save, message: "crystal_short" };
+  }
+  return {
+    save: {
+      ...save,
+      profileNickname: next,
+      nicknameChangeCount: (save.nicknameChangeCount ?? 0) + 1,
+      island:
+        cost > 0
+          ? { ...save.island, crystal: save.island.crystal - cost }
+          : save.island,
+    },
+    message: "ok",
+  };
+}
 /** Shop: buy grindstones for symbol forge (crystal — rare). */
 export const GRINDSTONE_BUY_CRYSTAL_COST = 28;
 export const GRINDSTONE_BUY_AMOUNT = 1;
@@ -4118,6 +4174,45 @@ export function createStageBattle(
   });
 }
 
+/**
+ * Summoners War extra-loot crystals: rare, not a guaranteed payout.
+ * Cairos community data is ~4–5% for 1–2; scenario extras sit a bit higher.
+ */
+export function stageCrystalDropChance(stage: StageDef): number {
+  switch (stage.mode) {
+    case "scenario":
+      return 0.08;
+    case "weekday":
+      return 0.06;
+    case "depth":
+    case "equip":
+    case "trial":
+      return 0.05;
+    case "guild_raid":
+      return 0.04;
+    case "arena":
+    case "world_arena":
+      return 0;
+    default:
+      return 0.05;
+  }
+}
+
+/** 0 on a miss; 1 most hits, 2 uncommon, 3 only on late scenario. */
+export function rollStageCrystalDrop(
+  stage: StageDef,
+  rng: () => number,
+): number {
+  const chance = stageCrystalDropChance(stage);
+  if (chance <= 0 || rng() >= chance) return 0;
+  const lateScenario =
+    stage.mode === "scenario" && (stage.map >= 8 || stage.stage >= 7);
+  const qtyRoll = rng();
+  if (qtyRoll < 0.82) return 1;
+  if (lateScenario && qtyRoll >= 0.95) return 3;
+  return 2;
+}
+
 /** Fully auto-resolve a battle (cap turns). */
 export function resolveBattleAuto(
   battle: Battle,
@@ -4166,10 +4261,6 @@ export function applyRewards(
               ? 1.15
               : 1;
   const manaGain = Math.round((180 + stage.stage * 60) * modeMul);
-  let crystalGain = 1 + Math.floor(stage.stage / 2);
-  if (stage.mode === "weekday") crystalGain += 3;
-  if (stage.mode === "depth") crystalGain += 1;
-  if (stage.mode === "equip") crystalGain += 4;
   const gloryGain = stage.gloryReward ?? 0;
   const jinmunGain = stage.jinmunReward ?? 0;
   const scenarioTable =
@@ -4186,7 +4277,6 @@ export function applyRewards(
     island: {
       ...save.island,
       mana: save.island.mana + manaGain,
-      crystal: save.island.crystal + crystalGain,
     },
   });
 
@@ -4361,6 +4451,14 @@ export function applyRewards(
     scrolls += 1;
   }
 
+  const crystalGain = rollStageCrystalDrop(stage, rng);
+  if (crystalGain > 0) {
+    island = {
+      ...island,
+      crystal: (island.crystal ?? 0) + crystalGain,
+    };
+  }
+
   const cleared = save.clearedStages.includes(stage.id)
     ? save.clearedStages
     : [...save.clearedStages, stage.id];
@@ -4386,10 +4484,8 @@ export function applyRewards(
   let raidBossHp = save.raidBossHp ?? RAID_BOSS_MAX_HP;
   let raidMilestonesClaimed = [...(save.raidMilestonesClaimed ?? [])];
 
-  const extras: string[] = [
-    `EXP +${expGain}`,
-    `크리스탈 +${crystalGain}`,
-  ];
+  const extras: string[] = [`EXP +${expGain}`];
+  if (crystalGain > 0) extras.push(`크리스탈 +${crystalGain}`);
   if (gloryGain > 0) extras.push(`영광 +${gloryGain}`);
   if (jinmunGain > 0) extras.push(`진문석 +${jinmunGain}`);
 
@@ -4501,7 +4597,7 @@ export function applyRewards(
     }),
     reward: {
       mana: manaGain,
-      crystal: crystalGain,
+      crystal: crystalGain || undefined,
       glory: gloryGain || undefined,
       jinmun: jinmunGain || undefined,
       contribution: contributionGain || undefined,
@@ -4595,6 +4691,12 @@ export function runSortie(
     return {
       save: working,
       message: `콘텐츠 잠김 — 해금 조건을 확인하세요 (${stageId})`,
+    };
+  }
+  if (!isDifficultyOpen(working, stage, difficulty)) {
+    return {
+      save: working,
+      message: `이 난이도는 아직 열리지 않았습니다 (${stageId})`,
     };
   }
 

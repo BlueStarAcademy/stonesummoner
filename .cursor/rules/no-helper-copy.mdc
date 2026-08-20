@@ -1,0 +1,32 @@
+---
+description: Build UI without helper/secondary descriptions
+globs: apps/web/src/**/*.{ts,css}
+alwaysApply: true
+---
+
+# No helper copy
+
+## Hard rule
+**Do not add 보조설명** — helper text, hint lines, subtitle blurbs, or “how to use” paragraphs.
+
+Controls carry their own meaning. A title, field label, button label, and cost chip are enough.
+
+## Allowed
+- Modal / section **title**
+- Control **label** (e.g. Nickname)
+- **Button** text
+- **Price / cost** on the action (icon + number, or Free)
+
+## Disallowed
+```html
+<p class="settings-account">Pick an unlocked Codex icon.</p>
+<span class="settings-lang-hint">First rename is free</span>
+<small>2–6 Hangul characters</small>
+```
+
+Standing format hints, empty-state essays, and extra sentences under a title are helper copy. Show errors only after a failed action (toast / inline fail), not as always-visible instructions.
+
+## Checklist
+1. New sheet has title + controls + actions — no hint paragraph.
+2. Cost belongs on the button, not in a footnote.
+3. Do not add `*Hint` / `*Blurb` i18n keys unless the user asked for that sentence.

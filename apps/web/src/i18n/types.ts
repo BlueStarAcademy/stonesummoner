@@ -1103,7 +1103,19 @@ export type MessageKey =
   | "settings.audioBgm"
   | "settings.audioSfx"
   | "settings.audioMute"
-  | "settings.audioUnmute";
+  | "settings.audioUnmute"
+  | "ui.profile.title"
+  | "ui.profile.close"
+  | "ui.profile.nick"
+  | "ui.profile.change"
+  | "ui.profile.free"
+  | "ui.profile.iconDefault"
+  | "ui.profile.errRequired"
+  | "ui.profile.errFormat"
+  | "ui.profile.errProfanity"
+  | "ui.profile.errTaken"
+  | "ui.profile.errCrystal"
+  | "ui.profile.nickSetupConfirm";
 
 export type MessageDict = Record<MessageKey, string>;
 

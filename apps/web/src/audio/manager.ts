@@ -15,7 +15,13 @@ type MissingKey = string;
 let ctx: AudioContext | null = null;
 let masterGain: GainNode | null = null;
 let sfxBus: GainNode | null = null;
-let bgmEl: HTMLAudioElement | null = null;
+let bgmGain: GainNode | null = null;
+let bgmSource: AudioBufferSourceNode | null = null;
+let bgmBuffer: AudioBuffer | null = null;
+/** `ctx.currentTime` when the current BGM source started. */
+let bgmStartedAt = 0;
+/** Offset (seconds) into the buffer at start — used to resume after stop. */
+let bgmOffset = 0;
 let currentBgm: BgmId | null = null;
 let pendingBgm: BgmId | null = null;
 let bgmGen = 0;
@@ -28,26 +34,9 @@ const bufferCache = new Map<string, AudioBuffer | null>();
 const missing = new Set<MissingKey>();
 const resolving = new Map<string, Promise<string | null>>();
 
-function ensureBgmEl(): HTMLAudioElement {
-  if (bgmEl) return bgmEl;
-  const el = new Audio();
-  el.preload = "auto";
-  el.loop = true;
-  el.setAttribute("playsinline", "");
-  el.setAttribute("webkit-playsinline", "");
-  bgmEl = el;
-  return el;
-}
-
-function stopBgmEl(): void {
-  if (!bgmEl) return;
-  bgmEl.pause();
-  bgmEl.volume = 0;
-}
-
-function bgmElementVolume(): number {
+function bgmGainValue(): number {
   if (prefs.muted) return 0;
-  return Math.min(1, Math.max(0, prefs.master * prefs.bgm * (ducking ? DUCK_BGM : 1)));
+  return Math.min(1, Math.max(0, prefs.bgm * (ducking ? DUCK_BGM : 1)));
 }
 
 function applyGains(): void {
@@ -56,7 +45,18 @@ function applyGains(): void {
     masterGain.gain.value = prefs.master * mute;
     sfxBus.gain.value = prefs.sfx;
   }
-  if (bgmEl) bgmEl.volume = bgmElementVolume();
+  if (bgmGain) bgmGain.gain.value = bgmGainValue();
+}
+
+function clearMediaSession(): void {
+  try {
+    const ms = navigator.mediaSession;
+    if (!ms) return;
+    ms.metadata = null;
+    ms.playbackState = "none";
+  } catch {
+    /* ignore */
+  }
 }
 
 async function ensureCtx(): Promise<AudioContext | null> {
@@ -71,9 +71,12 @@ async function ensureCtx(): Promise<AudioContext | null> {
       ctx = new AC();
       masterGain = ctx.createGain();
       sfxBus = ctx.createGain();
+      bgmGain = ctx.createGain();
       sfxBus.connect(masterGain);
+      bgmGain.connect(masterGain);
       masterGain.connect(ctx.destination);
       applyGains();
+      clearMediaSession();
     }
     if (ctx.state === "suspended") {
       await ctx.resume().catch(() => undefined);
@@ -114,7 +117,7 @@ async function firstExisting(urls: string[]): Promise<string | null> {
   return work;
 }
 
-async function decodeSfx(url: string): Promise<AudioBuffer | null> {
+async function decodeAudio(url: string): Promise<AudioBuffer | null> {
   const cached = bufferCache.get(url);
   if (cached !== undefined) return cached;
   const audio = await ensureCtx();
@@ -133,6 +136,58 @@ async function decodeSfx(url: string): Promise<AudioBuffer | null> {
     bufferCache.set(url, null);
     return null;
   }
+}
+
+function currentBgmPlayhead(): number {
+  if (!ctx || !bgmBuffer) return bgmOffset;
+  if (!bgmSource) return bgmOffset;
+  const elapsed = Math.max(0, ctx.currentTime - bgmStartedAt);
+  const dur = bgmBuffer.duration;
+  if (!(dur > 0)) return 0;
+  return (bgmOffset + elapsed) % dur;
+}
+
+function stopBgmSource(preserveOffset: boolean): void {
+  if (preserveOffset) bgmOffset = currentBgmPlayhead();
+  else bgmOffset = 0;
+  if (bgmSource) {
+    try {
+      bgmSource.onended = null;
+      bgmSource.stop();
+    } catch {
+      /* already stopped */
+    }
+    try {
+      bgmSource.disconnect();
+    } catch {
+      /* ignore */
+    }
+    bgmSource = null;
+  }
+  if (!preserveOffset) bgmBuffer = null;
+}
+
+function startBgmSource(buf: AudioBuffer, offsetSec: number): void {
+  if (!ctx || !bgmGain) return;
+  stopBgmSource(true);
+  bgmBuffer = buf;
+  const dur = buf.duration;
+  const offset = dur > 0 ? ((offsetSec % dur) + dur) % dur : 0;
+  bgmOffset = offset;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  src.connect(bgmGain);
+  bgmStartedAt = ctx.currentTime;
+  try {
+    src.start(0, offset);
+  } catch {
+    bgmSource = null;
+    return;
+  }
+  bgmSource = src;
+  applyGains();
+  clearMediaSession();
 }
 
 export function getAudioPrefs(): AudioPrefs {
@@ -158,12 +213,13 @@ export function setAudioPrefs(patch: Partial<AudioPrefs>): AudioPrefs {
 export async function unlockAudio(): Promise<void> {
   unlocked = true;
   await ensureCtx();
-  if (bgmEl && !bgmEl.paused) return;
+  if (bgmSource && ctx?.state === "running") return;
   const want = pendingBgm ?? currentBgm;
   if (!want) return;
   pendingBgm = null;
+  const resumeOffset = bgmSource ? currentBgmPlayhead() : bgmOffset;
   currentBgm = null;
-  await playBgm(want);
+  await playBgm(want, { resumeOffset });
 }
 
 export function initAudio(): void {
@@ -175,68 +231,85 @@ export function initAudio(): void {
   document.addEventListener("pointerdown", unlock, { capture: true, once: true });
   document.addEventListener("keydown", unlock, { capture: true, once: true });
   document.addEventListener("visibilitychange", () => {
-    if (!bgmEl) return;
+    if (!ctx) return;
     if (document.hidden) {
       hiddenPaused = true;
-      bgmEl.pause();
-      void ctx?.suspend().catch(() => undefined);
+      if (bgmSource) bgmOffset = currentBgmPlayhead();
+      void ctx.suspend().catch(() => undefined);
     } else {
-      void ctx?.resume().catch(() => undefined);
+      void ctx.resume().catch(() => undefined);
       if (hiddenPaused && currentBgm) {
-        void playBgm(currentBgm);
+        if (!bgmSource) {
+          void playBgm(currentBgm, { resumeOffset: bgmOffset });
+        } else {
+          applyGains();
+          clearMediaSession();
+        }
       }
       hiddenPaused = false;
     }
   });
 }
 
-export async function playBgm(id: BgmId | null): Promise<void> {
+export async function playBgm(
+  id: BgmId | null,
+  opts?: { resumeOffset?: number },
+): Promise<void> {
   if (!id) {
     await stopBgm();
     return;
   }
-  const el = ensureBgmEl();
-  if (id === currentBgm) {
-    el.volume = bgmElementVolume();
-    if (el.paused && el.src) {
-      try {
-        await el.play();
-      } catch {
-        pendingBgm = id;
-      }
-    }
+
+  const audio = await ensureCtx();
+  if (!audio || !bgmGain) {
+    pendingBgm = id;
+    return;
+  }
+
+  const sameTrack = id === currentBgm;
+  if (sameTrack && bgmSource) {
+    applyGains();
+    clearMediaSession();
     return;
   }
 
   const gen = ++bgmGen;
+  const resumeOffset =
+    opts?.resumeOffset ?? (sameTrack ? bgmOffset : 0);
   currentBgm = id;
   pendingBgm = id;
-  stopBgmEl();
+  stopBgmSource(sameTrack);
 
   const url = await firstExisting(bgmSrcCandidates(id));
   if (gen !== bgmGen) return;
   if (!url) return;
 
-  el.loop = true;
-  el.src = url;
-  el.currentTime = 0;
-  el.volume = bgmElementVolume();
+  const buf = await decodeAudio(url);
+  if (gen !== bgmGen) return;
+  if (!buf) return;
+
+  if (!unlocked && audio.state !== "running") {
+    pendingBgm = id;
+    bgmBuffer = buf;
+    bgmOffset = resumeOffset;
+    return;
+  }
+
   try {
-    await el.play();
+    startBgmSource(buf, resumeOffset);
   } catch {
     if (gen === bgmGen) pendingBgm = id;
     return;
   }
   if (gen !== bgmGen) return;
   pendingBgm = null;
-  applyGains();
 }
 
 export async function stopBgm(): Promise<void> {
   bgmGen += 1;
   currentBgm = null;
   pendingBgm = null;
-  stopBgmEl();
+  stopBgmSource(false);
 }
 
 export function duckBgm(on: boolean): void {
@@ -252,7 +325,7 @@ export async function playSfx(
   if (!audio || !sfxBus) return;
   const url = await firstExisting(sfxSrcCandidates(id));
   if (!url) return;
-  const buf = await decodeSfx(url);
+  const buf = await decodeAudio(url);
   if (!buf) return;
   try {
     const src = audio.createBufferSource();

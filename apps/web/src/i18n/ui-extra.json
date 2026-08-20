@@ -4042,5 +4042,53 @@
   "settings.audioUnmute": {
     "ko": "음소거 해제",
     "en": "Unmute"
+  },
+  "ui.profile.title": {
+    "ko": "프로필",
+    "en": "Profile"
+  },
+  "ui.profile.close": {
+    "ko": "프로필 닫기",
+    "en": "Close profile"
+  },
+  "ui.profile.nick": {
+    "ko": "닉네임",
+    "en": "Nickname"
+  },
+  "ui.profile.change": {
+    "ko": "변경",
+    "en": "Change"
+  },
+  "ui.profile.free": {
+    "ko": "무료",
+    "en": "Free"
+  },
+  "ui.profile.iconDefault": {
+    "ko": "기본",
+    "en": "Default"
+  },
+  "ui.profile.errRequired": {
+    "ko": "닉네임을 입력해 주세요.",
+    "en": "Enter a nickname."
+  },
+  "ui.profile.errFormat": {
+    "ko": "닉네임은 한글 2~6글자로 입력해 주세요.",
+    "en": "Use 2–6 Hangul characters."
+  },
+  "ui.profile.errProfanity": {
+    "ko": "사용할 수 없는 닉네임입니다.",
+    "en": "That nickname is not allowed."
+  },
+  "ui.profile.errTaken": {
+    "ko": "이미 사용 중인 닉네임입니다.",
+    "en": "That nickname is taken."
+  },
+  "ui.profile.errCrystal": {
+    "ko": "크리스탈이 부족합니다.",
+    "en": "Not enough crystals."
+  },
+  "ui.profile.nickSetupConfirm": {
+    "ko": "확인",
+    "en": "Confirm"
   }
 }

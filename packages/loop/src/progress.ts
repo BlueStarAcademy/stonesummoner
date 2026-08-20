@@ -79,6 +79,27 @@ export function nextStageInProgression(
   return next && isStageUnlocked(save, next.id) ? next : null;
 }
 
+/** Hard/Hell for a scenario map open only after every stage on that map is cleared. */
+export function isDifficultyOpen(
+  save: PlayerSave,
+  stage: StageDef,
+  difficulty: ScenarioDifficulty,
+): boolean {
+  if (difficulty === "normal") return true;
+  if (stage.mode === "scenario") {
+    const mapStages = stagesForMap(stage.map);
+    if (!mapStages.length) return false;
+    if (difficulty === "hard") {
+      return mapStages.every((s) => save.clearedStages.includes(s.id));
+    }
+    return mapStages.every((s) =>
+      (save.clearedHardStages ?? []).includes(s.id),
+    );
+  }
+  if (difficulty === "hard") return save.clearedStages.includes(stage.id);
+  return (save.clearedHardStages ?? []).includes(stage.id);
+}
+
 /** Content unlock rules (Phase 1–2+). */
 export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
   const stage = getStage(stageId);

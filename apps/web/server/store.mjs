@@ -86,7 +86,6 @@ function createMemoryStore() {
     async setNickname(userId, nickname) {
       const u = users.get(userId);
       if (!u) throw new Error("NOT_FOUND");
-      if (u.nickname) throw new Error("NICKNAME_LOCKED");
       for (const other of users.values()) {
         if (other.nickname === nickname && other.id !== userId) {
           throw new Error("NICKNAME_TAKEN");
@@ -207,15 +206,14 @@ function createPgStore(pool) {
     async setNickname(userId, nickname) {
       const cur = await this.getUser(userId);
       if (!cur) throw new Error("NOT_FOUND");
-      if (cur.nickname) throw new Error("NICKNAME_LOCKED");
       try {
         const { rows } = await pool.query(
           `UPDATE users SET nickname = $2
-           WHERE id = $1 AND nickname IS NULL
+           WHERE id = $1
            RETURNING id, email, kind, nickname`,
           [userId, nickname],
         );
-        if (!rows[0]) throw new Error("NICKNAME_LOCKED");
+        if (!rows[0]) throw new Error("NOT_FOUND");
         return {
           id: rows[0].id,
           email: rows[0].email,
@@ -223,7 +221,6 @@ function createPgStore(pool) {
           nickname: rows[0].nickname ?? null,
         };
       } catch (e) {
-        if (e?.message === "NICKNAME_LOCKED") throw e;
         if (e?.code === "23505") throw new Error("NICKNAME_TAKEN");
         throw e;
       }

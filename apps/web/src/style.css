@@ -225,6 +225,20 @@ header.app-bar {
   -webkit-backdrop-filter: blur(10px);
 }
 
+button.hud-profile {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+button.hud-profile:focus-visible {
+  outline: 2px solid #c9a227;
+  outline-offset: 2px;
+}
+
 .hud-profile .user-profile {
   margin-top: 2px;
 }
@@ -287,6 +301,7 @@ header.app-bar {
 }
 
 .user-profile-nick {
+  display: block;
   margin: 0;
   color: #f0e0a0;
   font-size: 0.74rem;
@@ -1314,6 +1329,105 @@ nav.tabs button.active .tab-ico {
   font-size: 0.82rem;
   color: var(--modal-muted);
   word-break: break-all;
+}
+
+.profile-sheet {
+  width: min(100%, 380px);
+  max-height: min(82%, 620px);
+}
+
+.profile-icon-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0 14px;
+  max-height: 220px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px;
+}
+
+.profile-icon-cell {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid #5a403088;
+  background: #0a0806;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.profile-icon-cell.is-on {
+  border-color: #e8c84a;
+  box-shadow: 0 0 0 1px #c9a22788, 0 0 10px #c9a22744;
+}
+
+.profile-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
+  pointer-events: none;
+}
+
+.profile-nick-input {
+  width: 100%;
+  min-height: var(--touch);
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--modal-line);
+  background: linear-gradient(180deg, #2a2418ee, #16120cee);
+  color: var(--modal-text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.profile-nick-input:focus {
+  outline: 1px solid #c9a22788;
+}
+
+.profile-nick-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.profile-nick-free {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gold-soft, #e8d5a3);
+}
+
+.nick-setup-sheet {
+  width: min(100%, 340px);
+}
+
+.nick-setup-sheet .profile-nick-input {
+  position: relative;
+  z-index: 1;
+  margin: 8px 0 12px;
+}
+
+.nick-setup-sheet .profile-nick-save {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+#app.nick-setup-open > .app-bar,
+#app.nick-setup-open > nav.tabs,
+#app.nick-setup-open > main,
+#app.nick-setup-open > .side-quick {
+  pointer-events: none;
 }
 
 .settings-lang {
@@ -8299,27 +8413,34 @@ button.battle-unit {
   border: 0;
   box-shadow: none;
   /* Playable grid sits on the inner ritual floor, not the outer gem ring. */
-  width: 54%;
-  max-width: 54%;
-  padding: 1.5%;
-  gap: 0;
-}
-
-.board-frame--has-art.board-frame--tilted .board.size-5 {
-  width: 56%;
-  max-width: 56%;
-  padding: 2%;
-}
-
-.board-frame--has-art.board-frame--tilted .board.size-7 {
-  width: 51%;
-  max-width: 51%;
+  width: 48%;
+  max-width: 48%;
   padding: 1%;
   gap: 0;
 }
 
-/* Arena table: steep tilt so the board sits BETWEEN the two rims */
+.board-frame--has-art.board-frame--tilted .board.size-5 {
+  width: 50%;
+  max-width: 50%;
+  padding: 1.5%;
+}
+
+.board-frame--has-art.board-frame--tilted .board.size-7 {
+  width: 46%;
+  max-width: 46%;
+  padding: 0.5%;
+  gap: 0;
+}
+
+/*
+ * Floor projection on the existing 3/4 arena — not a top-down camera.
+ * Circle art + grid share one plane; standing stones billboard back to the map camera.
+ */
 .board-frame--tilted {
+  --board-floor-tilt: 56deg;
+  --board-floor-widen: 1.16;
+  --board-sprite-untilt: -56deg;
+  --board-sprite-unwiden: 0.862;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -8329,13 +8450,13 @@ button.battle-unit {
 }
 
 .board-stage {
-  perspective: 1100px;
-  perspective-origin: 50% 42%;
+  perspective: 1600px;
+  perspective-origin: 50% 10%;
   width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 12px 4px;
+  padding: 4px 4px 10px;
   transform-style: preserve-3d;
   position: relative;
 }
@@ -8345,14 +8466,16 @@ button.battle-unit {
   inset: 0;
   width: 100%;
   height: 100%;
-  /* Nested in .board-hit — inherit the same tilt instead of a second rotate. */
   transform: none;
   transform-origin: center center;
   pointer-events: none;
   z-index: 0;
   object-fit: contain;
-  opacity: 1;
-  filter: saturate(0.98) brightness(0.96) contrast(1.04) drop-shadow(0 14px 18px #0007);
+  opacity: 0.84;
+  /* Fade the outer mossy dais so painted map ground shows through. */
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0 44%, #000d 56%, #0006 64%, transparent 74%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 0 44%, #000d 56%, #0006 64%, transparent 74%);
+  filter: saturate(0.94) brightness(1.08) contrast(1.08);
 }
 
 .board-frame--has-art.is-placeable .board-circle-art {
@@ -8361,17 +8484,18 @@ button.battle-unit {
 
 .board-frame--has-art.phase-2 .board-circle-art,
 .board-frame--has-art.phase-3 .board-circle-art {
-  filter: drop-shadow(0 0 36px #c9a22766) saturate(1.15) brightness(1.05);
-  opacity: 1;
+  filter: saturate(1.12) brightness(1.1) contrast(1.08);
+  opacity: 0.9;
 }
 
 .board-frame--has-art.is-rekindling .board-circle-art {
-  filter: drop-shadow(0 0 48px #e8d48aaa) saturate(1.35) brightness(1.12);
+  filter: saturate(1.22) brightness(1.14) contrast(1.1);
+  opacity: 0.95;
 }
 
 @keyframes board-circle-art-pulse {
-  0%, 100% { opacity: 0.96; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.012); }
+  0%, 100% { opacity: 0.84; transform: scale(1); }
+  50% { opacity: 0.92; transform: scale(1.008); }
 }
 
 .board-circle-aura {
@@ -8444,14 +8568,27 @@ button.battle-unit {
   width: min(420px, 94%);
   aspect-ratio: 1;
   overflow: visible;
-  transform: rotateX(52deg) scaleX(1.08);
+  transform: rotateX(var(--board-floor-tilt)) scaleX(var(--board-floor-widen));
   transform-origin: center center;
   transform-style: preserve-3d;
   will-change: transform;
-  filter: drop-shadow(0 18px 18px #000a);
-  /* Ensure transformed cells still receive precise touch hits. */
+  filter: none;
   touch-action: manipulation;
   pointer-events: auto;
+}
+
+.board-frame--tilted .board-hit::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 58%;
+  height: 28%;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+  background: radial-gradient(ellipse at center, #00000055 0%, transparent 72%);
+  filter: blur(8px);
 }
 
 .board-frame--tilted .board {
@@ -8498,39 +8635,39 @@ button.battle-unit {
 
 .board-frame--tilted .board button.cell .node-mark {
   display: block;
-  width: 46%;
-  height: 46%;
-  opacity: 0.7;
+  width: 38%;
+  height: 38%;
+  opacity: 0.55;
   background:
-    radial-gradient(circle at 50% 42%, #0a081288 0%, #00000066 55%, transparent 72%);
+    radial-gradient(circle at 50% 42%, #0a081266 0%, #00000044 55%, transparent 72%);
   box-shadow:
-    inset 0 1px 3px #0009,
-    0 0 8px #6ec8ff22;
-  border: 1px solid #c9a22733;
+    inset 0 1px 3px #0007,
+    0 0 6px #6ec8ff18;
+  border: 1px solid #c9a22722;
 }
 
 .board-frame--has-art.board-frame--tilted .board button.cell .node-mark {
-  opacity: 0.55;
+  opacity: 0.4;
   background:
-    radial-gradient(circle at 50% 42%, #07050ccc 0%, #00000055 52%, transparent 74%);
+    radial-gradient(circle at 50% 42%, #07050c88 0%, #00000033 52%, transparent 74%);
   box-shadow:
-    inset 0 1px 4px #000a,
-    0 0 7px #6ec8ff28;
+    inset 0 1px 3px #0008,
+    0 0 5px #6ec8ff18;
 }
 
 .board-frame--tilted .board button.cell .magic-stone {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 118%;
-  height: 118%;
+  width: 96%;
+  height: 148%;
   margin: 0;
   overflow: visible;
   z-index: 4;
   background: transparent;
   box-shadow: none;
   border-radius: 0;
-  transform: translate(-50%, -58%);
+  transform: translate(-50%, -78%);
   filter: none;
   pointer-events: none;
   transform-style: preserve-3d;
@@ -8546,30 +8683,30 @@ button.battle-unit {
 
 .board-frame--tilted .board button.cell .magic-stone-socket {
   position: absolute;
-  left: 18%;
-  right: 18%;
-  top: 58%;
-  height: 38%;
+  left: 22%;
+  right: 22%;
+  top: 78%;
+  height: 22%;
   border-radius: 50%;
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(ellipse at center, #000000aa 0%, #00000066 42%, transparent 74%);
+    radial-gradient(ellipse at center, #00000088 0%, #00000044 42%, transparent 74%);
   box-shadow:
-    inset 0 2px 5px #000a,
-    0 0 10px var(--stone-corona, #c9a22744);
-  transform: scaleY(0.55) translateZ(0);
+    inset 0 2px 4px #0008,
+    0 0 8px var(--stone-corona, #c9a22733);
+  transform: scaleY(0.42) translateZ(0);
 }
 
 .board-frame--tilted .board button.cell .magic-stone-ground {
   position: absolute;
-  left: 14%;
-  right: 14%;
-  top: 62%;
-  height: 36%;
+  left: 18%;
+  right: 18%;
+  top: 80%;
+  height: 20%;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, #000000aa 0%, #00000066 40%, transparent 74%);
-  transform: scaleY(0.5) translateZ(0);
+  background: radial-gradient(ellipse at center, #00000077 0%, #00000044 40%, transparent 74%);
+  transform: scaleY(0.38) translateZ(0);
   filter: blur(0.6px);
   pointer-events: none;
   z-index: 0;
@@ -8605,17 +8742,20 @@ button.battle-unit {
 
 .board-frame--tilted .board button.cell .magic-stone-img {
   position: absolute;
-  inset: -18% 0 6%;
-  width: 100%;
-  height: auto;
+  left: 6%;
+  right: 6%;
+  bottom: 4%;
+  top: auto;
+  width: auto;
+  height: 88%;
   aspect-ratio: 1;
   object-fit: contain;
   object-position: center bottom;
   background: none;
   mix-blend-mode: normal;
-  transform-origin: 50% 86%;
-  transform: rotateX(-38deg) scaleX(0.95) translateZ(16px);
-  filter: drop-shadow(0 6px 5px #000a);
+  transform-origin: 50% 100%;
+  transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(22px);
+  filter: drop-shadow(0 8px 6px #000a);
   animation: stone-gem-breathe 3.6s ease-in-out infinite;
   z-index: 2;
 }
@@ -8623,18 +8763,18 @@ button.battle-unit {
 .board-frame--tilted .board button.cell .magic-stone-spark {
   display: block;
   position: absolute;
-  left: 16%;
-  right: 16%;
-  top: 18%;
-  height: 62%;
+  left: 18%;
+  right: 18%;
+  top: 12%;
+  height: 70%;
   border-radius: 50%;
   pointer-events: none;
   z-index: 1;
-  transform-origin: 50% 86%;
-  transform: rotateX(-38deg) scaleX(0.95) translateZ(8px);
+  transform-origin: 50% 92%;
+  transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(10px);
   background: radial-gradient(ellipse at 50% 58%, var(--stone-corona, #c9a22744) 0%, transparent 70%);
   filter: blur(1.1px);
-  opacity: 0.88;
+  opacity: 0.72;
 }
 
 .board-frame--tilted .board button.cell .magic-stone.el-fire {
@@ -8692,8 +8832,8 @@ button.battle-unit {
 }
 
 .board-frame--tilted .board button.cell.fx-stone-materialize .magic-stone {
-  width: 118%;
-  height: 118%;
+  width: 96%;
+  height: 148%;
 }
 
 .board-frame--tilted .board button.cell.fx-stone-materialize .magic-stone-img {
@@ -8832,26 +8972,26 @@ button.battle-unit {
 }
 
 @keyframes stone-materialize {
-  0% { transform: rotateX(-38deg) scaleX(0.95) translateZ(42px) scale(0.32); opacity: 0; filter: brightness(2.1) drop-shadow(0 10px 8px #0000); }
-  58% { transform: rotateX(-38deg) scaleX(0.95) translateZ(12px) scale(1.08); opacity: 1; filter: brightness(1.28) drop-shadow(0 7px 6px #0008); }
-  78% { transform: rotateX(-38deg) scaleX(0.95) translateZ(18px) scale(0.97); filter: brightness(1.06) drop-shadow(0 6px 5px #0009); }
-  100% { transform: rotateX(-38deg) scaleX(0.95) translateZ(16px) scale(1); opacity: 1; filter: brightness(1) drop-shadow(0 6px 5px #000a); }
+  0% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(48px) scale(0.32); opacity: 0; filter: brightness(2.1) drop-shadow(0 10px 8px #0000); }
+  58% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(16px) scale(1.08); opacity: 1; filter: brightness(1.28) drop-shadow(0 9px 7px #0008); }
+  78% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(24px) scale(0.97); filter: brightness(1.06) drop-shadow(0 8px 6px #0009); }
+  100% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(22px) scale(1); opacity: 1; filter: brightness(1) drop-shadow(0 8px 6px #000a); }
 }
 
 @keyframes stone-materialize-enemy {
-  0% { transform: rotateX(-38deg) scaleX(0.95) translateZ(30px) scale(0.42); opacity: 0; filter: brightness(1.6); }
-  100% { transform: rotateX(-38deg) scaleX(0.95) translateZ(16px) scale(1); opacity: 1; filter: brightness(1); }
+  0% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(36px) scale(0.42); opacity: 0; filter: brightness(1.6); }
+  100% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(22px) scale(1); opacity: 1; filter: brightness(1); }
 }
 
 @keyframes stone-socket-ignite {
-  0% { transform: scaleY(0.55) scale(0.45); opacity: 0; }
-  42% { transform: scaleY(0.55) scale(1.12); opacity: 1; }
-  100% { transform: scaleY(0.55) scale(1); opacity: 1; }
+  0% { transform: scaleY(0.42) scale(0.45); opacity: 0; }
+  42% { transform: scaleY(0.42) scale(1.12); opacity: 1; }
+  100% { transform: scaleY(0.42) scale(1); opacity: 1; }
 }
 
 @keyframes stone-gem-breathe {
-  0%, 100% { transform: rotateX(-38deg) scaleX(0.95) translateZ(16px) scale(1); filter: drop-shadow(0 6px 5px #000a) brightness(1); }
-  50% { transform: rotateX(-38deg) scaleX(0.95) translateZ(20px) scale(1.04); filter: drop-shadow(0 8px 6px #0008) brightness(1.08); }
+  0%, 100% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(22px) scale(1); filter: drop-shadow(0 8px 6px #000a) brightness(1); }
+  50% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(28px) scale(1.04); filter: drop-shadow(0 10px 8px #0008) brightness(1.08); }
 }
 
 @keyframes stone-drop-in {
@@ -9083,11 +9223,11 @@ button.battle-unit {
     animation: none !important;
   }
   .board-frame--tilted .board button.cell .magic-stone-img {
-    transform: rotateX(-38deg) scaleX(0.95) translateZ(16px);
+    transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(22px);
   }
   .board-frame--tilted .board button.cell .board-mark-img,
   .board-frame--tilted .board button.cell .token-item-img {
-    transform: none;
+    transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(18px);
   }
 }
 
@@ -9737,14 +9877,14 @@ button.battle-unit {
 @keyframes rival-last-stone-blink-tilt {
   0%,
   100% {
-    filter: drop-shadow(0 6px 5px #000a) brightness(1);
+    filter: drop-shadow(0 8px 6px #000a) brightness(1);
     opacity: 0.92;
-    transform: rotateX(-38deg) scaleX(0.95) translateZ(16px) scale(1);
+    transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(22px) scale(1);
   }
   50% {
     filter: drop-shadow(0 0 12px #c4b0ffbb) brightness(1.28);
     opacity: 1;
-    transform: rotateX(-38deg) scaleX(0.95) translateZ(22px) scale(1.06);
+    transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(28px) scale(1.06);
   }
 }
 
@@ -9847,13 +9987,13 @@ button.battle-unit {
 .board-frame--tilted .board button.cell .board-mark-img,
 .board-frame--tilted .board button.cell .token-item-img {
   transform-origin: 50% 88%;
-  transform: rotateX(-52deg) scaleX(0.926) translateZ(16px);
+  transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(18px);
   animation: mark-relic-breathe 3.6s ease-in-out infinite;
 }
 
 @keyframes mark-relic-breathe {
-  0%, 100% { transform: rotateX(-52deg) scaleX(0.926) translateZ(14px) scale(1); }
-  50% { transform: rotateX(-52deg) scaleX(0.926) translateZ(20px) scale(1.05); }
+  0%, 100% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(16px) scale(1); }
+  50% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(22px) scale(1.05); }
 }
 
 .board-frame--tilted .board button.cell .token-resource-orbit {
@@ -9864,8 +10004,8 @@ button.battle-unit {
 }
 
 @keyframes token-resource-float-tilt {
-  0%, 100% { transform: rotateX(-52deg) scaleX(0.926) translateZ(20px) translateY(0) scale(0.96); opacity: 0.9; }
-  50% { transform: rotateX(-52deg) scaleX(0.926) translateZ(28px) translateY(-18%) scale(1.08); opacity: 1; }
+  0%, 100% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(22px) translateY(0) scale(0.96); opacity: 0.9; }
+  50% { transform: rotateX(var(--board-sprite-untilt)) scaleX(var(--board-sprite-unwiden)) translateZ(30px) translateY(-18%) scale(1.08); opacity: 1; }
 }
 
 .board button.cell.bait .bait-mark {
@@ -9877,21 +10017,21 @@ button.battle-unit {
   content: "";
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 42%;
-  height: 42%;
-  transform: translate(-50%, -50%);
+  top: 58%;
+  width: 44%;
+  height: 28%;
+  transform: translate(-50%, -50%) scaleY(0.72);
   border-radius: 50%;
   pointer-events: none;
   z-index: 1;
-  background: radial-gradient(circle at 50% 45%, #f0d87866 0%, #c9a22722 42%, transparent 72%);
+  background: radial-gradient(ellipse at center, #f0d87866 0%, #c9a22722 42%, transparent 72%);
   box-shadow: inset 0 1px 3px #0006, 0 0 10px #c9a22755, 0 0 16px #7b6cff33;
-  border: 1px solid #f0d87855;
+  border: 1px solid #f0d87844;
 }
 
 .board-frame--has-art .board button.cell.is-placeable:hover::after,
 .board-frame--has-art .board button.cell.is-placeable:focus-visible::after {
-  background: radial-gradient(circle at 50% 45%, #fff6c8aa 0%, #f0d87844 40%, transparent 74%);
+  background: radial-gradient(ellipse at center, #fff6c8aa 0%, #f0d87844 40%, transparent 74%);
   box-shadow: inset 0 1px 3px #0004, 0 0 14px #f0d87877, 0 0 20px #c9a22744;
   border-color: #fff6c888;
 }
