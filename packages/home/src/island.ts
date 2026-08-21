@@ -70,8 +70,10 @@ export const PHASE_BUILDINGS: BuildingDef[] = [
     swName: "Crystal Mine",
     kind: "production",
     resource: "crystal",
-    crystalPerHour: 2.5,
-    crystalCap: 30,
+    /** SW Crystal Mine: +1 / 10h. Scaled by building level. */
+    crystalPerHour: 0.1,
+    /** SW Crystal Mine max storage is 3. Scaled by building level. */
+    crystalCap: 3,
     unlockLevel: 10,
   },
   {
@@ -361,7 +363,7 @@ function tickEnergy(island: IslandState, now: number): IslandState {
   const max = island.energyMax ?? ENERGY_MAX;
   const cur = Math.floor(island.energy);
   const updatedAt = island.energyUpdatedAt ?? now;
-  // Preserve overflow above max (e.g. mail rewards); regen only fills up to max.
+  // Overflow above max is kept (rewards / purchases); regen only fills up to max.
   if (cur >= max) {
     return { ...island, energyMax: max, energy: cur };
   }
@@ -391,6 +393,20 @@ export function energyRegenRemainingMs(
   const elapsed = Math.max(0, now - updatedAt);
   if (elapsed > 0 && elapsed % ENERGY_REGEN_MS === 0) return 0;
   return ENERGY_REGEN_MS - (elapsed % ENERGY_REGEN_MS);
+}
+
+/**
+ * Add energy from rewards or purchases. Always grants the full amount and may
+ * exceed energyMax. Natural regen is the only path that stops at the cap.
+ */
+export function grantEnergy(island: IslandState, amount: number): IslandState {
+  const add = Math.max(0, Math.floor(amount));
+  if (add <= 0) return island;
+  return {
+    ...island,
+    energyMax: island.energyMax ?? ENERGY_MAX,
+    energy: Math.floor(island.energy) + add,
+  };
 }
 
 /** Spend energy; starts the regen clock only when leaving max. */
@@ -463,7 +479,11 @@ export function collectCrystal(
     if (inst.id !== buildingId) return inst;
     const gained = Math.floor(inst.storedCrystal ?? 0);
     next = { ...next, crystal: next.crystal + gained };
-    return { ...inst, storedCrystal: 0, lastUpdatedAt: now };
+    return {
+      ...inst,
+      storedCrystal: (inst.storedCrystal ?? 0) - gained,
+      lastUpdatedAt: now,
+    };
   });
   return { ...next, buildings };
 }
@@ -662,11 +682,7 @@ export function runWish(
   } else if (entry.kind === "crystal") {
     next = { ...next, crystal: next.crystal + amount };
   } else if (entry.kind === "energy") {
-    const max = next.energyMax ?? ENERGY_MAX;
-    next = {
-      ...next,
-      energy: Math.min(max, next.energy + amount),
-    };
+    next = grantEnergy(next, amount);
   }
   const reward: WishReward = { kind: entry.kind, amount };
   return {

@@ -1,4 +1,5 @@
 import type { LoopStepResult, PlayerSave } from "./loop.js";
+import { grantEnergy } from "stonesummoner-home";
 
 export type MissionReward = {
   mana?: number;
@@ -156,15 +157,16 @@ export function grantMissionReward(
   save: PlayerSave,
   reward: MissionReward,
 ): PlayerSave {
-  const max = save.island.energyMax ?? 100;
   return {
     ...save,
-    island: {
-      ...save.island,
-      mana: save.island.mana + (reward.mana ?? 0),
-      crystal: save.island.crystal + (reward.crystal ?? 0),
-      energy: Math.min(max, save.island.energy + (reward.energy ?? 0)),
-    },
+    island: grantEnergy(
+      {
+        ...save.island,
+        mana: save.island.mana + (reward.mana ?? 0),
+        crystal: save.island.crystal + (reward.crystal ?? 0),
+      },
+      reward.energy ?? 0,
+    ),
     jinmunStones: (save.jinmunStones ?? 0) + (reward.jinmun ?? 0),
     grindstones: (save.grindstones ?? 0) + (reward.grindstones ?? 0),
     imprintStones: (save.imprintStones ?? 0) + (reward.imprintStones ?? 0),

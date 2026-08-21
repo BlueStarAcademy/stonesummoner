@@ -347,163 +347,34 @@ export function spawnTravelBolt(
   window.setTimeout(() => bolt.remove(), Math.max(80, ms + 40));
 }
 
-export type ArenaStoneVfxPower = "place" | "capture" | "capture-large";
+export type CircleAbsorbPower = "safe" | "capture" | "capture-large" | "shape";
 
-function queryArenaStone(
+function queryTeamSummoner(
   root: ParentNode,
   team: "ally" | "enemy",
 ): HTMLElement | null {
   return root.querySelector<HTMLElement>(
-    `.arena-stone[data-arena-stone="${team}"]`,
+    `.battle-lane.${team} .battle-unit--summoner`,
   );
 }
 
-function arenaStoneElement(stone: HTMLElement): CombatElement {
-  if (stone.classList.contains("el-fire")) return "fire";
-  if (stone.classList.contains("el-water")) return "water";
-  if (stone.classList.contains("el-wind")) return "wind";
-  if (stone.classList.contains("el-light")) return "light";
-  return "dark";
-}
-
-function arenaStoneAnchor(
+/** Head sparkle on the summoner while the circle inscribes. */
+export function spawnCircleAbsorbVfx(
   root: ParentNode,
   team: "ally" | "enemy",
-): { x: number; y: number } | null {
-  const stone = queryArenaStone(root, team);
-  const art =
-    stone?.querySelector<HTMLElement>(".magic-stone-img") ?? stone;
-  if (!art) return null;
-  const r = art.getBoundingClientRect();
-  if (r.width < 1 && r.height < 1) return null;
-  return { x: r.left + r.width * 0.5, y: r.top + r.height * 0.38 };
-}
-
-function stonePlaceLayers(
-  element: CombatElement,
-  power: ArenaStoneVfxPower,
-): SkfxLayer[] {
-  const hit = hitArt(element);
-  if (power === "place") {
-    return [
-      { src: ART.cast, cls: "skfx-img skfx-img--cast" },
-      { src: ART.flash, cls: "skfx-img skfx-img--flash" },
-      { src: ART.buff, cls: "skfx-img skfx-img--rise" },
-      { src: hit, cls: "skfx-img skfx-img--burst skfx-img--soft" },
-    ];
-  }
-  const layers: SkfxLayer[] = [
-    { src: ART.shock, cls: "skfx-img skfx-img--shock" },
-    { src: ART.flash, cls: "skfx-img skfx-img--flash" },
-    { src: hit, cls: "skfx-img skfx-img--burst" },
-    { src: ART.debris, cls: "skfx-img skfx-img--debris" },
-    { src: ART.buff, cls: "skfx-img skfx-img--rise" },
-  ];
-  if (power === "capture-large") {
-    layers.push({ src: ART.hitCrit, cls: "skfx-img skfx-img--crit" });
-    layers.push({ src: ART.strikeUlt, cls: "skfx-img skfx-img--ult" });
-  }
-  return layers;
-}
-
-function stoneRivalHitLayers(
-  element: CombatElement,
-  large: boolean,
-): SkfxLayer[] {
-  const layers: SkfxLayer[] = [
-    { src: ART.hex, cls: "skfx-img skfx-img--hex" },
-    { src: hitArt(element), cls: "skfx-img skfx-img--burst" },
-  ];
-  if (large) {
-    layers.push({ src: ART.debris, cls: "skfx-img skfx-img--debris" });
-    layers.push({ src: ART.hitCrit, cls: "skfx-img skfx-img--crit" });
-  }
-  return layers;
-}
-
-function spawnStoneToStoneBolt(
-  root: ParentNode,
-  fromTeam: "ally" | "enemy",
-  toTeam: "ally" | "enemy",
-  element: CombatElement,
-  ms: number,
-): void {
-  const layer = skillFxLayer(root);
-  if (!layer) return;
-  const from = arenaStoneAnchor(root, fromTeam);
-  const to = arenaStoneAnchor(root, toTeam);
-  if (!from || !to) return;
-  const layerRect = layer.getBoundingClientRect();
-  const x0 = from.x - layerRect.left;
-  const y0 = from.y - layerRect.top;
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const rot = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const bolt = document.createElement("span");
-  bolt.className = `skill-bolt skill-bolt--${element} skill-bolt--stone`;
-  bolt.setAttribute("aria-hidden", "true");
-  bolt.style.left = `${Math.round(x0)}px`;
-  bolt.style.top = `${Math.round(y0)}px`;
-  bolt.style.setProperty("--dx", `${Math.round(dx)}px`);
-  bolt.style.setProperty("--dy", `${Math.round(dy)}px`);
-  bolt.style.setProperty("--rot", `${rot}deg`);
-  bolt.style.setProperty("--bolt-ms", `${Math.max(80, ms)}ms`);
-  const img = document.createElement("img");
-  img.className = "skill-bolt-art";
-  img.src = boltArt(element);
-  img.alt = "";
-  img.draggable = false;
-  img.decoding = "async";
-  img.setAttribute("aria-hidden", "true");
-  bolt.appendChild(img);
-  layer.appendChild(bolt);
-  window.setTimeout(() => bolt.remove(), Math.max(80, ms + 40));
-}
-
-/** Painted skill-style burst on a planted arena stone. Capture hits the rival. */
-export function spawnArenaStoneVfx(
-  root: ParentNode,
-  team: "ally" | "enemy",
-  power: ArenaStoneVfxPower,
+  power: CircleAbsorbPower,
   ms: number,
 ): void {
   if (reduceMotion) return;
-  preloadBattleFx();
-  const stone = queryArenaStone(root, team);
-  if (!stone) return;
-  const element = arenaStoneElement(stone);
-  const wrap = document.createElement("span");
-  wrap.className = `arena-stone-fx arena-stone-fx--${power} arena-stone-fx--${element}`;
-  wrap.setAttribute("aria-hidden", "true");
-  wrap.style.setProperty("--skfx-ms", `${Math.max(80, ms)}ms`);
-  for (const layer of stonePlaceLayers(element, power)) {
-    appendFxImg(wrap, layer);
-  }
-  stone.appendChild(wrap);
-  window.setTimeout(() => wrap.remove(), Math.max(80, ms));
-
-  if (power === "place") return;
-
-  const rivalTeam = team === "ally" ? "enemy" : "ally";
-  const rival = queryArenaStone(root, rivalTeam);
-  if (rival) {
-    const hit = document.createElement("span");
-    hit.className = `arena-stone-fx arena-stone-fx--struck arena-stone-fx--${element}`;
-    hit.setAttribute("aria-hidden", "true");
-    hit.style.setProperty("--skfx-ms", `${Math.max(80, ms)}ms`);
-    for (const layer of stoneRivalHitLayers(element, power === "capture-large")) {
-      appendFxImg(hit, layer);
-    }
-    rival.appendChild(hit);
-    window.setTimeout(() => hit.remove(), Math.max(80, ms));
-  }
-  spawnStoneToStoneBolt(
-    root,
-    team,
-    rivalTeam,
-    element,
-    Math.min(Math.max(80, ms), 460),
-  );
+  const summoner = queryTeamSummoner(root, team);
+  if (!summoner) return;
+  summoner.classList.add("is-mana-intake", `is-mana-intake--${power}`);
+  window.setTimeout(() => {
+    summoner.classList.remove(
+      "is-mana-intake",
+      `is-mana-intake--${power}`,
+    );
+  }, Math.max(80, ms));
 }
 
 function spawnAoeField(

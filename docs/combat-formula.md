@@ -62,8 +62,8 @@ Amplify = clamp(ComputedAmplify, 0.85, AmplifyCap)
 
 | 이벤트 | Amplify 기여 | 부가 (핵심) |
 |--------|--------------|-------------|
-| 안전 착수 | +0.01 | 마나 +소 (플랫) |
-| 돌 N 따냄 | +0.02 ~ +0.03 (유지) | **다음 소환수 피해 ×(1+0.10N)** · **마력 +10%p×N** |
+| 안전 착수 | +0.01 | **마력 +6** (플랫 × manaMul). 스탯 오라 없음 |
+| 돌 N 따냄 | +0.02 ~ +0.03 (유지) | **다음 소환수 피해 ×(1+0.10N)** · **마력 +12%p×N** |
 | 대마 유지 | 받는피해 ×0.90~0.95 | 힐↑ |
 | 활로1 압박 | 상대 ACC/행동 패널티 | — |
 | 보드 아이템 | 버프별 (치명/실드 등) | 일부 마나 +대 |
@@ -82,10 +82,10 @@ Amplify = clamp(ComputedAmplify, 0.85, AmplifyCap)
 ManaPerSecond = BaseManaRegen(SummonerLevel, EquipManaCircuit)
 
 OnSafePlace:
-  Mana += flatSafeMana * (1 + EquipBoardSense)   // 소량
+  Mana += 6 * (1 + EquipBoardSense) * phaseManaMul   // 마력 흡수. 스탯 버프 없음
 
 OnCapture(N):
-  Mana += manaMax * 0.10 * N                     // 돌 1개당 게이지 10%p
+  Mana += manaMax * 0.12 * N                     // 돌 1개당 게이지 12%p
 
 ManaMax = 100  // 또는 장비·스킬트리 상한
 ManaFull = Mana >= ManaMax
@@ -95,10 +95,10 @@ ManaFull = Mana >= ManaMax
 
 | 이벤트 | 마나 |
 |--------|------|
-| 안전 착수 | +2 ~ +4 (플랫 × manaMul) |
-| 따냄 N개 | **manaMax × 10% × N** |
+| 안전 착수 | **+6** (플랫 × manaMul) |
+| 따냄 N개 | **manaMax × 12% × N** |
 | 사석자석 아이템 | +30 ~ +40 |
-| 형상 완성 | +10 ~ +15 |
+| 형상 완성 | +15 ~ +20 |
 | 자살수 시도 | 0 |
 
 ### 소환사 스킬

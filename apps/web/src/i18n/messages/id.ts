@@ -684,6 +684,12 @@ const messages: MessageDict = {
   "ui.bldgUp.doneBody": "{name} is now Lv.{level}.",
   "ui.bldgUp.doneOk": "OK",
   "ui.bldgUp.needAccount": "Account Lv.{n}",
+  "ui.bldgProd.title": "Yield",
+  "ui.bldgProd.time": "Fill time",
+  "ui.bldgProd.cap": "Max storage",
+  "ui.bldgProd.durationHm": "{h}h {m}m",
+  "ui.bldgProd.durationH": "{h}h",
+  "ui.bldgProd.durationM": "{m}m",
   "ui.dojo.bonusNone": "None",
   "ui.dojo.bonusMax": "Max",
   "ui.dojo.valStartMana": "Start mana +{n}",
@@ -935,6 +941,7 @@ const messages: MessageDict = {
   "ui.islandEnter": "Enter",
   "ui.islandInfo": "Info",
   "ui.islandUp": "UP",
+  "ui.islandProd": "Yield",
   "ui.islandAction.summon_hearth": "Summon",
   "ui.islandAction.power_circle": "Combine",
   "ui.islandAction.gateway": "Battle",
@@ -1134,7 +1141,9 @@ const messages: MessageDict = {
   "ui.guild.board": "Rankings",
   "ui.guild.unjoined": "No guild",
   "ui.guild.checkedIn": "Checked in",
-  "ui.guild.save": "Save"
+  "ui.guild.save": "Save",
+  "ui.guild.create": "Found",
+  "ui.guild.close": "Close"
 };
 
 export default messages;

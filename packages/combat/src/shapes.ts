@@ -155,7 +155,7 @@ export function detectShapeBonuses(
       id: "corner",
       labelKo: "귀 점유",
       amplifyDelta: 0.02,
-      mana: 8,
+      mana: 20,
       skillAmplifyBonus: 0.03,
     });
   }
@@ -165,7 +165,7 @@ export function detectShapeBonuses(
       id: "star",
       labelKo: "화점",
       amplifyDelta: 0.03,
-      mana: 5,
+      mana: 16,
     });
   }
 
@@ -175,7 +175,7 @@ export function detectShapeBonuses(
       id: "star_control",
       labelKo: "화점 지배",
       amplifyDelta: 0.05,
-      mana: 6,
+      mana: 18,
       skillAmplifyBonus: 0.05,
     });
   }
@@ -185,7 +185,7 @@ export function detectShapeBonuses(
       id: "tiger",
       labelKo: "호구",
       amplifyDelta: 0.02,
-      mana: 4,
+      mana: 15,
       shieldPct: 0.1,
     });
   }
@@ -195,7 +195,7 @@ export function detectShapeBonuses(
       id: "kosumi",
       labelKo: "쌍립",
       amplifyDelta: 0.015,
-      mana: 3,
+      mana: 15,
     });
   }
 
@@ -204,7 +204,7 @@ export function detectShapeBonuses(
       id: "axis",
       labelKo: "축 연결",
       amplifyDelta: 0.025,
-      mana: 5,
+      mana: 16,
       shieldPct: 0.08,
     });
   }

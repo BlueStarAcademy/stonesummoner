@@ -44,6 +44,13 @@ export async function dematteBlackSrc(src: string): Promise<string> {
     const image = ctx.getImageData(0, 0, w, h);
     const d = image.data;
 
+    // Build-time dematte already punched the matte. A second flood fill
+    // tunnels through dark armor/cloth and leaves a silhouette.
+    if (edgeMostlyTransparent(d, w, h)) {
+      cache.set(src, src);
+      return src;
+    }
+
     const lim = 28;
     const chromaMax = 8;
     const flatRange = 6;
@@ -164,6 +171,28 @@ export async function dematteBlackSrc(src: string): Promise<string> {
   }
 }
 
+function edgeMostlyTransparent(
+  d: Uint8ClampedArray,
+  w: number,
+  h: number,
+): boolean {
+  let edge = 0;
+  let clear = 0;
+  const sample = (x: number, y: number) => {
+    edge += 1;
+    if (d[(y * w + x) * 4 + 3]! < 8) clear += 1;
+  };
+  for (let x = 0; x < w; x++) {
+    sample(x, 0);
+    sample(x, h - 1);
+  }
+  for (let y = 1; y < h - 1; y++) {
+    sample(0, y);
+    sample(w - 1, y);
+  }
+  return edge > 0 && clear / edge >= 0.3;
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -178,10 +207,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 export function dematteArtImg(img: HTMLImageElement): void {
   const src = img.getAttribute("src") || img.currentSrc || img.src;
   if (!src || src.startsWith("blob:") || src.startsWith("data:")) return;
-  // Battle stills ship with real alpha; dematte eats dark costume holes.
+  // Painted character art is already finished. Runtime dematte punches
+  // dark armor/hair to alpha and leaves a half-drawn silhouette.
   if (
     img.hasAttribute("data-still-front") ||
-    /\/art\/(?:monster|summoner)\/battle\//.test(src)
+    (/\/art\/(?:monster|summoner)\//.test(src) && !/\/skill\//.test(src))
   ) {
     return;
   }
@@ -197,7 +227,7 @@ export function dematteArtImg(img: HTMLImageElement): void {
 /** Apply dematte to all matching imgs under root (in place). */
 export function dematteArtInTree(
   root: ParentNode,
-  selector = "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.battle-unit-img, img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.codex-cell-img, img.codex-detail-img",
+  selector = "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.battle-unit-img, img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.summon-detail-img, img.summon-detail-skill-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.codex-cell-img, img.codex-detail-img",
 ): void {
   root.querySelectorAll<HTMLImageElement>(selector).forEach(dematteArtImg);
 }

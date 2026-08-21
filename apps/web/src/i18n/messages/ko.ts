@@ -684,6 +684,12 @@ const messages: MessageDict = {
   "ui.bldgUp.doneBody": "{name}이(가) Lv.{level}이 되었습니다.",
   "ui.bldgUp.doneOk": "확인",
   "ui.bldgUp.needAccount": "계정 Lv.{n}",
+  "ui.bldgProd.title": "수집량",
+  "ui.bldgProd.time": "생산시간",
+  "ui.bldgProd.cap": "최대보관량",
+  "ui.bldgProd.durationHm": "{h}시간 {m}분",
+  "ui.bldgProd.durationH": "{h}시간",
+  "ui.bldgProd.durationM": "{m}분",
   "ui.dojo.bonusNone": "없음",
   "ui.dojo.bonusMax": "최대",
   "ui.dojo.valStartMana": "시작 마나 +{n}",
@@ -935,6 +941,7 @@ const messages: MessageDict = {
   "ui.islandEnter": "입장",
   "ui.islandInfo": "정보",
   "ui.islandUp": "UP",
+  "ui.islandProd": "수집량",
   "ui.islandAction.summon_hearth": "소환",
   "ui.islandAction.power_circle": "조합",
   "ui.islandAction.gateway": "출정",
@@ -1134,7 +1141,9 @@ const messages: MessageDict = {
   "ui.guild.board": "기여 순위",
   "ui.guild.unjoined": "미가입",
   "ui.guild.checkedIn": "출석 완료",
-  "ui.guild.save": "저장"
+  "ui.guild.save": "저장",
+  "ui.guild.create": "창설",
+  "ui.guild.close": "닫기"
 };
 
 export default messages;

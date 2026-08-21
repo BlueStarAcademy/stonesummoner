@@ -14,6 +14,7 @@ import {
   listRoster,
   listSymbols,
   runBuyEnergy,
+  ENERGY_BUY_AMOUNT,
   runBuyGrindstone,
   GRINDSTONE_BUY_CRYSTAL_COST,
   SCROLL_PREMIUM_BUY_CRYSTAL_COST,
@@ -70,6 +71,7 @@ import {
   runClaimDailyMission,
   runImprintSymbol,
   runJoinGuild,
+  runCreateGuild,
   runGuildCheckIn,
   guildLeaderboard,
   runClaimSeasonReward,
@@ -94,6 +96,7 @@ import {
   RAID_BOSS_MAX_HP,
   RAID_ATTEMPTS_DAILY,
   GUILD_WEEK_CONTRIB_GOAL,
+  GUILD_CREATE_CRYSTAL_COST,
   applyRewards,
   rollStageCrystalDrop,
   stageCrystalDropChance,
@@ -429,6 +432,16 @@ describe("game loop", () => {
     assert.equal(energy.save.island.crystal, 20);
     save = energy.save;
 
+    const overflowBuy = runBuyEnergy(
+      {
+        ...save,
+        island: { ...save.island, crystal: 30, energy: 95, energyMax: 100 },
+        shopBuyCounts: {},
+      },
+      1,
+    );
+    assert.equal(overflowBuy.save.island.energy, 95 + ENERGY_BUY_AMOUNT);
+
     const essence = runCraftEssence(save);
     assert.match(essence.message, /정수/);
     assert.equal(essence.save.jinmunStones, 4);
@@ -513,6 +526,21 @@ describe("game loop", () => {
     assert.equal(blocked.save.jinmunStones, third.save.jinmunStones);
 
     let g = { ...third.save, island: { ...third.save.island, summonerLevel: 12 } };
+    const broke = runCreateGuild(
+      { ...g, island: { ...g.island, crystal: GUILD_CREATE_CRYSTAL_COST - 1 } },
+      "진문수호",
+    );
+    assert.match(broke.message, /크리스탈 부족/);
+    assert.equal(broke.save.guildName, null);
+    const founded = runCreateGuild(
+      { ...g, island: { ...g.island, crystal: GUILD_CREATE_CRYSTAL_COST + 50 } },
+      "진문수호",
+    );
+    assert.equal(founded.save.guildName, "진문수호");
+    assert.equal(founded.save.island.crystal, 50);
+    assert.match(founded.message, /창설/);
+    const already = runCreateGuild(founded.save, "다른길드");
+    assert.match(already.message, /이미/);
     const join = runJoinGuild(g, "진문수호");
     assert.equal(join.save.guildName, "진문수호");
     g = join.save;
@@ -897,6 +925,23 @@ describe("game loop", () => {
     );
     assert.match(again.message, /이미/);
 
+    const overflowClaim = runClaimDailyMission(
+      {
+        ...save,
+        island: {
+          ...save.island,
+          lastWishDay: day,
+          mana: 100,
+          energy: 95,
+          energyMax: 100,
+        },
+        claimedMissionKeys: [],
+      },
+      "wish",
+      Date.parse(`${day}T12:00:00Z`),
+    );
+    assert.equal(overflowClaim.save.island.energy, 105);
+
     save = {
       ...blocked.save,
       dojoDrillDay: day,
@@ -933,6 +978,15 @@ describe("game loop", () => {
     assert.ok(claimed.save.claimedMainQuestIds.includes("forest1"));
     const again = runClaimMainQuest(claimed.save, "forest1");
     assert.match(again.message, /이미/);
+
+    const overflowQuest = runClaimMainQuest(
+      {
+        ...save,
+        island: { ...save.island, energy: 95, energyMax: 100 },
+      },
+      "forest1",
+    );
+    assert.equal(overflowQuest.save.island.energy, 105);
 
     save = {
       ...claimed.save,

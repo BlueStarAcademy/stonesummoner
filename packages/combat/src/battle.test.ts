@@ -96,6 +96,7 @@ describe("Battle flow", () => {
     const hits = b.useSkill();
     assert.ok(hits.length >= 1);
     assert.ok(hits[0]!.damage > 0);
+    assert.equal(b.attackTurnCount, 1);
   });
 
   it("skips stone when the same team acts again (Go alternation)", () => {
@@ -150,7 +151,7 @@ describe("Battle flow", () => {
     assert.equal(b.lastStoneReport?.team, "enemy");
   });
 
-  it("keeps stone aura on a consecutive same-team monster turn", () => {
+  it("safe place grants flat mana with no combat aura chips", () => {
     const b = new Battle({
       boardSize: 5,
       units: roster(),
@@ -161,22 +162,18 @@ describe("Battle flow", () => {
     for (const u of b.units) u.atb = 0;
     b.getUnit("a-m1")!.atb = 100;
     b.tickUntilReady();
+    const mana0 = b.allySummoner.mana;
     assert.equal(b.autoStone(), true);
-    const aura = b.stoneAura.ally;
-    assert.ok(aura);
-    assert.ok(
-      (aura.atkPct ?? 0) > 0 ||
-        (aura.defPct ?? 0) > 0 ||
-        (aura.spdPct ?? 0) > 0 ||
-        (aura.critRate ?? 0) > 0,
-    );
-    assert.ok((b.lastStoneReport?.chips.length ?? 0) >= 1);
+    assert.ok(b.allySummoner.mana >= mana0 + 6);
+    assert.match(b.log.join("\n"), /일반 소환: 마력/);
+    const kinds = (b.lastStoneReport?.chips ?? []).map((c) => c.kind);
+    assert.ok(kinds.includes("mana"));
+    assert.ok(!kinds.some((k) => k === "atk" || k === "def" || k === "spd" || k === "crit"));
     b.useSkill();
     for (const u of b.units) u.atb = 0;
     b.getUnit("a-sum")!.atb = 100;
     b.tickUntilReady();
     assert.equal(b.phase, "await_skill");
-    assert.equal(b.stoneAura.ally, aura);
   });
 
   it("summoner skill when mana full hits all enemy summons", () => {
@@ -820,7 +817,7 @@ describe("Battle flow", () => {
     assert.match(b.log.join("\n"), /포석 보너스 \(중앙 국면\)/);
   });
 
-  it("capture grants N×10% next-monster damage and manaMax×10%×N", () => {
+  it("capture grants N×10% next-monster damage and manaMax×12%×N", () => {
     const b = new Battle({
       boardSize: 5,
       units: roster(),
@@ -874,7 +871,7 @@ describe("Battle flow", () => {
     const m0 = b3.allySummoner.mana;
     assert.equal(b3.playStone({ x: 2, y: 3 }), true);
     assert.equal(b3.pendingCaptureDamageBonus.ally, 0.1);
-    assert.ok(b3.allySummoner.mana >= m0 + 10); // 10% of 100
+    assert.ok(b3.allySummoner.mana >= m0 + 12); // 12% of 100
     assert.equal(b3.skillAmplifyBonus, 0);
     const hp0 = b3.getUnit("e-m1")!.hp;
     const hits = b3.useSkill({ targetId: "e-m1" });

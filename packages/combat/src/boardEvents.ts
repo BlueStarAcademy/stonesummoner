@@ -15,17 +15,23 @@ export interface BoardEventGains {
   skillAmplifyBonus: number;
   /**
    * Flat mana for safe place / items. Capture mana is applied in Battle as
-   * `manaMax × 0.10 × capturedCount` (not via this field).
+   * `manaMax × CAPTURE_MANA_FRAC_PER_STONE × capturedCount` (not via this field).
    */
   mana: number;
   /** Damage multiplier bonus for the next monster attack: `0.10 × N`. */
   captureDamageBonus: number;
-  /** Mana as fraction of manaMax from captures: `0.10 × N`. */
+  /** Mana as fraction of manaMax from captures: `0.12 × N`. */
   captureManaFrac: number;
 }
 
-/** Per captured stone: +10% next-monster damage and +10%p mana gauge. */
-export const CAPTURE_BONUS_PER_STONE = 0.1;
+/** Per captured stone: +10% next-monster damage. */
+export const CAPTURE_DAMAGE_PER_STONE = 0.1;
+/** Per captured stone: +12%p summoner mana gauge. */
+export const CAPTURE_MANA_FRAC_PER_STONE = 0.12;
+/** @deprecated Use CAPTURE_DAMAGE_PER_STONE. */
+export const CAPTURE_BONUS_PER_STONE = CAPTURE_DAMAGE_PER_STONE;
+/** Flat mana on a normal (non-capture) stone. */
+export const SAFE_PLACE_MANA = 6;
 
 export function gainsForBoardEvent(
   kind: BoardEventKind,
@@ -48,14 +54,14 @@ export function gainsForBoardEvent(
       amplifyDelta: n >= 3 ? 0.03 : 0.02,
       skillAmplifyBonus: 0,
       mana: 0,
-      captureDamageBonus: CAPTURE_BONUS_PER_STONE * n,
-      captureManaFrac: CAPTURE_BONUS_PER_STONE * n,
+      captureDamageBonus: CAPTURE_DAMAGE_PER_STONE * n,
+      captureManaFrac: CAPTURE_MANA_FRAC_PER_STONE * n,
     };
   }
   return {
     amplifyDelta: 0.01,
     skillAmplifyBonus: 0,
-    mana: 3 * manaMul,
+    mana: SAFE_PLACE_MANA * manaMul,
     captureDamageBonus: 0,
     captureManaFrac: 0,
   };
@@ -67,20 +73,3 @@ export function classifyCapture(capturedCount: number): BoardEventKind {
   return "safe_place";
 }
 
-export type SafePlaceProcAxis = "atk" | "def" | "spd" | "critRate";
-
-export interface SafePlaceProc {
-  axis: SafePlaceProcAxis;
-  /** ATK/DEF/SPD as 0.05–0.12; critRate uses the same fraction (×100 when applied). */
-  amount: number;
-}
-
-/** Mild random combat buff on a normal (non-capture) stone. */
-export function rollSafePlaceProc(rng: () => number): SafePlaceProc {
-  const kindRoll = rng();
-  const mag = 0.05 + Math.floor(rng() * 8) * 0.01;
-  if (kindRoll < 0.4) return { axis: "atk", amount: mag };
-  if (kindRoll < 0.65) return { axis: "def", amount: mag };
-  if (kindRoll < 0.85) return { axis: "spd", amount: mag };
-  return { axis: "critRate", amount: mag };
-}

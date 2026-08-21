@@ -13,19 +13,20 @@ import {
   battlePace,
   fxDurationMs,
   mountUnitAnimHooks,
-  pulseArenaStone,
+  pulseCircleAbsorb,
+  absorbKindFromStoneFx,
   pulseUnitClass,
   waitFx,
   type ArenaStoneFxKind,
 } from "./battle/fx";
-import { playSkillVfx, spawnArenaStoneVfx } from "./battle/skillVfx";
+import { playSkillVfx, spawnCircleAbsorbVfx } from "./battle/skillVfx";
 import { destroyAllSpine, mountBattleSpines, playSpineClip } from "./battle/spinePilot";
 import {
   getBattleStillSrc,
   getSummonerBattleStillSrc,
 } from "./battle/spinePacks";
 import { BATTLE_STILL_FAMILY_SET } from "./battle/battleStills";
-import { battleSkyHtml } from "./battle/battleBg";
+import { battleBgIdForStage, battleSkyHtml } from "./battle/battleBg";
 import {
   initAudio,
   bindUiSfx,
@@ -345,6 +346,7 @@ import {
   FUSION_MANA_COST,
   runImprintSymbol,
   runJoinGuild,
+  runCreateGuild,
   runGuildCheckIn,
   getActiveGear,
   getActiveSummoner,
@@ -354,6 +356,7 @@ import {
   GUILD_WEEK_CONTRIB_GOAL,
   GUILD_CHECKIN_CONTRIB,
   GUILD_CHECKIN_GLORY,
+  GUILD_CREATE_CRYSTAL_COST,
   syncGuildWeek,
   runClaimSeasonReward,
   SEASON_REWARD_WINS,
@@ -1510,8 +1513,10 @@ let battleAutoLive: BattleAutoOptions = { stone: true, combat: true };
 let battleAutoSettingsOpen = false;
 /** Blocks input while place/strike choreography plays. */
 let battleFxBusy = false;
-/** Wall-clock skip: enable after 1 minute in the live battle. */
+/** Wall-clock skip: enable after 1 minute and 50 attack turns. */
 const BATTLE_SKIP_AFTER_MS = 60_000;
+const BATTLE_SKIP_AFTER_ATTACK_TURNS = 50;
+let battleSkipTimeReady = false;
 let battleSkipReady = false;
 let battleSkipTimer: number | null = null;
 let battleSkipSeq = 0;
@@ -1566,6 +1571,8 @@ let missionOpen = false;
 let missionRewardReveal: MissionReward | null = null;
 let communityOpen = false;
 let guildRenameOpen = false;
+let guildFormMode: "join" | "create" | null = null;
+let guildFormModalAbort: AbortController | null = null;
 let shopOpen = false;
 /** Floating action menu above an island building (`data-b` id). */
 let islandSpotMenuId: string | null = null;
@@ -1579,6 +1586,9 @@ let buildingUpgradeDonePreview: ReturnType<typeof buildingUpgradePreview> | null
   null;
 /** True if a pond/mine upgrade succeeded in this overlay session. */
 let buildingUpgradeApplied = false;
+/** Read-only production stats sheet (max-level pond / mine). */
+let buildingProdStatsId: "mana_pond" | "crystal_mine" | null = null;
+let buildingProdStatsModalAbort: AbortController | null = null;
 /** Soft confirm sheet for circle inscriptions in the dojo. */
 let circleInscConfirmId: CircleInscriptionId | null = null;
 let circleInscUpgradeModalAbort: AbortController | null = null;
@@ -1909,6 +1919,14 @@ function islandSpotShowsUp(id: string): boolean {
   return inst.level < MAX_BUILDING_LEVEL;
 }
 
+function islandSpotShowsProdStats(id: string): boolean {
+  const buildingId = islandSpotUpgradeableBuildingId(id);
+  if (!buildingId) return false;
+  const inst = save.island.buildings.find((b) => b.id === buildingId);
+  if (!inst) return false;
+  return inst.level >= MAX_BUILDING_LEVEL;
+}
+
 function summonerAwakenGemsHtml(
   awaken: number,
   extraClass = "",
@@ -1988,6 +2006,7 @@ function openBuildingInfoSoft(id: string): void {
   summonerPickerOpen = false;
   resMoreOpen = false;
   closeChatOverlay();
+  closeBuildingProdStatsSoft();
   applyBuildingInfoOpen();
   applyShopOpen();
   applyCommunityOpen();
@@ -2120,16 +2139,19 @@ function buildingUpgradeCompareRowHtml(opts: {
 
 function buildingUpgradeResultRowHtml(opts: {
   label: string;
-  ico: string;
+  ico?: string;
   valueHtml: string;
 }): string {
+  const ico = opts.ico
+    ? `<img class="res-ico" src="${opts.ico}" width="18" height="18" alt="" draggable="false" />`
+    : "";
   return `<div class="bldg-up-stat bldg-up-stat--result" role="listitem">
     <div class="bldg-up-stat-head">
       <span class="bldg-up-stat-k">${escapeHtml(opts.label)}</span>
     </div>
     <div class="bldg-up-cell bldg-up-cell--next">
       <strong>
-        <img class="res-ico" src="${opts.ico}" width="18" height="18" alt="" draggable="false" />
+        ${ico}
         <span>${opts.valueHtml}</span>
       </strong>
     </div>
@@ -2266,7 +2288,7 @@ function reopenBuildingUpgradeConfirmSoft(): void {
   const preview = buildingUpgradePreview(id);
   if (preview.maxed) {
     dismissBuildingUpgradeSoft();
-    flash(t("ui.cc24e86471"));
+    openBuildingProdStatsSoft(id);
     return;
   }
   const layer = app.querySelector<HTMLElement>("#bldg-up-layer");
@@ -2351,15 +2373,105 @@ function bindBuildingUpgradeModal(): void {
 function openBuildingUpgradeSoft(id: ProdUpgradeBuildingId): void {
   const preview = buildingUpgradePreview(id);
   if (preview.maxed) {
-    flash(t("ui.cc24e86471"));
+    openBuildingProdStatsSoft(id);
     return;
   }
   buildingUpgradeDonePreview = null;
   buildingUpgradeApplied = false;
   buildingUpgradeId = id;
   closeBuildingInfoSoft();
+  closeBuildingProdStatsSoft();
   const layer = softMountOverlay("bldg-up-layer", renderBuildingUpgradeModal());
   if (layer) bindBuildingUpgradeModal();
+}
+
+function fmtBuildingFillDuration(ratePerHour: number, cap: number): string {
+  if (ratePerHour <= 0 || cap <= 0) return EM_DASH;
+  const totalMin = Math.max(1, Math.round((cap / ratePerHour) * 60));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0 && m > 0) return t("ui.bldgProd.durationHm", { h, m });
+  if (h > 0) return t("ui.bldgProd.durationH", { h });
+  return t("ui.bldgProd.durationM", { m });
+}
+
+function renderBuildingProdStatsBody(
+  preview: ReturnType<typeof buildingUpgradePreview>,
+): string {
+  const rateFmt = escapeHtml(
+    t("ui.bldgUp.perHour", { n: fmtBuildingProdRate(preview.rateNow) }),
+  );
+  return `<div class="bldg-up-body" id="bldg-prod-body">
+    <div class="bldg-up-hero">
+      <div class="bldg-up-art" aria-hidden="true">
+        <img src="${preview.art}" width="160" height="120" alt="" draggable="false" onerror="this.onerror=null;this.src='${preview.artFallback}'" />
+      </div>
+      <div class="bldg-up-meta">
+        <strong class="bldg-up-name">${escapeHtml(preview.title)}</strong>
+        <span class="bldg-up-lv">Lv.${preview.lv} MAX</span>
+      </div>
+    </div>
+    <div class="bldg-up-stats" role="list">
+      ${buildingUpgradeResultRowHtml({
+        label: t("ui.bldgUp.rate"),
+        ico: preview.resIco,
+        valueHtml: rateFmt,
+      })}
+      ${buildingUpgradeResultRowHtml({
+        label: t("ui.bldgProd.time"),
+        valueHtml: escapeHtml(fmtBuildingFillDuration(preview.rateNow, preview.capNow)),
+      })}
+      ${buildingUpgradeResultRowHtml({
+        label: t("ui.bldgProd.cap"),
+        ico: preview.resIco,
+        valueHtml: escapeHtml(fmtRes(preview.capNow)),
+      })}
+    </div>
+  </div>`;
+}
+
+function renderBuildingProdStatsModal(): string {
+  if (!buildingProdStatsId) return "";
+  const preview = buildingUpgradePreview(buildingProdStatsId);
+  return `<div class="settings-layer bldg-prod-layer" id="bldg-prod-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-bldg-prod-close" aria-label="${escapeHtml(t("ui.bldgUp.close"))}"></button>
+    <div class="settings-sheet bldg-up-sheet bldg-prod-sheet" role="dialog" aria-modal="true" aria-labelledby="bldg-prod-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.bldgUp.close"), "btn-bldg-prod-close")}
+      <h2 class="settings-title" id="bldg-prod-title">${escapeHtml(t("ui.bldgProd.title"))}</h2>
+      ${renderBuildingProdStatsBody(preview)}
+    </div>
+  </div>`;
+}
+
+function closeBuildingProdStatsSoft(): void {
+  if (!buildingProdStatsId && !app.querySelector("#bldg-prod-layer")) return;
+  buildingProdStatsId = null;
+  buildingProdStatsModalAbort?.abort();
+  buildingProdStatsModalAbort = null;
+  softRemoveOverlay("bldg-prod-layer");
+}
+
+function bindBuildingProdStatsModal(): void {
+  const layer = app.querySelector<HTMLElement>("#bldg-prod-layer");
+  if (!layer || !buildingProdStatsId) return;
+  buildingProdStatsModalAbort?.abort();
+  const ac = new AbortController();
+  buildingProdStatsModalAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+  const close = (): void => {
+    closeBuildingProdStatsSoft();
+  };
+  layer.querySelector("#btn-bldg-prod-close")?.addEventListener("click", close, opts);
+  layer.querySelector(".settings-backdrop")?.addEventListener("click", close, opts);
+}
+
+function openBuildingProdStatsSoft(id: ProdUpgradeBuildingId): void {
+  buildingProdStatsId = id;
+  closeBuildingInfoSoft();
+  closeBuildingUpgradeSoft();
+  const layer = softMountOverlay("bldg-prod-layer", renderBuildingProdStatsModal());
+  if (layer) bindBuildingProdStatsModal();
 }
 
 function buildingUnlockLevel(id: BuildingId): number {
@@ -2508,6 +2620,7 @@ function enterIslandBuilding(id: string): void {
   setIslandSpotMenu(null);
   closeBuildingInfoSoft();
   closeBuildingUpgradeSoft();
+  closeBuildingProdStatsSoft();
   closeDojoInscUpgradeSoft();
   if (id === "gateway") {
     patchOnboard({ openedStages: true });
@@ -3082,13 +3195,11 @@ async function enterWithUser(
       readAuthPrefs().autoLogin);
   if (enterGame) {
     view = "home";
-    flash(
-      user.kind === "demo"
-        ? t('ui.0b00025fb4')
-        : user.kind === "guest"
-          ? t('ui.02f932d2cd')
-          : `${t('ui.b0814cee04')}${user.email ? ` ${MIDDOT} ${user.email}` : ""}`,
-    );
+    if (user.kind === "demo") {
+      flash(t("ui.0b00025fb4"));
+    } else if (user.kind === "guest") {
+      flash(t("ui.02f932d2cd"));
+    }
   } else {
     view = "auth";
     flash(
@@ -3106,13 +3217,11 @@ function startGameFromAuth(): void {
   syncOnboardFromSave({
     offerWelcome: !onboard.welcomeSeen && onboard.step !== "done",
   });
-  flash(
-    sessionUser.kind === "demo"
-        ? t('ui.0b00025fb4')
-      : sessionUser.kind === "guest"
-        ? t('ui.02f932d2cd')
-        : `${t('ui.b0814cee04')}${sessionUser.email ? ` ${MIDDOT} ${sessionUser.email}` : ""}`,
-  );
+  if (sessionUser.kind === "demo") {
+    flash(t("ui.0b00025fb4"));
+  } else if (sessionUser.kind === "guest") {
+    flash(t("ui.02f932d2cd"));
+  }
   render();
 }
 
@@ -3348,14 +3457,29 @@ function applyBattleSkipReady(): void {
   btn.classList.toggle("is-ready", battleSkipReady);
 }
 
+function refreshBattleSkipReady(): void {
+  const ready =
+    battleSkipTimeReady &&
+    !!battle &&
+    !battle.finishReason &&
+    battle.attackTurnCount >= BATTLE_SKIP_AFTER_ATTACK_TURNS;
+  if (ready === battleSkipReady) {
+    if (ready) applyBattleSkipReady();
+    return;
+  }
+  battleSkipReady = ready;
+  applyBattleSkipReady();
+}
+
 function armBattleSkipTimer(): void {
   clearBattleSkipTimer();
+  battleSkipTimeReady = false;
   battleSkipReady = false;
   battleSkipTimer = window.setTimeout(() => {
     battleSkipTimer = null;
     if (view !== "battle" || !battle || battle.finishReason) return;
-    battleSkipReady = true;
-    applyBattleSkipReady();
+    battleSkipTimeReady = true;
+    refreshBattleSkipReady();
   }, BATTLE_SKIP_AFTER_MS);
 }
 
@@ -5031,17 +5155,21 @@ function pulseArenaStonePlace(
   ms: number,
 ): void {
   const kind = arenaStoneBurstKind(report);
-  pulseArenaStone(app, team, kind, ms);
-  spawnArenaStoneVfx(
+  const absorb = absorbKindFromStoneFx(kind);
+  pulseCircleAbsorb(app, team, absorb, ms);
+  spawnCircleAbsorbVfx(
     app,
     team,
     kind === "capture-large"
       ? "capture-large"
       : kind === "capture"
         ? "capture"
-        : "place",
+        : kind === "shape"
+          ? "shape"
+          : "safe",
     ms,
   );
+  spawnSummonerManaFloat(team, report);
   const frame = app.querySelector(".board-frame");
   if (kind === "place" || kind === "shape" || !frame) return;
   frame.classList.add("fx-capture-flash");
@@ -5050,6 +5178,36 @@ function pulseArenaStonePlace(
   window.setTimeout(() => {
     frame.classList.remove("fx-capture-flash", "fx-capture-flash-strong");
   }, flashMs);
+}
+
+function spawnSummonerManaFloat(
+  team: "ally" | "enemy",
+  report: StoneReport | null | undefined,
+): void {
+  const n = report?.chips.find((c) => c.kind === "mana")?.n ?? 0;
+  if (n <= 0) return;
+  const layer = app.querySelector<HTMLElement>(".dmg-layer");
+  const summoner = app.querySelector<HTMLElement>(
+    `.battle-lane.${team} .battle-unit--summoner`,
+  );
+  const art =
+    summoner?.querySelector<HTMLElement>(".battle-unit-art") ?? summoner;
+  if (!layer || !art) return;
+  const layerRect = layer.getBoundingClientRect();
+  const r = art.getBoundingClientRect();
+  if (r.width < 1 || r.height < 1) return;
+  const el = document.createElement("span");
+  el.className = `mana-float${team === "enemy" ? " is-enemy" : ""}`;
+  el.textContent = `+${n}`;
+  el.style.left = `${Math.round(r.left + r.width * 0.5 - layerRect.left)}px`;
+  el.style.top = `${Math.round(r.top + r.height * 0.22 - layerRect.top)}px`;
+  layer.appendChild(el);
+  summoner?.classList.add("is-mana-intake");
+  const ms = fxDurationMs(720, battleSpeed);
+  window.setTimeout(() => {
+    el.remove();
+    summoner?.classList.remove("is-mana-intake");
+  }, ms);
 }
 
 /** Module B board/amp feedback after a stone lands at (x,y). */
@@ -5064,7 +5222,8 @@ function pulseShapeBonusesAfterStone(
   const shapeMs = fxDurationMs(720, battleSpeed);
   shapeFlashIds = shapes.map((s) => s.id);
   shapeFlashUntil = Date.now() + fxDurationMs(900, battleSpeed);
-  pulseArenaStone(app, stoneColorTeam(color), "shape", shapeMs);
+  pulseCircleAbsorb(app, stoneColorTeam(color), "shape", shapeMs);
+  spawnCircleAbsorbVfx(app, stoneColorTeam(color), "shape", shapeMs);
   app.querySelector(".battle-amp-chip")?.classList.add("is-hot");
   window.setTimeout(
     () => app.querySelector(".battle-amp-chip")?.classList.remove("is-hot"),
@@ -5136,8 +5295,10 @@ function applyStoneResultLayer(): void {
 }
 
 async function presentStoneResult(report: StoneReport | null): Promise<void> {
-  if (!report || report.chips.length === 0) return;
-  stoneResultFx = report;
+  if (!report) return;
+  const chips = report.chips.filter((c) => c.kind !== "mana");
+  if (!chips.length) return;
+  stoneResultFx = { ...report, chips };
   applyStoneResultLayer();
   const layer = app.querySelector<HTMLElement>("#stone-result-layer");
   layer?.classList.remove("is-out");
@@ -5171,9 +5332,9 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     : null;
   if (!unit || unit.team !== "ally") return;
 
-  battleFxBusy = true;
+    battleFxBusy = true;
   try {
-    // Close the pick grid, unfold a seal on the ally arena stone, then flare.
+    // Close the pick grid, absorb from the map circle, then continue.
     stoneSummonFx = {
       element: battle.allySummoner.summonerElement ?? unit.element,
       x,
@@ -5211,9 +5372,6 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     await waitFx(Math.max(appearMs, shapeMs));
     stoneSummonFx = null;
     app.querySelector(".battle-layout")?.classList.remove("is-stone-summoning");
-    const allyStone = app.querySelector(".arena-stone.ally");
-    allyStone?.classList.remove("is-summoning");
-    allyStone?.querySelector(".summon-seal")?.remove();
     await presentStoneResult(battle.lastStoneReport);
     await resolveCombatUntilAllyInput({ holdBusy: true });
     cueOnboardFirstSkills();
@@ -5288,9 +5446,11 @@ function layoutDmgFloats(): void {
     el.textContent = f.text;
 
     const r = anchor.getBoundingClientRect();
+    const ally = !!unit?.closest(".battle-lane.ally");
+    if (ally) el.classList.add("is-ally");
     const x = r.left + r.width * 0.5 - layerRect.left;
-    // Sprites sit at the bottom of the art box; 0.36 is roughly the head.
-    const y = r.top + r.height * 0.36 - layerRect.top;
+    // Sprites are bottom-aligned in a tall art box; sit numbers on the body.
+    const y = r.top + r.height * (ally ? 0.7 : 0.58) - layerRect.top;
     const jitter = (stack % 3) * 6 - 6;
     el.style.left = `${Math.round(x + jitter)}px`;
     el.style.top = `${Math.round(y)}px`;
@@ -5300,7 +5460,9 @@ function layoutDmgFloats(): void {
 
 function refreshDmgLayer(): void {
   const layer = app.querySelector<HTMLElement>(".dmg-layer");
-  if (layer) layer.innerHTML = "";
+  if (layer) {
+    layer.querySelectorAll(".dmg-float").forEach((el) => el.remove());
+  }
   layoutDmgFloats();
   if (dmgLayoutRaf) cancelAnimationFrame(dmgLayoutRaf);
   // Double rAF: wait until soft-patched unit art has a real layout box.
@@ -5413,13 +5575,9 @@ function resolveActiveUnitSkillHits(unit: Unit): {
  */
 async function resolveCombatUntilAllyInput(opts?: {
   holdBusy?: boolean;
-  autoAlly?: boolean;
 }): Promise<void> {
   if (!battle) return;
   const skipSeq = battleSkipSeq;
-  const autoAlly = opts?.autoAlly ?? autoMode;
-  const autoStone = autoAlly && battleAutoLive.stone;
-  const autoCombat = autoAlly && battleAutoLive.combat;
   const ownBusy = !opts?.holdBusy;
   if (ownBusy) {
     if (battleFxBusy) return;
@@ -5481,7 +5639,7 @@ async function resolveCombatUntilAllyInput(opts?: {
 
       if (unit.team === "ally") {
         if (battle.phase === "await_stone") {
-          if (autoStone) {
+          if (autoMode && battleAutoLive.stone) {
             // Continue below so AUTO can choose a legal point.
           } else {
             clearBattleSkillSelection();
@@ -5492,7 +5650,7 @@ async function resolveCombatUntilAllyInput(opts?: {
           }
         }
         if (battle.phase === "await_capture_shop") {
-          if (autoCombat) {
+          if (autoMode && battleAutoLive.combat) {
             // Continue below so AUTO can choose the capture reward.
           } else {
             render();
@@ -5500,7 +5658,7 @@ async function resolveCombatUntilAllyInput(opts?: {
           }
         }
         if (battle.phase === "await_skill") {
-          if (autoCombat) {
+          if (autoMode && battleAutoLive.combat) {
             // Continue below so AUTO can select and cast a skill.
           } else {
             // Manual: select skill under unit, then tap an enemy.
@@ -5517,7 +5675,20 @@ async function resolveCombatUntilAllyInput(opts?: {
       }
 
       if (battle.phase === "await_stone") {
+        if (unit.team === "ally" && !(autoMode && battleAutoLive.stone)) {
+          clearBattleSkillSelection();
+          selectedTargetId = null;
+          refreshLegal();
+          render();
+          return;
+        }
         await waitFx(pulseTeamSummonerCast(unit.team));
+        if (battleSkipSeq !== skipSeq) return;
+        if (unit.team === "ally" && !(autoMode && battleAutoLive.stone)) {
+          refreshLegal();
+          render();
+          return;
+        }
         const before = battle.board.getBoard().map((row) => [...row]);
         if (!battle.autoStone()) {
           // No legal stone — fall through to skill if phase advanced, else bail.
@@ -5554,7 +5725,7 @@ async function resolveCombatUntilAllyInput(opts?: {
       }
 
       if (battle.phase === "await_capture_shop") {
-        if (unit.team === "ally" && !autoCombat) {
+        if (unit.team === "ally" && !(autoMode && battleAutoLive.combat)) {
           render();
           return;
         }
@@ -5566,7 +5737,18 @@ async function resolveCombatUntilAllyInput(opts?: {
       }
 
       if (battle.phase === "await_skill") {
+        if (unit.team === "ally" && !(autoMode && battleAutoLive.combat)) {
+          clearBattleSkillSelection();
+          selectedTargetId = null;
+          if (unit.kind === "monster" && battle.canUseSkill(unit, 0)) {
+            selectedSkillIndex = 0;
+          }
+          refreshLegal();
+          render();
+          return;
+        }
         const { hits, sfxKind } = resolveActiveUnitSkillHits(unit);
+        refreshBattleSkipReady();
         if (battle.phase === "await_skill" && !hits.length) {
           // Skill no-op / soft — end the turn so we never spin.
           battle.phase = "resolved";
@@ -5679,14 +5861,27 @@ function scheduleAuto(): void {
   clearAutoTimer();
   if (!autoMode || !battle || battle.finishReason) return;
   autoTimer = setTimeout(() => {
+    autoTimer = null;
+    if (!autoMode || !battle || battle.finishReason) return;
     // Apply sheet edits from this tick onward (not mid-action).
     commitBattleAutoLive();
-    void resolveCombatUntilAllyInput({ autoAlly: true });
+    void resolveCombatUntilAllyInput();
   }, 420 / battlePace(battleSpeed));
 }
 
 function autoAllyTurn(): void {
-  void resolveCombatUntilAllyInput({ autoAlly: true });
+  void resolveCombatUntilAllyInput();
+}
+
+function setBattleAutoMode(on: boolean): void {
+  autoMode = on;
+  if (on) {
+    clearBattleSkillSelection();
+    commitBattleAutoLive();
+    scheduleAuto();
+    return;
+  }
+  clearAutoTimer();
 }
 
 function castSkill(
@@ -5789,6 +5984,7 @@ async function castSkillAsync(
       hits: SkillResult[],
       opts?: { ult?: boolean; sfxKind?: CombatSfxKind },
     ) => {
+      refreshBattleSkipReady();
       clearBattleSkillSelection();
       selectedTargetId = null;
       await playStrikeFx(hits, opts);
@@ -6058,10 +6254,10 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
   }
 
   return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${u.name}">
-    ${barsHtml}
     ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
     <span class="battle-unit-glow" aria-hidden="true"></span>
     <span class="battle-unit-art" aria-hidden="true">${art}</span>
+    ${barsHtml}
     ${showName ? `<span class="battle-unit-name">${u.name}</span>` : ""}
     ${renderActiveUnitSkills(u)}
   </${tag}>`;
@@ -6116,7 +6312,7 @@ function renderBoardCells(canClick: boolean): string {
         ? `${battle.activeBoardIndex}:${token.id}:${token.x}:${token.y}`
         : "";
       const tokenSpawnClass =
-        token && !seenBoardTokenKeys.has(tokenKey) ? " token-spawn" : "";
+        canClick && token && !seenBoardTokenKeys.has(tokenKey) ? " token-spawn" : "";
       const tokenResource =
         token &&
         (token.id === "shield_core" ||
@@ -6197,31 +6393,28 @@ function renderBoardCells(canClick: boolean): string {
                 : starSet.has(key)
                   ? boardMarkHtml("star", "star-mark")
                   : `<span class="node-mark" aria-hidden="true"></span>`;
-      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${summoning ? " is-summoning fx-summon-seal" : ""}${rivalLast ? " is-rival-last" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
+      const contentKey = `${stone ?? ""}|${token?.id ?? ""}|${summoning ? "s" : ""}|${rivalLast ? "r" : ""}|${forbid && !stone ? "f" : ""}|${bait ? "b" : ""}|${victory === key && !stone ? "v" : ""}|${starSet.has(key) && !stone ? "*" : ""}`;
+      cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${summoning ? " is-summoning fx-summon-seal" : ""}${rivalLast ? " is-rival-last" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" data-ck="${contentKey}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
     }
   }
   seenBoardTokenKeys = activeTokenKeys;
   return cells;
 }
 
-function renderArenaStoneHtml(
-  team: "ally" | "enemy",
-  allyElement: string | null | undefined,
-  summoning: boolean,
-): string {
-  const stoneId = battleStoneIdForTeam(team, allyElement);
-  const src = battleStoneSrc(stoneId);
-  const elClass = stoneId === "enemy" ? "el-enemy" : `el-${stoneId}`;
-  const color = team === "enemy" ? "white" : "black";
-  const seal = summoning
-    ? `<i class="summon-seal" aria-hidden="true"><i></i></i>`
-    : "";
-  return `<span class="arena-stone ${team} magic-stone ${color} ${elClass} has-art${summoning ? " is-summoning" : ""}" data-arena-stone="${team}" aria-hidden="true">${seal}<i class="magic-stone-ground"></i><i class="magic-stone-faction"></i><img class="magic-stone-img" src="${src}" width="256" height="256" alt="" draggable="false" decoding="async" onerror="this.closest('.arena-stone')?.classList.add('art-failed');this.remove()"/><i class="magic-stone-spark"></i><i class="arena-stone-ring arena-stone-ring--a"></i><i class="arena-stone-ring arena-stone-ring--b"></i></span>`;
+function pickOverlayOpen(): boolean {
+  if (!battle) return false;
+  return (
+    battle.phase === "await_stone" &&
+    !!battle.activeUnitId &&
+    battle.getUnit(battle.activeUnitId)?.team === "ally" &&
+    (!autoMode || !battleAutoLive.stone) &&
+    !stoneSummonFx
+  );
 }
 
 /**
- * Map circle: ritual floor with two persistent arena stones.
- * Manual taps happen on the large flat pick overlay.
+ * Map circle: ritual floor only. Stones live on the pick overlay / mini board.
+ * Absorb VFX draws mana from this circle into the acting summoner.
  */
 function renderBoard(): string {
   if (!battle) return "";
@@ -6253,28 +6446,118 @@ function renderBoard(): string {
   );
   const circleId = battleCircleIdForStage(currentStage);
   const circleSrc = battleCircleSrc(circleId);
-  const allySummonerUnit = battle.units.find(
-    (u) => u.team === "ally" && u.kind === "summoner",
-  );
-  const allyStoneEl =
-    battle.allySummoner.summonerElement ?? allySummonerUnit?.element;
   const summoningAlly = !!stoneSummonFx;
-  return `<div class="board-frame board-frame--tilted board-frame--circle board-frame--has-art board-frame--arena-stones phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}${canClick ? " is-placeable" : ""}${summoningAlly ? " is-summoning" : ""}" data-element="${battle.circleElement ?? ""}" data-circle="${circleId}">
+  return `<div class="board-frame board-frame--tilted board-frame--circle board-frame--has-art phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}${canClick ? " is-placeable" : ""}${summoningAlly ? " is-summoning" : ""}" data-element="${battle.circleElement ?? ""}" data-circle="${circleId}">
     <div class="board-phase-tag">${rebuildTag}${openingHint}</div>
     <div class="board-phase-meter" aria-hidden="true"><i style="width:${resetPct}%"></i></div>
     <div class="board-stage">
-      <div class="board-hit" aria-hidden="false">
+      <div class="board-hit" aria-hidden="true">
         <img class="board-circle-art" src="${circleSrc}" width="512" height="512" alt="" draggable="false" decoding="async" aria-hidden="true" onerror="this.remove();this.closest('.board-frame')?.classList.remove('board-frame--has-art')"/>
         <div class="board-circle-aura" aria-hidden="true"></div>
         <div class="board-circle-ring" aria-hidden="true"></div>
-        <div class="arena-stones" aria-hidden="true">
-          <i class="arena-stone-beam"></i>
-          ${renderArenaStoneHtml("enemy", allyStoneEl, false)}
-          ${renderArenaStoneHtml("ally", allyStoneEl, summoningAlly)}
+        <div class="board-circle-absorb" aria-hidden="true">
+          <svg class="board-absorb-sigil" viewBox="0 0 100 100" width="100%" height="100%">
+            <circle class="sigil-rim" cx="50" cy="50" r="44" fill="none" pathLength="100" />
+            <circle class="sigil-mid" cx="50" cy="50" r="31" fill="none" pathLength="100" />
+            <polygon class="sigil-star" points="50,20 55,38 74,38 59,49 64,67 50,56 36,67 41,49 26,38 45,38" fill="none" pathLength="100" />
+            <path class="sigil-cross" d="M50 24 V76 M24 50 H76" fill="none" pathLength="100" />
+            <circle class="sigil-core" cx="50" cy="50" r="9" fill="none" pathLength="100" />
+          </svg>
         </div>
       </div>
     </div>
   </div>`;
+}
+
+/** Always-mounted right-side Go readout; hidden while the large pick overlay is open. */
+function renderBoardMini(): string {
+  if (!battle) return "";
+  const size = battle.board.size;
+  const show = !pickOverlayOpen();
+  return `<aside class="board-mini" id="board-mini"${show ? "" : ' hidden aria-hidden="true"'}>
+    <div class="board magic-circle board-mini-grid size-${size}" data-size="${size}" style="grid-template-columns:repeat(${size},minmax(0,1fr))"></div>
+  </aside>`;
+}
+
+function boardMiniContentKey(): string {
+  if (!battle) return "";
+  const grid = battle.board.getBoard();
+  let stones = `${battle.activeBoardIndex}:${battle.board.size}:`;
+  for (let y = 0; y < grid.length; y++) {
+    const row = grid[y];
+    if (!row) continue;
+    for (let x = 0; x < row.length; x++) {
+      stones += row[x] ?? ".";
+      if (!row[x] && battle.isForbidden({ x, y })) stones += "f";
+    }
+  }
+  const tokens = battle.tokens
+    .map((token) => `${token.id}:${token.x}:${token.y}`)
+    .join(",");
+  const victory =
+    battle.victoryPoint && !battle.victoryPointClaimed
+      ? `${battle.victoryPoint.x},${battle.victoryPoint.y}`
+      : "";
+  const enemy =
+    battle.lastEnemyStone &&
+    battle.lastEnemyStone.boardIndex === battle.activeBoardIndex
+      ? `${battle.lastEnemyStone.x},${battle.lastEnemyStone.y}`
+      : "";
+  const summon = stoneSummonFx ? `${stoneSummonFx.x},${stoneSummonFx.y}` : "";
+  const bait = battle.baitLure ? `${battle.baitLure.x},${battle.baitLure.y}` : "";
+  return `${stones}|t:${tokens}|v:${victory}|e:${enemy}|s:${summon}|b:${bait}`;
+}
+
+/** Patch the live mini board in place so stone images do not reload. */
+function syncBoardMini(): void {
+  if (!battle) return;
+  const mini = app.querySelector<HTMLElement>("#board-mini");
+  if (!mini) return;
+  const show = !pickOverlayOpen();
+  mini.hidden = !show;
+  mini.setAttribute("aria-hidden", show ? "false" : "true");
+
+  const size = battle.board.size;
+  let grid = mini.querySelector<HTMLElement>(".board-mini-grid");
+  if (!grid) {
+    mini.innerHTML = `<div class="board magic-circle board-mini-grid size-${size}" data-size="${size}" style="grid-template-columns:repeat(${size},minmax(0,1fr))"></div>`;
+    grid = mini.querySelector<HTMLElement>(".board-mini-grid");
+    if (!grid) return;
+  }
+
+  const fp = boardMiniContentKey();
+  if (grid.dataset.fp === fp && grid.childElementCount === size * size) return;
+
+  if (Number(grid.dataset.size) !== size) {
+    grid.className = `board magic-circle board-mini-grid size-${size}`;
+    grid.dataset.size = String(size);
+    grid.style.gridTemplateColumns = `repeat(${size}, minmax(0, 1fr))`;
+  }
+
+  const html = renderBoardCells(false);
+  if (grid.childElementCount !== size * size) {
+    grid.innerHTML = html;
+    grid.dataset.fp = fp;
+    return;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.innerHTML = html;
+  const nextNodes = Array.from(wrap.children) as HTMLElement[];
+  const prevNodes = Array.from(grid.children) as HTMLElement[];
+  for (let i = 0; i < nextNodes.length; i++) {
+    const nextCell = nextNodes[i];
+    const prevCell = prevNodes[i];
+    if (!nextCell || !prevCell) continue;
+    if (prevCell.dataset.ck === nextCell.dataset.ck) {
+      if (prevCell.className !== nextCell.className) {
+        prevCell.className = nextCell.className;
+      }
+      continue;
+    }
+    prevCell.replaceWith(nextCell);
+  }
+  grid.dataset.fp = fp;
 }
 
 /**
@@ -6284,12 +6567,7 @@ function renderBoard(): string {
 function renderStonePickLayer(): string {
   if (!battle) return "";
   const size = battle.board.size;
-  const open =
-    battle.phase === "await_stone" &&
-    !!battle.activeUnitId &&
-    battle.getUnit(battle.activeUnitId)?.team === "ally" &&
-    (!autoMode || !battleAutoLive.stone) &&
-    !stoneSummonFx;
+  const open = pickOverlayOpen();
   return `<div class="stone-pick-layer" id="stone-pick-layer"${open ? "" : ' hidden aria-hidden="true"'}>
     <div class="stone-pick-card">
       <div class="stone-pick-hit" aria-label="${escapeHtml(t("ui.onboard.battleTipStone"))}">
@@ -7076,12 +7354,14 @@ const APP_ROOT_OVERLAY_IDS = [
   "mission-layer",
   "mission-reward-layer",
   "community-layer",
+  "guild-form-layer",
   "shop-layer",
   "summoner-picker-layer",
   "chat-layer",
   "building-info-layer",
   "building-unlock-layer",
   "bldg-up-layer",
+  "bldg-prod-layer",
   "dojo-insc-up-layer",
   "skill-feed-layer",
   "power-up-layer",
@@ -7150,30 +7430,70 @@ function applyPowerUpOpen(): void {
 }
 
 /** Toggle battle AUTO sheet without remounting combat. */
+function positionBattleAutoSettings(
+  layer: HTMLElement,
+  btn: HTMLElement | null,
+): void {
+  if (!btn) return;
+  const r = btn.getBoundingClientRect();
+  const gap = 8;
+  const width = Math.min(250, Math.max(160, window.innerWidth - 16));
+  const right = Math.max(8, window.innerWidth - r.right);
+  const bottom = Math.max(8, window.innerHeight - r.top + gap);
+  layer.style.position = "fixed";
+  layer.style.inset = "auto";
+  layer.style.right = `${Math.round(right)}px`;
+  layer.style.bottom = `${Math.round(bottom)}px`;
+  layer.style.left = "auto";
+  layer.style.top = "auto";
+  layer.style.width = `${Math.round(width)}px`;
+  layer.style.zIndex = String(Math.max(overlayStackZ, 80));
+}
+
+function ensureBattleAutoSettings(): HTMLElement | null {
+  let layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  if (layer) return layer;
+  app.insertAdjacentHTML("beforeend", renderBattleAutoSettings());
+  layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  bindBattleAutoSettingsLayer(layer);
+  return layer;
+}
+
 function applyBattleAutoSettingsOpen(): void {
   const btn = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
-  let layer = app.querySelector<HTMLElement>("#battle-auto-settings");
-  if (!layer) {
-    // Prefer soft battle patch; never wipe combat just to open the sheet.
-    if (view === "battle") refreshBattleView();
-    layer = app.querySelector<HTMLElement>("#battle-auto-settings");
-  }
   if (btn) {
     btn.classList.toggle("is-open", battleAutoSettingsOpen);
     btn.setAttribute("aria-expanded", battleAutoSettingsOpen ? "true" : "false");
   }
+  const layer = battleAutoSettingsOpen
+    ? ensureBattleAutoSettings()
+    : app.querySelector<HTMLElement>("#battle-auto-settings");
   if (!layer) return;
+  const opening = battleAutoSettingsOpen && (layer.hidden || !layer.classList.contains("is-open"));
   layer.classList.toggle("is-open", battleAutoSettingsOpen);
   layer.hidden = !battleAutoSettingsOpen;
   layer.setAttribute("aria-hidden", battleAutoSettingsOpen ? "false" : "true");
   if (battleAutoSettingsOpen) {
-    // Lift above the soft-patched battle tree so combat ticks cannot remount it.
-    promoteOverlayToAppRoot(layer);
-    layer.classList.add("is-ported");
-    replayModalPop(layer);
-  } else {
-    layer.classList.remove("is-ported");
+    app.appendChild(layer);
+    positionBattleAutoSettings(layer, btn);
+    if (opening) replayModalPop(layer);
   }
+}
+
+/** Re-anchor an already-open sheet after a combat HUD patch; do not remount. */
+function restoreBattleAutoSettingsIfOpen(): void {
+  if (!battleAutoSettingsOpen) return;
+  const layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  const btn = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
+  if (layer && layer.isConnected && !layer.hidden) {
+    if (btn) {
+      btn.classList.add("is-open");
+      btn.setAttribute("aria-expanded", "true");
+    }
+    positionBattleAutoSettings(layer, btn);
+    return;
+  }
+  applyBattleAutoSettingsOpen();
 }
 
 /** Sync AUTO category switches on the live sheet (no remount). */
@@ -7194,14 +7514,7 @@ function applyBattleAutoOptionsUi(): void {
   });
 }
 
-function bindBattleAutoSettings(): void {
-  const trigger = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
-  trigger?.addEventListener("click", () => {
-    battleAutoSettingsOpen = !battleAutoSettingsOpen;
-    applyBattleAutoSettingsOpen();
-  });
-
-  const layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+function bindBattleAutoSettingsLayer(layer: HTMLElement | null): void {
   if (!layer || layer.dataset.bound === "1") return;
   layer.dataset.bound = "1";
   layer.addEventListener("click", (ev) => {
@@ -7228,9 +7541,19 @@ function bindBattleAutoSettings(): void {
     } else {
       return;
     }
-    // Keep the sheet mounted; commit on the next AUTO tick only.
     applyBattleAutoOptionsUi();
   });
+}
+
+function bindBattleAutoSettings(): void {
+  const trigger = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
+  trigger?.addEventListener("click", () => {
+    battleAutoSettingsOpen = !battleAutoSettingsOpen;
+    applyBattleAutoSettingsOpen();
+  });
+  bindBattleAutoSettingsLayer(
+    app.querySelector<HTMLElement>("#battle-auto-settings"),
+  );
 }
 
 const PROFILE_DEFAULT_ART = "/art/auth/logo-mark-192.png";
@@ -8038,7 +8361,10 @@ function goFromMission(nav: string): void {
 
 /** Toggle community (guild) modal without a full screen re-render. */
 function applyCommunityOpen(): void {
-  if (!communityOpen) guildRenameOpen = false;
+  if (!communityOpen) {
+    guildRenameOpen = false;
+    closeGuildFormSoft();
+  }
   if (communityOpen) closeProfileSoft();
   const btn = app.querySelector<HTMLButtonElement>("#btn-community");
   const layer = app.querySelector<HTMLElement>("#community-layer");
@@ -8095,30 +8421,125 @@ function refreshCommunitySoft(): boolean {
   return true;
 }
 
+function renderGuildFormModal(): string {
+  const creating = guildFormMode === "create";
+  const title = creating ? t("ui.guild.create") : t("ui.8b92576f2b");
+  const confirm = creating
+    ? `<button type="button" class="auth-btn-primary full guild-cta" id="btn-guild-form-confirm">
+         <span class="guild-cta-label">${escapeHtml(t("ui.guild.create"))}</span>
+         <span class="guild-cta-gains">${resChip("/art/ui/res/crystal.svg", GUILD_CREATE_CRYSTAL_COST, t("res.crystal"))}</span>
+       </button>`
+    : `<button type="button" class="auth-btn-primary full guild-cta" id="btn-guild-form-confirm">${escapeHtml(t("ui.8b92576f2b"))}</button>`;
+  return `<div class="settings-layer guild-form-layer" id="guild-form-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-guild-form-close" aria-label="${escapeHtml(t("ui.guild.close"))}"></button>
+    <div class="settings-sheet guild-form-sheet" role="dialog" aria-modal="true" aria-labelledby="guild-form-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.guild.close"), "btn-guild-form-close")}
+      <h2 class="settings-title" id="guild-form-title">${escapeHtml(title)}</h2>
+      <label class="guild-field" for="guild-form-name">${escapeHtml(t("ui.f6d4bb4a67"))}
+        <input id="guild-form-name" maxlength="16" autocomplete="off" />
+      </label>
+      ${confirm}
+    </div>
+  </div>`;
+}
+
+function closeGuildFormSoft(): void {
+  if (!guildFormMode && !app.querySelector("#guild-form-layer")) return;
+  guildFormMode = null;
+  guildFormModalAbort?.abort();
+  guildFormModalAbort = null;
+  softRemoveOverlay("guild-form-layer");
+}
+
+function bindGuildFormModal(): void {
+  const layer = app.querySelector<HTMLElement>("#guild-form-layer");
+  if (!layer || !guildFormMode) return;
+  guildFormModalAbort?.abort();
+  const ac = new AbortController();
+  guildFormModalAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+  const close = (): void => {
+    closeGuildFormSoft();
+  };
+  const confirm = (): void => {
+    const name =
+      layer.querySelector<HTMLInputElement>("#guild-form-name")?.value ?? "";
+    const r =
+      guildFormMode === "create"
+        ? runCreateGuild(save, name)
+        : runJoinGuild(save, name);
+    applyGuildAction(r, { closeFormOnJoin: true });
+  };
+  layer.querySelector("#btn-guild-form-close")?.addEventListener("click", close, opts);
+  layer
+    .querySelector("#btn-guild-form-confirm")
+    ?.addEventListener(
+      "click",
+      (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        confirm();
+      },
+      opts,
+    );
+  layer
+    .querySelector("#guild-form-name")
+    ?.addEventListener(
+      "keydown",
+      (ev) => {
+        if (!(ev instanceof KeyboardEvent) || ev.key !== "Enter") return;
+        ev.preventDefault();
+        confirm();
+      },
+      opts,
+    );
+  queueMicrotask(() =>
+    layer.querySelector<HTMLInputElement>("#guild-form-name")?.focus(),
+  );
+}
+
+function openGuildFormSoft(mode: "join" | "create"): void {
+  guildRenameOpen = false;
+  guildFormMode = mode;
+  eatTrailingTap();
+  const layer = softMountOverlay("guild-form-layer", renderGuildFormModal());
+  if (layer) bindGuildFormModal();
+}
+
+function applyGuildAction(
+  r: { save: PlayerSave; message: string },
+  opts?: { closeFormOnJoin?: boolean },
+): void {
+  const joined = Boolean(r.save.guildName);
+  save = r.save;
+  persist();
+  flash(r.message);
+  syncHudResources();
+  syncGuildSpotLabel();
+  if (opts?.closeFormOnJoin && joined) closeGuildFormSoft();
+  if (!refreshCommunitySoft()) {
+    render();
+    if (communityOpen) applyCommunityOpen();
+    if (guildFormMode) openGuildFormSoft(guildFormMode);
+  }
+}
+
 function bindCommunityActions(root: ParentNode = app): void {
   const inputEl = () =>
     root.querySelector<HTMLInputElement>("#guild-name-input");
-  const apply = (r: { save: PlayerSave; message: string }) => {
-    save = r.save;
-    persist();
-    flash(r.message);
-    syncHudResources();
-    syncGuildSpotLabel();
-    if (!refreshCommunitySoft()) {
-      render();
-      if (communityOpen) applyCommunityOpen();
-    }
-  };
   root.querySelector("#btn-guild-join")?.addEventListener("click", () => {
-    guildRenameOpen = false;
-    apply(runJoinGuild(save, inputEl()?.value ?? ""));
+    openGuildFormSoft("join");
+  });
+  root.querySelector("#btn-guild-create")?.addEventListener("click", () => {
+    openGuildFormSoft("create");
   });
   root.querySelector("#btn-guild-rename-save")?.addEventListener("click", () => {
     guildRenameOpen = false;
-    apply(runJoinGuild(save, inputEl()?.value ?? ""));
+    applyGuildAction(runJoinGuild(save, inputEl()?.value ?? ""));
   });
   root.querySelector("#btn-guild-checkin")?.addEventListener("click", () => {
-    apply(runGuildCheckIn(save));
+    applyGuildAction(runGuildCheckIn(save));
   });
   root.querySelector("#btn-guild-rename")?.addEventListener("click", () => {
     guildRenameOpen = !guildRenameOpen;
@@ -9497,7 +9918,9 @@ function renderHome(): string {
     const upFab =
       !locked && islandSpotShowsUp(id)
         ? `<button type="button" class="island-spot-fab island-spot-fab--up" data-spot-up="${id}">${escapeHtml(t("ui.islandUp"))}</button>`
-        : "";
+        : !locked && islandSpotShowsProdStats(id)
+          ? `<button type="button" class="island-spot-fab island-spot-fab--prod" data-spot-prod="${id}">${escapeHtml(t("ui.islandProd"))}</button>`
+          : "";
     const fabs = locked
       ? ""
       : `<div class="island-spot-fabs" ${menuOpen || onboardFocus ? "" : "hidden"} aria-hidden="${menuOpen || onboardFocus ? "false" : "true"}">
@@ -10390,12 +10813,12 @@ function renderPond(): string {
             <small>${stored > 0 ? `${t('ui.df72a8753d')} ${stored}` : t('ui.2c1116fb7b')}</small>
           </span>
         </button>
-        <button type="button" class="stage-card" id="btn-pond-upgrade" ${maxed ? "disabled" : ""}>
-          <span class="stage-card-mark" aria-hidden="true">${ARROW_UP}</span>
+        <button type="button" class="stage-card" id="btn-pond-upgrade">
+          <span class="stage-card-mark" aria-hidden="true">${maxed ? Mark.pond : ARROW_UP}</span>
           <span class="stage-card-body">
             <strong>${
               maxed
-                ? t("ui.cc24e86471")
+                ? t("ui.islandProd")
                 : lv >= maxProdBuildingLevelForAccount(accountLevelOf(save))
                   ? t("ui.bldgUp.needAccount", { n: accountLevelForProdBuilding(lv + 1) })
                   : `${t("ui.e5f5d19099")} ${ARROW_RIGHT} Lv.${lv + 1}`
@@ -10444,12 +10867,12 @@ function renderMine(): string {
             <small>${stored > 0 ? `${t('ui.df72a8753d')} ${stored}` : t('ui.2c1116fb7b')}</small>
           </span>
         </button>
-        <button type="button" class="stage-card" id="btn-mine-upgrade" ${maxed ? "disabled" : ""}>
-          <span class="stage-card-mark" aria-hidden="true">${ARROW_UP}</span>
+        <button type="button" class="stage-card" id="btn-mine-upgrade">
+          <span class="stage-card-mark" aria-hidden="true">${maxed ? Mark.crystal : ARROW_UP}</span>
           <span class="stage-card-body">
             <strong>${
               maxed
-                ? t("ui.cc24e86471")
+                ? t("ui.islandProd")
                 : lv >= maxProdBuildingLevelForAccount(accountLevelOf(save))
                   ? t("ui.bldgUp.needAccount", { n: accountLevelForProdBuilding(lv + 1) })
                   : `${t("ui.e5f5d19099")} ${ARROW_RIGHT} Lv.${lv + 1}`
@@ -11225,7 +11648,7 @@ function renderSummonRevealCell(uid: string): string {
   const el = def?.element ?? "dark";
   const stars = STAR.repeat(def?.naturalStars ?? 0);
   return `<button type="button" class="summon-multi-cell el-${el}" data-summon-detail="${mon.uid}" aria-label="${escapeHtml(def?.nameKo ?? mon.monsterId)}">
-    <span class="summon-multi-seal" aria-hidden="true">${monsterArtImg(mon.monsterId, "summon-multi-img", 48) || monsterElementLabel(el).slice(0, 1)}</span>
+    <span class="summon-multi-seal" aria-hidden="true">${monsterArtImg(mon.monsterId, "summon-multi-img", 56) || monsterElementLabel(el).slice(0, 1)}</span>
     <strong>${def?.nameKo ?? mon.monsterId}</strong>
     <small class="summon-multi-stars" aria-label="${def?.naturalStars ?? 0}">${stars}</small>
     <span class="summon-card-meta">
@@ -11244,7 +11667,23 @@ function renderSummonDetailModal(): string {
   const el = def?.element ?? "dark";
   const preview = previewOwnedCombatStats(save, mon.uid);
   const stars = STAR.repeat(def?.naturalStars ?? 0);
-  const skills = def?.skills ?? [];
+  const levels = (mon.skillLevels ?? [1, 1, 1]) as [number, number, number];
+  const skills = (def?.skills ?? [])
+    .map((sk, si) => {
+      const lv = levels[si] ?? 1;
+      const lines = monsterSkillDescLines(sk)
+        .map((line) => `<li>${escapeHtml(line)}</li>`)
+        .join("");
+      return `<div class="summon-detail-skill">
+        ${monsterSkillArtImg(mon.monsterId, si, sk, "summon-detail-skill-img", 40)}
+        <span class="summon-detail-skill-copy">
+          <strong>${escapeHtml(sk.nameKo)}</strong>
+          <small>Lv.${lv}${lv >= MAX_SKILL_LEVEL ? " MAX" : ""}</small>
+          <ul>${lines}</ul>
+        </span>
+      </div>`;
+    })
+    .join("");
   return `<div class="settings-layer summon-detail-layer" id="summon-detail-layer" role="presentation">
     <button type="button" class="settings-backdrop" id="btn-summon-detail-close" aria-label="${escapeHtml(t("ui.468266d639"))}"></button>
     <div class="settings-sheet summon-detail-sheet el-${el}" role="dialog" aria-modal="true" aria-labelledby="summon-detail-title">
@@ -11265,12 +11704,7 @@ function renderSummonDetailModal(): string {
             </div>`
           : ""
       }
-      <div class="summon-detail-skills">${skills
-        .map(
-          (skill, index) =>
-            `<div><strong>S${index + 1}</strong><span>${escapeHtml(skill.nameKo)}</span></div>`,
-        )
-        .join("")}</div>
+      <div class="summon-detail-skills">${skills}</div>
       <button type="button" class="auth-btn-primary full" id="btn-summon-detail-confirm">${t("ui.468266d639")}</button>
     </div>
   </div>`;
@@ -11285,6 +11719,12 @@ function openSummonDetailSoft(uid: string): void {
   if (!save.roster.some((mon) => mon.uid === uid)) return;
   summonDetailUid = uid;
   const layer = softMountOverlay("summon-detail-layer", renderSummonDetailModal());
+  if (layer) {
+    dematteArtInTree(
+      layer,
+      "img.summon-detail-img, img.summon-detail-skill-img",
+    );
+  }
   const close = () => closeSummonDetailSoft();
   layer?.querySelectorAll("#btn-summon-detail-close, #btn-summon-detail-confirm").forEach(
     (btn) => btn.addEventListener("click", close),
@@ -11326,6 +11766,7 @@ function openSummonMultiResultSoft(): void {
     "summon-multi-result-layer",
     renderSummonMultiResultModal(),
   );
+  if (layer) dematteArtInTree(layer, "img.summon-multi-img");
   const close = () => closeSummonMultiResultSoft();
   layer
     ?.querySelectorAll("#btn-summon-multi-close, #btn-summon-multi-confirm")
@@ -15877,12 +16318,12 @@ function renderGuildBody(): string {
              </button>
              <button type="button" class="auth-btn-ghost guild-ghost" id="btn-guild-rename" aria-pressed="${guildRenameOpen ? "true" : "false"}">${escapeHtml(t("ui.guild.rename"))}</button>
            </div>`
-    : `<div class="guild-join">
-             <label class="guild-field">${escapeHtml(t("ui.f6d4bb4a67"))}
-               <input id="guild-name-input" maxlength="16" />
-             </label>
-             <button type="button" class="auth-btn-primary full guild-cta" id="btn-guild-join">${escapeHtml(t("ui.8b92576f2b"))}</button>
-           </div>`;
+    : `<div class="guild-join-actions">
+               <button type="button" class="auth-btn-ghost guild-ghost" id="btn-guild-join">${escapeHtml(t("ui.8b92576f2b"))}</button>
+               <button type="button" class="auth-btn-primary guild-cta" id="btn-guild-create">
+                 <span class="guild-cta-label">${escapeHtml(t("ui.guild.create"))}</span>
+               </button>
+             </div>`;
   const members = name
     ? `<p class="guild-section">${escapeHtml(t("ui.guild.members"))}</p>
     <div class="guild-board">${memberRows}</div>`
@@ -16925,7 +17366,7 @@ function renderBattleTicker(): string {
     .join("")}</div>`;
 }
 
-/** Always-mounted battle AUTO category sheet; toggled with a battle soft patch. */
+/** Lives on #app so combat ticks never remount it. */
 function renderBattleAutoSettings(): string {
   const allEnabled = battleAutoOptions.stone && battleAutoOptions.combat;
   const option = (
@@ -16935,7 +17376,7 @@ function renderBattleAutoSettings(): string {
   ) => `<button type="button" class="battle-auto-option${enabled ? " is-on" : ""}" data-auto-option="${id}" role="switch" aria-checked="${enabled}" aria-label="${escapeHtml(t(label))}">
       <span>${escapeHtml(t(label))}</span><i aria-hidden="true"></i>
     </button>`;
-  return `<section class="battle-auto-settings${battleAutoSettingsOpen ? " is-open" : ""}" id="battle-auto-settings" aria-label="${escapeHtml(t("ui.autoSettings"))}"${battleAutoSettingsOpen ? "" : ' hidden aria-hidden="true"'}>
+  return `<section class="battle-auto-settings" id="battle-auto-settings" aria-label="${escapeHtml(t("ui.autoSettings"))}" hidden aria-hidden="true">
     <div class="battle-auto-settings-card">
       <div class="battle-auto-settings-head">
         <strong>${escapeHtml(t("ui.autoSettings"))}</strong>
@@ -16987,7 +17428,7 @@ function renderBattle(manaPct: number): string {
     onboard.step === "battle" && currentStage?.id === ONBOARD_FIRST_STAGE_ID
       ? " is-onboard-rite"
       : ""
-  }">
+  }" data-bg="${battleBgIdForStage(currentStage)}">
     ${battleSkyHtml(currentStage)}
     <header class="battle-chrome">
       <div class="battle-stage-pill" title="${stageTitle}">
@@ -17015,6 +17456,7 @@ function renderBattle(manaPct: number): string {
     <div class="board-wrap board-wrap--stage${canPlaceStone ? " is-live" : ""}">
       ${renderBoardTabs()}${renderBoard()}${renderCaptureShop()}
     </div>
+    ${renderBoardMini()}
     <div class="battle-lane ally">
       ${renderBattleFront(allyUnits, "ally")}
     </div>
@@ -17030,7 +17472,6 @@ function renderBattle(manaPct: number): string {
         <button type="button" id="btn-auto-toggle" class="${autoMode ? "auto-on" : ""}">${autoMode ? "AUTO ON" : "AUTO"}</button>
       </div>
     </div>
-    ${renderBattleAutoSettings()}
   </div>
   </div>`;
 }
@@ -17076,10 +17517,7 @@ function refreshBattleView(): boolean {
   const manaPct = Math.round((allyMana.mana / allyMana.manaMax) * 100);
   const arts = captureBattleArtMap(screen);
   const sky = screen.querySelector<HTMLElement>(".battle-sky");
-  const autoSettings = app.querySelector<HTMLElement>("#battle-auto-settings");
-  const autoPorted =
-    !!autoSettings &&
-    (autoSettings.parentElement === app || autoSettings.classList.contains("is-ported"));
+  const mini = screen.querySelector<HTMLElement>("#board-mini");
 
   const wrap = document.createElement("div");
   wrap.innerHTML = renderBattle(manaPct);
@@ -17089,30 +17527,27 @@ function refreshBattleView(): boolean {
   // Drop enter animation on subsequent soft updates
   next.classList.remove("battle-screen--enter");
   screen.classList.remove("battle-screen--enter");
+  const nextBg = next.getAttribute("data-bg");
+  if (nextBg) screen.setAttribute("data-bg", nextBg);
+  else screen.removeAttribute("data-bg");
 
   const nextSky = next.querySelector(".battle-sky");
   if (sky && nextSky) nextSky.replaceWith(sky);
 
-  const nextAuto = next.querySelector("#battle-auto-settings");
-  if (autoPorted) {
-    // Sheet lives on #app — drop the fresh duplicate so combat ticks never remount it.
-    nextAuto?.remove();
-  } else if (autoSettings) {
-    if (nextAuto) nextAuto.replaceWith(autoSettings);
-    else next.appendChild(autoSettings);
-  }
+  const nextMini = next.querySelector("#board-mini");
+  if (mini && nextMini) nextMini.replaceWith(mini);
 
   screen.replaceChildren(...Array.from(next.childNodes));
   restoreBattleArt(screen, arts);
   bindBattleInteractive();
   mountUnitAnimHooks(screen);
   refreshDmgLayer();
-  if (battleAutoSettingsOpen) applyBattleAutoSettingsOpen();
-  else applyBattleAutoOptionsUi();
+  restoreBattleAutoSettingsIfOpen();
+  syncBoardMini();
   return true;
 }
 
-/** Taps on the large flat pick grid place a stone; the map orbs flare. */
+/** Taps on the large flat pick grid place a stone; the map circle absorbs. */
 function bindStonePickTaps(): void {
   const hit = app.querySelector<HTMLElement>(".stone-pick-hit");
   if (!hit) return;
@@ -17276,19 +17711,17 @@ function bindBattleInteractive(): void {
 
   app.querySelector("#btn-auto-toggle")?.addEventListener("click", () => {
     if (!battle || battle.finishReason) return;
-    autoMode = !autoMode;
-    if (autoMode) {
-      clearBattleSkillSelection();
-      commitBattleAutoLive();
-      scheduleAuto();
-    } else clearAutoTimer();
+    setBattleAutoMode(!autoMode);
     render();
   });
 
   app.querySelector("#btn-back")?.addEventListener("click", () => {
     autoMode = false;
+    battleAutoSettingsOpen = false;
+    softRemoveOverlay("battle-auto-settings");
     clearAutoTimer();
     clearBattleSkipTimer();
+    battleSkipTimeReady = false;
     battleSkipReady = false;
     battleSkipSeq += 1;
     if (battle?.finishReason) grantRewardIfNeeded();
@@ -18409,7 +18842,7 @@ function bind(): void {
     if (preserveIslandDom) return;
     btn.addEventListener("click", (ev) => {
       const target = ev.target as HTMLElement | null;
-      if (target?.closest?.("[data-spot-enter], [data-spot-up], [data-spot-info], [data-collect]")) {
+      if (target?.closest?.("[data-spot-enter], [data-spot-up], [data-spot-prod], [data-spot-info], [data-collect]")) {
         return;
       }
       if (app.querySelector("#island-viewport")?.getAttribute("data-pan-moved") === "1") {
@@ -18462,6 +18895,19 @@ function bind(): void {
         openBuildingUpgradeSoft(buildingId);
       });
     });
+    app.querySelectorAll<HTMLButtonElement>("[data-spot-prod]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (app.querySelector("#island-viewport")?.getAttribute("data-pan-moved") === "1") return;
+        const id = btn.dataset.spotProd;
+        if (!id) return;
+        const buildingId = islandSpotUpgradeableBuildingId(id);
+        if (buildingId !== "mana_pond" && buildingId !== "crystal_mine") return;
+        setIslandSpotMenu(null);
+        openBuildingProdStatsSoft(buildingId);
+      });
+    });
     app.querySelectorAll<HTMLButtonElement>("[data-spot-info]").forEach((btn) => {
       btn.addEventListener("click", (ev) => {
         ev.preventDefault();
@@ -18476,7 +18922,7 @@ function bind(): void {
     viewport?.addEventListener("click", (ev) => {
       if (islandLayoutEdit || !islandSpotMenuId) return;
       const target = ev.target as HTMLElement | null;
-      if (target?.closest?.("[data-b], [data-spot-enter], [data-spot-up], [data-spot-info], [data-collect]")) {
+      if (target?.closest?.("[data-b], [data-spot-enter], [data-spot-up], [data-spot-prod], [data-spot-info], [data-collect]")) {
         return;
       }
       if (viewport.getAttribute("data-pan-moved") === "1") return;
@@ -19026,21 +19472,17 @@ function bind(): void {
 
   app.querySelector("#btn-auto-toggle")?.addEventListener("click", () => {
     if (!battle || battle.finishReason) return;
-    autoMode = !autoMode;
-    if (autoMode) {
-      clearBattleSkillSelection();
-      commitBattleAutoLive();
-      scheduleAuto();
-    } else {
-      clearAutoTimer();
-    }
+    setBattleAutoMode(!autoMode);
     render();
   });
 
   app.querySelector("#btn-back")?.addEventListener("click", () => {
     autoMode = false;
+    battleAutoSettingsOpen = false;
+    softRemoveOverlay("battle-auto-settings");
     clearAutoTimer();
     clearBattleSkipTimer();
+    battleSkipTimeReady = false;
     battleSkipReady = false;
     battleSkipSeq += 1;
     if (battle?.finishReason) grantRewardIfNeeded();
@@ -19126,6 +19568,8 @@ function bind(): void {
     dematteArtInTree(app, "img.battle-unit-img:not([data-still-front])");
     void mountBattleSpines(app);
     requestAnimationFrame(() => refreshDmgLayer());
+    restoreBattleAutoSettingsIfOpen();
+    syncBoardMini();
     // One-shot enter fade; soft patches strip this class.
     queueMicrotask(() => {
       app.querySelector(".battle-screen")?.classList.remove("battle-screen--enter");
@@ -19141,7 +19585,7 @@ function bind(): void {
   if (view !== "battle") {
     dematteArtInTree(
       app,
-      "img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.mon-slot-img, img.codex-cell-img, img.growth-rite-img, img.growth-skill-img, img.dojo-insc-seal-art, img.dojo-block-seal-img, img.dojo-block-seal-ring, img.dojo-insc-seal-ring-art",
+      "img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.summon-detail-img, img.summon-detail-skill-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.mon-slot-img, img.codex-cell-img, img.growth-rite-img, img.growth-skill-img, img.dojo-insc-seal-art, img.dojo-block-seal-img, img.dojo-block-seal-ring, img.dojo-insc-seal-ring-art",
     );
   }
 

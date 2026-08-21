@@ -96,6 +96,7 @@ import {
   collectMana,
   createStarterIsland,
   energyMaxForLevel,
+  grantEnergy,
   runWish,
   syncBuildingUnlocks,
   tickProduction,
@@ -252,6 +253,8 @@ export const ARENA_ATTACKS_DAILY = 10;
 export const GUILD_WEEK_CONTRIB_GOAL = 100;
 export const GUILD_CHECKIN_CONTRIB = 15;
 export const GUILD_CHECKIN_GLORY = 8;
+/** Local stub: founding a guild spends crystal. */
+export const GUILD_CREATE_CRYSTAL_COST = 300;
 export const GUILD_CHEST_GLORY = 25;
 export const GUILD_CHEST_CRYSTAL = 10;
 /** Phase 3h: local raid boss. */
@@ -2138,13 +2141,9 @@ export function runBuyShopOffer(
   } else if (offer.kind === "scroll_premium") {
     next = withScrollDelta(next, "premium", offer.qty);
   } else if (offer.kind === "energy") {
-    const max = next.island.energyMax ?? 100;
     next = {
       ...next,
-      island: {
-        ...next.island,
-        energy: Math.min(max, next.island.energy + offer.qty),
-      },
+      island: grantEnergy(next.island, offer.qty),
     };
   } else if (offer.kind === "symbol_roll") {
     if (next.symbols.length >= symbolBagCapacity(next)) {
@@ -2200,18 +2199,17 @@ export function runBuyEnergy(
   const quota = tryConsumeCatalogQuota(working, "energy", n, now);
   if (!quota.ok) return { save: quota.save, message: quota.message };
   working = quota.save;
-  const max = working.island.energyMax ?? 100;
-  const energy = Math.min(max, working.island.energy + gain);
+  const island = {
+    ...grantEnergy(working.island, gain),
+    crystal: working.island.crystal - cost,
+  };
+  const max = island.energyMax ?? 100;
   return {
     save: {
       ...working,
-      island: {
-        ...working.island,
-        crystal: working.island.crystal - cost,
-        energy,
-      },
+      island,
     },
-    message: `에너지 +${Math.floor(energy - working.island.energy)} (−크리스탈 ${cost}) · 보유 ${Math.floor(energy)}/${max}`,
+    message: `에너지 +${Math.floor(island.energy - working.island.energy)} (−크리스탈 ${cost}) · 보유 ${Math.floor(island.energy)}/${max}`,
   };
 }
 
@@ -2470,28 +2468,76 @@ export function runBuyCircleInscription(
   };
 }
 
+function guildHallIsland(save: PlayerSave) {
+  const island = syncBuildingUnlocks(tickProduction(save.island));
+  const unlocked =
+    island.buildings.some((b) => b.id === "guild_hall") ||
+    island.summonerLevel >= 12;
+  return { island, unlocked };
+}
+
+function trimmedGuildName(name: string): string {
+  return name.trim().slice(0, 16);
+}
+
 /** Join or rename local guild (non-realtime stub). */
 export function runJoinGuild(
   save: PlayerSave,
   name: string,
 ): LoopStepResult {
-  let island = syncBuildingUnlocks(tickProduction(save.island));
-  if (
-    !island.buildings.some((b) => b.id === "guild_hall") &&
-    island.summonerLevel < 12
-  ) {
+  const { island, unlocked } = guildHallIsland(save);
+  if (!unlocked) {
     return {
       save: { ...save, island },
       message: "길드 홀 해금 필요 (소환사 Lv.12)",
     };
   }
-  const trimmed = name.trim().slice(0, 16);
+  const trimmed = trimmedGuildName(name);
   if (!trimmed) {
     return { save: { ...save, island }, message: "길드 이름을 입력하세요" };
   }
   return {
     save: { ...save, island, guildName: trimmed },
     message: `길드 가입: ${trimmed}`,
+  };
+}
+
+/** Found a local guild (non-realtime stub). */
+export function runCreateGuild(
+  save: PlayerSave,
+  name: string,
+): LoopStepResult {
+  const { island, unlocked } = guildHallIsland(save);
+  if (!unlocked) {
+    return {
+      save: { ...save, island },
+      message: "길드 홀 해금 필요 (소환사 Lv.12)",
+    };
+  }
+  if (save.guildName) {
+    return {
+      save: { ...save, island },
+      message: `이미 ${save.guildName} 소속입니다`,
+    };
+  }
+  const trimmed = trimmedGuildName(name);
+  if (!trimmed) {
+    return { save: { ...save, island }, message: "길드 이름을 입력하세요" };
+  }
+  const held = Math.floor(island.crystal);
+  if (held < GUILD_CREATE_CRYSTAL_COST) {
+    return {
+      save: { ...save, island },
+      message: `크리스탈 부족 (필요 ${GUILD_CREATE_CRYSTAL_COST}, 보유 ${held})`,
+    };
+  }
+  return {
+    save: {
+      ...save,
+      island: { ...island, crystal: island.crystal - GUILD_CREATE_CRYSTAL_COST },
+      guildName: trimmed,
+    },
+    message: `길드 창설: ${trimmed}`,
   };
 }
 
@@ -3832,12 +3878,13 @@ export function runClaimMail(
     return { save, message: "이미 수령한 우편입니다" };
   }
   const max = save.island.energyMax ?? 100;
-  const island = {
-    ...save.island,
-    mana: save.island.mana + def.mana,
-    // Mail may exceed energyMax (overflow allowed).
-    energy: save.island.energy + def.energy,
-  };
+  const island = grantEnergy(
+    {
+      ...save.island,
+      mana: save.island.mana + def.mana,
+    },
+    def.energy,
+  );
   const bits: string[] = [];
   if (def.mana > 0) bits.push(`골드 +${def.mana}`);
   if (def.energy > 0) bits.push(`행동력 +${def.energy}`);
@@ -3985,12 +4032,13 @@ export function runClaimDailyMission(
   if (isDailyMissionClaimed(save, missionId, day)) {
     return { save, message: "오늘 이미 수령한 미션 보상입니다" };
   }
-  const max = save.island.energyMax ?? 100;
-  const island = {
-    ...save.island,
-    mana: save.island.mana + reward.mana,
-    energy: Math.min(max, save.island.energy + reward.energy),
-  };
+  const island = grantEnergy(
+    {
+      ...save.island,
+      mana: save.island.mana + reward.mana,
+    },
+    reward.energy,
+  );
   const key = dailyMissionClaimKey(missionId, day);
   return {
     save: {

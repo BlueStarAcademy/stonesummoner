@@ -705,6 +705,12 @@ export type MessageKey =
   | "ui.bldgUp.doneBody"
   | "ui.bldgUp.doneOk"
   | "ui.bldgUp.needAccount"
+  | "ui.bldgProd.title"
+  | "ui.bldgProd.time"
+  | "ui.bldgProd.cap"
+  | "ui.bldgProd.durationHm"
+  | "ui.bldgProd.durationH"
+  | "ui.bldgProd.durationM"
   | "ui.dojo.bonusNone"
   | "ui.dojo.bonusMax"
   | "ui.dojo.valStartMana"
@@ -956,6 +962,7 @@ export type MessageKey =
   | "ui.islandEnter"
   | "ui.islandInfo"
   | "ui.islandUp"
+  | "ui.islandProd"
   | "ui.islandAction.summon_hearth"
   | "ui.islandAction.power_circle"
   | "ui.islandAction.gateway"
@@ -1155,7 +1162,9 @@ export type MessageKey =
   | "ui.guild.board"
   | "ui.guild.unjoined"
   | "ui.guild.checkedIn"
-  | "ui.guild.save";
+  | "ui.guild.save"
+  | "ui.guild.create"
+  | "ui.guild.close";
 
 export type MessageDict = Record<MessageKey, string>;
 

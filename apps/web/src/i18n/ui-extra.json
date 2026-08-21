@@ -2447,6 +2447,30 @@
     "ko": "계정 Lv.{n}",
     "en": "Account Lv.{n}"
   },
+  "ui.bldgProd.title": {
+    "ko": "수집량",
+    "en": "Yield"
+  },
+  "ui.bldgProd.time": {
+    "ko": "생산시간",
+    "en": "Fill time"
+  },
+  "ui.bldgProd.cap": {
+    "ko": "최대보관량",
+    "en": "Max storage"
+  },
+  "ui.bldgProd.durationHm": {
+    "ko": "{h}시간 {m}분",
+    "en": "{h}h {m}m"
+  },
+  "ui.bldgProd.durationH": {
+    "ko": "{h}시간",
+    "en": "{h}h"
+  },
+  "ui.bldgProd.durationM": {
+    "ko": "{m}분",
+    "en": "{m}m"
+  },
   "ui.dojo.bonusNone": {
     "ko": "없음",
     "en": "None"
@@ -3451,6 +3475,10 @@
     "ko": "UP",
     "en": "UP"
   },
+  "ui.islandProd": {
+    "ko": "수집량",
+    "en": "Yield"
+  },
   "ui.islandAction.summon_hearth": {
     "ko": "소환",
     "en": "Summon"
@@ -4250,5 +4278,13 @@
   "ui.guild.save": {
     "ko": "저장",
     "en": "Save"
+  },
+  "ui.guild.create": {
+    "ko": "창설",
+    "en": "Found"
+  },
+  "ui.guild.close": {
+    "ko": "닫기",
+    "en": "Close"
   }
 }

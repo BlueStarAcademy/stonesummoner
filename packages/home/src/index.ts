@@ -16,6 +16,7 @@ export {
   createStarterIsland,
   energyMaxForLevel,
   energyRegenRemainingMs,
+  grantEnergy,
   hasBuilding,
   maxProdBuildingLevelForAccount,
   productionCrystalCap,

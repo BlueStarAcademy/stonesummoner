@@ -19,7 +19,7 @@ describe("ai helpers", () => {
     assert.equal(ranked[0]!.point.x, 1);
     assert.equal(ranked[0]!.capturedCount, 2);
     assert.equal(ranked[0]!.manaGain, 0);
-    assert.equal(ranked[0]!.captureManaFrac, 0.2);
+    assert.equal(ranked[0]!.captureManaFrac, 0.24);
     assert.equal(ranked[0]!.captureDamageBonus, 0.2);
   });
 

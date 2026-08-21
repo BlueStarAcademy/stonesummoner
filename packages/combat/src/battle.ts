@@ -21,7 +21,6 @@ import { pickExpertStone } from "./stoneTactic.js";
 import {
   classifyCapture,
   gainsForBoardEvent,
-  rollSafePlaceProc,
 } from "./boardEvents.js";
 import { composeSummonerUlt } from "./summonerUlt.js";
 import { detectShapeBonuses } from "./shapes.js";
@@ -171,15 +170,6 @@ export interface StoneReport {
   chips: StoneReportChip[];
 }
 
-/** Team-wide combat aura from the last stone; lasts until that team places again. */
-export interface StoneAura {
-  atkPct: number;
-  defPct: number;
-  spdPct: number;
-  /** Flat crit rate points (8 = +8%). */
-  critRate: number;
-}
-
 export class Battle {
   /**
    * Last team that placed a stone. Go-like alternation: if the same team
@@ -193,14 +183,6 @@ export class Battle {
   lastEnemyStone: { x: number; y: number; boardIndex: number } | null = null;
   /** UI readout for the stone that just landed. */
   lastStoneReport: StoneReport | null = null;
-  /**
-   * Combat aura from the team's last stone. Cleared/replaced on that team's
-   * next stone so consecutive same-team ATB keeps the effect without re-placing.
-   */
-  stoneAura: Record<TeamId, StoneAura | null> = {
-    ally: null,
-    enemy: null,
-  };
   /** One or two boards (쌍국). Prefer `board` getter for the active one. */
   readonly boards: Board[];
   activeBoardIndex = 0;
@@ -254,6 +236,8 @@ export class Battle {
   /** 1-based current wave. */
   currentWave: number;
   readonly totalWaves: number;
+  /** Completed skill/attack turns (not stone-only or skipped stun). */
+  attackTurnCount = 0;
   private powerGapCap: number;
   private inscriptionAmplifyAdd: number;
   private inscriptionItemSpawn: number;
@@ -442,8 +426,7 @@ export class Battle {
         if (!u.alive) continue;
         const spdMul = (u.spdBoostTurns ?? 0) > 0 ? 1.4 : 1;
         const spdBuff = 1 + (u.spdBuffPct ?? 0);
-        const spdAura = 1 + (this.stoneAura[u.team]?.spdPct ?? 0);
-        u.atb += u.stats.spd * 0.1 * spdMul * spdBuff * spdAura;
+        u.atb += u.stats.spd * 0.1 * spdMul * spdBuff;
       }
       const ready = this.units
         .filter((u) => u.alive && u.atb >= ATB_THRESHOLD)
@@ -877,7 +860,6 @@ export class Battle {
       return false;
     }
 
-    this.stoneAura[unit.team] = null;
     this.lastStoneReport = null;
     const chips: StoneReportChip[] = [];
     let claimedVictory = false;
@@ -892,21 +874,7 @@ export class Battle {
     const gains = gainsForBoardEvent(kind, result.capturedCount, manaMul);
 
     if (kind === "safe_place") {
-      const proc = rollSafePlaceProc(this.rng);
-      const aura: StoneAura = {
-        atkPct: proc.axis === "atk" ? proc.amount : 0,
-        defPct: proc.axis === "def" ? proc.amount : 0,
-        spdPct: proc.axis === "spd" ? proc.amount : 0,
-        critRate: proc.axis === "critRate" ? proc.amount * 100 : 0,
-      };
-      this.stoneAura[unit.team] = aura;
-      const pct = Math.round(proc.amount * 100);
-      const chipKind =
-        proc.axis === "critRate"
-          ? "crit"
-          : proc.axis;
-      chips.push({ kind: chipKind, n: pct });
-      this.log.push(`일반 소환: ${proc.axis} +${pct}%`);
+      this.log.push(`일반 소환: 마력 +${Math.round(gains.mana)}`);
     }
 
     let ampDelta = gains.amplifyDelta;
@@ -1582,6 +1550,7 @@ export class Battle {
       smEarly.magicSkills?.some((s) => s.id === summonerSkill) &&
       this.canUseMagicSkill(unit, summonerSkill)
     ) {
+      this.attackTurnCount += 1;
       return this.castMagicSkill(unit, summonerSkill, opts?.targetId);
     }
 
@@ -1733,6 +1702,7 @@ export class Battle {
       return [];
     }
 
+    this.attackTurnCount += 1;
     this.skillAmplifyBonus = 0;
     // Violent: extra turn (not from counter)
     if (
@@ -2131,13 +2101,11 @@ export class Battle {
       incomingMul *= 0.9;
     }
 
-    const aura = this.stoneAura[attacker.team];
-    const defAura = this.stoneAura[target.team];
     const atkMul =
-      (1 + (attacker.atkBuffPct ?? 0) + (aura?.atkPct ?? 0)) *
+      (1 + (attacker.atkBuffPct ?? 0)) *
       (1 - (attacker.atkDebuffPct ?? 0));
     const defMul =
-      (1 + (target.defBuffPct ?? 0) + (defAura?.defPct ?? 0)) *
+      (1 + (target.defBuffPct ?? 0)) *
       (1 - (target.defDebuffPct ?? 0));
     const { damage, crit } = computeDamage({
       atk: attacker.stats.atk * Math.max(0.3, atkMul),
@@ -2149,8 +2117,7 @@ export class Battle {
       critRate:
         attacker.stats.critRate +
         critBonus +
-        (attacker.critRateBuff ?? 0) +
-        (aura?.critRate ?? 0),
+        (attacker.critRateBuff ?? 0),
       critDmg:
         attacker.stats.critDmg +
         critDmgExtra +

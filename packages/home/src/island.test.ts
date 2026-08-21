@@ -3,14 +3,19 @@ import assert from "node:assert/strict";
 import {
   ENERGY_MAX,
   PHASE1_BUILDINGS,
+  PHASE_BUILDINGS,
   addSummonerExp,
   buildingUpgradeManaCost,
+  collectCrystal,
   collectMana,
   createStarterIsland,
   energyMaxForLevel,
   energyRegenRemainingMs,
+  grantEnergy,
   hasBuilding,
   maxProdBuildingLevelForAccount,
+  productionCrystalCap,
+  productionCrystalPerHour,
   productionStorageCap,
   runWish,
   spendEnergy,
@@ -125,6 +130,35 @@ describe("Phase1 island", () => {
     assert.equal(capped.reward, undefined);
   });
 
+  it("produces crystals slowly like SW mine and keeps leftover after collect", () => {
+    const def = PHASE_BUILDINGS.find((b) => b.id === "crystal_mine")!;
+    assert.equal(productionCrystalPerHour(def, 1), 0.1);
+    assert.equal(productionCrystalCap(def, 1), 3);
+    assert.equal(productionCrystalPerHour(def, 10), 1);
+    assert.equal(productionCrystalCap(def, 10), 30);
+
+    let island = createStarterIsland(0);
+    island = { ...island, summonerLevel: 10 };
+    island = syncBuildingUnlocks(island, 0);
+    const hour = 3_600_000;
+    island = tickProduction(island, 10 * hour);
+    const mine = island.buildings.find((b) => b.id === "crystal_mine")!;
+    assert.equal(mine.storedCrystal, 1);
+
+    island = tickProduction(island, 15 * hour);
+    const mid = island.buildings.find((b) => b.id === "crystal_mine")!;
+    assert.equal(mid.storedCrystal, 1.5);
+    const before = island.crystal;
+    island = collectCrystal(island, "crystal_mine", 15 * hour);
+    assert.equal(island.crystal, before + 1);
+    const leftover = island.buildings.find((b) => b.id === "crystal_mine")!;
+    assert.equal(leftover.storedCrystal, 0.5);
+
+    island = tickProduction(island, 200 * hour);
+    const full = island.buildings.find((b) => b.id === "crystal_mine")!;
+    assert.equal(full.storedCrystal, 3);
+  });
+
   it("regens energy 1 per 3 minutes up to max", () => {
     let island = createStarterIsland(0);
     island = { ...island, energy: 50, energyUpdatedAt: 0 };
@@ -178,5 +212,14 @@ describe("Phase1 island", () => {
     island = tickProduction(island, 180_000 * 10);
     assert.equal(island.energy, 120);
     assert.equal(energyRegenRemainingMs(island, 180_000 * 10), null);
+  });
+
+  it("lets granted energy exceed the regen cap even when below max", () => {
+    let island = createStarterIsland(0);
+    island = { ...island, energy: 95, energyMax: 100 };
+    island = grantEnergy(island, 20);
+    assert.equal(island.energy, 115);
+    island = tickProduction(island, 180_000 * 10);
+    assert.equal(island.energy, 115);
   });
 });

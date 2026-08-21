@@ -2,7 +2,6 @@ export { Battle, makeUnit, pickAutoSkillIndex } from "./battle.js";
 export type {
   BattleConfig,
   SkillResult,
-  StoneAura,
   StoneReport,
   StoneReportChip,
   StoneReportChipKind,
@@ -16,7 +15,9 @@ export {
   gainsForBoardEvent,
   classifyCapture,
   CAPTURE_BONUS_PER_STONE,
-  rollSafePlaceProc,
+  CAPTURE_DAMAGE_PER_STONE,
+  CAPTURE_MANA_FRAC_PER_STONE,
+  SAFE_PLACE_MANA,
 } from "./boardEvents.js";
 export { composeSummonerUlt } from "./summonerUlt.js";
 export type { ComposedSummonerUlt } from "./summonerUlt.js";

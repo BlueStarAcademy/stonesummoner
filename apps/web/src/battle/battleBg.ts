@@ -71,7 +71,7 @@ export function battleSkyHtml(
   stage?: Pick<StageDef, "mode" | "map" | "cairosDungeon"> | null,
 ): string {
   const id = battleBgIdForStage(stage);
-  return `<div class="battle-sky" aria-hidden="true">
+  return `<div class="battle-sky" data-bg="${id}" aria-hidden="true">
       <img
         class="battle-sky-img"
         src="${battleBgSrc(id)}"
