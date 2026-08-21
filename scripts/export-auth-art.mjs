@@ -19,11 +19,9 @@ const assets = path.join(
 const finalDir = path.join(root, "docs/art/auth/final");
 const publicDir = path.join(root, "apps/web/public/art/auth");
 const selects = path.join(root, "docs/art/auth/selects");
-const icons = path.join(root, "apps/web/public/icons");
 
 fs.mkdirSync(finalDir, { recursive: true });
 fs.mkdirSync(publicDir, { recursive: true });
-fs.mkdirSync(icons, { recursive: true });
 
 console.log("ROOT", root);
 
@@ -93,9 +91,7 @@ async function exportMark(srcPath) {
   for (const f of ["logo-mark-1024.png", "logo-mark-512.png", "logo-mark-192.png"]) {
     fs.copyFileSync(path.join(finalDir, f), path.join(publicDir, f));
   }
-  await sharp(out1024).resize(512, 512).png().toFile(path.join(icons, "icon-512.png"));
-  await sharp(out1024).resize(192, 192).png().toFile(path.join(icons, "icon-192.png"));
-  console.log("logo-mark + PWA icons ok");
+  console.log("logo-mark ok (PWA/Android icons: node scripts/export-app-icons.mjs)");
 }
 
 async function exportOg(srcPath) {

@@ -58,21 +58,8 @@ if (fs.existsSync(logoPath)) {
   fs.renameSync(featureTmp, featurePng);
 }
 
-const iconsDir = path.join(root, "apps/web/public/icons");
-const iconSvg = path.join(iconsDir, "icon-512.svg");
-if (fs.existsSync(iconSvg)) {
-  await sharp(iconSvg)
-    .resize(512, 512)
-    .png({ compressionLevel: 9 })
-    .toFile(path.join(iconsDir, "icon-512.png"));
-  await sharp(iconSvg)
-    .resize(192, 192)
-    .png({ compressionLevel: 9 })
-    .toFile(path.join(iconsDir, "icon-192.png"));
-}
-
 console.log("Wrote", path.relative(root, featurePng));
-console.log("Wrote icons PNG under apps/web/public/icons/");
+console.log("PWA/Android icons: node scripts/export-app-icons.mjs");
 
 const shotsDir = path.join(outDir, "screenshots");
 fs.mkdirSync(shotsDir, { recursive: true });

@@ -12,7 +12,8 @@
 | Title lockup | `apps/web/public/art/auth/logo-title-lockup.webp` (~300 KB, 1:1) |
 | Mark 1024/512/192 | `logo-mark-*.png` |
 | OG | `auth-og.webp` / `auth-og.png` (1200×630) |
-| PWA | `apps/web/public/icons/icon-192.png`, `icon-512.png` |
+| PWA / shortcut | `apps/web/public/icons/icon-192.png`, `icon-512.png`, `apple-touch-icon.png` |
+| Android launcher | `apps/web/android/app/src/main/res/mipmap-*/ic_launcher*.png` |
 
 ## Naming
 
@@ -33,8 +34,15 @@ auth-og[.png|.webp]
 | auth-hero-master@2x.webp | ~180 KB | OK |
 | auth-og.webp | ~115 KB | OK |
 | logo-wordmark.svg | ~1 KB | ≤ 30 KB PASS |
-| logo-mark-1024.png | ~598 KB | source; runtime uses 192/512 |
-| logo-mark-192.png | ~24 KB | PWA/favicon OK |
+| logo-mark-1024.png | painted master | source; runtime uses 192/512 |
+| logo-mark-192.png | PWA/favicon | OK |
+
+App / desktop shortcut icons (painted mark, not the old SVG):
+
+```bash
+node scripts/export-app-icons.mjs
+```
+
 ## Re-export
 
 Requires `sharp` locally:

@@ -31,7 +31,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "icons/*.svg"],
+      includeAssets: ["favicon.svg", "icons/*.svg", "icons/*.png"],
       manifest: {
         name: "StoneSummoner",
         short_name: "StoneSummoner",
@@ -52,7 +52,13 @@ export default defineConfig({
             src: "icons/icon-512.png",
             sizes: "512x512",
             type: "image/png",
-            purpose: "any maskable",
+            purpose: "any",
+          },
+          {
+            src: "icons/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
           },
         ],
       },

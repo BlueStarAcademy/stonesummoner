@@ -1,7 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="12" fill="#1a1528"/>
-  <circle cx="32" cy="32" r="18" stroke="#c9a227" stroke-width="3"/>
-  <circle cx="32" cy="32" r="6" fill="#e8e0d0"/>
-  <circle cx="22" cy="24" r="4" fill="#1a1528" stroke="#e8e0d0" stroke-width="1.5"/>
-  <circle cx="42" cy="40" r="4" fill="#e8e0d0"/>
+  <rect width="64" height="64" fill="#0e0b16"/>
+  <circle cx="32" cy="32" r="22" fill="#16101c" stroke="#c9a227" stroke-width="3.2"/>
+  <circle cx="32" cy="32" r="16.5" fill="none" stroke="#c9a227" stroke-width="0.6" opacity="0.45"/>
+  <path d="M22 32h20M32 22v20M25.2 25.2l13.6 13.6M38.8 25.2L25.2 38.8" stroke="#c9a227" stroke-width="0.45" opacity="0.35"/>
+  <circle cx="22.5" cy="32" r="4.2" fill="#1a1528" stroke="#c9a227" stroke-width="0.8"/>
+  <path d="M32 21.2 36.6 32 32 42.8 27.4 32Z" fill="#e8c34a" stroke="#f6e7a0" stroke-width="0.6" stroke-linejoin="round"/>
+  <circle cx="41.5" cy="32" r="4.2" fill="#e8e0d0"/>
+  <path d="M32 8.6 34.2 11.2 32 12.4 29.8 11.2Z" fill="#c9a227"/>
+  <path d="M32 51.4 34.2 52.8 32 55.4 29.8 52.8Z" fill="#c9a227"/>
+  <path d="M8.6 32 11.2 29.8 12.4 32 11.2 34.2Z" fill="#c9a227"/>
+  <path d="M51.4 32 52.8 29.8 55.4 32 52.8 34.2Z" fill="#c9a227"/>
 </svg>
