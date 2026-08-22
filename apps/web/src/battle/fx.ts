@@ -150,8 +150,12 @@ export function pulseCircleAbsorb(
 export function playUltCutin(root: ParentNode, ms: number): void {
   const stage = root.querySelector<HTMLElement>(".battle-screen");
   if (!stage) return;
+  stage.style.setProperty("--ult-cutin-ms", `${Math.max(80, ms)}ms`);
   stage.classList.add("is-ult-cutin");
-  window.setTimeout(() => stage.classList.remove("is-ult-cutin"), ms);
+  window.setTimeout(() => {
+    stage.classList.remove("is-ult-cutin");
+    stage.style.removeProperty("--ult-cutin-ms");
+  }, ms);
 }
 
 /**

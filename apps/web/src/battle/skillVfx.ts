@@ -124,8 +124,8 @@ function isOrbBolt(kind: SkillBoltKind): boolean {
 function boltArc(dx: number, dy: number, kind: SkillBoltKind): number {
   const dist = Math.hypot(dx, dy);
   const mul =
-    kind === "slash" ? 0.1 : isOrbBolt(kind) ? 0.3 : kind === "hex" ? 0.16 : 0.22;
-  return Math.min(72, Math.max(16, dist * mul));
+    kind === "slash" ? 0.12 : isOrbBolt(kind) ? 0.34 : kind === "hex" ? 0.2 : 0.28;
+  return Math.min(110, Math.max(24, dist * mul));
 }
 
 function boltPath(dx: number, dy: number, arc: number): string {
@@ -217,6 +217,7 @@ function presetLayers(
     layers.push({ src: ART.flash, cls: "skfx-img skfx-img--flash" });
     layers.push({ src: hit, cls: "skfx-img skfx-img--burst" });
     layers.push({ src: ART.debris, cls: "skfx-img skfx-img--debris" });
+    layers.push({ src: hit, cls: "skfx-img skfx-img--burst skfx-img--burst-b" });
   };
 
   if (preset === "slash" || preset === "wind-cut") {
@@ -226,15 +227,18 @@ function presetLayers(
       layers.push({ src: ART.slashWind, cls: "skfx-img skfx-img--slash skfx-img--slash-b" });
     }
     layers.push({ src: ART.slash3, cls: "skfx-img skfx-img--trail" });
+    layers.push({ src: slash, cls: "skfx-img skfx-img--slash skfx-img--slash-c" });
     if (opts?.role !== "cast") {
       layers.push({ src: hit, cls: "skfx-img skfx-img--burst" });
       layers.push({ src: ART.debris, cls: "skfx-img skfx-img--debris" });
+      layers.push({ src: hit, cls: "skfx-img skfx-img--burst skfx-img--burst-b" });
     }
   } else if (preset === "light-beam") {
     layers.push({ src: ART.flash, cls: "skfx-img skfx-img--flash" });
     layers.push({ src: ART.hitLight, cls: "skfx-img skfx-img--beam" });
     layers.push({ src: hit, cls: "skfx-img skfx-img--burst" });
     layers.push({ src: ART.debris, cls: "skfx-img skfx-img--debris" });
+    layers.push({ src: ART.hitLight, cls: "skfx-img skfx-img--beam skfx-img--burst-b" });
   } else if (
     preset === "fire-nova" ||
     preset === "ice-nova" ||
@@ -254,16 +258,25 @@ function presetLayers(
       cls: "skfx-img skfx-img--flash skfx-img--soft skfx-img--heal-glow",
     });
     layers.push({ src: ART.heal, cls: "skfx-img skfx-img--heal-motes" });
+    layers.push({
+      src: ART.heal,
+      cls: "skfx-img skfx-img--heal-bloom skfx-img--heal-bloom-b",
+    });
   } else if (preset === "shield") {
     layers.push({ src: ART.shield, cls: "skfx-img skfx-img--ward" });
+    layers.push({ src: ART.cast, cls: "skfx-img skfx-img--empower-ring" });
   } else if (preset === "buff") {
     layers.push({ src: ART.buff, cls: "skfx-img skfx-img--empower" });
     layers.push({ src: ART.cast, cls: "skfx-img skfx-img--empower-ring" });
+    layers.push({ src: ART.buff, cls: "skfx-img skfx-img--empower skfx-img--empower-b" });
   } else if (preset === "hex") {
     layers.push({ src: ART.hex, cls: "skfx-img skfx-img--hex" });
     layers.push({ src: ART.hitDark, cls: "skfx-img skfx-img--burst" });
+    layers.push({ src: ART.hex, cls: "skfx-img skfx-img--hex skfx-img--burst-b" });
   } else if (preset === "cast") {
     layers.push({ src: ART.cast, cls: "skfx-img skfx-img--cast" });
+    layers.push({ src: ART.flash, cls: "skfx-img skfx-img--flash skfx-img--soft" });
+    layers.push({ src: ART.cast, cls: "skfx-img skfx-img--cast skfx-img--cast-b" });
   } else {
     impactSeq();
   }
@@ -304,13 +317,14 @@ function appendFxImg(wrap: HTMLElement, layer: SkfxLayer): void {
   wrap.appendChild(img);
 }
 
-function spawnFxMotes(wrap: HTMLElement, kind: "heal" | "buff"): void {
-  const n = kind === "heal" ? 7 : 6;
+function spawnFxMotes(wrap: HTMLElement, kind: "heal" | "buff", ms: number): void {
+  const n = kind === "heal" ? 10 : 8;
+  const step = Math.max(0.04, (ms / 1000) * 0.07);
   for (let i = 0; i < n; i++) {
     const mote = document.createElement("span");
     mote.className = `skfx-mote skfx-mote--${kind}`;
-    mote.style.setProperty("--mote-x", `${-40 + i * 13}%`);
-    mote.style.setProperty("--mote-delay", `${(i * 0.05).toFixed(2)}s`);
+    mote.style.setProperty("--mote-x", `${-46 + i * 10}%`);
+    mote.style.setProperty("--mote-delay", `${(i * step).toFixed(2)}s`);
     wrap.appendChild(mote);
   }
 }
@@ -342,10 +356,10 @@ export function spawnSkillFx(
   for (const layer of presetLayers(preset, element, opts)) {
     appendFxImg(wrap, layer);
   }
-  if (preset === "heal") spawnFxMotes(wrap, "heal");
-  if (preset === "buff") spawnFxMotes(wrap, "buff");
+  if (preset === "heal") spawnFxMotes(wrap, "heal", ms);
+  if (preset === "buff") spawnFxMotes(wrap, "buff", ms);
   el.appendChild(wrap);
-  window.setTimeout(() => wrap.remove(), Math.max(80, ms));
+  window.setTimeout(() => wrap.remove(), Math.max(80, Math.round(ms * 1.4)));
 }
 
 function unitAnchor(
@@ -367,6 +381,7 @@ export function spawnTravelBolt(
   toId: string,
   kind: SkillBoltKind,
   ms: number,
+  opts?: { ghost?: boolean; delayMs?: number },
 ): void {
   if (reduceMotion) return;
   if (fromId === toId) return;
@@ -385,8 +400,9 @@ export function spawnTravelBolt(
   const rot = (Math.atan2(dy, dx) * 180) / Math.PI;
   const orb = isOrbBolt(kind);
   const arc = boltArc(dx, dy, kind);
+  const delayMs = Math.max(0, opts?.delayMs ?? 0);
   const bolt = document.createElement("span");
-  bolt.className = `skill-bolt skill-bolt--${kind}${orb ? " is-orb" : " is-arc"}`;
+  bolt.className = `skill-bolt skill-bolt--${kind}${orb ? " is-orb" : " is-arc"}${opts?.ghost ? " is-ghost" : ""}`;
   bolt.setAttribute("aria-hidden", "true");
   bolt.style.left = `${Math.round(x0)}px`;
   bolt.style.top = `${Math.round(y0)}px`;
@@ -394,6 +410,7 @@ export function spawnTravelBolt(
   bolt.style.setProperty("--dy", `${Math.round(dy)}px`);
   bolt.style.setProperty("--rot", `${rot}deg`);
   bolt.style.setProperty("--bolt-ms", `${Math.max(80, ms)}ms`);
+  if (delayMs) bolt.style.animationDelay = `${delayMs}ms`;
   bolt.style.offsetPath = `path("${boltPath(dx, dy, arc)}")`;
   if (orb) bolt.style.offsetRotate = "0deg";
   const wake = document.createElement("span");
@@ -408,7 +425,44 @@ export function spawnTravelBolt(
   img.setAttribute("aria-hidden", "true");
   bolt.appendChild(img);
   layer.appendChild(bolt);
-  window.setTimeout(() => bolt.remove(), Math.max(80, ms + 40));
+  window.setTimeout(() => bolt.remove(), Math.max(80, ms + delayMs + 80));
+}
+
+function spawnBoltFlight(
+  root: ParentNode,
+  fromId: string,
+  toId: string,
+  kind: SkillBoltKind,
+  ms: number,
+  volley = 3,
+): void {
+  spawnTravelBolt(root, fromId, toId, kind, ms);
+  if (volley < 2) return;
+  const ghostA = Math.round(ms * 0.11);
+  spawnTravelBolt(root, fromId, toId, kind, Math.round(ms * 0.94), {
+    ghost: true,
+    delayMs: ghostA,
+  });
+  if (volley < 3) return;
+  spawnTravelBolt(root, fromId, toId, kind, Math.round(ms * 0.88), {
+    ghost: true,
+    delayMs: Math.round(ms * 0.22),
+  });
+}
+
+function pulseBattleSlam(
+  root: ParentNode,
+  ms: number,
+  ult?: boolean,
+): void {
+  if (reduceMotion) return;
+  const stage =
+    (root as ParentNode & { querySelector?: Document["querySelector"] })
+      .querySelector?.<HTMLElement>(".battle-screen") ?? null;
+  if (!stage) return;
+  const cls = ult ? "is-ult-impact" : "is-skill-slam";
+  stage.classList.add(cls);
+  window.setTimeout(() => stage.classList.remove(cls), Math.max(80, ms));
 }
 
 export type CircleAbsorbPower = "safe" | "capture" | "capture-large" | "shape";
@@ -448,7 +502,7 @@ function spawnAoeField(
   ms: number,
   ult?: boolean,
 ): void {
-  if (reduceMotion || targetIds.length < 2) return;
+  if (reduceMotion) return;
   preloadBattleFx();
   const layer = skillFxLayer(root);
   if (!layer) return;
@@ -487,7 +541,7 @@ function spawnAoeField(
   burst.setAttribute("aria-hidden", "true");
   field.appendChild(burst);
   layer.appendChild(field);
-  window.setTimeout(() => field.remove(), Math.max(80, ms + 40));
+  window.setTimeout(() => field.remove(), Math.max(80, Math.round(ms * 1.25)));
 }
 
 export type SkillVfxPlayOpts = {
@@ -535,10 +589,27 @@ export async function playSkillVfx(
   const pulse = (id: string, cls: string, ms: number) =>
     pulseUnitClass(root, id, cls, ms);
 
+  const strikeTarget = (
+    id: string,
+    delay: number,
+    impactMs: number,
+    slam?: boolean,
+  ) => {
+    window.setTimeout(() => {
+      pulse(id, hitClass, impactMs);
+      spawnSkillFx(root, id, impact, impactMs, {
+        element: opts.element,
+        ult: opts.ult,
+        crit: opts.crit,
+      });
+      if (slam) pulseBattleSlam(root, Math.min(impactMs, fxDurationMs(520, opts.speed)), opts.ult);
+    }, delay);
+  };
+
   if (opts.ult) {
-    const cutMs = fxDurationMs(640, opts.speed);
-    const flyMs = fxDurationMs(240, opts.speed);
-    const impactMs = fxDurationMs(720, opts.speed);
+    const cutMs = fxDurationMs(980, opts.speed);
+    const flyMs = fxDurationMs(520, opts.speed);
+    const impactMs = fxDurationMs(1180, opts.speed);
     playUltCutin(root, cutMs);
     pulse(attackerId, "fx-ult", cutMs);
     spawnSkillFx(root, attackerId, family === "nova" ? impact : cast, cutMs, {
@@ -548,34 +619,27 @@ export async function playSkillVfx(
       role: "cast",
     });
     opts.playCasterClip?.(attackerId, "ult");
-    const launchAt = Math.floor(cutMs * 0.36);
+    const launchAt = Math.floor(cutMs * 0.46);
     window.setTimeout(() => {
       for (const id of targets) {
-        spawnTravelBolt(root, attackerId, id, opts.element, flyMs);
+        spawnBoltFlight(root, attackerId, id, opts.element, flyMs, 3);
       }
     }, launchAt);
+    const impactAt = launchAt + flyMs;
     window.setTimeout(() => {
       spawnAoeField(root, targets, opts.element, impactMs, true);
-      targets.forEach((id, i) => {
-        window.setTimeout(() => {
-          pulse(id, hitClass, fxDurationMs(420, opts.speed));
-          spawnSkillFx(root, id, impact, impactMs, {
-            element: opts.element,
-            ult: true,
-            crit: opts.crit,
-          });
-        }, i * 70);
-      });
+      pulseBattleSlam(root, fxDurationMs(640, opts.speed), true);
+      targets.forEach((id, i) => strikeTarget(id, i * 110, impactMs));
       opts.onImpact?.();
-    }, launchAt + flyMs);
-    await waitFx(launchAt + flyMs + fxDurationMs(180, opts.speed));
+    }, impactAt);
+    await waitFx(impactAt + impactMs + Math.max(0, (targets.length - 1) * 110));
     return;
   }
 
   if (family === "melee") {
-    const lungeMs = fxDurationMs(520, opts.speed);
-    const flyMs = fxDurationMs(220, opts.speed);
-    const impactMs = fxDurationMs(560, opts.speed);
+    const lungeMs = fxDurationMs(760, opts.speed);
+    const flyMs = fxDurationMs(400, opts.speed);
+    const impactMs = fxDurationMs(920, opts.speed);
     pulse(attackerId, "fx-lunge", lungeMs);
     spawnSkillFx(root, attackerId, cast, lungeMs, {
       element: opts.element,
@@ -583,65 +647,60 @@ export async function playSkillVfx(
       role: "cast",
     });
     opts.playCasterClip?.(attackerId, "run", { loop: false });
-    const launchAt = Math.floor(lungeMs * 0.38);
+    const launchAt = Math.floor(lungeMs * 0.4);
     window.setTimeout(() => {
       opts.playCasterClip?.(attackerId, "attack");
       for (const id of targets) {
-        spawnTravelBolt(root, attackerId, id, "slash", flyMs);
+        spawnBoltFlight(root, attackerId, id, "slash", flyMs, 2);
       }
     }, launchAt);
     window.setTimeout(() => {
-      targets.forEach((id, i) => {
-        window.setTimeout(() => {
-          pulse(id, hitClass, fxDurationMs(380, opts.speed));
-          spawnSkillFx(root, id, impact, impactMs, {
-            element: opts.element,
-            crit: opts.crit,
-          });
-        }, i * 55);
-      });
+      for (const id of targets) {
+        spawnTravelBolt(root, attackerId, id, "slash", Math.round(flyMs * 0.78));
+      }
+    }, launchAt + Math.round(flyMs * 0.32));
+    const impactAt = launchAt + flyMs;
+    window.setTimeout(() => {
+      targets.forEach((id, i) => strikeTarget(id, i * 70, impactMs, i === 0));
       opts.onImpact?.();
-    }, launchAt + flyMs);
-    await waitFx(launchAt + flyMs + fxDurationMs(140, opts.speed));
+    }, impactAt);
+    await waitFx(impactAt + impactMs + Math.max(0, (targets.length - 1) * 70));
     return;
   }
 
   if (family === "bolt") {
-    const chargeMs = fxDurationMs(360, opts.speed);
-    const flyMs = fxDurationMs(420, opts.speed);
-    const impactMs = fxDurationMs(580, opts.speed);
+    const chargeMs = fxDurationMs(640, opts.speed);
+    const flyMs = fxDurationMs(720, opts.speed);
+    const impactMs = fxDurationMs(960, opts.speed);
     pulse(attackerId, "fx-cast-skill", chargeMs);
     spawnSkillFx(root, attackerId, "cast", chargeMs, {
       element: opts.element,
       role: "cast",
     });
     opts.playCasterClip?.(attackerId, "cast");
-    const launchAt = Math.floor(chargeMs * 0.5);
+    const launchAt = Math.floor(chargeMs * 0.62);
     window.setTimeout(() => {
+      spawnSkillFx(root, attackerId, "cast", Math.round(chargeMs * 0.45), {
+        element: opts.element,
+        role: "cast",
+      });
       for (const id of targets) {
-        spawnTravelBolt(root, attackerId, id, opts.element, flyMs);
+        spawnBoltFlight(root, attackerId, id, opts.element, flyMs, 3);
       }
     }, launchAt);
+    const impactAt = launchAt + flyMs;
     window.setTimeout(() => {
-      targets.forEach((id, i) => {
-        window.setTimeout(() => {
-          pulse(id, hitClass, fxDurationMs(400, opts.speed));
-          spawnSkillFx(root, id, impact, impactMs, {
-            element: opts.element,
-            crit: opts.crit,
-          });
-        }, i * 50);
-      });
+      targets.forEach((id, i) => strikeTarget(id, i * 80, impactMs, i === 0));
       opts.onImpact?.();
-    }, launchAt + flyMs);
-    await waitFx(launchAt + flyMs + fxDurationMs(360, opts.speed));
+    }, impactAt);
+    await waitFx(impactAt + impactMs + Math.max(0, (targets.length - 1) * 80));
     return;
   }
 
   if (family === "nova") {
-    const chargeMs = fxDurationMs(480, opts.speed);
-    const flyMs = fxDurationMs(300, opts.speed);
-    const impactMs = fxDurationMs(680, opts.speed);
+    const chargeMs = fxDurationMs(780, opts.speed);
+    const flyMs = fxDurationMs(560, opts.speed);
+    const impactMs = fxDurationMs(1040, opts.speed);
     pulse(attackerId, "fx-cast-skill", chargeMs);
     spawnSkillFx(root, attackerId, cast, chargeMs, {
       element: opts.element,
@@ -649,32 +708,30 @@ export async function playSkillVfx(
       role: "cast",
     });
     opts.playCasterClip?.(attackerId, "cast");
-    const launchAt = Math.floor(chargeMs * 0.52);
+    const launchAt = Math.floor(chargeMs * 0.58);
     window.setTimeout(() => {
+      spawnSkillFx(root, attackerId, "cast", Math.round(chargeMs * 0.4), {
+        element: opts.element,
+        role: "cast",
+      });
       for (const id of targets) {
-        spawnTravelBolt(root, attackerId, id, opts.element, flyMs);
+        spawnBoltFlight(root, attackerId, id, opts.element, flyMs, 2);
       }
     }, launchAt);
+    const impactAt = launchAt + flyMs;
     window.setTimeout(() => {
       spawnAoeField(root, targets, opts.element, impactMs, opts.ult);
-      targets.forEach((id, i) => {
-        window.setTimeout(() => {
-          pulse(id, hitClass, fxDurationMs(420, opts.speed));
-          spawnSkillFx(root, id, impact, impactMs, {
-            element: opts.element,
-            crit: opts.crit,
-          });
-        }, i * 75);
-      });
+      pulseBattleSlam(root, fxDurationMs(560, opts.speed));
+      targets.forEach((id, i) => strikeTarget(id, i * 120, impactMs));
       opts.onImpact?.();
-    }, launchAt + flyMs);
-    await waitFx(chargeMs + flyMs + fxDurationMs(280, opts.speed));
+    }, impactAt);
+    await waitFx(impactAt + impactMs + Math.max(0, (targets.length - 1) * 120));
     return;
   }
 
-  const chargeMs = fxDurationMs(420, opts.speed);
-  const flyMs = fxDurationMs(400, opts.speed);
-  const impactMs = fxDurationMs(700, opts.speed);
+  const chargeMs = fxDurationMs(700, opts.speed);
+  const flyMs = fxDurationMs(680, opts.speed);
+  const impactMs = fxDurationMs(1020, opts.speed);
   pulse(attackerId, "fx-cast-skill", chargeMs);
   spawnSkillFx(root, attackerId, "cast", chargeMs, {
     element: opts.element,
@@ -686,22 +743,17 @@ export async function playSkillVfx(
   opts.playCasterClip?.(attackerId, "cast");
   const ids = targets.length ? targets : [attackerId];
   const remote = ids.filter((id) => id !== attackerId);
-  const launchAt = Math.floor(chargeMs * 0.48);
+  const launchAt = Math.floor(chargeMs * 0.55);
   const boltKind = supportBoltKind(opts.kind);
   window.setTimeout(() => {
     for (const id of remote) {
-      spawnTravelBolt(root, attackerId, id, boltKind, flyMs);
+      spawnBoltFlight(root, attackerId, id, boltKind, flyMs, 2);
     }
   }, launchAt);
-  const impactAt = remote.length ? launchAt + flyMs : launchAt;
+  const impactAt = remote.length ? launchAt + flyMs : Math.floor(chargeMs * 0.58);
   window.setTimeout(() => {
-    ids.forEach((id, i) => {
-      window.setTimeout(() => {
-        pulse(id, hitClass, fxDurationMs(420, opts.speed));
-        spawnSkillFx(root, id, impact, impactMs, { element: opts.element });
-      }, i * 80);
-    });
+    ids.forEach((id, i) => strikeTarget(id, i * 100, impactMs, i === 0));
     opts.onImpact?.();
   }, impactAt);
-  await waitFx(impactAt + fxDurationMs(380, opts.speed));
+  await waitFx(impactAt + impactMs + Math.max(0, (ids.length - 1) * 100));
 }
