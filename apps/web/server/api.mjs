@@ -1,5 +1,26 @@
 import cookieParser from "cookie-parser";
 import { validateNickname } from "../shared/nickname.mjs";
+import {
+  startChatSweeper,
+  joinChannel,
+  leaveChannel,
+  pollChannel,
+  sendMessage,
+  actorId,
+  onlineUids,
+} from "./chat.mjs";
+import {
+  acceptFriend,
+  bindSocial,
+  findUidByNick,
+  profilePayload,
+  rejectFriend,
+  removeFriend,
+  requestFriend,
+  sendEnergyGift,
+  socialState,
+  touchProfile,
+} from "./social.mjs";
 
 const COOKIE = "ss_session";
 
@@ -105,6 +126,8 @@ async function requireUser(store, req, res) {
 export function mountApi(app, store) {
   app.use("/api", corsForApi);
   app.use(cookieParser());
+  bindSocial(store);
+  startChatSweeper();
 
   app.get("/api/health", async (_req, res) => {
     try {
@@ -266,6 +289,10 @@ export function mountApi(app, store) {
       return;
     }
     res.json({ user });
+    await touchProfile(actorId(user, token), {
+      nick: user.nickname,
+      userId: user.kind === "demo" ? null : user.id,
+    }).catch(() => {});
   });
 
   app.get("/api/save", async (req, res) => {
@@ -284,6 +311,177 @@ export function mountApi(app, store) {
       return;
     }
     await store.putSave(user.id, payload);
+    const token = String(req.cookies?.[COOKIE] ?? "");
+    await touchProfile(actorId(user, token), {
+      nick: user.nickname,
+      level: payload?.island?.summonerLevel,
+      guildName: payload?.guildName ?? undefined,
+      userId: user.kind === "demo" ? null : user.id,
+    }).catch(() => {});
     res.json({ ok: true });
+  });
+
+  app.get("/api/chat", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const token = String(req.cookies?.[COOKIE] ?? "");
+    const after = Number(req.query?.after ?? 0);
+    const snap = await pollChannel(user, Number.isFinite(after) ? after : 0, token, {
+      tab: req.query?.tab,
+      peer: req.query?.peer,
+    });
+    if (!snap) {
+      res.status(409).json({ error: "not_joined" });
+      return;
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.json(snap);
+  });
+
+  app.post("/api/chat/join", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const token = String(req.cookies?.[COOKIE] ?? "");
+    const result = await joinChannel(user, req.body ?? {}, token);
+    if (!result.ok) {
+      res.status(409).json({
+        error: result.error,
+        suggested: result.suggested ?? null,
+        channels: result.channels,
+      });
+      return;
+    }
+    res.json(result.snapshot);
+  });
+
+  app.post("/api/chat/send", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const token = String(req.cookies?.[COOKIE] ?? "");
+    const result = await sendMessage(user, req.body?.text, token);
+    if (!result.ok) {
+      const status =
+        result.error === "not_joined"
+          ? 409
+          : result.error === "rate_limited"
+            ? 429
+            : 400;
+      res.status(status).json({ error: result.error });
+      return;
+    }
+    res.json({ ...result.snapshot, message: result.message });
+  });
+
+  app.post("/api/chat/leave", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    leaveChannel(user, String(req.cookies?.[COOKIE] ?? ""));
+    res.json({ ok: true });
+  });
+
+  app.get("/api/social", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const token = String(req.cookies?.[COOKIE] ?? "");
+    const uid = actorId(user, token);
+    await touchProfile(uid, {
+      nick: user.nickname,
+      userId: user.kind === "demo" ? null : user.id,
+    }).catch(() => {});
+    res.setHeader("Cache-Control", "no-store");
+    res.json(await socialState(uid, new Set(onlineUids())));
+  });
+
+  app.get("/api/social/profile", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const token = String(req.cookies?.[COOKIE] ?? "");
+    const me = actorId(user, token);
+    const uid = String(req.query?.uid ?? "");
+    const row = await profilePayload(me, uid, new Set(onlineUids()));
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+  });
+
+  app.post("/api/social/request", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const token = String(req.cookies?.[COOKIE] ?? "");
+    const me = actorId(user, token);
+    let target = String(req.body?.uid ?? "").trim();
+    const nick = String(req.body?.nick ?? "").trim();
+    if (!target && nick) target = (await findUidByNick(nick)) ?? "";
+    if (!target && nick && typeof store.findUserByNickname === "function") {
+      const found = await store.findUserByNickname(nick);
+      if (found?.id) {
+        target = `user:${found.id}`;
+        const createdAt = found.createdAt
+          ? new Date(found.createdAt).getTime()
+          : 0;
+        await store.upsertSocialProfile(target, {
+          nick: found.nickname ?? nick,
+          userId: found.id,
+          lastSeen: createdAt || 1,
+          touchSeen: false,
+        });
+      }
+    }
+    const result = await requestFriend(me, target);
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({
+      ok: true,
+      status: result.status,
+      ...(await socialState(me, new Set(onlineUids()))),
+    });
+  });
+
+  app.post("/api/social/accept", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const me = actorId(user, String(req.cookies?.[COOKIE] ?? ""));
+    const result = await acceptFriend(me, String(req.body?.uid ?? ""));
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, ...(await socialState(me, new Set(onlineUids()))) });
+  });
+
+  app.post("/api/social/reject", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const me = actorId(user, String(req.cookies?.[COOKIE] ?? ""));
+    await rejectFriend(me, String(req.body?.uid ?? ""));
+    res.json({ ok: true, ...(await socialState(me, new Set(onlineUids()))) });
+  });
+
+  app.post("/api/social/remove", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const me = actorId(user, String(req.cookies?.[COOKIE] ?? ""));
+    await removeFriend(me, String(req.body?.uid ?? ""));
+    res.json({ ok: true, ...(await socialState(me, new Set(onlineUids()))) });
+  });
+
+  app.post("/api/social/energy", async (req, res) => {
+    const user = await requireUser(store, req, res);
+    if (!user) return;
+    const me = actorId(user, String(req.cookies?.[COOKIE] ?? ""));
+    const result = await sendEnergyGift(me, String(req.body?.uid ?? ""));
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({
+      ok: true,
+      friendship: result.friendship,
+      ...(await socialState(me, new Set(onlineUids()))),
+    });
   });
 }

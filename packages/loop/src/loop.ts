@@ -157,6 +157,51 @@ import {
   stageUnlockLabel,
   type ScenarioDifficulty,
 } from "./progress.js";
+import {
+  bumpDailyActivity,
+  emptyDailyActivity,
+  type DailyActivity,
+} from "./dailyMissions.js";
+export {
+  DAILY_MISSION_WISH,
+  DAILY_MISSION_WISH_MANA,
+  DAILY_MISSION_WISH_ENERGY,
+  DAILY_MISSION_DOJO,
+  DAILY_MISSION_DOJO_MANA,
+  DAILY_MISSION_DOJO_ENERGY,
+  DAILY_MISSION_COLLECT,
+  DAILY_MISSION_COLLECT_MANA,
+  DAILY_MISSION_COLLECT_ENERGY,
+  DAILY_MISSION_SORTIE,
+  DAILY_MISSION_SORTIE_MANA,
+  DAILY_MISSION_SORTIE_ENERGY,
+  DAILY_MISSIONS,
+  DAILY_MISSION_REWARDS,
+  bumpDailyActivity,
+  claimableDailyMissionCount,
+  claimableDailyMissionIds,
+  dailyActivityCount,
+  dailyMissionClaimKey,
+  dailyMissionGoal,
+  dailyMissionProgress,
+  emptyDailyActivity,
+  getDailyMission,
+  isDailyMissionClaimed,
+  isDailyMissionComplete,
+  isDailyMissionUnlocked,
+  mergeDailyMissionState,
+  normalizeDailyActivity,
+  runClaimDailyMission,
+  syncDailyActivity,
+  unlockedDailyMissions,
+  visibleDailyMissions,
+} from "./dailyMissions.js";
+export type {
+  DailyActivity,
+  DailyActivityKey,
+  DailyMissionDef,
+  DailyMissionId,
+} from "./dailyMissions.js";
 
 export type { OwnedMonster, ScrollKind } from "./roster.js";
 export {
@@ -261,6 +306,9 @@ export const GUILD_CHEST_CRYSTAL = 10;
 export const RAID_BOSS_MAX_HP = 100_000;
 export const RAID_ATTEMPTS_DAILY = 3;
 export const RAID_DAMAGE_BASE = 5000;
+/** Combat HP → weekly raid bar. A full clear lands near RAID_DAMAGE_BASE. */
+export const RAID_COMBAT_TO_BOSS = 0.1;
+const RAID_CONTRIB_BASE = 40;
 export const RAID_MILESTONE_PERCENTS = [75, 50, 25, 0] as const;
 export const RAID_MILESTONE_JINMUN = 5;
 export const RAID_MILESTONE_GLORY = 20;
@@ -495,6 +543,35 @@ export function catalogShopRemaining(
 ): number {
   const used = catalogShopBoughtToday(save, sku, now);
   return Math.max(0, CATALOG_SHOP_DAILY_LIMIT[sku] - used);
+}
+
+function tryConsumeShopQuota(
+  save: PlayerSave,
+  sku: string,
+  limit: number,
+  purchases = 1,
+  now = Date.now(),
+): { ok: true; save: PlayerSave } | { ok: false; save: PlayerSave; message: string } {
+  const working = syncShopDay(save, now);
+  const n = Math.max(1, Math.floor(purchases));
+  const bought = Math.max(0, Math.floor(working.shopBuyCounts?.[sku as CatalogShopSku] ?? 0));
+  if (bought + n > limit) {
+    return {
+      ok: false,
+      save: working,
+      message: `오늘 구매 한도 초과 (${Math.min(bought, limit)}/${limit})`,
+    };
+  }
+  return {
+    ok: true,
+    save: {
+      ...working,
+      shopBuyCounts: {
+        ...(working.shopBuyCounts ?? {}),
+        [sku]: bought + n,
+      },
+    },
+  };
 }
 
 function tryConsumeCatalogQuota(
@@ -1156,6 +1233,8 @@ export interface PlayerSave {
   summonerMagicLoadouts: Record<SummonerElement, SummonerMagicLoadout>;
   /** Phase 2: arena glory currency. */
   gloryPoints: number;
+  /** Friendship shop currency (hearts sent to friends). */
+  friendshipPoints: number;
   /** Phase 2: magic-circle trial tokens. */
   jinmunStones: number;
   /** Phase 2: glory building levels. */
@@ -1202,8 +1281,8 @@ export interface PlayerSave {
   shopDayKey: string | null;
   /** Phase 3c: offer ids bought today. */
   shopSoldIds: string[];
-  /** Catalog shop purchase counts for the current `shopDayKey`. */
-  shopBuyCounts: Partial<Record<CatalogShopSku, number>>;
+  /** Catalog / extra shop purchase counts for the current `shopDayKey`. */
+  shopBuyCounts: Partial<Record<string, number>>;
   /** Phase 3d: trial B3 clear tokens. */
   trialTokens: number;
   /** Phase 3d: dojo cosmetic unlock from trial. */
@@ -1232,6 +1311,10 @@ export interface PlayerSave {
   imprintStones: number;
   /** Claimed mailbox reward ids (persistent). */
   claimedMailIds: string[];
+  /** Client persist timestamp (ms). Used to keep the freshest save on reconnect. */
+  updatedAt: number;
+  /** Today's daily-mission action counters (`day` rolls over with `todayKey`). */
+  dailyActivity: DailyActivity;
   /** Claimed daily mission keys (`missionId:YYYY-MM-DD`). */
   claimedMissionKeys: string[];
   /** Claimed one-time main quest ids. */
@@ -1271,6 +1354,7 @@ export interface BattleReward {
   glory?: number;
   jinmun?: number;
   contribution?: number;
+  raidDamage?: number;
   expNote: string;
   symbol?: SymbolInstance;
   /** Equip dungeon wearable drop (stored in gearBag). */
@@ -1586,6 +1670,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     summonerMagic: createEmptySummonerMagic(),
     summonerMagicLoadouts: createEmptySummonerMagicLoadouts(),
     gloryPoints: 0,
+    friendshipPoints: 0,
     jinmunStones: 0,
     gloryLevels: {},
     arenaBanIds: [],
@@ -1624,6 +1709,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     grindstones: 1,
     imprintStones: 0,
     claimedMailIds: [],
+    updatedAt: 0,
+    dailyActivity: emptyDailyActivity(),
     claimedMissionKeys: [],
     claimedMainQuestIds: [],
     profileIconId: null,
@@ -1642,6 +1729,7 @@ export function createDemoSave(now = Date.now()): PlayerSave {
     scrollsPremium: 5,
     scrollsMystic: 3,
     gloryPoints: 120,
+    friendshipPoints: 80,
     jinmunStones: 5,
     grindstones: Math.max(save.grindstones ?? 0, 2),
     imprintStones: Math.max(save.imprintStones ?? 0, 1),
@@ -1677,8 +1765,10 @@ export function homeCollect(save: PlayerSave, now = Date.now()): LoopStepResult 
   const before = island.mana;
   island = collectMana(island, "mana_pond", now);
   const gained = Math.floor(island.mana - before);
+  let next: PlayerSave = { ...save, island };
+  if (gained > 0) next = bumpDailyActivity(next, "collect", 1, now);
   return {
-    save: { ...save, island },
+    save: next,
     message: `골드 연못 수집: 골드 +${gained} (보유 ${Math.floor(island.mana)})`,
   };
 }
@@ -1700,8 +1790,10 @@ export function homeCollectCrystal(
   const before = island.crystal;
   island = collectCrystal(island, "crystal_mine", now);
   const gained = island.crystal - before;
+  let next: PlayerSave = { ...save, island };
+  if (gained > 0) next = bumpDailyActivity(next, "collect", 1, now);
   return {
-    save: { ...save, island },
+    save: next,
     message: `수정 광맥 수집: 크리스탈 +${gained} (보유 ${island.crystal})`,
   };
 }
@@ -1718,6 +1810,10 @@ export function runDailyWish(
     island: r.island,
   };
   if (reward) {
+    next = {
+      ...bumpDailyActivity(save, "wish", 1, now),
+      island: r.island,
+    };
     switch (reward.kind) {
       case "scroll":
         next = { ...next, scrolls: (next.scrolls ?? 0) + reward.amount };
@@ -1754,9 +1850,15 @@ export function runUpgradeBuilding(
   buildingId: BuildingId = "mana_pond",
 ): LoopStepResult {
   const island = tickProduction(save.island);
+  const before =
+    island.buildings.find((b) => b.id === buildingId)?.level ?? 0;
   const r = upgradeBuilding(island, buildingId, accountLevelOf(save));
+  const after =
+    r.island.buildings.find((b) => b.id === buildingId)?.level ?? 0;
+  let next: PlayerSave = { ...save, island: r.island };
+  if (after > before) next = bumpDailyActivity(next, "building");
   return {
-    save: { ...save, island: r.island },
+    save: next,
     message: r.message,
   };
 }
@@ -1786,12 +1888,15 @@ export function runBuyGlory(
     manaProdBonus: buff.manaProdPct,
   };
   return {
-    save: {
-      ...save,
-      gloryPoints: save.gloryPoints - cost,
-      gloryLevels,
-      island,
-    },
+    save: bumpDailyActivity(
+      {
+        ...save,
+        gloryPoints: save.gloryPoints - cost,
+        gloryLevels,
+        island,
+      },
+      "building",
+    ),
     message: `영광: ${def.nameKo} Lv.${nextLv} (−영광 ${cost}) · ${def.effectKo}`,
   };
 }
@@ -2153,7 +2258,12 @@ export function runBuyShopOffer(
       };
     }
     const sym = rollSymbolDrop(rng, `shop_${offerId}`, {});
-    next = { ...next, symbols: [...next.symbols, sym] };
+    next = bumpDailyActivity(
+      { ...next, symbols: [...next.symbols, sym] },
+      "shop",
+      1,
+      now,
+    );
     return {
       save: next,
       message: `일일상점: ${describeSymbol(sym)} (−골드 ${offer.costMana})`,
@@ -2175,7 +2285,7 @@ export function runBuyShopOffer(
       ? `−크리스탈 ${offer.costCrystal}`
       : `−골드 ${offer.costMana}`;
   return {
-    save: next,
+    save: bumpDailyActivity(next, "shop", 1, now),
     message: `일일상점: ${offer.labelKo} x${offer.qty} (${costNote})`,
   };
 }
@@ -2205,10 +2315,15 @@ export function runBuyEnergy(
   };
   const max = island.energyMax ?? 100;
   return {
-    save: {
-      ...working,
-      island,
-    },
+    save: bumpDailyActivity(
+      {
+        ...working,
+        island,
+      },
+      "shop",
+      1,
+      now,
+    ),
     message: `에너지 +${Math.floor(island.energy - working.island.energy)} (−크리스탈 ${cost}) · 보유 ${Math.floor(island.energy)}/${max}`,
   };
 }
@@ -2234,11 +2349,16 @@ export function runBuyGrindstone(
   working = quota.save;
   const next = (working.grindstones ?? 0) + qty;
   return {
-    save: {
-      ...working,
-      island: { ...working.island, crystal: working.island.crystal - cost },
-      grindstones: next,
-    },
+    save: bumpDailyActivity(
+      {
+        ...working,
+        island: { ...working.island, crystal: working.island.crystal - cost },
+        grindstones: next,
+      },
+      "shop",
+      1,
+      now,
+    ),
     message: `연마석 +${qty} (−크리스탈 ${cost}) · 보유 ${next}`,
   };
 }
@@ -2264,12 +2384,171 @@ export function runBuyImprintStone(
   working = quota.save;
   const next = (working.imprintStones ?? 0) + qty;
   return {
-    save: {
-      ...working,
-      island: { ...working.island, crystal: working.island.crystal - cost },
-      imprintStones: next,
-    },
+    save: bumpDailyActivity(
+      {
+        ...working,
+        island: { ...working.island, crystal: working.island.crystal - cost },
+        imprintStones: next,
+      },
+      "shop",
+      1,
+      now,
+    ),
     message: `각인석 +${qty} (−크리스탈 ${cost}) · 보유 ${next}`,
+  };
+}
+
+export type ArenaShopSku = "arena_gold" | "arena_energy" | "arena_scroll" | "arena_grind";
+export type FriendShopSku = "friend_gold" | "friend_energy" | "friend_scroll" | "friend_grind";
+export type CashPackSku =
+  | "pack_crystal_250"
+  | "pack_crystal_650"
+  | "pack_crystal_1400"
+  | "pack_energy";
+
+export const ARENA_SHOP: Record<
+  ArenaShopSku,
+  { glory: number; gold?: number; energy?: number; premiumScrolls?: number; grindstones?: number; daily: number }
+> = {
+  arena_gold: { glory: 15, gold: 50000, daily: 5 },
+  arena_energy: { glory: 15, energy: 50, daily: 5 },
+  arena_scroll: { glory: 30, premiumScrolls: 1, daily: 3 },
+  arena_grind: { glory: 20, grindstones: 1, daily: 5 },
+};
+
+export const FRIEND_SHOP: Record<
+  FriendShopSku,
+  { fp: number; gold?: number; energy?: number; scrolls?: number; grindstones?: number; daily: number }
+> = {
+  friend_gold: { fp: 5, gold: 30000, daily: 10 },
+  friend_energy: { fp: 5, energy: 10, daily: 10 },
+  friend_scroll: { fp: 10, scrolls: 1, daily: 5 },
+  friend_grind: { fp: 20, grindstones: 1, daily: 5 },
+};
+
+export const CASH_PACKS: Record<
+  CashPackSku,
+  { krw: number; crystal?: number; energy?: number; scrolls?: number; daily: number }
+> = {
+  pack_crystal_250: { krw: 3300, crystal: 250, daily: 3 },
+  pack_crystal_650: { krw: 6600, crystal: 700, daily: 3 },
+  pack_crystal_1400: { krw: 11000, crystal: 1550, daily: 3 },
+  pack_energy: { krw: 3300, energy: 100, scrolls: 5, daily: 3 },
+};
+
+export function shopQuotaRemaining(
+  save: PlayerSave,
+  sku: string,
+  limit: number,
+  now = Date.now(),
+): number {
+  const synced = syncShopDay(save, now);
+  const bought = Math.max(0, Math.floor(synced.shopBuyCounts?.[sku] ?? 0));
+  return Math.max(0, limit - bought);
+}
+
+export function grantFriendshipPoints(save: PlayerSave, n: number): PlayerSave {
+  const add = Math.max(0, Math.floor(n));
+  if (!add) return save;
+  return { ...save, friendshipPoints: (save.friendshipPoints ?? 0) + add };
+}
+
+export function runBuyArenaShop(
+  save: PlayerSave,
+  sku: ArenaShopSku,
+  now = Date.now(),
+): LoopStepResult {
+  const def = ARENA_SHOP[sku];
+  if (!def) return { save, message: "상품 없음" };
+  let working = syncShopDay(save, now);
+  const glory = working.gloryPoints ?? 0;
+  if (glory < def.glory) {
+    return { save: working, message: `영광 부족 (필요 ${def.glory}, 보유 ${glory})` };
+  }
+  const quota = tryConsumeShopQuota(working, sku, def.daily, 1, now);
+  if (!quota.ok) return { save: quota.save, message: quota.message };
+  working = quota.save;
+  let next: PlayerSave = { ...working, gloryPoints: glory - def.glory };
+  if (def.gold) {
+    next = { ...next, island: { ...next.island, mana: next.island.mana + def.gold } };
+  }
+  if (def.energy) {
+    next = { ...next, island: grantEnergy(next.island, def.energy) };
+  }
+  if (def.premiumScrolls) {
+    next = withScrollDelta(next, "premium", def.premiumScrolls);
+  }
+  if (def.grindstones) {
+    next = { ...next, grindstones: (next.grindstones ?? 0) + def.grindstones };
+  }
+  return {
+    save: bumpDailyActivity(next, "shop", 1, now),
+    message: `아레나 상점 구매 (−영광 ${def.glory})`,
+  };
+}
+
+export function runBuyFriendShop(
+  save: PlayerSave,
+  sku: FriendShopSku,
+  now = Date.now(),
+): LoopStepResult {
+  const def = FRIEND_SHOP[sku];
+  if (!def) return { save, message: "상품 없음" };
+  let working = syncShopDay(save, now);
+  const fp = working.friendshipPoints ?? 0;
+  if (fp < def.fp) {
+    return { save: working, message: `우정 부족 (필요 ${def.fp}, 보유 ${fp})` };
+  }
+  const quota = tryConsumeShopQuota(working, sku, def.daily, 1, now);
+  if (!quota.ok) return { save: quota.save, message: quota.message };
+  working = quota.save;
+  let next: PlayerSave = { ...working, friendshipPoints: fp - def.fp };
+  if (def.gold) {
+    next = { ...next, island: { ...next.island, mana: next.island.mana + def.gold } };
+  }
+  if (def.energy) {
+    next = { ...next, island: grantEnergy(next.island, def.energy) };
+  }
+  if (def.scrolls) {
+    next = withScrollDelta(next, "normal", def.scrolls);
+  }
+  if (def.grindstones) {
+    next = { ...next, grindstones: (next.grindstones ?? 0) + def.grindstones };
+  }
+  return {
+    save: bumpDailyActivity(next, "shop", 1, now),
+    message: `우정상점 구매 (−우정 ${def.fp})`,
+  };
+}
+
+/** Cash pack grant (web sandbox until Play Billing IAP is wired). */
+export function runBuyCashPack(
+  save: PlayerSave,
+  sku: CashPackSku,
+  now = Date.now(),
+): LoopStepResult {
+  const def = CASH_PACKS[sku];
+  if (!def) return { save, message: "상품 없음" };
+  let working = syncShopDay(save, now);
+  const quota = tryConsumeShopQuota(working, sku, def.daily, 1, now);
+  if (!quota.ok) return { save: quota.save, message: quota.message };
+  working = quota.save;
+  let next: PlayerSave = working;
+  if (def.crystal) {
+    next = {
+      ...next,
+      island: { ...next.island, crystal: next.island.crystal + def.crystal },
+    };
+  }
+  if (def.energy) {
+    next = { ...next, island: grantEnergy(next.island, def.energy) };
+  }
+  if (def.scrolls) {
+    next = withScrollDelta(next, "normal", def.scrolls);
+  }
+  return {
+    save: bumpDailyActivity(next, "shop", 1, now),
+    message: `패키지 구매`,
   };
 }
 
@@ -2412,7 +2691,7 @@ export function runPracticeDojo(
   const nextActive = getActiveSummoner(leveled.save);
   return {
     save: {
-      ...leveled.save,
+      ...bumpDailyActivity(leveled.save, "dojo", 1, now),
       dojoDrills: (save.dojoDrills ?? 0) + 1,
       dojoDrillDay: day,
       dojoDrillsToday: nextDrillsToday,
@@ -2600,7 +2879,7 @@ export function runGuildCheckIn(
   }
   return {
     save: {
-      ...working,
+      ...bumpDailyActivity(working, "guild", 1, now),
       island: { ...island, crystal },
       guildCheckInDay: day,
       guildCheckInStreak: streak,
@@ -2856,11 +3135,15 @@ export function runSummon(
       : `${pulls}연 소환 성공 (${label} −${cost} · 잔여 ${left})`;
 
   return {
-    save: {
-      ...nextSave,
-      roster,
-      party,
-    },
+    save: bumpDailyActivity(
+      {
+        ...nextSave,
+        roster,
+        party,
+      },
+      "summon",
+      pulls,
+    ),
     message,
   };
 }
@@ -2914,7 +3197,7 @@ export function runEnhance(
   const island = { ...save.island, mana: save.island.mana - cost };
 
   return {
-    save: { ...save, island, roster },
+    save: bumpDailyActivity({ ...save, island, roster }, "enhanceMon"),
     message: `강화: ${describeOwned({ ...owned, level: nextLevel, skillLevels: nextLevels })}${skillNote} (−골드 ${cost})`,
   };
 }
@@ -3009,12 +3292,15 @@ export function runPowerUpMonster(
   const skillNote = skillUps > 0 ? ` · 동일 소환수 스킬 +${skillUps}` : "";
 
   return {
-    save: {
-      ...save,
-      island: { ...save.island, mana: save.island.mana - cost },
-      roster,
-      party,
-    },
+    save: bumpDailyActivity(
+      {
+        ...save,
+        island: { ...save.island, mana: save.island.mana - cost },
+        roster,
+        party,
+      },
+      "enhanceMon",
+    ),
     message: `강화: ${describeOwned(updated)} · EXP +${expGain}${skillNote} (재료 ${materials.length} · −골드 ${cost})`,
   };
 }
@@ -3092,13 +3378,16 @@ export function runFeedSameMonster(
   const island = { ...save.island, mana: save.island.mana - cost };
 
   return {
-    save: {
-      ...save,
-      island,
-      roster,
-      party,
-      skillMats: haveMats - SKILL_UP_MAT_COST,
-    },
+    save: bumpDailyActivity(
+      {
+        ...save,
+        island,
+        roster,
+        party,
+        skillMats: haveMats - SKILL_UP_MAT_COST,
+      },
+      "skillUp",
+    ),
     message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[skillIdx]} (−${describeOwned(fodder)}, −골드 ${cost} · −스킬재료 ${SKILL_UP_MAT_COST})`,
   };
 }
@@ -3295,12 +3584,15 @@ export function runSkillUp(
   const updated = { ...owned, skillLevels: nextLevels };
 
   return {
-    save: {
-      ...save,
-      island,
-      roster,
-      skillMats: haveMats - SKILL_UP_MAT_COST,
-    },
+    save: bumpDailyActivity(
+      {
+        ...save,
+        island,
+        roster,
+        skillMats: haveMats - SKILL_UP_MAT_COST,
+      },
+      "skillUp",
+    ),
     message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[idx]} (−골드 ${cost} · −스킬재료 ${SKILL_UP_MAT_COST})`,
   };
 }
@@ -3347,7 +3639,7 @@ export function runEnhanceGear(
       ? `−골드 ${cost} · −크리스탈 ${crystalCost}`
       : `−골드 ${cost}`;
   return {
-    save: withActiveGear({ ...synced, island }, gear),
+    save: bumpDailyActivity(withActiveGear({ ...synced, island }, gear), "enhanceGear"),
     message: `장비 강화: ${describeGear(next)} (${costNote})`,
   };
 }
@@ -3689,7 +3981,7 @@ export function runEnhanceSymbol(
   const symbols = save.symbols.map((s) => (s.id === sym.id ? next : s));
   const island = { ...save.island, mana: save.island.mana - cost };
   return {
-    save: { ...save, island, symbols },
+    save: bumpDailyActivity({ ...save, island, symbols }, "enhanceSymbol"),
     message: `상징 강화: ${describeSymbol(next)} (−골드 ${cost})`,
   };
 }
@@ -3724,7 +4016,7 @@ export function runBuyScroll(
     const island = { ...working.island, crystal: working.island.crystal - cost };
     const next = withScrollDelta({ ...working, island }, kind, n);
     return {
-      save: next,
+      save: bumpDailyActivity(next, "shop", 1, now),
       message: `상점: ${label} ${n}장 구매 (−크리스탈 ${cost}) · 보유 ${scrollCount(next, kind)}`,
     };
   }
@@ -3742,7 +4034,7 @@ export function runBuyScroll(
   const island = { ...working.island, mana: working.island.mana - cost };
   const next = withScrollDelta({ ...working, island }, kind, n);
   return {
-    save: next,
+    save: bumpDailyActivity(next, "shop", 1, now),
     message: `상점: ${label} ${n}장 구매 (−골드 ${cost}) · 보유 ${scrollCount(next, kind)}`,
   };
 }
@@ -3778,11 +4070,14 @@ export function runImprintSymbol(
   }
   const symbols = save.symbols.map((s) => (s.id === sym.id ? next : s));
   return {
-    save: {
-      ...save,
-      symbols,
-      imprintStones: stones - SYMBOL_IMPRINT_STONE_COST,
-    },
+    save: bumpDailyActivity(
+      {
+        ...save,
+        symbols,
+        imprintStones: stones - SYMBOL_IMPRINT_STONE_COST,
+      },
+      "enhanceSymbol",
+    ),
     message: `각인: ${describeSymbol(sym)} → ${describeSymbol(next)} (−각인석 ${SYMBOL_IMPRINT_STONE_COST})`,
   };
 }
@@ -3830,12 +4125,15 @@ export function runGrindSymbol(
   };
   const mode = hasSubs ? "부옵션" : "접두어";
   return {
-    save: {
-      ...save,
-      island,
-      symbols,
-      grindstones: stones - SYMBOL_GRIND_STONE_COST,
-    },
+    save: bumpDailyActivity(
+      {
+        ...save,
+        island,
+        symbols,
+        grindstones: stones - SYMBOL_GRIND_STONE_COST,
+      },
+      "grindSymbol",
+    ),
     message: `연마(${mode}): ${describeSymbol(sym)} → ${describeSymbol(next)} (−연마석 ${SYMBOL_GRIND_STONE_COST} · −골드 ${SYMBOL_GRIND_MANA_COST})`,
   };
 }
@@ -3899,154 +4197,6 @@ export function runClaimMail(
         ? ` · 보유 ${Math.floor(island.energy)}/${max}`
         : ""
     }`,
-  };
-}
-
-export const DAILY_MISSION_WISH = "wish";
-export const DAILY_MISSION_DOJO = "dojo";
-export const DAILY_MISSION_COLLECT = "collect";
-export const DAILY_MISSION_SORTIE = "sortie";
-export const DAILY_MISSION_WISH_MANA = 200;
-export const DAILY_MISSION_WISH_ENERGY = 10;
-export const DAILY_MISSION_DOJO_MANA = 150;
-export const DAILY_MISSION_DOJO_ENERGY = 5;
-export const DAILY_MISSION_COLLECT_MANA = 100;
-export const DAILY_MISSION_COLLECT_ENERGY = 5;
-export const DAILY_MISSION_SORTIE_MANA = 120;
-export const DAILY_MISSION_SORTIE_ENERGY = 10;
-
-export type DailyMissionId =
-  | typeof DAILY_MISSION_WISH
-  | typeof DAILY_MISSION_DOJO
-  | typeof DAILY_MISSION_COLLECT
-  | typeof DAILY_MISSION_SORTIE;
-
-export const DAILY_MISSION_REWARDS: Record<
-  DailyMissionId,
-  { mana: number; energy: number }
-> = {
-  wish: {
-    mana: DAILY_MISSION_WISH_MANA,
-    energy: DAILY_MISSION_WISH_ENERGY,
-  },
-  dojo: {
-    mana: DAILY_MISSION_DOJO_MANA,
-    energy: DAILY_MISSION_DOJO_ENERGY,
-  },
-  collect: {
-    mana: DAILY_MISSION_COLLECT_MANA,
-    energy: DAILY_MISSION_COLLECT_ENERGY,
-  },
-  sortie: {
-    mana: DAILY_MISSION_SORTIE_MANA,
-    energy: DAILY_MISSION_SORTIE_ENERGY,
-  },
-};
-
-export function dailyMissionClaimKey(
-  missionId: string,
-  dayKey: string,
-): string {
-  return `${missionId}:${dayKey}`;
-}
-
-export function isDailyMissionClaimed(
-  save: PlayerSave,
-  missionId: string,
-  day = todayKey(),
-): boolean {
-  const key = dailyMissionClaimKey(missionId, day);
-  return (save.claimedMissionKeys ?? []).includes(key);
-}
-
-export function isDailyMissionComplete(
-  save: PlayerSave,
-  missionId: string,
-  now = Date.now(),
-): boolean {
-  const day = todayKey(now);
-  if (missionId === DAILY_MISSION_WISH) {
-    if ((save.island.lastWishDay ?? null) === day) return true;
-    return (
-      (save.island.wishUsesToday ?? 0) > 0 && save.island.wishDayKey === day
-    );
-  }
-  if (missionId === DAILY_MISSION_DOJO) {
-    return dojoDayState(save, now).drillsToday > 0;
-  }
-  if (missionId === DAILY_MISSION_COLLECT) {
-    const pond = save.island.buildings.find((b) => b.id === "mana_pond");
-    const mine = save.island.buildings.find((b) => b.id === "crystal_mine");
-    const stored =
-      Math.floor(pond?.storedMana ?? 0) + Math.floor(mine?.storedCrystal ?? 0);
-    return stored <= 0;
-  }
-  if (missionId === DAILY_MISSION_SORTIE) {
-    return (
-      (save.clearedStages?.length ?? 0) > 0 &&
-      Math.floor(save.island.energy) < (save.island.energyMax ?? 100)
-    );
-  }
-  return false;
-}
-
-export function claimableDailyMissionIds(
-  save: PlayerSave,
-  now = Date.now(),
-): DailyMissionId[] {
-  const day = todayKey(now);
-  const ids: DailyMissionId[] = [
-    DAILY_MISSION_WISH,
-    DAILY_MISSION_DOJO,
-    DAILY_MISSION_COLLECT,
-    DAILY_MISSION_SORTIE,
-  ];
-  return ids.filter(
-    (id) =>
-      isDailyMissionComplete(save, id, now) &&
-      !isDailyMissionClaimed(save, id, day),
-  );
-}
-
-export function claimableDailyMissionCount(
-  save: PlayerSave,
-  now = Date.now(),
-): number {
-  return claimableDailyMissionIds(save, now).length;
-}
-
-/** Claim a completed daily mission reward. */
-export function runClaimDailyMission(
-  save: PlayerSave,
-  missionId: string,
-  now = Date.now(),
-): LoopStepResult {
-  const day = todayKey(now);
-  const reward = DAILY_MISSION_REWARDS[missionId as DailyMissionId];
-  if (!reward) {
-    return { save, message: `미지원 미션: ${missionId}` };
-  }
-  if (!isDailyMissionComplete(save, missionId, now)) {
-    return { save, message: "일일 미션이 아직 완료되지 않았습니다" };
-  }
-  if (isDailyMissionClaimed(save, missionId, day)) {
-    return { save, message: "오늘 이미 수령한 미션 보상입니다" };
-  }
-  const island = grantEnergy(
-    {
-      ...save.island,
-      mana: save.island.mana + reward.mana,
-    },
-    reward.energy,
-  );
-  const key = dailyMissionClaimKey(missionId, day);
-  return {
-    save: {
-      ...save,
-      island,
-      claimedMissionKeys: [...(save.claimedMissionKeys ?? []), key],
-    },
-    message: `일일 미션 보상: 골드 +${reward.mana} · 행동력 +${reward.energy}`,
   };
 }
 
@@ -4425,14 +4575,110 @@ export function resolveBattleAuto(
   };
 }
 
+export type ApplyRewardsOpts = {
+  damageDealt?: number;
+};
+
+function raidChipFromCombat(damageDealt: number, raidBossHp: number): number {
+  const raw = Math.round(Math.max(0, damageDealt) * RAID_COMBAT_TO_BOSS);
+  return Math.max(0, Math.min(raidBossHp, raw));
+}
+
+function raidPayRatio(chip: number, victory: boolean): number {
+  const ratio = RAID_DAMAGE_BASE > 0 ? chip / RAID_DAMAGE_BASE : 0;
+  return victory ? Math.max(1, ratio) : Math.max(0, ratio);
+}
+
+function applyRaidHpMilestones(
+  beforeHp: number,
+  afterHp: number,
+  claimedIn: number[],
+): { claimed: number[]; extraJinmun: number; extraGlory: number; extras: string[] } {
+  const claimed = new Set(claimedIn);
+  const extras: string[] = [];
+  let extraJinmun = 0;
+  let extraGlory = 0;
+  for (const pct of RAID_MILESTONE_PERCENTS) {
+    if (claimed.has(pct)) continue;
+    const threshold = Math.floor((RAID_BOSS_MAX_HP * pct) / 100);
+    const crossed =
+      pct === 0
+        ? beforeHp > 0 && afterHp <= 0
+        : beforeHp > threshold && afterHp <= threshold;
+    if (!crossed) continue;
+    claimed.add(pct);
+    extraJinmun += RAID_MILESTONE_JINMUN;
+    extraGlory += RAID_MILESTONE_GLORY;
+    extras.push(
+      `레이드${pct}% 마일스톤 진문+${RAID_MILESTONE_JINMUN}/영광+${RAID_MILESTONE_GLORY}`,
+    );
+  }
+  return {
+    claimed: [...claimed].sort((a, b) => b - a),
+    extraJinmun,
+    extraGlory,
+    extras,
+  };
+}
+
+function applyGuildRaidDefeatRewards(
+  save: PlayerSave,
+  stage: StageDef,
+  damageDealt: number,
+): { save: PlayerSave; reward: BattleReward } {
+  const working = bumpDailyActivity(syncRaidWeek(save), "raid");
+  const raidBossHp = working.raidBossHp ?? RAID_BOSS_MAX_HP;
+  const chip = raidChipFromCombat(damageDealt, raidBossHp);
+  const ratio = raidPayRatio(chip, false);
+  const gloryGain = Math.round((stage.gloryReward ?? 0) * ratio);
+  const jinmunGain = Math.round((stage.jinmunReward ?? 0) * ratio);
+  const contributionGain =
+    chip > 0 ? Math.max(1, Math.round(RAID_CONTRIB_BASE * ratio)) : 0;
+  const afterHp = Math.max(0, raidBossHp - chip);
+  const miles = applyRaidHpMilestones(
+    raidBossHp,
+    afterHp,
+    working.raidMilestonesClaimed ?? [],
+  );
+  const extras: string[] = [];
+  if (chip > 0) extras.push(`보스 HP ${afterHp}/${RAID_BOSS_MAX_HP} (−${chip})`);
+  extras.push(...miles.extras);
+  if (contributionGain > 0) extras.push(`기여도 +${contributionGain}`);
+  return {
+    save: {
+      ...working,
+      gloryPoints: (working.gloryPoints ?? 0) + gloryGain + miles.extraGlory,
+      jinmunStones: (working.jinmunStones ?? 0) + jinmunGain + miles.extraJinmun,
+      guildContribution: (working.guildContribution ?? 0) + contributionGain,
+      guildRaidBest: Math.max(working.guildRaidBest ?? 0, contributionGain),
+      raidBossHp: afterHp,
+      raidMilestonesClaimed: miles.claimed,
+    },
+    reward: {
+      mana: 0,
+      glory: gloryGain + miles.extraGlory || undefined,
+      jinmun: jinmunGain + miles.extraJinmun || undefined,
+      contribution: contributionGain || undefined,
+      raidDamage: chip,
+      expNote: extras.join(" · ") || "패배",
+      victory: false,
+      expTracks: [],
+    },
+  };
+}
+
 export function applyRewards(
   save: PlayerSave,
   stage: StageDef,
   victory: boolean,
   rng: () => number = Math.random,
   difficulty: ScenarioDifficulty = "normal",
+  opts?: ApplyRewardsOpts,
 ): { save: PlayerSave; reward: BattleReward } {
   if (!victory) {
+    if (stage.mode === "guild_raid") {
+      return applyGuildRaidDefeatRewards(save, stage, opts?.damageDealt ?? 0);
+    }
     return {
       save,
       reward: {
@@ -4457,8 +4703,8 @@ export function applyRewards(
               ? 1.15
               : 1;
   const manaGain = Math.round((180 + stage.stage * 60) * modeMul);
-  const gloryGain = stage.gloryReward ?? 0;
-  const jinmunGain = stage.jinmunReward ?? 0;
+  let gloryGain = stage.gloryReward ?? 0;
+  let jinmunGain = stage.jinmunReward ?? 0;
   const scenarioTable =
     stage.mode === "scenario"
       ? scenarioSymbolDropTable(difficulty, stage.stage)
@@ -4475,6 +4721,16 @@ export function applyRewards(
       mana: save.island.mana + manaGain,
     },
   });
+  working = bumpDailyActivity(working, "battle");
+  if (stage.mode === "depth") working = bumpDailyActivity(working, "dungeon");
+  else if (stage.mode === "arena") working = bumpDailyActivity(working, "arena");
+  else if (stage.mode === "weekday") working = bumpDailyActivity(working, "weekday");
+  else if (stage.mode === "equip") working = bumpDailyActivity(working, "equip");
+  else if (stage.mode === "world_arena") {
+    working = bumpDailyActivity(working, "warena");
+  } else if (stage.mode === "guild_raid") {
+    working = bumpDailyActivity(working, "raid");
+  }
 
   const beforeAccountLv = accountSummonerLevel(
     working.summoners ?? createSummonerRoster(),
@@ -4679,6 +4935,7 @@ export function applyRewards(
   let guildRaidBest = save.guildRaidBest ?? 0;
   let raidBossHp = save.raidBossHp ?? RAID_BOSS_MAX_HP;
   let raidMilestonesClaimed = [...(save.raidMilestonesClaimed ?? [])];
+  let raidDamageOut = 0;
 
   const extras: string[] = [`EXP +${expGain}`];
   if (crystalGain > 0) extras.push(`크리스탈 +${crystalGain}`);
@@ -4686,30 +4943,30 @@ export function applyRewards(
   if (jinmunGain > 0) extras.push(`진문석 +${jinmunGain}`);
 
   if (stage.mode === "guild_raid") {
-    contributionGain = 40 + jinmunGain * 5 + gloryGain * 2;
+    const chip = raidChipFromCombat(opts?.damageDealt ?? 0, raidBossHp);
+    raidDamageOut = chip;
+    const ratio = raidPayRatio(chip, true);
+    const nextGlory = Math.round((stage.gloryReward ?? 0) * ratio);
+    const nextJinmun = Math.round((stage.jinmunReward ?? 0) * ratio);
+    gloryPoints += nextGlory - gloryGain;
+    jinmunStones += nextJinmun - jinmunGain;
+    gloryGain = nextGlory;
+    jinmunGain = nextJinmun;
+    contributionGain = Math.max(1, Math.round(RAID_CONTRIB_BASE * ratio));
     guildContribution += contributionGain;
     guildRaidBest = Math.max(guildRaidBest, contributionGain);
-    const dmg = RAID_DAMAGE_BASE + contributionGain;
     const beforeHp = raidBossHp;
-    raidBossHp = Math.max(0, raidBossHp - dmg);
-    const claimed = new Set(raidMilestonesClaimed);
-    for (const pct of RAID_MILESTONE_PERCENTS) {
-      if (claimed.has(pct)) continue;
-      const threshold = Math.floor((RAID_BOSS_MAX_HP * pct) / 100);
-      const crossed =
-        pct === 0
-          ? beforeHp > 0 && raidBossHp <= 0
-          : beforeHp > threshold && raidBossHp <= threshold;
-      if (!crossed) continue;
-      claimed.add(pct);
-      jinmunStones += RAID_MILESTONE_JINMUN;
-      gloryPoints += RAID_MILESTONE_GLORY;
-      extras.push(
-        `레이드${pct}% 마일스톤 진문+${RAID_MILESTONE_JINMUN}/영광+${RAID_MILESTONE_GLORY}`,
-      );
-    }
-    raidMilestonesClaimed = [...claimed].sort((a, b) => b - a);
-    extras.push(`보스 HP ${raidBossHp}/${RAID_BOSS_MAX_HP} (−${dmg})`);
+    raidBossHp = Math.max(0, raidBossHp - chip);
+    const miles = applyRaidHpMilestones(
+      beforeHp,
+      raidBossHp,
+      raidMilestonesClaimed,
+    );
+    raidMilestonesClaimed = miles.claimed;
+    jinmunStones += miles.extraJinmun;
+    gloryPoints += miles.extraGlory;
+    extras.push(...miles.extras);
+    extras.push(`보스 HP ${raidBossHp}/${RAID_BOSS_MAX_HP} (−${chip})`);
   }
 
   let arenaSeasonWins = save.arenaSeasonWins ?? 0;
@@ -4797,6 +5054,7 @@ export function applyRewards(
       glory: gloryGain || undefined,
       jinmun: jinmunGain || undefined,
       contribution: contributionGain || undefined,
+      raidDamage: raidDamageOut || undefined,
       expNote: `${stage.nameKo} 클리어 · ${extras.join(" · ")}${bagSoldNote}${levelNote}`,
       symbol,
       gear: gearDrop,
@@ -4858,7 +5116,12 @@ export function runSortie(
       };
     }
   }
-  const difficulty = opts?.difficulty ?? "normal";
+  const difficulty =
+    stage.mode === "arena" ||
+    stage.mode === "world_arena" ||
+    stage.mode === "guild_raid"
+      ? "normal"
+      : (opts?.difficulty ?? "normal");
   const energyCost =
     stage.mode === "scenario"
       ? Math.ceil(
@@ -4965,6 +5228,7 @@ export function runSortie(
     victory,
     opts?.rng,
     difficulty,
+    { damageDealt: battle.allyDamageDealt },
   );
   return {
     save: next,

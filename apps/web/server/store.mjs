@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
-import pg from "pg";
+import { createMemorySocialOps, createPgSocialOps } from "./socialStore.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 14;
@@ -31,6 +31,7 @@ function createMemoryStore() {
   const users = new Map();
   const sessions = new Map();
   const saves = new Map();
+  const social = createMemorySocialOps();
 
   return {
     mode: "memory",
@@ -80,6 +81,14 @@ function createMemoryStore() {
       }
       return false;
     },
+    async findUserByNickname(nickname) {
+      for (const u of users.values()) {
+        if (u.nickname === nickname) {
+          return { ...publicUser(u), createdAt: u.created_at ?? null };
+        }
+      }
+      return null;
+    },
     async getUser(id) {
       return publicUser(users.get(id));
     },
@@ -128,10 +137,12 @@ function createMemoryStore() {
       }
       return null;
     },
+    ...social,
   };
 }
 
 function createPgStore(pool) {
+  const social = createPgSocialOps(pool);
   return {
     mode: "postgres",
     async health() {
@@ -139,7 +150,7 @@ function createPgStore(pool) {
       return { ok: true, db: "postgres" };
     },
     async migrate() {
-      for (const name of ["001_init.sql", "002_nickname.sql"]) {
+      for (const name of ["001_init.sql", "002_nickname.sql", "003_social.sql"]) {
         const sqlPath = path.join(__dirname, "../sql", name);
         const sql = fs.readFileSync(sqlPath, "utf8");
         await pool.query(sql);
@@ -188,6 +199,21 @@ function createPgStore(pool) {
         excludeUserId ? [nickname, excludeUserId] : [nickname],
       );
       return rows.length > 0;
+    },
+    async findUserByNickname(nickname) {
+      const { rows } = await pool.query(
+        `SELECT id, email, kind, nickname, created_at FROM users WHERE nickname = $1 LIMIT 1`,
+        [nickname],
+      );
+      return rows[0]
+        ? {
+            id: rows[0].id,
+            email: rows[0].email,
+            kind: rows[0].kind,
+            nickname: rows[0].nickname ?? null,
+            createdAt: rows[0].created_at ?? null,
+          }
+        : null;
     },
     async getUser(id) {
       const { rows } = await pool.query(
@@ -286,6 +312,7 @@ function createPgStore(pool) {
           }
         : null;
     },
+    ...social,
   };
 }
 

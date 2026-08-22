@@ -238,6 +238,8 @@ export class Battle {
   readonly totalWaves: number;
   /** Completed skill/attack turns (not stone-only or skipped stun). */
   attackTurnCount = 0;
+  /** Ally HP damage actually applied to enemies (no overkill / shield). */
+  allyDamageDealt = 0;
   private powerGapCap: number;
   private inscriptionAmplifyAdd: number;
   private inscriptionItemSpawn: number;
@@ -2145,7 +2147,12 @@ export class Battle {
       if (target.shieldHp <= 0) target.shieldHp = 0;
     }
 
+    const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - remaining);
+    const applied = hpBefore - target.hp;
+    if (attacker.team === "ally" && target.team === "enemy" && applied > 0) {
+      this.allyDamageDealt += applied;
+    }
     if (target.hp <= 0) {
       target.alive = false;
       this.log.push(`${target.name} defeated`);

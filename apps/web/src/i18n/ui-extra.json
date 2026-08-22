@@ -11,6 +11,14 @@
     "ko": "모험을 초기화했습니다.",
     "en": "Adventure reset."
   },
+  "nav.confirmLogin": {
+    "ko": "로그인 화면으로 이동하시겠습니까?",
+    "en": "Return to the login screen?"
+  },
+  "nav.exitGame": {
+    "ko": "게임을 종료합니다",
+    "en": "The game will close."
+  },
   "ui.resultNextStage": {
     "ko": "다음 스테이지",
     "en": "Next stage"
@@ -1932,8 +1940,8 @@
     "en": "Daily wish"
   },
   "mission.daily.wish.desc": {
-    "ko": "소원의 사당에서 오늘 한 번 이상 기원하세요",
-    "en": "Make at least one wish at the temple today"
+    "ko": "소원의 사당에서 오늘 한 번 기원하세요",
+    "en": "Make a wish at the temple today"
   },
   "mission.daily.dojo.title": {
     "ko": "진문 수련",
@@ -1941,7 +1949,7 @@
   },
   "mission.daily.dojo.desc": {
     "ko": "진문 수련장에서 오늘 한 번 수련하세요",
-    "en": "Train once today at the Circle Training Hall"
+    "en": "Train once at the Circle Training Hall"
   },
   "mission.daily.collect.title": {
     "ko": "재화 수집",
@@ -1949,15 +1957,143 @@
   },
   "mission.daily.collect.desc": {
     "ko": "연못·광맥에 쌓인 골드/크리스탈을 수령하세요",
-    "en": "Collect stored gold/crystal from buildings"
+    "en": "Collect stored gold or crystal from buildings"
   },
   "mission.daily.sortie.title": {
-    "ko": "출정 도전",
-    "en": "Sortie"
+    "ko": "출정 승리",
+    "en": "Battle victories"
   },
   "mission.daily.sortie.desc": {
-    "ko": "출정문으로 전투에 한 번 나서세요",
-    "en": "Fight once through the gate"
+    "ko": "전투에서 {n}회 승리하세요",
+    "en": "Win {n} battles today"
+  },
+  "mission.daily.summon.title": {
+    "ko": "소환",
+    "en": "Summon"
+  },
+  "mission.daily.summon.desc": {
+    "ko": "소환수 {n}마리를 소환하세요",
+    "en": "Summon {n} monster(s)"
+  },
+  "mission.daily.enhanceMon.title": {
+    "ko": "소환수 강화",
+    "en": "Power up monster"
+  },
+  "mission.daily.enhanceMon.desc": {
+    "ko": "소환수를 {n}회 강화하세요",
+    "en": "Power up a monster {n} time(s)"
+  },
+  "mission.daily.enhanceGear.title": {
+    "ko": "장비 강화",
+    "en": "Enhance gear"
+  },
+  "mission.daily.enhanceGear.desc": {
+    "ko": "소환사 장비를 {n}회 강화하세요",
+    "en": "Enhance summoner gear {n} time(s)"
+  },
+  "mission.daily.enhanceSymbol.title": {
+    "ko": "상징 강화",
+    "en": "Enhance symbol"
+  },
+  "mission.daily.enhanceSymbol.desc": {
+    "ko": "상징을 {n}회 강화하세요",
+    "en": "Enhance a symbol {n} time(s)"
+  },
+  "mission.daily.grindSymbol.title": {
+    "ko": "상징 연마",
+    "en": "Grind symbol"
+  },
+  "mission.daily.grindSymbol.desc": {
+    "ko": "상징을 {n}회 연마하세요",
+    "en": "Grind a symbol {n} time(s)"
+  },
+  "mission.daily.shop.title": {
+    "ko": "상점 구매",
+    "en": "Shop purchase"
+  },
+  "mission.daily.shop.desc": {
+    "ko": "상점에서 상품을 1회 구매하세요",
+    "en": "Buy an item from the shop"
+  },
+  "mission.daily.building.title": {
+    "ko": "건물 강화",
+    "en": "Upgrade building"
+  },
+  "mission.daily.building.desc": {
+    "ko": "섬 건물 또는 영광 건물을 1회 강화하세요",
+    "en": "Upgrade an island or glory building"
+  },
+  "mission.daily.arena.title": {
+    "ko": "아레나 전투",
+    "en": "Arena battle"
+  },
+  "mission.daily.arena.desc": {
+    "ko": "아레나에서 {n}회 승리하세요",
+    "en": "Win {n} Arena battle(s)"
+  },
+  "mission.daily.weekday.title": {
+    "ko": "요일 던전",
+    "en": "Cadence dungeon"
+  },
+  "mission.daily.weekday.desc": {
+    "ko": "요일 던전을 1회 클리어하세요",
+    "en": "Clear a cadence dungeon"
+  },
+  "mission.daily.equipDun.title": {
+    "ko": "장비 던전",
+    "en": "Equip dungeon"
+  },
+  "mission.daily.equipDun.desc": {
+    "ko": "장비 금고를 1회 클리어하세요",
+    "en": "Clear the Equip Vault"
+  },
+  "mission.daily.dungeon.title": {
+    "ko": "심연 던전",
+    "en": "Symbol dungeon"
+  },
+  "mission.daily.dungeon.desc": {
+    "ko": "심연 던전을 {n}회 클리어하세요",
+    "en": "Clear a symbol dungeon {n} time(s)"
+  },
+  "mission.daily.skillUp.title": {
+    "ko": "스킬 강화",
+    "en": "Skill up"
+  },
+  "mission.daily.skillUp.desc": {
+    "ko": "소환수 스킬을 1회 강화하세요",
+    "en": "Raise a monster skill once"
+  },
+  "mission.daily.guild.title": {
+    "ko": "길드 출석",
+    "en": "Guild check-in"
+  },
+  "mission.daily.guild.desc": {
+    "ko": "길드에 오늘 출석하세요",
+    "en": "Check in at your guild"
+  },
+  "mission.daily.raid.title": {
+    "ko": "길드 레이드",
+    "en": "Guild raid"
+  },
+  "mission.daily.raid.desc": {
+    "ko": "길드 레이드를 1회 클리어하세요",
+    "en": "Clear the guild raid once"
+  },
+  "mission.daily.warena.title": {
+    "ko": "월드 아레나",
+    "en": "World Arena"
+  },
+  "mission.daily.warena.desc": {
+    "ko": "월드 아레나에서 1회 승리하세요",
+    "en": "Win a World Arena battle"
+  },
+  "mission.daily.all.title": {
+    "ko": "일일 미션 완료",
+    "en": "Complete all dailies"
+  },
+  "mission.daily.all.desc": {
+    "ko": "오늘의 일일 미션을 모두 완료하세요",
+    "en": "Complete every daily mission today"
   },
   "mission.ach.lv5.title": {
     "ko": "소환사 Lv.5",
@@ -2694,6 +2830,218 @@
   "chat.send": {
     "ko": "전송",
     "en": "Send"
+  },
+  "chat.unavailable": {
+    "ko": "채팅에 연결할 수 없습니다",
+    "en": "Chat is unavailable"
+  },
+  "chat.rateLimited": {
+    "ko": "메시지를 너무 자주 보내고 있습니다",
+    "en": "You are sending messages too quickly"
+  },
+  "chat.textBlocked": {
+    "ko": "보낼 수 없는 메시지입니다",
+    "en": "That message cannot be sent"
+  },
+  "chat.tabWorld": {
+    "ko": "월드",
+    "en": "World"
+  },
+  "chat.tabFriends": {
+    "ko": "친구",
+    "en": "Friends"
+  },
+  "chat.tabGuild": {
+    "ko": "길드원",
+    "en": "Guild"
+  },
+  "chat.level": {
+    "ko": "Lv.{n}",
+    "en": "Lv.{n}"
+  },
+  "chat.profile": {
+    "ko": "모험가",
+    "en": "Summoner"
+  },
+  "chat.addFriend": {
+    "ko": "친구 추가",
+    "en": "Add friend"
+  },
+  "chat.removeFriend": {
+    "ko": "친구 삭제",
+    "en": "Remove friend"
+  },
+  "chat.noGuild": {
+    "ko": "길드에 가입해야 합니다",
+    "en": "Join a guild first"
+  },
+  "chat.pickFriend": {
+    "ko": "친구 선택",
+    "en": "Select friend"
+  },
+  "chat.requestSent": {
+    "ko": "친구 요청을 보냈습니다",
+    "en": "Friend request sent"
+  },
+  "chat.alreadyFriend": {
+    "ko": "이미 친구입니다",
+    "en": "Already friends"
+  },
+  "friend.add": {
+    "ko": "추가",
+    "en": "Add"
+  },
+  "friend.accept": {
+    "ko": "수락",
+    "en": "Accept"
+  },
+  "friend.reject": {
+    "ko": "거절",
+    "en": "Decline"
+  },
+  "friend.remove": {
+    "ko": "삭제",
+    "en": "Remove"
+  },
+  "friend.sendEnergy": {
+    "ko": "에너지",
+    "en": "Energy"
+  },
+  "friend.sent": {
+    "ko": "보냄",
+    "en": "Sent"
+  },
+  "friend.full": {
+    "ko": "친구 목록이 가득 찼습니다",
+    "en": "Friend list is full"
+  },
+  "friend.self": {
+    "ko": "자신을 추가할 수 없습니다",
+    "en": "You cannot add yourself"
+  },
+  "friend.notFound": {
+    "ko": "모험가를 찾을 수 없습니다",
+    "en": "Summoner not found"
+  },
+  "friend.pending": {
+    "ko": "이미 요청을 보냈습니다",
+    "en": "Request already sent"
+  },
+  "friend.notFriends": {
+    "ko": "친구가 아닙니다",
+    "en": "Not friends"
+  },
+  "friend.alreadySent": {
+    "ko": "오늘 이미 보냈습니다",
+    "en": "Already sent today"
+  },
+  "friend.seen.online": {
+    "ko": "온라인",
+    "en": "Online"
+  },
+  "friend.seen.hours": {
+    "ko": "{n}시간 전",
+    "en": "{n}h ago"
+  },
+  "friend.seen.days": {
+    "ko": "{n}일 전",
+    "en": "{n}d ago"
+  },
+  "friend.seen.months": {
+    "ko": "{n}개월 전",
+    "en": "{n}mo ago"
+  },
+  "friend.seen.longAgo": {
+    "ko": "오래전",
+    "en": "Long ago"
+  },
+  "friend.nick": {
+    "ko": "닉네임",
+    "en": "Nickname"
+  },
+  "friend.requests": {
+    "ko": "요청",
+    "en": "Requests"
+  },
+  "community.tabGuild": {
+    "ko": "길드",
+    "en": "Guild"
+  },
+  "community.tabFriends": {
+    "ko": "친구",
+    "en": "Friends"
+  },
+  "shop.tabNormal": {
+    "ko": "일반",
+    "en": "General"
+  },
+  "shop.tabPack": {
+    "ko": "패키지",
+    "en": "Packs"
+  },
+  "shop.tabArena": {
+    "ko": "아레나",
+    "en": "Arena"
+  },
+  "shop.tabFriend": {
+    "ko": "우정",
+    "en": "Social"
+  },
+  "shop.pack.crystal250": {
+    "ko": "크리스탈 250",
+    "en": "250 Crystals"
+  },
+  "shop.pack.crystal650": {
+    "ko": "크리스탈 700",
+    "en": "700 Crystals"
+  },
+  "shop.pack.crystal1400": {
+    "ko": "크리스탈 1550",
+    "en": "1,550 Crystals"
+  },
+  "shop.pack.energy": {
+    "ko": "에너지 패키지",
+    "en": "Energy pack"
+  },
+  "shop.arena.gold": {
+    "ko": "골드 50,000",
+    "en": "50,000 Gold"
+  },
+  "shop.arena.energy": {
+    "ko": "에너지 50",
+    "en": "50 Energy"
+  },
+  "shop.arena.scroll": {
+    "ko": "고급 소환서",
+    "en": "Premium scroll"
+  },
+  "shop.arena.grind": {
+    "ko": "연마석",
+    "en": "Grindstone"
+  },
+  "shop.friend.gold": {
+    "ko": "골드 30,000",
+    "en": "30,000 Gold"
+  },
+  "shop.friend.energy": {
+    "ko": "에너지 10",
+    "en": "10 Energy"
+  },
+  "shop.friend.scroll": {
+    "ko": "소환서",
+    "en": "Scroll"
+  },
+  "shop.friend.grind": {
+    "ko": "연마석",
+    "en": "Grindstone"
+  },
+  "res.friendship": {
+    "ko": "우정",
+    "en": "Friendship"
+  },
+  "res.cash": {
+    "ko": "현금",
+    "en": "Cash"
   },
   "ui.symCompareSelected": {
     "ko": "선택",
@@ -4286,5 +4634,33 @@
   "ui.guild.close": {
     "ko": "닫기",
     "en": "Close"
+  },
+  "ui.arena.attack": {
+    "ko": "공격",
+    "en": "Attack"
+  },
+  "ui.resultRaidDamage": {
+    "ko": "피해",
+    "en": "Damage"
+  },
+  "ui.dungeon.giant": {
+    "ko": "거인의 탑",
+    "en": "Giant's Keep"
+  },
+  "ui.dungeon.dragon": {
+    "ko": "용의 둥지",
+    "en": "Dragon's Lair"
+  },
+  "ui.dungeon.necro": {
+    "ko": "네크로폴리스",
+    "en": "Necropolis"
+  },
+  "ui.dungeon.floors": {
+    "ko": "층",
+    "en": "Floors"
+  },
+  "ui.dungeon.back": {
+    "ko": "목록",
+    "en": "List"
   }
 }

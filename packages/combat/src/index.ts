@@ -79,3 +79,9 @@ export type {
   UnitKind,
   UnitStats,
 } from "./types.js";
+export { listUnitStatuses } from "./statuses.js";
+export type {
+  UnitStatusIcon,
+  UnitStatusId,
+  UnitStatusPolarity,
+} from "./statuses.js";

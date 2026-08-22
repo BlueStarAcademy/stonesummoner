@@ -49,7 +49,7 @@ export function battleBgIdForStage(
   if (mode === "arena" || mode === "world_arena") return "arena";
   if (mode === "equip") return "equip";
   if (mode === "weekday") return "weekday";
-  if (mode === "depth") return "depth";
+  if (mode === "depth" || mode === "guild_raid") return "depth";
 
   const map = typeof stage.map === "number" ? stage.map : 0;
   if (map >= 1 && map <= 13) {

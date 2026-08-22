@@ -50,6 +50,7 @@ export {
   RAID_BOSS_MAX_HP,
   RAID_ATTEMPTS_DAILY,
   RAID_DAMAGE_BASE,
+  RAID_COMBAT_TO_BOSS,
   RAID_MILESTONE_PERCENTS,
   RAID_MILESTONE_JINMUN,
   RAID_MILESTONE_GLORY,
@@ -83,6 +84,14 @@ export {
   runBuyEnergy,
   runBuyGrindstone,
   runBuyImprintStone,
+  runBuyArenaShop,
+  runBuyFriendShop,
+  runBuyCashPack,
+  grantFriendshipPoints,
+  shopQuotaRemaining,
+  ARENA_SHOP,
+  FRIEND_SHOP,
+  CASH_PACKS,
   runExpandSymbolBag,
   symbolBagCapacity,
   symbolBagExpandCost,
@@ -137,6 +146,12 @@ export {
   isDailyMissionClaimed,
   runClaimDailyMission,
   DAILY_MISSION_REWARDS,
+  DAILY_MISSIONS,
+  visibleDailyMissions,
+  dailyMissionGoal,
+  dailyMissionProgress,
+  getDailyMission,
+  mergeDailyMissionState,
   runImprintSymbol,
   runJoinGuild,
   runCreateGuild,
@@ -216,7 +231,7 @@ export {
   totalScrollCount,
   type CatalogShopSku,
 } from "./loop.js";
-export { migrateSave } from "./migrateSave.js";
+export { migrateSave, pickPreferredSave } from "./migrateSave.js";
 export {
   MAIN_QUESTS,
   claimableMainQuestCount,
@@ -228,6 +243,12 @@ export {
   runClaimMainQuest,
 } from "./mainQuest.js";
 export type { MainQuestDef, MainQuestId, MissionReward } from "./mainQuest.js";
+export type {
+  DailyActivity,
+  DailyActivityKey,
+  DailyMissionDef,
+  DailyMissionId,
+} from "./dailyMissions.js";
 export type {
   BattleReward,
   ElementSummonerProfile,
@@ -243,5 +264,8 @@ export type {
   ShopOffer,
   ShopOfferKind,
   SummonerElement,
+  ArenaShopSku,
+  FriendShopSku,
+  CashPackSku,
 } from "./loop.js";
 export type { ScenarioDifficulty } from "./progress.js";

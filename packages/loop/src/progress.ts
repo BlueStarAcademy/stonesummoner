@@ -140,6 +140,7 @@ export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
       if (!chapter2Cleared(save) && save.island.summonerLevel < 12) return false;
       return chainUnlocked(save, WORLD_ARENA_STAGES, stageId);
     case "guild_raid":
+      if (!save.guildName) return false;
       return chapter2Cleared(save) || save.clearedStages.includes("garen_1_5");
     default:
       return false;

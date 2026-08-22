@@ -1,6 +1,28 @@
 import "./style.css";
 import { apiUrl } from "./api/url";
 import {
+  CHAT_CHANNEL_CAP,
+  CHAT_CHANNEL_COUNT,
+  chatJoin,
+  chatLeave,
+  chatPoll,
+  chatSend,
+  socialAccept,
+  socialLoad,
+  socialProfile,
+  socialReject,
+  socialRemove,
+  socialRequest,
+  socialSendEnergy,
+  type ChatChannelDto,
+  type ChatFriendDto,
+  type ChatMsgDto,
+  type ChatSnapshot,
+  type ChatTab,
+  type SocialProfile,
+  type SocialState,
+} from "./chat/api";
+import {
   formatNumber,
   getLocale,
   initI18n,
@@ -20,13 +42,14 @@ import {
   type ArenaStoneFxKind,
 } from "./battle/fx";
 import { playSkillVfx, spawnCircleAbsorbVfx } from "./battle/skillVfx";
+import { renderUnitStatusIcons } from "./battle/statusIcons";
 import { destroyAllSpine, mountBattleSpines, playSpineClip } from "./battle/spinePilot";
 import {
   getBattleStillSrc,
   getSummonerBattleStillSrc,
 } from "./battle/spinePacks";
 import { BATTLE_STILL_FAMILY_SET } from "./battle/battleStills";
-import { battleBgIdForStage, battleSkyHtml } from "./battle/battleBg";
+import { battleBgIdForStage, battleBgSrc, battleSkyHtml } from "./battle/battleBg";
 import {
   initAudio,
   bindUiSfx,
@@ -55,6 +78,7 @@ import {
 import { dematteArtInTree } from "./ui/dematteArt";
 import {
   GROWTH_REVEAL_LAYER_ID,
+  abortGrowthReveal,
   growthRevealIsOpen,
   playGrowthReveal,
   remountGrowthReveal,
@@ -77,6 +101,11 @@ import {
   wishRewardName,
 } from "./ui/wishReveal";
 import { initUiScale } from "./ui/uiScale";
+import {
+  armBackHistoryTrap,
+  exitNativeApp,
+  installHardwareBack,
+} from "./nav/hardwareBack";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
 import { bindCoreStageMapController } from "./core-loop/stages/mapController";
 import { bindCoreStagePrepController } from "./core-loop/stages/prepController";
@@ -133,6 +162,7 @@ import {
   CAIROS_GIANT_STAGES,
   CAIROS_DRAGON_STAGES,
   CAIROS_NECRO_STAGES,
+  cairosStagesFor,
   EQUIP_STAGES,
   FUSION_RECIPES,
   CIRCLE_INSCRIPTIONS,
@@ -209,6 +239,7 @@ import {
   type GearQuality,
   type GearSlot,
   type MainQuestPinId,
+  type CairosDungeon,
   type StageDef,
   type SymbolInstance,
   type SymbolSetId,
@@ -218,6 +249,7 @@ import {
   buildingUpgradeManaCost,
   canUpgradeBuilding,
   collectMana,
+  grantEnergy,
   energyRegenRemainingMs,
   ENERGY_REGEN_MS,
   MAX_BUILDING_LEVEL,
@@ -272,6 +304,8 @@ import {
   monsterExpToNext,
   monsterMaxLevel,
   migrateSave,
+  pickPreferredSave,
+  mergeDailyMissionState,
   runAwakenMonster,
   runAwakenSummoner,
   runEnhanceMagicSkill,
@@ -281,6 +315,17 @@ import {
   runBuyEnergy,
   runBuyGrindstone,
   runBuyImprintStone,
+  runBuyArenaShop,
+  runBuyFriendShop,
+  runBuyCashPack,
+  grantFriendshipPoints,
+  shopQuotaRemaining,
+  ARENA_SHOP,
+  FRIEND_SHOP,
+  CASH_PACKS,
+  type ArenaShopSku,
+  type FriendShopSku,
+  type CashPackSku,
   runExpandSymbolBag,
   symbolBagCapacity,
   symbolBagExpandCost,
@@ -324,11 +369,11 @@ import {
   imprintStoneCount,
   unclaimedMailIds,
   runClaimMail,
-  DAILY_MISSION_WISH,
-  DAILY_MISSION_DOJO,
-  DAILY_MISSION_COLLECT,
-  DAILY_MISSION_SORTIE,
   DAILY_MISSION_REWARDS,
+  visibleDailyMissions,
+  dailyMissionGoal,
+  dailyMissionProgress,
+  getDailyMission,
   claimableDailyMissionCount,
   isDailyMissionClaimed,
   runClaimDailyMission,
@@ -551,6 +596,7 @@ function enterIslandLayoutEdit(focusId?: string): void {
   islandLayoutSuppressClick = true;
   islandPanDrag = null;
   islandLongPress = null;
+  rememberOverlayOpen("island-layout-edit");
   flash(t('ui.19364fa53d'));
   render();
   if (focusId) {
@@ -575,6 +621,7 @@ function exitIslandLayoutEdit(commit: boolean): void {
   islandLayoutDraft = null;
   islandSpotDrag = null;
   islandLongPress = null;
+  rememberOverlayClose("island-layout-edit");
   clearIslandDropTargets();
 
   // Soft leave — do not remount via render(). render() would set
@@ -772,6 +819,7 @@ let cloudAuthWarned = false;
 let ephemeralStore = false;
 
 let save: PlayerSave = createNewSave();
+let sessionHydrated = false;
 let view: View = "auth";
 let battle: Battle | null = null;
 let currentStage: StageDef | null = null;
@@ -1228,6 +1276,8 @@ function bindGearBagFilter(): void {
   root.querySelector("[data-gear-filter-toggle]")?.addEventListener("click", (ev) => {
     ev.stopPropagation();
     gearBagFilterOpen = !gearBagFilterOpen;
+    if (gearBagFilterOpen) rememberOverlayOpen("gear-bag-filter");
+    else rememberOverlayClose("gear-bag-filter");
     if (!refreshSumGearPane()) render();
   });
 }
@@ -1557,6 +1607,8 @@ let shapeFlashUntil = 0;
 /** Extra currencies drawer under app-bar resources. */
 let resMoreOpen = false;
 let settingsOpen = false;
+/** Phone-back confirm: return to login, or exit the app. */
+let sysConfirmKind: "login" | "exit" | null = null;
 let profileOpen = false;
 let nicknameSetupOpen = false;
 let starterSummonerDraft: SummonerElement | null = null;
@@ -1574,6 +1626,12 @@ let guildRenameOpen = false;
 let guildFormMode: "join" | "create" | null = null;
 let guildFormModalAbort: AbortController | null = null;
 let shopOpen = false;
+type ShopTab = "normal" | "pack" | "arena" | "friend";
+let shopTab: ShopTab = "normal";
+type CommunityTab = "guild" | "friends";
+let communityTab: CommunityTab = "guild";
+let socialFriends: ChatFriendDto[] = [];
+let socialIncoming: ChatFriendDto[] = [];
 /** Floating action menu above an island building (`data-b` id). */
 let islandSpotMenuId: string | null = null;
 /** Building info sheet open for this island spot id. */
@@ -1605,7 +1663,18 @@ let chatLineNick: string | null = null;
 let chatLineText: string | null = null;
 /** True while the one-line dock has unseen messages. */
 let chatLineUnread = false;
-let chatSimTimer: ReturnType<typeof setInterval> | null = null;
+let chatPollTimer: ReturnType<typeof setInterval> | null = null;
+let chatWanted = false;
+let chatAfter = 0;
+let chatSendBusy = false;
+let chatFailFlashed = false;
+let chatJoinInFlight: Promise<boolean> | null = null;
+let chatTab: ChatTab = "world";
+let chatPeerUid: string | null = null;
+let chatSelfUid: string | null = null;
+let chatFriendOpts: ChatFriendDto[] = [];
+let chatSideMsgs: ChatMsgDto[] = [];
+let chatProfileUid: string | null = null;
 type MissionTab = "main" | "daily" | "achievements";
 let missionTab: MissionTab = "main";
 
@@ -1618,6 +1687,12 @@ type StagesRegionId =
   | "warena"
   | "guild";
 let stagesRegion: StagesRegionId | null = null;
+/** Cairos dungeon picked inside the depth region sheet. */
+let stagesDepthDungeon: CairosDungeon | null = null;
+/** Scenario page-turn FX: enemy summoner flees, allies chase, last-page vanish. */
+let pageTransitionFx: "flee" | "chase" | "enter" | "vanish" | null = null;
+/** Last-page win dissolve already played for this fight. */
+let winVanishPlayed = false;
 type StageDifficulty = "normal" | "hard" | "hell";
 let stageEntryId: string | null = null;
 let stageEntryDiff: StageDifficulty = "normal";
@@ -2577,6 +2652,8 @@ function applyIslandSpotMenu(): void {
 function setIslandSpotMenu(id: string | null): void {
   islandSpotMenuId = id;
   applyIslandSpotMenu();
+  if (id) rememberOverlayOpen("island-spot-menu");
+  else rememberOverlayClose("island-spot-menu");
 }
 
 function collectIslandProduction(kind: "mana" | "crystal", origin: DOMRect): void {
@@ -2811,9 +2888,49 @@ function scheduleCloudSave(): void {
   }, 600);
 }
 
-function persist(): void {
-  localStorage.setItem(localSaveKey(), JSON.stringify(save));
-  scheduleCloudSave();
+function persist(opts?: { flushCloud?: boolean }): void {
+  save = { ...save, updatedAt: Date.now() };
+  try {
+    localStorage.setItem(localSaveKey(), JSON.stringify(save));
+  } catch {
+    /* private / restricted webview */
+  }
+  if (opts?.flushCloud) flushCloudSave();
+  else scheduleCloudSave();
+}
+
+function flushCloudSave(): void {
+  if (!cloudSyncOk) return;
+  if (!sessionUser || sessionUser.id.startsWith("local-")) return;
+  if (cloudTimer) {
+    clearTimeout(cloudTimer);
+    cloudTimer = null;
+  }
+  try {
+    void fetch(apiUrl("/api/save"), {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ save }),
+      keepalive: true,
+    });
+  } catch {
+    /* ignore unload races */
+  }
+}
+
+let saveFlushBound = false;
+function bindSaveFlush(): void {
+  if (saveFlushBound) return;
+  saveFlushBound = true;
+  const flush = (): void => {
+    if (!sessionHydrated || !sessionUser) return;
+    persist({ flushCloud: true });
+  };
+  window.addEventListener("pagehide", flush);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flush();
+  });
 }
 
 function persistOnboard(): void {
@@ -3132,6 +3249,7 @@ async function hydrateSession(
     onboardWelcomeOpen = false;
     persistOnboard();
     adoptSessionNickname(user);
+    sessionHydrated = true;
     return;
   }
   if (opts?.fresh || needsCoreLoopReset(user)) {
@@ -3151,31 +3269,33 @@ async function hydrateSession(
     persistOnboard();
     syncOnboardFromSave({ offerWelcome: true });
     adoptSessionNickname(user);
+    sessionHydrated = true;
     return;
   }
   if (!user.id.startsWith("local-")) {
     const remote = await apiJson<{ save: unknown }>("/api/save");
     const migrated = remote?.save ? migrateSave(remote.save) : null;
-    if (migrated) {
-      save = migrated;
-      localStorage.setItem(localSaveKey(), JSON.stringify(save));
-    } else {
-      save = loadLocalSave() ?? createNewSave();
-      await apiJson("/api/save", {
-        method: "PUT",
-        body: JSON.stringify({ save }),
-      });
-      localStorage.setItem(localSaveKey(), JSON.stringify(save));
-    }
+    const local = loadLocalSave();
+    const picked = pickPreferredSave(local, migrated);
+    save = mergeDailyMissionState(
+      picked,
+      picked === local ? migrated : local,
+    );
+    persist();
+    await apiJson("/api/save", {
+      method: "PUT",
+      body: JSON.stringify({ save }),
+    });
   } else {
     save = loadLocalSave() ?? createNewSave();
-    localStorage.setItem(localSaveKey(), JSON.stringify(save));
+    persist();
   }
   onboard = loadOnboardForSession();
   syncOnboardFromSave({
     offerWelcome: forcedFresh || (!onboard.welcomeSeen && onboard.step === "gateway"),
   });
   adoptSessionNickname(user);
+  sessionHydrated = true;
 }
 
 async function enterWithUser(
@@ -3226,10 +3346,13 @@ function startGameFromAuth(): void {
 }
 
 async function logout(): Promise<void> {
+  stopChatLive();
+  if (sessionHydrated && sessionUser) persist({ flushCloud: true });
   if (sessionUser && !sessionUser.id.startsWith("local-")) {
     await apiJson("/api/auth/logout", { method: "POST", body: "{}" });
   }
   sessionUser = null;
+  sessionHydrated = false;
   profileOpen = false;
   nicknameSetupOpen = false;
   battle = null;
@@ -3483,8 +3606,24 @@ function armBattleSkipTimer(): void {
   }, BATTLE_SKIP_AFTER_MS);
 }
 
+/** Last-page win: enemy summoner (or boss) dissolves before the result screen. */
+async function playLastPageVanish(skipSeq: number): Promise<void> {
+  if (winVanishPlayed) return;
+  if (!battle || battle.finishReason !== "ally_win") return;
+  if (view !== "battle") return;
+  winVanishPlayed = true;
+  pageTransitionFx = "vanish";
+  refreshLegal();
+  if (!refreshBattleView()) render();
+  await waitFx(fxDurationMs(820, battleSpeed));
+  if (battleSkipSeq !== skipSeq) return;
+  pageTransitionFx = null;
+}
+
 function skipBattleToResult(): void {
-  if (!battle || !currentStage || !battleSkipReady || battle.finishReason) return;
+  if (!battle || !currentStage || !battleSkipReady) return;
+  if (view !== "battle" || lastReward) return;
+  if (battle.finishReason && battle.finishReason !== "ally_win") return;
   battleSkipSeq += 1;
   autoMode = false;
   clearAutoTimer();
@@ -3493,22 +3632,43 @@ function skipBattleToResult(): void {
   dmgFloats = [];
   stoneSummonFx = null;
   stoneResultFx = null;
-  resolveBattleAuto(battle, 600);
   if (!battle.finishReason) {
-    const allies = battle.units.filter(
-      (u) => u.team === "ally" && u.kind === "monster" && u.alive,
-    ).length;
-    const enemies = battle.units.filter(
-      (u) => u.team === "enemy" && u.kind === "monster" && u.alive,
-    ).length;
-    battle.finishReason = enemies === 0 || allies >= enemies ? "ally_win" : "enemy_win";
-    battle.phase = "finished";
+    resolveBattleAuto(battle, 600);
+    if (!battle.finishReason) {
+      const allies = battle.units.filter(
+        (u) => u.team === "ally" && u.kind === "monster" && u.alive,
+      ).length;
+      const enemies = battle.units.filter(
+        (u) => u.team === "enemy" && u.kind === "monster" && u.alive,
+      ).length;
+      battle.finishReason = enemies === 0 || allies >= enemies ? "ally_win" : "enemy_win";
+      battle.phase = "finished";
+    }
   }
   grantRewardIfNeeded();
   render();
 }
 
+function battleDiffForStage(
+  stage: StageDef,
+  diff: StageDifficulty,
+): StageDifficulty {
+  if (
+    stage.mode === "arena" ||
+    stage.mode === "world_arena" ||
+    stage.mode === "guild_raid"
+  ) {
+    return "normal";
+  }
+  return diff;
+}
+
 function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
+  diff = battleDiffForStage(stage, diff);
+  if (stage.mode === "guild_raid" && !save.guildName) {
+    flash(t("ui.guild.unjoined"));
+    return;
+  }
   if (!isStageUnlocked(save, stage.id)) {
     flash(t('ui.b72f5a4752'));
     render();
@@ -3577,6 +3737,8 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   shapeFlashUntil = 0;
   waveEnterIds = new Set();
   waveBannerText = null;
+  pageTransitionFx = null;
+  winVanishPlayed = false;
   stoneSummonFx = null;
   stoneResultFx = null;
   battleFxBusy = false;
@@ -3765,7 +3927,7 @@ function confirmStagePrepStart(): void {
   if (onboard.step === "party") {
     patchOnboard({ partySet: true });
   }
-  startBattle(stage, stageEntryDiff);
+  startBattle(stage, battleDiffForStage(stage, stageEntryDiff));
 }
 
 function stagePrepLeaderPassive(saveRef: PlayerSave): {
@@ -3966,14 +4128,46 @@ function renderStageEntryModal(): string {
 
   const equipSlots = renderAllyMagicEquipSlots("stage");
 
-  const titleText = `${stage.nameKo}(${diff.labelKo})`;
+  const hideDiffTitle =
+    stage.mode === "arena" ||
+    stage.mode === "world_arena" ||
+    stage.mode === "guild_raid";
+  const titleText = hideDiffTitle
+    ? stage.nameKo
+    : `${stage.nameKo}(${diff.labelKo})`;
   const canStart = selected.size > 0 && energyNow >= cost;
+  const bossPrep = isBossPrepStage(stage);
 
   const leaderMarkers = renderLeaderPassiveMarkerChips(leader.markers);
+  const bossLeadId = stage.enemyMonsterIds[0];
+  const bossArt = stage.cairosDungeon
+    ? `<img class="stage-prep-boss-art" src="/art/battle/circle/cairos-${stage.cairosDungeon}.webp" width="280" height="280" alt="" draggable="false" />`
+    : `<div class="stage-prep-boss-artwrap">
+        <img class="stage-prep-boss-bg" src="${battleBgSrc(battleBgIdForStage(stage))}" width="320" height="180" alt="" draggable="false" />
+        ${monsterBattleArtImg(bossLeadId, "stage-prep-boss-art", 220, "front")}
+      </div>`;
+  const bossBlock = `<section class="stage-prep-boss" aria-hidden="true">
+      ${bossArt}
+      ${stageDropPreview(stage, { keySets: true, equipWeekly: stage.mode === "equip" })}
+    </section>`;
+
+  const enemyBlock = bossPrep
+    ? bossBlock
+    : `<section class="stage-prep-team stage-prep-team--enemy" aria-label="${escapeHtml(t("ui.stagePrepEnemy"))}">
+        <h3 class="stage-prep-team-label stage-prep-team-label--enemy">${escapeHtml(t("ui.stagePrepEnemy"))}</h3>
+        <div class="stage-prep-slots">
+          <div class="stage-prep-slot stage-prep-slot--summoner el-dark" title="${escapeHtml(t("ui.stagePrepEnemySummoner"))}">
+            <img class="stage-prep-slot-img" src="${summonerArtSrc("dark")}" width="64" height="64" alt="" draggable="false" decoding="async" />
+            <span class="stage-prep-slot-tag">${escapeHtml(t("ui.stagePrepEnemySummoner"))}</span>
+          </div>
+          ${enemyMonSlots}
+        </div>
+      </section>
+      <div class="stage-prep-vs" aria-hidden="true">VS</div>`;
 
   return `<div class="stage-prep-layer" role="presentation">
     <button type="button" class="stage-prep-backdrop" data-core-prep-action="cancel" aria-label="${escapeHtml(t("ui.stagePrepCancel"))}"></button>
-    <div class="stage-prep stage-prep--board stage-prep--${diff.id}" role="dialog" aria-modal="true" aria-labelledby="stage-entry-title">
+    <div class="stage-prep stage-prep--board stage-prep--${diff.id}${bossPrep ? " stage-prep--boss" : ""}" role="dialog" aria-modal="true" aria-labelledby="stage-entry-title">
       <header class="stage-prep-top stage-prep-top--board">
         <span class="stage-prep-team-label stage-prep-team-label--stage">${escapeHtml(t("ui.stagePrepTitle"))}</span>
         <h2 class="stage-prep-title" id="stage-entry-title">${escapeHtml(titleText)}</h2>
@@ -3984,21 +4178,7 @@ function renderStageEntryModal(): string {
         </div>
       </header>
 
-      <section class="stage-prep-team stage-prep-team--enemy" aria-label="${escapeHtml(t("ui.stagePrepEnemy"))}">
-        <h3 class="stage-prep-team-label stage-prep-team-label--enemy">${escapeHtml(t("ui.stagePrepEnemy"))}</h3>
-        <div class="stage-prep-slots">
-          <div class="stage-prep-slot stage-prep-slot--summoner el-dark" title="${escapeHtml(t("ui.stagePrepEnemySummoner"))}">
-            <img class="stage-prep-slot-img" src="${summonerArtSrc("dark")}" width="64" height="64" alt="" draggable="false" decoding="async" />
-            <span class="stage-prep-slot-tag">${escapeHtml(t("ui.stagePrepEnemySummoner"))}</span>
-          </div>
-          ${enemyMonSlots}
-        </div>
-        <div class="stage-prep-effects">
-          <p><span>${escapeHtml(t("ui.stagePrepEnemyLeader"))}</span> ${escapeHtml(t("ui.stagePrepEnemyLeaderLine"))}</p>
-        </div>
-      </section>
-
-      <div class="stage-prep-vs" aria-hidden="true">VS</div>
+      ${enemyBlock}
 
       <section class="stage-prep-team stage-prep-team--ally" aria-label="${escapeHtml(t("ui.stagePrepParty"))}">
         <h3 class="stage-prep-team-label stage-prep-team-label--ally">${escapeHtml(t("ui.stagePrepParty"))}</h3>
@@ -4712,6 +4892,7 @@ function grantRewardIfNeeded(): void {
     victory,
     undefined,
     stageEntryDiff,
+    { damageDealt: battle.allyDamageDealt },
   );
   save = next;
   persist();
@@ -4878,7 +5059,17 @@ function renderResult(): string {
       onboard.step === "equip");
 
   const lootTiles: string[] = [];
-  if (win) {
+  if (reward.raidDamage != null) {
+    lootTiles.push(
+      resultLootTile({
+        icon: "/art/ui/res/guild.svg",
+        label: t("ui.resultRaidDamage"),
+        amount: fmtRes(reward.raidDamage),
+        tone: "guild",
+      }),
+    );
+  }
+  if (win || stage.mode === "guild_raid") {
     if (reward.mana > 0) {
       lootTiles.push(
         resultLootTile({
@@ -5474,11 +5665,32 @@ function refreshDmgLayer(): void {
   });
 }
 
+function battleBossUnit(units: Unit[]): Unit | null {
+  const mons = units.filter((u) => u.kind === "monster");
+  if (!mons.length) return null;
+  const leadId = currentStage?.enemyMonsterIds[0];
+  if (currentStage?.mode === "guild_raid" && leadId) {
+    return mons.find((u) => u.monsterId === leadId) ?? mons[0]!;
+  }
+  return mons.slice().sort((a, b) => b.stats.hp - a.stats.hp)[0] ?? null;
+}
+
 /** Monsters with summoner seated in the middle of the line (e.g. M M S M M). */
-function battleLine(units: Unit[]): Unit[] {
+function battleLine(units: Unit[], side: "enemy" | "ally"): Unit[] {
+  const hideEnemySummoner =
+    side === "enemy" && currentStage && isBossPrepStage(currentStage);
   const monsters = units.filter((u) => u.kind === "monster");
-  const summoner = units.find((u) => u.kind === "summoner");
-  if (!summoner) return monsters;
+  const summoner = hideEnemySummoner
+    ? undefined
+    : units.find((u) => u.kind === "summoner");
+  if (!summoner) {
+    if (hideEnemySummoner) {
+      const boss = battleBossUnit(monsters);
+      if (!boss) return monsters;
+      return [boss, ...monsters.filter((u) => u.id !== boss.id)];
+    }
+    return monsters;
+  }
   const mid = Math.floor(monsters.length / 2);
   return [...monsters.slice(0, mid), summoner, ...monsters.slice(mid)];
 }
@@ -5489,10 +5701,14 @@ function renderBattleFront(
   side: "enemy" | "ally",
   opts?: { targetable?: boolean },
 ): string {
-  const line = battleLine(units);
+  const line = battleLine(units, side);
+  const bossId =
+    side === "enemy" && currentStage && isBossPrepStage(currentStage)
+      ? battleBossUnit(units)?.id
+      : null;
   return `<div class="battle-formation ${side}">
     <div class="battle-front ${side}">${line
-      .map((u) => renderUnit(u, opts))
+      .map((u) => renderUnit(u, { ...opts, boss: u.id === bossId }))
       .join("")}</div>
   </div>`;
 }
@@ -5587,11 +5803,26 @@ async function resolveCombatUntilAllyInput(opts?: {
     for (let guard = 0; battle && !battle.finishReason && guard < 80; guard++) {
       if (battleSkipSeq !== skipSeq) return;
       if (battle.phase === "await_wave") {
-        // Empty-rim beat, then spawn the next pack with a staggered entrance.
-        refreshLegal();
-        render();
-        await waitFx(fxDurationMs(720, battleSpeed));
-        if (battleSkipSeq !== skipSeq) return;
+        const chase =
+          currentStage?.mode === "scenario" && battle.totalWaves > 1;
+        const patchBattle = (): void => {
+          refreshLegal();
+          if (!refreshBattleView()) render();
+        };
+        if (chase) {
+          pageTransitionFx = "flee";
+          patchBattle();
+          await waitFx(fxDurationMs(520, battleSpeed));
+          if (battleSkipSeq !== skipSeq) return;
+          pageTransitionFx = "chase";
+          patchBattle();
+          await waitFx(fxDurationMs(420, battleSpeed));
+          if (battleSkipSeq !== skipSeq) return;
+        } else {
+          patchBattle();
+          await waitFx(fxDurationMs(720, battleSpeed));
+          if (battleSkipSeq !== skipSeq) return;
+        }
         if (!battle || battle.phase !== "await_wave") continue;
         const beforeIds = new Set(
           battle.units
@@ -5608,14 +5839,14 @@ async function resolveCombatUntilAllyInput(opts?: {
         );
         waveEnterIds = new Set(spawned.map((u) => u.id));
         waveBannerText = `${battle.currentWave}/${battle.totalWaves}`;
-        refreshLegal();
-        render();
+        pageTransitionFx = chase ? "enter" : null;
+        patchBattle();
         await waitFx(fxDurationMs(1100, battleSpeed));
         if (battleSkipSeq !== skipSeq) return;
         waveEnterIds = new Set();
         waveBannerText = null;
-        refreshLegal();
-        render();
+        pageTransitionFx = null;
+        patchBattle();
         continue;
       }
 
@@ -5770,6 +6001,10 @@ async function resolveCombatUntilAllyInput(opts?: {
     if (battle?.finishReason) {
       autoMode = false;
       clearAutoTimer();
+      if (battle.finishReason === "ally_win") {
+        await playLastPageVanish(skipSeq);
+        if (battleSkipSeq !== skipSeq) return;
+      }
       grantRewardIfNeeded();
     }
     refreshLegal();
@@ -6193,7 +6428,10 @@ function renderActiveUnitSkills(u: Unit): string {
   return `<div class="battle-unit-skills" role="toolbar" aria-label="${escapeHtml(t("ui.battleUnitSkills"))}">${body}</div>`;
 }
 
-function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
+function renderUnit(
+  u: Unit,
+  opts?: { targetable?: boolean; boss?: boolean },
+): string {
   const isActive = battle?.activeUnitId === u.id;
   const isTargeted = !!(opts?.targetable && selectedTargetId === u.id);
   const active = isActive ? " active" : "";
@@ -6212,7 +6450,7 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
     opts?.targetable && u.alive
       ? `type="button" data-target="${u.id}"`
       : "";
-  const artSize = isSummoner ? 128 : 168;
+  const artSize = opts?.boss ? 240 : isSummoner ? 128 : 168;
   const facing: "front" | "back" = u.team === "ally" ? "back" : "front";
   const art =
     u.kind === "monster"
@@ -6253,8 +6491,9 @@ function renderUnit(u: Unit, opts?: { targetable?: boolean }): string {
     </div>`;
   }
 
-  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${u.name}">
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${u.name}">
     ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
+    ${renderUnitStatusIcons(u)}
     <span class="battle-unit-glow" aria-hidden="true"></span>
     <span class="battle-unit-art" aria-hidden="true">${art}</span>
     ${barsHtml}
@@ -7010,6 +7249,7 @@ function openCommunityModalSoft(): void {
   applySummonerPickerOpen();
   applyResMoreOpen();
   applyBuildingInfoOpen();
+  void refreshSocialThenCommunity();
 }
 
 /** Compact display for wallet amounts in the app bar. */
@@ -7172,6 +7412,120 @@ function ensureModalXDelegate(): void {
   );
 }
 
+function sysConfirmTitle(kind: "login" | "exit"): string {
+  return kind === "exit" ? t("nav.exitGame") : t("nav.confirmLogin");
+}
+
+function renderSysConfirmLayer(): string {
+  const kind = sysConfirmKind;
+  const open = !!kind;
+  const title = kind ? sysConfirmTitle(kind) : "";
+  const cancel = escapeHtml(t("ui.19b2d19bc1"));
+  return `<div class="settings-layer sys-confirm-layer" id="sys-confirm-layer" ${open ? "" : "hidden"} aria-hidden="${open ? "false" : "true"}">
+    <button type="button" class="settings-backdrop" id="btn-sys-confirm-backdrop" aria-label="${cancel}"></button>
+    <div class="gear-sell-confirm-sheet sys-confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="sys-confirm-title">
+      ${modalCloseX(t("ui.19b2d19bc1"), "btn-sys-confirm-backdrop")}
+      <h2 class="gear-sell-confirm-title" id="sys-confirm-title">${escapeHtml(title)}</h2>
+      <div class="gear-sell-acts">
+        <button type="button" class="secondary" id="btn-sys-confirm-cancel">${cancel}</button>
+        <button type="button" class="auth-btn-primary" id="btn-sys-confirm-ok">${escapeHtml(t("ui.468266d639"))}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function applySysConfirmOpen(): void {
+  let layer = app.querySelector<HTMLElement>("#sys-confirm-layer");
+  if (!layer) {
+    if (!sysConfirmKind) {
+      rememberOverlayClose("sys-confirm-layer");
+      return;
+    }
+    app.insertAdjacentHTML("beforeend", renderSysConfirmLayer());
+    layer = app.querySelector<HTMLElement>("#sys-confirm-layer");
+  }
+  if (!layer) return;
+  const titleEl = layer.querySelector("#sys-confirm-title");
+  if (titleEl) titleEl.textContent = sysConfirmKind ? sysConfirmTitle(sysConfirmKind) : "";
+  layer.hidden = !sysConfirmKind;
+  layer.setAttribute("aria-hidden", sysConfirmKind ? "false" : "true");
+  if (sysConfirmKind) {
+    promoteOverlayToAppRoot(layer);
+    replayModalPop(layer);
+  } else {
+    rememberOverlayClose("sys-confirm-layer");
+  }
+}
+
+function closeSysConfirm(): void {
+  if (!sysConfirmKind) return;
+  sysConfirmKind = null;
+  applySysConfirmOpen();
+}
+
+function openSysConfirm(kind: "login" | "exit"): void {
+  sysConfirmKind = kind;
+  applySysConfirmOpen();
+  ensureSysConfirmDelegate();
+}
+
+function confirmSysConfirm(): void {
+  const kind = sysConfirmKind;
+  closeSysConfirm();
+  if (kind === "exit") {
+    void exitNativeApp();
+    return;
+  }
+  if (kind === "login") returnToLoginScreen();
+}
+
+let sysConfirmDelegateBound = false;
+function ensureSysConfirmDelegate(): void {
+  if (sysConfirmDelegateBound) return;
+  sysConfirmDelegateBound = true;
+  app.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (!(t instanceof Element)) return;
+    if (t.closest("#btn-sys-confirm-ok")) {
+      ev.preventDefault();
+      confirmSysConfirm();
+      return;
+    }
+    if (t.closest("#btn-sys-confirm-cancel, #btn-sys-confirm-backdrop")) {
+      ev.preventDefault();
+      closeSysConfirm();
+    }
+  });
+}
+
+function returnToLoginScreen(): void {
+  persist();
+  stopChatLive();
+  chatOpen = false;
+  profileOpen = false;
+  settingsOpen = false;
+  mailboxOpen = false;
+  notifOpen = false;
+  missionOpen = false;
+  communityOpen = false;
+  shopOpen = false;
+  resMoreOpen = false;
+  summonerPickerOpen = false;
+  battle = null;
+  currentStage = null;
+  autoMode = false;
+  clearAutoTimer();
+  authUi.pane = "gate";
+  overlayBackStack = [];
+  viewHistory = [];
+  viewHistoryLock = true;
+  sysConfirmKind = null;
+  view = "auth";
+  lastTrackedView = "auth";
+  render();
+  viewHistoryLock = false;
+}
+
 function adoptSessionNickname(user: SessionUser): void {
   const nick = user.nickname?.trim();
   if (!nick) return;
@@ -7302,13 +7656,15 @@ function applyResMoreOpen(): void {
     else panel.setAttribute("hidden", "");
   }
   cueModalSfx("res-more", resMoreOpen);
+  if (resMoreOpen) rememberOverlayOpen("res-more");
+  else rememberOverlayClose("res-more");
 }
 
 
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play",
+    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -7329,6 +7685,32 @@ function softPatchHost(hostSelector: string, html: string): HTMLElement | null {
 
 /** Last-opened overlay sits above HUD / tabs / earlier sheets. */
 let overlayStackZ = 10000;
+/** Skip back-stack bookkeeping while re-porting known layers after a render. */
+let overlayPromoteQuiet = false;
+/** Overlay ids in open order (most recent last) for hardware back. */
+let overlayBackStack: string[] = [];
+/** Previous game screens for hardware back (most recent last). */
+let viewHistory: View[] = [];
+let viewHistoryLock = false;
+let lastTrackedView: View = view;
+
+function rememberOverlayOpen(id: string): void {
+  if (!id) return;
+  overlayBackStack = overlayBackStack.filter((item) => item !== id);
+  overlayBackStack.push(id);
+}
+
+function rememberOverlayClose(id: string): void {
+  if (!id) return;
+  overlayBackStack = overlayBackStack.filter((item) => item !== id);
+}
+
+function overlayDomIsOpen(el: HTMLElement): boolean {
+  if (el.id === "facility-layer") return false;
+  if (el.hidden) return false;
+  if (el.getAttribute("aria-hidden") === "true") return false;
+  return true;
+}
 
 /** Move a modal layer to `#app` so it escapes `main` / facility stacking contexts. */
 function promoteOverlayToAppRoot(el: Element | null | undefined): HTMLElement | null {
@@ -7339,6 +7721,9 @@ function promoteOverlayToAppRoot(el: Element | null | undefined): HTMLElement | 
   el.style.inset = "0";
   el.style.zIndex = String(overlayStackZ);
   app.appendChild(el);
+  if (!overlayPromoteQuiet && el.id && overlayDomIsOpen(el)) {
+    rememberOverlayOpen(el.id);
+  }
   return el;
 }
 
@@ -7358,6 +7743,7 @@ const APP_ROOT_OVERLAY_IDS = [
   "shop-layer",
   "summoner-picker-layer",
   "chat-layer",
+  "chat-profile-layer",
   "building-info-layer",
   "building-unlock-layer",
   "bldg-up-layer",
@@ -7376,16 +7762,20 @@ const APP_ROOT_OVERLAY_IDS = [
   "stage-prep-info-layer",
   "stage-drop-info-layer",
   "forge-reveal-layer",
+  "forge-confirm-layer",
   "mon-rite-layer",
+  "sys-confirm-layer",
   GROWTH_REVEAL_LAYER_ID,
   WISH_REVEAL_LAYER_ID,
 ] as const;
 
 function promoteKnownOverlays(): void {
   overlayStackZ = 10000;
+  overlayPromoteQuiet = true;
   for (const id of APP_ROOT_OVERLAY_IDS) {
     promoteOverlayToAppRoot(app.querySelector(`#${id}`));
   }
+  overlayPromoteQuiet = false;
 }
 
 /** Inject/replace a single overlay node without remounting the active screen. */
@@ -7477,6 +7867,9 @@ function applyBattleAutoSettingsOpen(): void {
     app.appendChild(layer);
     positionBattleAutoSettings(layer, btn);
     if (opening) replayModalPop(layer);
+    rememberOverlayOpen("battle-auto-settings");
+  } else {
+    rememberOverlayClose("battle-auto-settings");
   }
 }
 
@@ -8214,7 +8607,7 @@ function patchMissionModalBody(): boolean {
 
 function missionRewardForClaimId(id: string): MissionReward | undefined {
   if (id.startsWith("mq:")) return getMainQuest(id.slice(3))?.reward;
-  return DAILY_MISSION_REWARDS[id as keyof typeof DAILY_MISSION_REWARDS];
+  return getDailyMission(id)?.reward ?? DAILY_MISSION_REWARDS[id as keyof typeof DAILY_MISSION_REWARDS];
 }
 
 function missionRewardGainChips(reward: MissionReward): string {
@@ -8335,6 +8728,18 @@ function goFromMission(nav: string): void {
   shopOpen = false;
   applyCommunityOpen();
   applyShopOpen();
+  if (nav === "enhance:symbols") {
+    enhanceTab = "monsters";
+    monBookDock = "symbols";
+    const next = "enhance" as View;
+    const stayOnIsland =
+      (view === "home" || isFacilityView(view)) &&
+      Boolean(app.querySelector(".home-island"));
+    view = next;
+    if (stayOnIsland) renderPreservingIsland();
+    else render();
+    return;
+  }
   if (nav.startsWith("stages:")) {
     const region = nav.slice("stages:".length) as StagesRegionId;
     const stay = view === "stages";
@@ -8407,18 +8812,27 @@ function syncGuildSpotLabel(): void {
 }
 
 function refreshCommunitySoft(): boolean {
-  const html = renderGuildBody();
-  const hosts = [
-    app.querySelector("#community-body-host"),
-    app.querySelector("#guild-body-host"),
-  ].filter((el): el is HTMLElement => !!el);
-  if (!hosts.length) return false;
-  for (const host of hosts) {
-    host.innerHTML = html;
-    dematteArtInTree(host);
-    bindCommunityActions(host);
+  const communityHost = app.querySelector<HTMLElement>("#community-body-host");
+  const guildHost = app.querySelector<HTMLElement>("#guild-body-host");
+  let ok = false;
+  if (communityHost) {
+    communityHost.innerHTML =
+      communityTab === "friends" ? renderFriendsBody() : renderGuildBody();
+    dematteArtInTree(communityHost);
+    bindCommunityActions(communityHost);
+    ok = true;
   }
-  return true;
+  if (guildHost) {
+    guildHost.innerHTML = renderGuildBody();
+    dematteArtInTree(guildHost);
+    bindCommunityActions(guildHost);
+    ok = true;
+  }
+  const friendsTab = app.querySelector<HTMLButtonElement>('[data-community-tab="friends"]');
+  if (friendsTab) {
+    friendsTab.innerHTML = `${escapeHtml(t("community.tabFriends"))}${socialIncoming.length ? missionTabBadge(socialIncoming.length) : ""}`;
+  }
+  return ok;
 }
 
 function renderGuildFormModal(): string {
@@ -8518,6 +8932,9 @@ function applyGuildAction(
   syncHudResources();
   syncGuildSpotLabel();
   if (opts?.closeFormOnJoin && joined) closeGuildFormSoft();
+  if (view === "stages" && stagesRegion === "guild") {
+    applyStagesRegionOpen({ animate: false });
+  }
   if (!refreshCommunitySoft()) {
     render();
     if (communityOpen) applyCommunityOpen();
@@ -8548,6 +8965,112 @@ function bindCommunityActions(root: ParentNode = app): void {
   if (guildRenameOpen) {
     queueMicrotask(() => inputEl()?.focus());
   }
+  bindFriendActions(root);
+}
+
+function bindFriendActions(root: ParentNode = app): void {
+  root.querySelector("#friend-add-form")?.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const input = root.querySelector<HTMLInputElement>("#friend-nick-input");
+    const nick = input?.value.trim() ?? "";
+    if (!nick) return;
+    void (async () => {
+      const r = await socialRequest({ nick });
+      if (!r.ok) {
+        chatFlashError(r.error);
+        return;
+      }
+      applySocialLists(r.data);
+      applySocialGifts(r.data.gifts);
+      if (input) input.value = "";
+      flash(t("chat.requestSent"));
+      if (!refreshCommunitySoft()) render();
+    })();
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-friend-accept]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.friendAccept;
+      if (!uid) return;
+      void socialAccept(uid).then((r) => {
+        if (!r.ok) {
+          chatFlashError(r.error);
+          return;
+        }
+        applySocialLists(r.data);
+        if (!refreshCommunitySoft()) render();
+      });
+    });
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-friend-reject]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.friendReject;
+      if (!uid) return;
+      void socialReject(uid).then((r) => {
+        if (!r.ok) return;
+        applySocialLists(r.data);
+        if (!refreshCommunitySoft()) render();
+      });
+    });
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-friend-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.friendRemove;
+      if (!uid) return;
+      void socialRemove(uid).then((r) => {
+        if (!r.ok) {
+          chatFlashError(r.error);
+          return;
+        }
+        applySocialLists(r.data);
+        if (!refreshCommunitySoft()) render();
+      });
+    });
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-friend-energy]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.friendEnergy;
+      if (!uid) return;
+      void socialSendEnergy(uid).then((r) => {
+        if (!r.ok) {
+          chatFlashError(r.error);
+          return;
+        }
+        applySocialLists(r.data);
+        if (r.data.friendship) {
+          save = grantFriendshipPoints(save, r.data.friendship);
+          persist();
+          syncHudResources();
+        }
+        flash(t("friend.sent"));
+      });
+    });
+  });
+}
+
+function bindCommunityTabs(root: ParentNode = app): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-community-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.communityTab;
+      if (tab !== "guild" && tab !== "friends") return;
+      if (communityTab === tab) return;
+      communityTab = tab;
+      root.querySelectorAll<HTMLButtonElement>("[data-community-tab]").forEach((b) => {
+        const on = b.dataset.communityTab === communityTab;
+        b.classList.toggle("is-active", on);
+      });
+      if (tab === "friends") void refreshSocialThenCommunity();
+      else if (!refreshCommunitySoft()) render();
+    });
+  });
+}
+
+async function refreshSocialThenCommunity(): Promise<void> {
+  const r = await socialLoad();
+  if (r.ok) {
+    applySocialLists(r.data);
+    applySocialGifts(r.data.gifts);
+  }
+  if (!refreshCommunitySoft()) render();
 }
 
 /** Toggle shop modal without a full screen re-render. */
@@ -8602,6 +9125,57 @@ function bindShopBuyButtons(root: ParentNode = app): void {
     flash(r.message);
     softRefreshShopAfterBuy();
   });
+  root.querySelectorAll<HTMLButtonElement>("[data-shop-pack]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const sku = btn.dataset.shopPack as CashPackSku | undefined;
+      if (!sku || !(sku in CASH_PACKS)) return;
+      const r = runBuyCashPack(save, sku);
+      save = r.save;
+      persist();
+      void playSfx("ui-purchase");
+      flash(r.message);
+      softRefreshShopAfterBuy();
+    });
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-shop-arena]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const sku = btn.dataset.shopArena as ArenaShopSku | undefined;
+      if (!sku || !(sku in ARENA_SHOP)) return;
+      const r = runBuyArenaShop(save, sku);
+      save = r.save;
+      persist();
+      void playSfx("ui-purchase");
+      flash(r.message);
+      softRefreshShopAfterBuy();
+    });
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-shop-friend]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const sku = btn.dataset.shopFriend as FriendShopSku | undefined;
+      if (!sku || !(sku in FRIEND_SHOP)) return;
+      const r = runBuyFriendShop(save, sku);
+      save = r.save;
+      persist();
+      void playSfx("ui-purchase");
+      flash(r.message);
+      softRefreshShopAfterBuy();
+    });
+  });
+}
+
+function bindShopTabs(root: ParentNode = app): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-shop-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.shopTab;
+      if (tab !== "normal" && tab !== "pack" && tab !== "arena" && tab !== "friend") return;
+      if (shopTab === tab) return;
+      shopTab = tab;
+      root.querySelectorAll<HTMLButtonElement>("[data-shop-tab]").forEach((b) => {
+        b.classList.toggle("is-active", b.dataset.shopTab === shopTab);
+      });
+      softRefreshShopAfterBuy();
+    });
+  });
 }
 
 /** Patch shop product grid + HUD after a catalog purchase (no hub-sky flash). */
@@ -8616,9 +9190,7 @@ function softRefreshShopAfterBuy(): void {
   bodies.forEach((body) => {
     body.outerHTML = html;
   });
-  const layer = app.querySelector("#shop-layer");
-  if (layer) bindShopBuyButtons(layer);
-  else bindShopBuyButtons(app);
+  bindShopBuyButtons(app);
 }
 
 /** Open shop modal and close other home overlays. */
@@ -8673,47 +9245,42 @@ function tickerMessages(): string[] {
   return lines;
 }
 
-const CHAT_CHANNEL_CAP = 100;
-const CHAT_CHANNEL_COUNT = 6;
+const CHAT_CHANNEL_STORE = "ss.chat.channel";
 
-type ChatMsg = { id: string; nick: string; text: string; at: number };
+type ChatMsg = ChatMsgDto;
 type ChatChannel = { id: number; users: number; msgs: ChatMsg[] };
 
 let chatChannels: ChatChannel[] = [];
 let chatChannelId = 1;
-let chatMsgSeq = 0;
 
-const CHAT_BOT_NICKS = [
-  "StoneFox",
-  "RuneOwl",
-  "CrystalJay",
-  "ManaPike",
-  "GloryFin",
-  "DojoCrow",
-];
-const CHAT_BOT_LINES = [
-  "gg",
-  "anyone farming stage 7?",
-  "looking for guild",
-  "nice pull!",
-  "energy refill soon",
-  "symbol bag almost full",
-  "hello channel",
-  "need wind lead",
-];
+function readSavedChatChannel(): number {
+  try {
+    const n = Number(localStorage.getItem(CHAT_CHANNEL_STORE));
+    if (Number.isInteger(n) && n >= 1 && n <= CHAT_CHANNEL_COUNT) return n;
+  } catch {
+    /* ignore */
+  }
+  return 1;
+}
+
+function persistChatChannel(): void {
+  try {
+    localStorage.setItem(CHAT_CHANNEL_STORE, String(chatChannelId));
+  } catch {
+    /* ignore */
+  }
+}
+
+function canUseLiveChat(): boolean {
+  return Boolean(sessionUser && !sessionUser.id.startsWith("local-"));
+}
 
 function ensureChatChannels(): void {
   if (chatChannels.length) return;
   for (let i = 1; i <= CHAT_CHANNEL_COUNT; i++) {
-    const seeded =
-      i === 1 ? 18 : i === 2 ? CHAT_CHANNEL_CAP : Math.min(CHAT_CHANNEL_CAP, 35 + i * 9);
-    chatChannels.push({
-      id: i,
-      users: seeded,
-      msgs: [],
-    });
+    chatChannels.push({ id: i, users: 0, msgs: [] });
   }
-  chatChannelId = chatChannels.find((c) => c.users < CHAT_CHANNEL_CAP)?.id ?? 1;
+  chatChannelId = readSavedChatChannel();
 }
 
 function chatChannel(id: number): ChatChannel | undefined {
@@ -8723,19 +9290,6 @@ function chatChannel(id: number): ChatChannel | undefined {
 
 function chatIsFull(ch: ChatChannel): boolean {
   return ch.users >= CHAT_CHANNEL_CAP;
-}
-
-function joinChatChannel(id: number): boolean {
-  ensureChatChannels();
-  const ch = chatChannel(id);
-  if (!ch || chatIsFull(ch)) return false;
-  if (chatChannelId !== id) {
-    const prev = chatChannel(chatChannelId);
-    if (prev && prev.users > 0) prev.users -= 1;
-    ch.users = Math.min(CHAT_CHANNEL_CAP, ch.users + 1);
-    chatChannelId = id;
-  }
-  return true;
 }
 
 function clearChatLine(): void {
@@ -8749,104 +9303,376 @@ function clearChannelMsgs(id: number): void {
   if (ch) ch.msgs = [];
 }
 
-/** Begin a chat session on a channel — no history from before this connect. */
-function connectChatSession(id?: number): boolean {
-  ensureChatChannels();
-  const target = id ?? chatChannelId;
-  if (!joinChatChannel(target)) {
-    const fallback = chatChannels.find((c) => !chatIsFull(c));
-    if (!fallback || !joinChatChannel(fallback.id)) return false;
+function chatFlashError(error: string): void {
+  if (error === "channel_full") {
+    flash(t("chat.channelFull"));
+    return;
   }
-  clearChannelMsgs(chatChannelId);
-  chatConnected = true;
-  clearChatLine();
-  return true;
+  if (error === "rate_limited") {
+    flash(t("chat.rateLimited"));
+    return;
+  }
+  if (error === "text_blocked" || error === "text_invalid") {
+    flash(t("chat.textBlocked"));
+    return;
+  }
+  if (error === "no_guild") {
+    flash(t("chat.noGuild"));
+    return;
+  }
+  if (error === "need_peer") {
+    flash(t("chat.pickFriend"));
+    return;
+  }
+  if (error === "not_friends") {
+    flash(t("friend.notFriends"));
+    return;
+  }
+  if (error === "already") {
+    flash(t("chat.alreadyFriend"));
+    return;
+  }
+  if (error === "pending") {
+    flash(t("friend.pending"));
+    return;
+  }
+  if (error === "full") {
+    flash(t("friend.full"));
+    return;
+  }
+  if (error === "self") {
+    flash(t("friend.self"));
+    return;
+  }
+  if (error === "not_found") {
+    flash(t("friend.notFound"));
+    return;
+  }
+  if (error === "already_sent") {
+    flash(t("friend.alreadySent"));
+    return;
+  }
+  if (chatFailFlashed) return;
+  chatFailFlashed = true;
+  flash(t("chat.unavailable"));
 }
 
-/** End the chat session and wipe session messages. */
-function disconnectChatSession(): void {
-  if (chatConnected) clearChannelMsgs(chatChannelId);
-  chatConnected = false;
-  chatOpen = false;
-  clearChatLine();
-}
-
-/** Switch channel: leave previous session history, join empty. */
-function switchChatSession(id: number): boolean {
-  ensureChatChannels();
-  if (chatConnected && id === chatChannelId) return true;
-  if (chatConnected) clearChannelMsgs(chatChannelId);
-  if (!joinChatChannel(id)) return false;
-  clearChannelMsgs(chatChannelId);
-  chatConnected = true;
-  clearChatLine();
-  return true;
-}
-
-function pushChatMessage(channelId: number, nick: string, text: string): ChatMsg | null {
-  ensureChatChannels();
-  if (!chatConnected || channelId !== chatChannelId) return null;
-  const ch = chatChannel(channelId);
-  if (!ch) return null;
-  const msg: ChatMsg = {
-    id: `m${++chatMsgSeq}`,
-    nick,
-    text,
-    at: Date.now(),
+function chatProfilePayload(): { level: number; guildName: string | null } {
+  return {
+    level: save.island.summonerLevel ?? 1,
+    guildName: save.guildName,
   };
-  ch.msgs = [...ch.msgs.slice(-40), msg];
-  chatLineNick = nick;
-  chatLineText = text;
-  if (!chatOpen) chatLineUnread = true;
-  return msg;
 }
 
-function chatSimAllowed(): boolean {
-  return view !== "auth" && view !== "battle" && view !== "result";
+function applySocialLists(state: Pick<SocialState, "friends" | "incoming">): void {
+  socialFriends = state.friends ?? [];
+  socialIncoming = state.incoming ?? [];
+  chatFriendOpts = socialFriends;
 }
 
-function simulateChatTick(): void {
-  if (!chatSimAllowed() || !chatConnected) return;
+function friendSeenLabel(seen?: ChatFriendDto["seen"]): string {
+  if (!seen) return t("friend.seen.longAgo");
+  if (seen.kind === "online") return t("friend.seen.online");
+  if (seen.kind === "hours") return t("friend.seen.hours", { n: seen.n ?? 1 });
+  if (seen.kind === "days") return t("friend.seen.days", { n: seen.n ?? 1 });
+  if (seen.kind === "months") return t("friend.seen.months", { n: seen.n ?? 1 });
+  return t("friend.seen.longAgo");
+}
+
+function friendSeenHtml(seen?: ChatFriendDto["seen"]): string {
+  const on = seen?.kind === "online";
+  return `<em class="friend-seen${on ? " is-online" : ""}">${escapeHtml(friendSeenLabel(seen))}</em>`;
+}
+
+function applySocialGifts(gifts: SocialState["gifts"] | undefined): void {
+  if (!gifts?.length) return;
+  let energy = 0;
+  for (const g of gifts) energy += g.energy ?? 0;
+  if (!energy) return;
+  save = { ...save, island: grantEnergy(save.island, energy) };
+  persist();
+  syncHudResources();
+}
+
+function applyChannelList(channels: ChatChannelDto[]): void {
   ensureChatChannels();
-  const ch = chatChannel(chatChannelId);
-  if (!ch || chatIsFull(ch)) return;
-  const nick = CHAT_BOT_NICKS[Math.floor(Math.random() * CHAT_BOT_NICKS.length)]!;
-  const text = CHAT_BOT_LINES[Math.floor(Math.random() * CHAT_BOT_LINES.length)]!;
-  const msg = pushChatMessage(ch.id, nick, text);
-  if (!msg) return;
-  if (chatOpen) {
-    const log = app.querySelector("#chat-log");
-    if (log) {
-      const empty = log.querySelector(".chat-empty");
-      if (empty) empty.remove();
-      const row = document.createElement("div");
-      row.className = "chat-msg";
-      row.innerHTML = `<strong>${escapeHtml(nick)}</strong><span>${escapeHtml(text)}</span>`;
-      log.appendChild(row);
-      log.scrollTop = log.scrollHeight;
+  for (const c of channels) {
+    const row = chatChannel(c.id);
+    if (row) row.users = c.users;
+    else chatChannels.push({ id: c.id, users: c.users, msgs: [] });
+  }
+  chatChannels.sort((a, b) => a.id - b.id);
+  syncChatChannelSelect();
+}
+
+function chatMsgRowHtml(m: ChatMsg): string {
+  const mine = m.self ? " is-self" : "";
+  const uid = m.uid && !m.self ? m.uid : "";
+  const nick = uid
+    ? `<button type="button" class="chat-msg-nick" data-chat-uid="${escapeHtml(uid)}">${escapeHtml(m.nick)}</button>`
+    : `<strong>${escapeHtml(m.nick)}</strong>`;
+  return `<div class="chat-msg${mine}" data-chat-id="${m.id}">${nick}<span>${escapeHtml(m.text)}</span></div>`;
+}
+
+function activeChatMsgs(): ChatMsg[] {
+  if (chatTab === "world") return chatChannel(chatChannelId)?.msgs ?? [];
+  return chatSideMsgs;
+}
+
+function setActiveChatMsgs(list: ChatMsg[]): void {
+  if (chatTab === "world") {
+    const ch = chatChannel(chatChannelId);
+    if (ch) ch.msgs = list;
+    return;
+  }
+  chatSideMsgs = list;
+}
+
+function renderChatLogHtml(): string {
+  const list = activeChatMsgs();
+  if (!list.length) return `<p class="muted chat-empty">${escapeHtml(t("chat.empty"))}</p>`;
+  return list.map(chatMsgRowHtml).join("");
+}
+
+function syncChatLog(): void {
+  const log = app.querySelector("#chat-log");
+  if (!log) return;
+  log.innerHTML = renderChatLogHtml();
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderChatChannelOptions(): string {
+  ensureChatChannels();
+  return chatChannels
+    .map((c) => {
+      const full = chatIsFull(c);
+      const on = c.id === chatChannelId;
+      const users = t("chat.channelUsers", { n: c.users, max: CHAT_CHANNEL_CAP });
+      const label = `${t("chat.channelN", { n: c.id })} ${MIDDOT} ${users}${full ? ` ${MIDDOT} ${t("chat.full")}` : ""}`;
+      return `<option value="${c.id}" ${on ? "selected" : ""} ${full && !on ? "disabled" : ""}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+}
+
+function syncChatChannelSelect(): void {
+  const sel = app.querySelector<HTMLSelectElement>("#chat-channel-select");
+  if (!sel) return;
+  sel.innerHTML = renderChatChannelOptions();
+  sel.value = String(chatChannelId);
+}
+
+function renderChatFriendOptions(): string {
+  const opts = chatFriendOpts.length ? chatFriendOpts : socialFriends;
+  if (!opts.length) {
+    return `<option value="">${escapeHtml(t("chat.pickFriend"))}</option>`;
+  }
+  return opts
+    .map((f) => {
+      const on = f.uid === chatPeerUid;
+      return `<option value="${escapeHtml(f.uid)}" ${on ? "selected" : ""}>${escapeHtml(f.nick)}</option>`;
+    })
+    .join("");
+}
+
+function syncChatPeerSelect(): void {
+  const sel = app.querySelector<HTMLSelectElement>("#chat-peer-select");
+  if (!sel) return;
+  sel.innerHTML = renderChatFriendOptions();
+  sel.value = chatPeerUid ?? "";
+}
+
+function ingestChatMessage(m: ChatMsg): void {
+  const list = activeChatMsgs();
+  if (list.some((x) => x.id === m.id)) return;
+  const next = [...list.slice(-40), m];
+  setActiveChatMsgs(next);
+  if (m.id > chatAfter) chatAfter = m.id;
+  chatLineNick = m.nick;
+  chatLineText = m.text;
+  if (!m.self && !chatOpen) chatLineUnread = true;
+  if (chatOpen) appendChatRow(m);
+  else applyHomeChatRail();
+}
+
+function appendChatRow(m: ChatMsg): void {
+  const log = app.querySelector("#chat-log");
+  if (!log) return;
+  if (log.querySelector(`[data-chat-id="${m.id}"]`)) return;
+  log.querySelector(".chat-empty")?.remove();
+  log.insertAdjacentHTML("beforeend", chatMsgRowHtml(m));
+  log.scrollTop = log.scrollHeight;
+}
+
+function applyChatSnapshot(snap: ChatSnapshot): void {
+  applyChannelList(snap.channels ?? []);
+  if (snap.friends) {
+    chatFriendOpts = snap.friends;
+    socialFriends = snap.friends;
+  }
+  chatTab = snap.tab ?? chatTab;
+  chatSelfUid = snap.selfUid ?? chatSelfUid;
+  chatPeerUid = snap.peerUid ?? chatPeerUid;
+  const prevId = chatChannelId;
+  chatChannelId = snap.channelId || chatChannelId;
+  persistChatChannel();
+  if (snap.reset || prevId !== chatChannelId) {
+    setActiveChatMsgs(snap.messages.slice());
+    chatAfter = snap.after;
+    const last = snap.messages[snap.messages.length - 1];
+    if (last) {
+      chatLineNick = last.nick;
+      chatLineText = last.text;
+      if (chatConnected && !last.self && !chatOpen) chatLineUnread = true;
+      if (!chatOpen) applyHomeChatRail();
     }
-  } else {
-    applyHomeChatRail();
+    if (chatOpen) {
+      syncChatLog();
+      syncChatChannelSelect();
+      syncChatPeerSelect();
+    }
+    return;
+  }
+  for (const m of snap.messages) ingestChatMessage(m);
+  chatAfter = snap.after;
+}
+
+async function doJoinChat(): Promise<boolean> {
+  const r = await chatJoin({
+    tab: chatTab,
+    channel: chatChannelId,
+    peer: chatPeerUid,
+    profile: chatProfilePayload(),
+  });
+  if (r.ok) {
+    applyChatSnapshot(r.data);
+    chatConnected = true;
+    chatFailFlashed = false;
+    persistChatChannel();
+    return true;
+  }
+  if (r.channels) applyChannelList(r.channels);
+  if (r.suggested && r.suggested !== chatChannelId) {
+    chatChannelId = r.suggested;
+    const again = await chatJoin({
+      tab: chatTab,
+      channel: chatChannelId,
+      peer: chatPeerUid,
+      profile: chatProfilePayload(),
+    });
+    if (again.ok) {
+      applyChatSnapshot(again.data);
+      chatConnected = true;
+      chatFailFlashed = false;
+      persistChatChannel();
+      return true;
+    }
+  }
+  chatFlashError(r.error);
+  return false;
+}
+
+async function joinChatLive(): Promise<boolean> {
+  if (!canUseLiveChat()) {
+    chatFlashError("unavailable");
+    return false;
+  }
+  while (chatJoinInFlight) {
+    await chatJoinInFlight;
+  }
+  const p = doJoinChat();
+  chatJoinInFlight = p;
+  try {
+    return await p;
+  } finally {
+    if (chatJoinInFlight === p) chatJoinInFlight = null;
   }
 }
 
-function pauseChatSim(): void {
-  if (!chatSimTimer) return;
-  clearInterval(chatSimTimer);
-  chatSimTimer = null;
+async function sendChatLive(text: string): Promise<boolean> {
+  if (chatSendBusy) return false;
+  chatSendBusy = true;
+  try {
+    if (!chatConnected) {
+      const ok = await joinChatLive();
+      if (!ok) return false;
+    }
+    let r = await chatSend(text);
+    if (!r.ok && r.error === "not_joined") {
+      chatConnected = false;
+      const ok = await joinChatLive();
+      if (!ok) return false;
+      r = await chatSend(text);
+    }
+    if (!r.ok) {
+      chatFlashError(r.error);
+      return false;
+    }
+    ingestChatMessage(r.data.message);
+    if (r.data.channels) applyChannelList(r.data.channels);
+    if (r.data.friends) chatFriendOpts = r.data.friends;
+    chatFailFlashed = false;
+    return true;
+  } finally {
+    chatSendBusy = false;
+  }
 }
 
-function startChatSim(): void {
-  if (!chatSimAllowed()) return;
-  if (!chatConnected) connectChatSession(chatChannelId);
-  if (chatSimTimer) return;
+async function tickChatLive(): Promise<void> {
+  if (!chatWanted || !canUseLiveChat()) return;
+  if (!chatConnected) {
+    await joinChatLive();
+    return;
+  }
+  const r = await chatPoll(chatAfter, { tab: chatTab, peer: chatPeerUid });
+  if (!r.ok) {
+    if (r.error === "not_joined" || r.status === 409) {
+      chatConnected = false;
+      await joinChatLive();
+      return;
+    }
+    if (r.status === 401) {
+      chatConnected = false;
+      chatWanted = false;
+      if (chatPollTimer) {
+        clearInterval(chatPollTimer);
+        chatPollTimer = null;
+      }
+      chatFlashError("unauthorized");
+      return;
+    }
+    chatFlashError(r.error);
+    return;
+  }
+  chatFailFlashed = false;
+  applyChatSnapshot(r.data);
+}
+
+function startChatLive(): void {
+  if (!canUseLiveChat()) return;
+  chatWanted = true;
+  if (chatPollTimer) return;
   ensureChatChannels();
-  chatSimTimer = setInterval(() => simulateChatTick(), 14000);
+  chatPollTimer = setInterval(() => {
+    void tickChatLive();
+  }, 1600);
+  void tickChatLive();
 }
 
-function stopChatSim(): void {
-  disconnectChatSession();
-  pauseChatSim();
+function stopChatLive(): void {
+  chatWanted = false;
+  if (chatPollTimer) {
+    clearInterval(chatPollTimer);
+    chatPollTimer = null;
+  }
+  const was = chatConnected;
+  chatConnected = false;
+  chatAfter = 0;
+  if (was) void chatLeave();
+  if (chatOpen) closeChatOverlay();
+  if (was) {
+    clearChannelMsgs(chatChannelId);
+    clearChatLine();
+  }
 }
 
 function renderHomeChatRail(): string {
@@ -8886,7 +9712,6 @@ function applyHomeChatRail(): void {
 
 function openHomeChat(): void {
   ensureChatChannels();
-  if (!chatConnected) connectChatSession(chatChannelId);
   chatLineUnread = false;
   chatOpen = true;
   mailboxOpen = false;
@@ -8905,9 +9730,18 @@ function openHomeChat(): void {
   applyMissionOpen();
   applyCommunityOpen();
   applyShopOpen();
-  // Inject chat sheet without remounting the island / map.
-  app.querySelector("#chat-layer")?.remove();
-  app.insertAdjacentHTML("beforeend", renderChatModal());
+  if (canUseLiveChat()) {
+    chatWanted = true;
+    if (!chatConnected) void joinChatLive();
+    void socialLoad().then((r) => {
+      if (!r.ok) return;
+      applySocialLists(r.data);
+      applySocialGifts(r.data.gifts);
+    });
+  } else {
+    chatFlashError("unavailable");
+  }
+  softMountOverlay("chat-layer", renderChatModal());
   applyHomeChatRail();
   bindChatUi();
   queueMicrotask(() => {
@@ -8919,9 +9753,10 @@ function openHomeChat(): void {
 
 /** Close chat sheet without remounting the island. */
 function closeChatOverlay(): void {
-  if (!chatOpen) return;
+  if (!chatOpen && !app.querySelector("#chat-layer")) return;
   chatOpen = false;
-  app.querySelector("#chat-layer")?.remove();
+  closeChatProfile();
+  softRemoveOverlay("chat-layer");
   applyHomeChatRail();
   cueModalSfx("chat", false);
 }
@@ -8938,37 +9773,66 @@ function bindChatUi(): void {
   app.querySelector("#btn-chat-close")?.addEventListener("click", () => {
     closeChatOverlay();
   });
+  app.querySelectorAll<HTMLButtonElement>("[data-chat-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.chatTab;
+      if (tab !== "world" && tab !== "friends" && tab !== "guild") return;
+      if (chatTab === tab) return;
+      chatTab = tab;
+      chatAfter = 0;
+      chatConnected = false;
+      chatSideMsgs = [];
+      void joinChatLive().then(() => refreshChatModalSoft());
+    });
+  });
   app.querySelector("#chat-channel-select")?.addEventListener("change", (ev) => {
     const sel = ev.currentTarget as HTMLSelectElement;
     const id = Number(sel.value);
     if (!Number.isFinite(id)) return;
-    if (!switchChatSession(id)) {
-      flash(t("chat.channelFull"));
-      sel.value = String(chatChannelId);
-      return;
-    }
-    chatLineUnread = false;
-    refreshChatModalSoft();
+    chatChannelId = id;
+    chatConnected = false;
+    void (async () => {
+      const ok = await joinChatLive();
+      if (!ok) {
+        sel.value = String(chatChannelId);
+        return;
+      }
+      chatLineUnread = false;
+      refreshChatModalSoft();
+    })();
+  });
+  app.querySelector("#chat-peer-select")?.addEventListener("change", (ev) => {
+    const sel = ev.currentTarget as HTMLSelectElement;
+    chatPeerUid = sel.value || null;
+    chatConnected = false;
+    chatAfter = 0;
+    void joinChatLive().then(() => refreshChatModalSoft());
+  });
+  app.querySelector("#chat-log")?.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement | null)?.closest<HTMLButtonElement>("[data-chat-uid]");
+    if (!btn?.dataset.chatUid) return;
+    void openChatProfile(btn.dataset.chatUid);
   });
   app.querySelector("#chat-compose")?.addEventListener("submit", (ev) => {
     ev.preventDefault();
     const input = app.querySelector<HTMLInputElement>("#chat-input");
     const text = input?.value.trim() ?? "";
     if (!text) return;
-    if (!pushChatMessage(chatChannelId, displayNickname(), text)) return;
-    if (input) input.value = "";
-    chatLineUnread = false;
-    refreshChatModalSoft();
-    queueMicrotask(() => {
-      app.querySelector<HTMLInputElement>("#chat-input")?.focus();
-    });
+    void (async () => {
+      const ok = await sendChatLive(text);
+      if (!ok) return;
+      if (input) input.value = "";
+      chatLineUnread = false;
+      queueMicrotask(() => {
+        app.querySelector<HTMLInputElement>("#chat-input")?.focus();
+      });
+    })();
   });
 }
 
 function refreshChatModalSoft(): void {
   if (!chatOpen) return;
-  app.querySelector("#chat-layer")?.remove();
-  app.insertAdjacentHTML("beforeend", renderChatModal());
+  softMountOverlay("chat-layer", renderChatModal());
   applyHomeChatRail();
   bindChatUi();
   queueMicrotask(() => {
@@ -8980,43 +9844,109 @@ function refreshChatModalSoft(): void {
 function renderChatModal(): string {
   if (!chatOpen) return "";
   ensureChatChannels();
-  const ch = chatChannel(chatChannelId) ?? chatChannels[0]!;
-  const options = chatChannels
-    .map((c) => {
-      const full = chatIsFull(c);
-      const on = c.id === chatChannelId;
-      const users = t("chat.channelUsers", { n: c.users, max: CHAT_CHANNEL_CAP });
-      const label = `${t("chat.channelN", { n: c.id })} ${MIDDOT} ${users}${full ? ` ${MIDDOT} ${t("chat.full")}` : ""}`;
-      return `<option value="${c.id}" ${on ? "selected" : ""} ${full && !on ? "disabled" : ""}>${escapeHtml(label)}</option>`;
-    })
-    .join("");
-  const msgs =
-    ch.msgs
-      .map(
-        (m) =>
-          `<div class="chat-msg"><strong>${escapeHtml(m.nick)}</strong><span>${escapeHtml(m.text)}</span></div>`,
-      )
-      .join("") || `<p class="muted chat-empty">${escapeHtml(t("chat.empty"))}</p>`;
+  const tabBtn = (id: ChatTab, label: string) =>
+    `<button type="button" class="sheet-tab${chatTab === id ? " is-active" : ""}" role="tab" aria-selected="${chatTab === id ? "true" : "false"}" data-chat-tab="${id}">${escapeHtml(label)}</button>`;
+  const select =
+    chatTab === "world"
+      ? `<label class="chat-ch-select-wrap">
+        <span class="chat-ch-select-label">${escapeHtml(t("chat.channelSelect"))}</span>
+        <select id="chat-channel-select" class="chat-ch-select" aria-label="${escapeHtml(t("chat.channelSelect"))}">
+          ${renderChatChannelOptions()}
+        </select>
+      </label>`
+      : chatTab === "friends"
+        ? `<label class="chat-ch-select-wrap">
+        <span class="chat-ch-select-label">${escapeHtml(t("chat.pickFriend"))}</span>
+        <select id="chat-peer-select" class="chat-ch-select" aria-label="${escapeHtml(t("chat.pickFriend"))}">
+          ${renderChatFriendOptions()}
+        </select>
+      </label>`
+        : "";
   return `<div class="settings-layer chat-layer" id="chat-layer" aria-hidden="false">
     <button type="button" class="settings-backdrop" id="btn-chat-close" aria-label="${escapeHtml(t("chat.close"))}"></button>
     <div class="settings-sheet chat-sheet" role="dialog" aria-modal="true" aria-labelledby="chat-title">
       <div class="settings-sheet-handle" aria-hidden="true"></div>
       ${modalCloseX(t("chat.close"), "btn-chat-close")}
       <h2 class="settings-title" id="chat-title">${escapeHtml(t("chat.title"))}</h2>
-      <p class="chat-cap-hint">${escapeHtml(t("chat.capHint", { max: CHAT_CHANNEL_CAP }))}</p>
-      <label class="chat-ch-select-wrap">
-        <span class="chat-ch-select-label">${escapeHtml(t("chat.channelSelect"))}</span>
-        <select id="chat-channel-select" class="chat-ch-select" aria-label="${escapeHtml(t("chat.channelSelect"))}">
-          ${options}
-        </select>
-      </label>
-      <div class="chat-log" id="chat-log">${msgs}</div>
+      <div class="sheet-tabs sheet-tabs--3" role="tablist">
+        ${tabBtn("world", t("chat.tabWorld"))}
+        ${tabBtn("friends", t("chat.tabFriends"))}
+        ${tabBtn("guild", t("chat.tabGuild"))}
+      </div>
+      ${select}
+      <div class="chat-log" id="chat-log">${renderChatLogHtml()}</div>
       <form class="chat-compose" id="chat-compose">
         <input class="chat-input" id="chat-input" type="text" maxlength="80" autocomplete="off" placeholder="${escapeHtml(t("chat.placeholder"))}" />
         <button type="submit" class="chat-send">${escapeHtml(t("chat.send"))}</button>
       </form>
     </div>
   </div>`;
+}
+
+function renderChatProfileModal(info: SocialProfile): string {
+  const guild = info.guildName
+    ? `<span>${escapeHtml(info.guildName)}</span>`
+    : "";
+  const action =
+    info.status === "friends" || info.friends
+      ? `<button type="button" class="auth-btn-ghost" id="btn-chat-friend-remove">${escapeHtml(t("chat.removeFriend"))}</button>`
+      : info.status === "pending_out"
+        ? `<button type="button" class="auth-btn-ghost" disabled>${escapeHtml(t("friend.pending"))}</button>`
+        : `<button type="button" class="auth-btn-primary" id="btn-chat-friend-add">${escapeHtml(t("chat.addFriend"))}</button>`;
+  return `<div class="settings-layer chat-layer" id="chat-profile-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-chat-profile-close" aria-label="${escapeHtml(t("chat.close"))}"></button>
+    <div class="settings-sheet chat-profile-sheet" role="dialog" aria-modal="true" aria-labelledby="chat-profile-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("chat.close"), "btn-chat-profile-close")}
+      <h2 class="settings-title" id="chat-profile-title">${escapeHtml(t("chat.profile"))}</h2>
+      <div class="chat-profile-meta">
+        <strong>${escapeHtml(info.nick)}</strong>
+        <span>${escapeHtml(t("chat.level", { n: info.level }))}</span>
+        ${guild}
+        ${friendSeenHtml(info.seen)}
+      </div>
+      <div class="chat-profile-actions">${action}</div>
+    </div>
+  </div>`;
+}
+
+async function openChatProfile(uid: string): Promise<void> {
+  const r = await socialProfile(uid);
+  if (!r.ok) {
+    chatFlashError(r.error);
+    return;
+  }
+  chatProfileUid = uid;
+  softMountOverlay("chat-profile-layer", renderChatProfileModal(r.data));
+  app.querySelector("#btn-chat-profile-close")?.addEventListener("click", closeChatProfile);
+  app.querySelector("#btn-chat-friend-add")?.addEventListener("click", () => {
+    void (async () => {
+      const res = await socialRequest({ uid });
+      if (!res.ok) {
+        chatFlashError(res.error);
+        return;
+      }
+      applySocialLists(res.data);
+      flash(t("chat.requestSent"));
+      closeChatProfile();
+    })();
+  });
+  app.querySelector("#btn-chat-friend-remove")?.addEventListener("click", () => {
+    void (async () => {
+      const res = await socialRemove(uid);
+      if (!res.ok) {
+        chatFlashError(res.error);
+        return;
+      }
+      applySocialLists(res.data);
+      closeChatProfile();
+    })();
+  });
+}
+
+function closeChatProfile(): void {
+  chatProfileUid = null;
+  softRemoveOverlay("chat-profile-layer");
 }
 
 
@@ -9200,70 +10130,137 @@ function renderMissionMainList(): string {
   }).join("");
 }
 
+function dailyMissionCopy(
+  id: string,
+  goal: number,
+): { title: string; desc: string } {
+  switch (id) {
+    case "wish":
+      return {
+        title: t("mission.daily.wish.title"),
+        desc: t("mission.daily.wish.desc"),
+      };
+    case "dojo":
+      return {
+        title: t("mission.daily.dojo.title"),
+        desc: t("mission.daily.dojo.desc"),
+      };
+    case "collect":
+      return {
+        title: t("mission.daily.collect.title"),
+        desc: t("mission.daily.collect.desc"),
+      };
+    case "sortie":
+      return {
+        title: t("mission.daily.sortie.title"),
+        desc: t("mission.daily.sortie.desc", { n: goal }),
+      };
+    case "summon":
+      return {
+        title: t("mission.daily.summon.title"),
+        desc: t("mission.daily.summon.desc", { n: goal }),
+      };
+    case "enhanceMon":
+      return {
+        title: t("mission.daily.enhanceMon.title"),
+        desc: t("mission.daily.enhanceMon.desc", { n: goal }),
+      };
+    case "enhanceGear":
+      return {
+        title: t("mission.daily.enhanceGear.title"),
+        desc: t("mission.daily.enhanceGear.desc", { n: goal }),
+      };
+    case "enhanceSymbol":
+      return {
+        title: t("mission.daily.enhanceSymbol.title"),
+        desc: t("mission.daily.enhanceSymbol.desc", { n: goal }),
+      };
+    case "grindSymbol":
+      return {
+        title: t("mission.daily.grindSymbol.title"),
+        desc: t("mission.daily.grindSymbol.desc", { n: goal }),
+      };
+    case "shop":
+      return {
+        title: t("mission.daily.shop.title"),
+        desc: t("mission.daily.shop.desc"),
+      };
+    case "building":
+      return {
+        title: t("mission.daily.building.title"),
+        desc: t("mission.daily.building.desc"),
+      };
+    case "arena":
+      return {
+        title: t("mission.daily.arena.title"),
+        desc: t("mission.daily.arena.desc", { n: goal }),
+      };
+    case "weekday":
+      return {
+        title: t("mission.daily.weekday.title"),
+        desc: t("mission.daily.weekday.desc"),
+      };
+    case "equipDun":
+      return {
+        title: t("mission.daily.equipDun.title"),
+        desc: t("mission.daily.equipDun.desc"),
+      };
+    case "dungeon":
+      return {
+        title: t("mission.daily.dungeon.title"),
+        desc: t("mission.daily.dungeon.desc", { n: goal }),
+      };
+    case "skillUp":
+      return {
+        title: t("mission.daily.skillUp.title"),
+        desc: t("mission.daily.skillUp.desc"),
+      };
+    case "guild":
+      return {
+        title: t("mission.daily.guild.title"),
+        desc: t("mission.daily.guild.desc"),
+      };
+    case "raid":
+      return {
+        title: t("mission.daily.raid.title"),
+        desc: t("mission.daily.raid.desc"),
+      };
+    case "warena":
+      return {
+        title: t("mission.daily.warena.title"),
+        desc: t("mission.daily.warena.desc"),
+      };
+    case "all":
+      return {
+        title: t("mission.daily.all.title"),
+        desc: t("mission.daily.all.desc"),
+      };
+    default:
+      return { title: id, desc: "" };
+  }
+}
+
 function renderMissionDailyList(): string {
-  const day = todayKey();
-  const wishDone = (save.island.lastWishDay ?? null) === day;
-  const wishClaimed = isDailyMissionClaimed(save, DAILY_MISSION_WISH, day);
-  const drills = save.dojoDrills ?? 0;
-  const dojoCur = drills % 3;
-  const dojoProg = dojoCur === 0 && drills > 0 ? 3 : dojoCur;
-  const dojoClaimed = isDailyMissionClaimed(save, DAILY_MISSION_DOJO, day);
-  const pond = save.island.buildings.find((b) => b.id === "mana_pond");
-  const mine = save.island.buildings.find((b) => b.id === "crystal_mine");
-  const stored =
-    Math.floor(pond?.storedMana ?? 0) + Math.floor(mine?.storedCrystal ?? 0);
-  const collectDone = stored <= 0;
-  const collectClaimed = isDailyMissionClaimed(save, DAILY_MISSION_COLLECT, day);
-  const sortieDone =
-    (save.clearedStages?.length ?? 0) > 0 &&
-    Math.floor(save.island.energy) < (save.island.energyMax ?? 100);
-  const sortieClaimed = isDailyMissionClaimed(save, DAILY_MISSION_SORTIE, day);
-  return [
-    missionItemHtml({
-      title: t("mission.daily.wish.title"),
-      desc: t("mission.daily.wish.desc"),
-      cur: wishDone ? 1 : 0,
-      max: 1,
-      goNav: wishDone ? undefined : "wish",
-      claimId: DAILY_MISSION_WISH,
-      claimed: wishClaimed,
-      rewards: DAILY_MISSION_REWARDS.wish,
-      index: 1,
-    }),
-    missionItemHtml({
-      title: t("mission.daily.dojo.title"),
-      desc: t("mission.daily.dojo.desc"),
-      cur: dojoProg,
-      max: 3,
-      goNav: dojoProg >= 3 ? undefined : "dojo",
-      claimId: DAILY_MISSION_DOJO,
-      claimed: dojoClaimed,
-      rewards: DAILY_MISSION_REWARDS.dojo,
-      index: 2,
-    }),
-    missionItemHtml({
-      title: t("mission.daily.collect.title"),
-      desc: t("mission.daily.collect.desc"),
-      cur: collectDone ? 1 : 0,
-      max: 1,
-      goNav: collectDone ? undefined : "home",
-      claimId: DAILY_MISSION_COLLECT,
-      claimed: collectClaimed,
-      rewards: DAILY_MISSION_REWARDS.collect,
-      index: 3,
-    }),
-    missionItemHtml({
-      title: t("mission.daily.sortie.title"),
-      desc: t("mission.daily.sortie.desc"),
-      cur: sortieDone ? 1 : 0,
-      max: 1,
-      goNav: sortieDone ? undefined : "stages",
-      claimId: DAILY_MISSION_SORTIE,
-      claimed: sortieClaimed,
-      rewards: DAILY_MISSION_REWARDS.sortie,
-      index: 4,
-    }),
-  ].join("");
+  return visibleDailyMissions(save)
+    .map((def, i) => {
+      const goal = dailyMissionGoal(save, def);
+      const cur = Math.min(dailyMissionProgress(save, def), goal);
+      const claimed = isDailyMissionClaimed(save, def.id);
+      const done = cur >= goal;
+      const copy = dailyMissionCopy(def.id, goal);
+      return missionItemHtml({
+        title: copy.title,
+        desc: copy.desc,
+        cur,
+        max: goal,
+        goNav: done ? undefined : def.goNav,
+        claimId: def.id,
+        claimed,
+        rewards: def.reward,
+        index: i + 1,
+      });
+    })
+    .join("");
 }
 
 function renderMissionAchieveList(): string {
@@ -9368,6 +10365,7 @@ function renderMissionModal(): string {
 }
 
 function render(): void {
+  noteViewChange();
   // In-combat soft patch: avoid wiping the whole app (BG reload + fade flash).
   if (view === "battle" && battle && app.querySelector(".battle-screen")) {
     if (refreshBattleView()) return;
@@ -9389,6 +10387,7 @@ function render(): void {
     const next = app.querySelector<HTMLElement>(".home-island");
     if (next && next !== keepIsland) next.replaceWith(keepIsland);
   }
+  armBackHistoryTrap();
 }
 
 /** Full re-render; island DOM is preserved by render() when staying on the island. */
@@ -9456,13 +10455,13 @@ function renderScreen(): void {
   const notifItems = tickerMessages().slice(0, 5);
 
   if (view === "auth") {
-    stopChatSim();
+    stopChatLive();
     chatOpen = false;
   } else if (view === "battle" || view === "result") {
-    pauseChatSim();
     chatOpen = false;
+    startChatLive();
   } else {
-    startChatSim();
+    startChatLive();
   }
 
   if (view === "auth") {
@@ -9474,6 +10473,7 @@ function renderScreen(): void {
     app.classList.remove("summoner-mode");
     app.innerHTML = `
       <main class="auth-main auth-main--center">${authPwaInstallBtn()}${renderAuth()}${authFooter()}</main>
+      ${renderSysConfirmLayer()}
     `;
     bind();
     bindUiSfx(app);
@@ -9608,6 +10608,10 @@ function renderScreen(): void {
             <div class="res-item res-item--glory" title="${escapeHtml(t("res.glory"))}">
               <img class="res-ico" src="/art/ui/res/glory.svg" width="16" height="16" alt="" draggable="false" />
               <strong class="res-val">${fmtRes(save.gloryPoints ?? 0)}</strong>
+            </div>
+            <div class="res-item res-item--friendship" title="${escapeHtml(t("res.friendship"))}">
+              <img class="res-ico" src="/art/ui/res/friendship.svg" width="16" height="16" alt="" draggable="false" />
+              <strong class="res-val">${fmtRes(save.friendshipPoints ?? 0)}</strong>
             </div>
             <div class="res-item res-item--jinmun" title="${escapeHtml(t("res.jinmun"))}">
               <img class="res-ico" src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" />
@@ -9824,6 +10828,7 @@ function renderScreen(): void {
       <button type="button" id="btn-community" class="${tabCommunity ? "active" : ""}" aria-expanded="${communityOpen ? "true" : "false"}" aria-controls="community-layer" title="${escapeHtml(t("nav.community"))}"><span class="seal-badge"><span class="tab-ico tab-ico--community" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/community.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.community"))}</span></span></button>
       <button type="button" id="btn-shop" class="${tabShop ? "active" : ""}" aria-expanded="${shopOpen ? "true" : "false"}" aria-controls="shop-layer" title="${escapeHtml(t("nav.shop"))}"><span class="seal-badge"><span class="tab-ico tab-ico--shop" aria-hidden="true"><img class="tab-ico-img" src="/art/ui/nav/shop.webp" width="58" height="58" alt="" draggable="false" /></span><span class="tab-label">${escapeHtml(t("nav.shop"))}</span></span></button>
     </nav>
+    ${renderSysConfirmLayer()}
   `;
 
   bind();
@@ -15379,6 +16384,8 @@ function syncHudResources(): void {
   if (crystal) crystal.textContent = fmtRes(save.island.crystal);
   const gloryHud = app.querySelector<HTMLElement>(".res-item--glory .res-val");
   if (gloryHud) gloryHud.textContent = fmtRes(save.gloryPoints ?? 0);
+  const fpHud = app.querySelector<HTMLElement>(".res-item--friendship .res-val");
+  if (fpHud) fpHud.textContent = fmtRes(save.friendshipPoints ?? 0);
   app.querySelectorAll<HTMLElement>(".res-item--mats").forEach((item) => {
     const title = item.getAttribute("title") ?? "";
     const val = item.querySelector<HTMLElement>(".res-val");
@@ -15863,7 +16870,7 @@ function renderShopProductCard(opts: {
   tone: string;
   art: string;
   title: string;
-  desc: string;
+  desc?: string;
   priceHtml: string;
   disabled?: boolean;
   limitHtml?: string;
@@ -15874,11 +16881,12 @@ function renderShopProductCard(opts: {
   const limit = opts.limitHtml
     ? `<small class="shop-product-limit">${opts.limitHtml}</small>`
     : "";
+  const desc = opts.desc ? `<small class="shop-product-desc">${opts.desc}</small>` : "";
   return `<button type="button" class="shop-product shop-product--${opts.tone}${opts.disabled ? " is-sold-out" : ""}"${idAttr} ${data}${disabled}>
     <span class="shop-product-seal" aria-hidden="true">${opts.art}</span>
     <span class="shop-product-meta">
       <strong class="shop-product-title">${opts.title}</strong>
-      <small class="shop-product-desc">${opts.desc}</small>
+      ${desc}
       ${limit}
     </span>
     <span class="shop-product-price">${opts.priceHtml}</span>
@@ -15897,6 +16905,18 @@ function shopPriceJinmun(n: number): string {
   return `<span class="shop-price-chip shop-price-chip--jinmun"><img src="/art/ui/res/jinmun.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(n)}</strong></span>`;
 }
 
+function shopPriceGlory(n: number): string {
+  return `<span class="shop-price-chip"><img src="/art/ui/res/glory.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(n)}</strong></span>`;
+}
+
+function shopPriceFriendship(n: number): string {
+  return `<span class="shop-price-chip"><img src="/art/ui/res/friendship.svg" width="16" height="16" alt="" draggable="false" /><strong>${fmtRes(n)}</strong></span>`;
+}
+
+function shopPriceCash(n: number): string {
+  return `<span class="shop-price-chip"><img src="/art/ui/res/cash.svg" width="16" height="16" alt="" draggable="false" /><strong>${formatNumber(n)}</strong></span>`;
+}
+
 function shopDailyLimitHtml(sku: CatalogShopSku): string {
   const limit = CATALOG_SHOP_DAILY_LIMIT[sku];
   const left = catalogShopRemaining(save, sku);
@@ -15904,7 +16924,100 @@ function shopDailyLimitHtml(sku: CatalogShopSku): string {
   return escapeHtml(t("ui.shop.dailyLeft", { left, limit }));
 }
 
+function shopLimitHtml(sku: string, limit: number): string {
+  const left = shopQuotaRemaining(save, sku, limit);
+  if (left <= 0) return escapeHtml(t("ui.shop.soldOut"));
+  return escapeHtml(t("ui.shop.dailyLeft", { left, limit }));
+}
+
+function renderShopPackBody(): string {
+  const crystalArt = `<img class="shop-product-art" src="/art/ui/res/crystal.svg" width="48" height="48" alt="" draggable="false" />`;
+  const energyArt = `<img class="shop-product-art" src="/art/ui/res/energy.svg" width="48" height="48" alt="" draggable="false" />`;
+  const pack = (sku: CashPackSku, title: string, art: string) => {
+    const def = CASH_PACKS[sku];
+    const left = shopQuotaRemaining(save, sku, def.daily);
+    return renderShopProductCard({
+      dataAttr: `data-shop-pack="${sku}"`,
+      tone: "premium",
+      art,
+      title: escapeHtml(title),
+      priceHtml: shopPriceCash(def.krw),
+      disabled: left <= 0,
+      limitHtml: shopLimitHtml(sku, def.daily),
+    });
+  };
+  return `<div class="hub-panel shop-body">
+    <div class="shop-grid">
+      ${pack("pack_crystal_250", t("shop.pack.crystal250"), crystalArt)}
+      ${pack("pack_crystal_650", t("shop.pack.crystal650"), crystalArt)}
+      ${pack("pack_crystal_1400", t("shop.pack.crystal1400"), crystalArt)}
+      ${pack("pack_energy", t("shop.pack.energy"), energyArt)}
+    </div>
+  </div>`;
+}
+
+function renderShopArenaBody(): string {
+  const goldArt = `<img class="shop-product-art" src="/art/ui/res/gold.svg" width="48" height="48" alt="" draggable="false" />`;
+  const energyArt = `<img class="shop-product-art" src="/art/ui/res/energy.svg" width="48" height="48" alt="" draggable="false" />`;
+  const scrollArt = `<img class="shop-product-art" src="${scrollArtSrc("premium")}" width="56" height="56" alt="" draggable="false" />`;
+  const grindArt = `<img class="shop-product-art" src="/art/ui/res/grindstone.webp" width="48" height="48" alt="" draggable="false" />`;
+  const item = (sku: ArenaShopSku, title: string, art: string) => {
+    const def = ARENA_SHOP[sku];
+    const left = shopQuotaRemaining(save, sku, def.daily);
+    return renderShopProductCard({
+      dataAttr: `data-shop-arena="${sku}"`,
+      tone: "scroll",
+      art,
+      title: escapeHtml(title),
+      priceHtml: shopPriceGlory(def.glory),
+      disabled: left <= 0 || (save.gloryPoints ?? 0) < def.glory,
+      limitHtml: shopLimitHtml(sku, def.daily),
+    });
+  };
+  return `<div class="hub-panel shop-body">
+    <div class="shop-wallet">${resChip("/art/ui/res/glory.svg", save.gloryPoints ?? 0, t("res.glory"))}</div>
+    <div class="shop-grid">
+      ${item("arena_gold", t("shop.arena.gold"), goldArt)}
+      ${item("arena_energy", t("shop.arena.energy"), energyArt)}
+      ${item("arena_scroll", t("shop.arena.scroll"), scrollArt)}
+      ${item("arena_grind", t("shop.arena.grind"), grindArt)}
+    </div>
+  </div>`;
+}
+
+function renderShopFriendBody(): string {
+  const goldArt = `<img class="shop-product-art" src="/art/ui/res/gold.svg" width="48" height="48" alt="" draggable="false" />`;
+  const energyArt = `<img class="shop-product-art" src="/art/ui/res/energy.svg" width="48" height="48" alt="" draggable="false" />`;
+  const scrollArt = `<img class="shop-product-art" src="${scrollArtSrc("normal")}" width="56" height="56" alt="" draggable="false" />`;
+  const grindArt = `<img class="shop-product-art" src="/art/ui/res/grindstone.webp" width="48" height="48" alt="" draggable="false" />`;
+  const item = (sku: FriendShopSku, title: string, art: string) => {
+    const def = FRIEND_SHOP[sku];
+    const left = shopQuotaRemaining(save, sku, def.daily);
+    return renderShopProductCard({
+      dataAttr: `data-shop-friend="${sku}"`,
+      tone: "energy",
+      art,
+      title: escapeHtml(title),
+      priceHtml: shopPriceFriendship(def.fp),
+      disabled: left <= 0 || (save.friendshipPoints ?? 0) < def.fp,
+      limitHtml: shopLimitHtml(sku, def.daily),
+    });
+  };
+  return `<div class="hub-panel shop-body">
+    <div class="shop-wallet">${resChip("/art/ui/res/friendship.svg", save.friendshipPoints ?? 0, t("res.friendship"))}</div>
+    <div class="shop-grid">
+      ${item("friend_gold", t("shop.friend.gold"), goldArt)}
+      ${item("friend_energy", t("shop.friend.energy"), energyArt)}
+      ${item("friend_scroll", t("shop.friend.scroll"), scrollArt)}
+      ${item("friend_grind", t("shop.friend.grind"), grindArt)}
+    </div>
+  </div>`;
+}
+
 function renderShopBody(): string {
+  if (shopTab === "pack") return renderShopPackBody();
+  if (shopTab === "arena") return renderShopArenaBody();
+  if (shopTab === "friend") return renderShopFriendBody();
   const scrollArt = (kind: "normal" | "premium") =>
     `<img class="shop-product-art" src="${scrollArtSrc(kind)}" width="56" height="56" alt="" draggable="false" />`;
   const energyArt = `<img class="shop-product-art" src="/art/ui/res/energy.svg" width="48" height="48" alt="" draggable="false" />`;
@@ -16029,11 +17142,22 @@ function renderShopBody(): string {
   </div>`;
 }
 
+function renderShopTabsHtml(): string {
+  const tab = (id: ShopTab, label: string) =>
+    `<button type="button" class="sheet-tab${shopTab === id ? " is-active" : ""}" role="tab" data-shop-tab="${id}">${escapeHtml(label)}</button>`;
+  return `<div class="sheet-tabs sheet-tabs--4" role="tablist">
+      ${tab("normal", t("shop.tabNormal"))}
+      ${tab("pack", t("shop.tabPack"))}
+      ${tab("arena", t("shop.tabArena"))}
+      ${tab("friend", t("shop.tabFriend"))}
+    </div>`;
+}
+
 function renderShop(): string {
   return hubShell(
     t("nav.shop"),
     `${t("ui.dc78e6a251")} ${fmtRes(Math.floor(save.island.mana))} ${MIDDOT} ${t("ui.5d0bf3b101")} ${fmtRes(save.island.crystal)} ${MIDDOT} ${t("ui.fa73f3a42f")} ${totalScrollCount(save)}`,
-    renderShopBody(),
+    `${renderShopTabsHtml()}${renderShopBody()}`,
   );
 }
 
@@ -16044,6 +17168,7 @@ function renderShopModal(): string {
     <div class="settings-sheet-handle" aria-hidden="true"></div>
     ${modalCloseX(t("shop.close"), "btn-shop-close")}
     <h2 class="settings-title" id="shop-title">${escapeHtml(t("nav.shop"))}</h2>
+    ${renderShopTabsHtml()}
     ${renderShopBody()}
   </div>
 </div>`;
@@ -16353,13 +17478,57 @@ function renderCommunityModal(): string {
   <div class="settings-sheet community-sheet" role="dialog" aria-modal="true" aria-labelledby="community-title">
     <div class="settings-sheet-handle" aria-hidden="true"></div>
     ${modalCloseX(t("community.close"), "btn-community-close")}
-    <header class="community-head">
-      <p class="community-kicker">${escapeHtml(t("ui.hubGuild"))}</p>
-      <h2 class="settings-title" id="community-title">${escapeHtml(t("nav.community"))}</h2>
-    </header>
-    <div id="community-body-host">${renderGuildBody()}</div>
+    <h2 class="settings-title" id="community-title">${escapeHtml(t("nav.community"))}</h2>
+    <div class="sheet-tabs sheet-tabs--2" role="tablist">
+      <button type="button" class="sheet-tab${communityTab === "guild" ? " is-active" : ""}" role="tab" data-community-tab="guild">${escapeHtml(t("community.tabGuild"))}</button>
+      <button type="button" class="sheet-tab${communityTab === "friends" ? " is-active" : ""}" role="tab" data-community-tab="friends">${escapeHtml(t("community.tabFriends"))}${socialIncoming.length ? missionTabBadge(socialIncoming.length) : ""}</button>
+    </div>
+    <div id="community-body-host">${communityTab === "friends" ? renderFriendsBody() : renderGuildBody()}</div>
   </div>
 </div>`;
+}
+
+function renderFriendsBody(): string {
+  const add = `<form class="friend-add" id="friend-add-form">
+      <input id="friend-nick-input" type="text" maxlength="12" autocomplete="off" placeholder="${escapeHtml(t("friend.nick"))}" />
+      <button type="submit" class="auth-btn-primary">${escapeHtml(t("friend.add"))}</button>
+    </form>`;
+  const reqs = socialIncoming
+    .map(
+      (f) => `<div class="friend-row" data-friend-uid="${escapeHtml(f.uid)}">
+        <div class="friend-row-name">
+          <strong>${escapeHtml(f.nick)}</strong>
+          <span>${escapeHtml(t("chat.level", { n: f.level }))} ${MIDDOT} ${friendSeenHtml(f.seen)}</span>
+        </div>
+        <div class="friend-row-actions">
+          <button type="button" class="auth-btn-primary" data-friend-accept="${escapeHtml(f.uid)}">${escapeHtml(t("friend.accept"))}</button>
+          <button type="button" class="auth-btn-ghost" data-friend-reject="${escapeHtml(f.uid)}">${escapeHtml(t("friend.reject"))}</button>
+        </div>
+      </div>`,
+    )
+    .join("");
+  const list = socialFriends
+    .map(
+      (f) => `<div class="friend-row" data-friend-uid="${escapeHtml(f.uid)}">
+        <div class="friend-row-name">
+          <strong>${escapeHtml(f.nick)}</strong>
+          <span>${escapeHtml(t("chat.level", { n: f.level }))} ${MIDDOT} ${friendSeenHtml(f.seen)}${f.guildName ? ` ${MIDDOT} ${escapeHtml(f.guildName)}` : ""}</span>
+        </div>
+        <div class="friend-row-actions">
+          <button type="button" class="auth-btn-ghost" data-friend-energy="${escapeHtml(f.uid)}">${escapeHtml(t("friend.sendEnergy"))}</button>
+          <button type="button" class="auth-btn-ghost" data-friend-remove="${escapeHtml(f.uid)}">${escapeHtml(t("friend.remove"))}</button>
+        </div>
+      </div>`,
+    )
+    .join("");
+  const reqBlock = reqs
+    ? `<p class="guild-section">${escapeHtml(t("friend.requests"))}</p><div class="friend-list">${reqs}</div>`
+    : "";
+  return `<div class="hub-panel community-body">
+    ${add}
+    ${reqBlock}
+    <div class="friend-list">${list}</div>
+  </div>`;
 }
 
 function renderFusionBodyHtml(): string {
@@ -16682,17 +17851,33 @@ function stageDropSlots(stage: StageDef): Array<1 | 2 | 3 | 4 | 5 | 6> {
   return [n as 1 | 2 | 3 | 4 | 5 | 6];
 }
 
-function stageDropPreview(stage: StageDef, opts?: { equipWeekly?: boolean }): string {
-  const def = SYMBOL_SETS.find((x) => x.id === stage.dropSetId);
-  const name = def?.nameKo ?? stage.dropSetId;
-  const slots = stageDropSlots(stage);
-  const chips = slots
-    .map((slot) => {
-      const label = `${name}${slot}`;
-      return `<span class="stage-drop-piece" title="${label}">
-        <img class="stage-drop-piece-ico" src="/art/ui/symbol/${stage.dropSetId}-${slot}.svg" width="28" height="28" alt="${label}" draggable="false" />
+function stageDropPreview(stage: StageDef, opts?: { equipWeekly?: boolean; keySets?: boolean }): string {
+  const setIds = [
+    ...new Set(
+      opts?.keySets && stage.dropSetPool?.length
+        ? stage.dropSetPool
+        : [stage.dropSetId],
+    ),
+  ];
+  const chips = setIds
+    .flatMap((setId) => {
+      const def = SYMBOL_SETS.find((x) => x.id === setId);
+      const name = def?.nameKo ?? setId;
+      if (opts?.keySets) {
+        return [
+          `<span class="stage-drop-piece" title="${escapeHtml(name)}">
+        <img class="stage-drop-piece-ico" src="/art/ui/symbol/${setId}-2.svg" width="28" height="28" alt="${escapeHtml(name)}" draggable="false" />
+      </span>`,
+        ];
+      }
+      const slots = stageDropSlots(stage);
+      return slots.map((slot) => {
+        const label = `${name}${slot}`;
+        return `<span class="stage-drop-piece" title="${label}">
+        <img class="stage-drop-piece-ico" src="/art/ui/symbol/${setId}-${slot}.svg" width="28" height="28" alt="${label}" draggable="false" />
         <span class="stage-drop-piece-label">${label}</span>
       </span>`;
+      });
     })
     .join("");
   const hasGear =
@@ -16703,7 +17888,13 @@ function stageDropPreview(stage: StageDef, opts?: { equipWeekly?: boolean }): st
         <span class="stage-drop-piece-label">${t('ui.e17b206052')}</span>
       </span>`
     : "";
-  return `<span class="stage-card-drops">${chips}${gear}</span>`;
+  const mat =
+    stage.id === "weekday_skill" || stage.id.startsWith("weekday_awaken_")
+      ? `<span class="stage-drop-piece" title="${escapeHtml(t("res.skillMats"))}">
+        <img class="stage-drop-piece-ico" src="/art/ui/res/skill-mat.svg" width="28" height="28" alt="" draggable="false" />
+      </span>`
+      : "";
+  return `<span class="stage-card-drops">${chips}${gear}${mat}</span>`;
 }
 
 function stageAppearingMons(stage: StageDef): string {
@@ -16728,7 +17919,7 @@ function stageListMarker(stage: StageDef, idx: number): string {
   return String(stage.stage > 0 ? stage.stage : idx + 1);
 }
 
-function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): string {
+function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean; drops?: boolean }): string {
   const vaultLeft = opts?.equipWeekly
     ? equipVaultRemaining(syncEquipVaultWeek(save))
     : null;
@@ -16741,7 +17932,6 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
       const done = save.clearedStages.includes(s.id);
       const diffOpen = isDifficultyOpen(save, s, stageEntryDiff);
       const cost = stageEnergyCost(s, stageEntryDiff);
-      // Allow opening prep even when short on energy; Start inside the modal stays gated.
       const canOpen = !locked && diffOpen;
       const short = cost > energyNow && diffOpen;
       const marker = stageListMarker(s, idx);
@@ -16754,6 +17944,9 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
         vaultLeft !== null
           ? `${s.nameKo} · ${t("ui.9cbaf58b88")} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}`
           : `${s.nameKo} · ${status}`;
+      const mid = opts?.drops
+        ? stageDropPreview(s, { equipWeekly: opts.equipWeekly, keySets: true })
+        : stageAppearingMons(s);
       return `<div class="stage-sortie${done ? " is-cleared" : ""}${locked ? " is-locked" : ""}${!canOpen ? " is-disabled" : ""}${short ? " is-short-energy" : ""}${
         onboard.step === "battle" && s.id === ONBOARD_FIRST_STAGE_ID
           ? " is-onboard-focus"
@@ -16763,7 +17956,7 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean }): strin
           ${done ? `<span class="stage-sortie-check">${CHECK}</span>` : ""}
           <strong>${escapeHtml(marker)}</strong>
         </span>
-        ${stageAppearingMons(s)}
+        ${mid}
         <button type="button" class="stage-sortie-battle${short ? " is-short" : ""}" data-stage="${s.id}" data-core-stage="${s.id}" aria-label="${escapeHtml(battleAria)}" title="${!diffOpen ? t("ui.4292516afd") : escapeHtml(status)}" ${canOpen ? "" : "disabled"}>
           <span class="stage-sortie-cost" aria-hidden="true"><strong>${costLabel}</strong></span>
           <span class="stage-sortie-battle-label">${t("ui.stageBattle")}</span>
@@ -16890,6 +18083,7 @@ function bindCoreStageMap(): void {
       const next = isSameRegion ? null : region.id;
       stagesRegion = next;
       stageEntryId = null;
+      stagesDepthDungeon = null;
       if (!isSameRegion) {
         stagesDropInfoOpen = false;
         stagesDropSetExpand = false;
@@ -16928,6 +18122,7 @@ function applyStagesRegionOpen(opts?: { animate?: boolean }): void {
       closeRegion: () => {
         stagesRegion = null;
         stageEntryId = null;
+        stagesDepthDungeon = null;
         stagesDropInfoOpen = false;
         stagesDropSetExpand = false;
         applyStagesRegionOpen();
@@ -16948,10 +18143,22 @@ function applyStagesRegionOpen(opts?: { animate?: boolean }): void {
     ? stagesRegions().find((r) => r.id === stagesRegion) ?? null
     : null;
   if (!selected && !stageEntryId) {
+    rememberOverlayClose("stage-prep");
+    rememberOverlayClose("stages-region");
     host.innerHTML = "";
     return;
   }
   if (selected && !regionDifficultyOpen(selected, stageEntryDiff)) {
+    stageEntryDiff = "normal";
+  }
+  if (
+    selected &&
+    (hideRegionDifficulty(selected) ||
+      selected.id === "depth" ||
+      selected.id === "cadence" ||
+      selected.equipWeekly) &&
+    stageEntryDiff !== "normal"
+  ) {
     stageEntryDiff = "normal";
   }
   const sheet = selected && !stageEntryId ? renderStagesRegionSheet(selected) : "";
@@ -16967,6 +18174,13 @@ function applyStagesRegionOpen(opts?: { animate?: boolean }): void {
   }
   if (selected && !stageEntryId) bindStagesRegionSheet();
   if (stageEntryId) bindStageEntryModal();
+  if (stageEntryId) {
+    rememberOverlayClose("stages-region");
+    rememberOverlayOpen("stage-prep");
+  } else {
+    rememberOverlayClose("stage-prep");
+    rememberOverlayOpen("stages-region");
+  }
 }
 
 function bindStagesRegionSheet(): void {
@@ -17022,6 +18236,29 @@ function bindStagesRegionSheet(): void {
     flash(r.message);
     applyStagesRegionOpen({ animate: false });
   });
+
+  host.querySelector("#btn-arena-defense")?.addEventListener("click", () => {
+    const r = runSetArenaDefense(save);
+    save = r.save;
+    persist();
+    flash(r.message);
+    applyStagesRegionOpen({ animate: false });
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-depth-dungeon]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.depthDungeon;
+      if (id === "giant" || id === "dragon" || id === "necro") {
+        stagesDepthDungeon = id;
+        applyStagesRegionOpen({ animate: false });
+      }
+    });
+  });
+  host.querySelector("[data-depth-back]")?.addEventListener("click", () => {
+    stagesDepthDungeon = null;
+    applyStagesRegionOpen({ animate: false });
+  });
+  bindCommunityActions(host);
 }
 
 function regionPrimaryDropSet(region: StagesRegion): (typeof SYMBOL_SETS)[number] | null {
@@ -17149,11 +18386,140 @@ function renderStageDropInfoModal(region: StagesRegion): string {
   </div>`;
 }
 
+function hideRegionDifficulty(region: StagesRegion): boolean {
+  return Boolean(region.arena || region.warena || region.guild);
+}
+
+function isBossPrepStage(stage: StageDef): boolean {
+  return (
+    stage.mode === "depth" ||
+    stage.mode === "guild_raid" ||
+    stage.mode === "weekday" ||
+    stage.mode === "equip" ||
+    stage.mode === "trial"
+  );
+}
+
+function pvpRivalPortraits(ids: string[]): string {
+  return `<div class="pvp-rival-mons">${ids
+    .slice(0, 4)
+    .map((id) => {
+      const m = getMonster(id);
+      const grade = invGradeFromStars(m?.naturalStars ?? 1);
+      return `<span class="pvp-rival-mon inv-grade--${grade}" title="${escapeHtml(m?.nameKo ?? id)}">${monsterArtImg(id, "pvp-rival-mon-img", 40) || ""}</span>`;
+    })
+    .join("")}</div>`;
+}
+
+function renderArenaRivalCards(): string {
+  const attacksLeft = arenaAttacksRemaining(save);
+  return `<div class="pvp-rival-list">${ARENA_STAGES.map((s) => {
+    const rival = pickArenaRival(`${todayKey()}:${s.id}`);
+    const locked = !isStageUnlocked(save, s.id) || attacksLeft <= 0;
+    return `<article class="pvp-rival-card${locked ? " is-locked" : ""}">
+      ${pvpRivalPortraits(rival.enemyMonsterIds)}
+      <strong class="pvp-rival-name">${escapeHtml(rival.nameKo)}</strong>
+      ${resChip("/art/ui/res/glory.svg", s.gloryReward ?? 0, t("res.glory"))}
+      <button type="button" class="pvp-rival-attack" data-stage="${s.id}" data-core-stage="${s.id}" ${locked ? "disabled" : ""}>${escapeHtml(t("ui.arena.attack"))}</button>
+    </article>`;
+  }).join("")}</div>`;
+}
+
+function renderWarenaMatchCards(): string {
+  return `<div class="pvp-rival-list">${WORLD_ARENA_STAGES.map((s) => {
+    const locked = !isStageUnlocked(save, s.id);
+    const bans = new Set(save.arenaBanIds ?? []);
+    const ids = s.enemyMonsterIds.filter((id) => !bans.has(id));
+    return `<article class="pvp-rival-card${locked ? " is-locked" : ""}">
+      ${pvpRivalPortraits(ids.length ? ids : s.enemyMonsterIds)}
+      <strong class="pvp-rival-name">${escapeHtml(s.nameKo)}</strong>
+      ${resChip("/art/ui/res/glory.svg", s.gloryReward ?? 0, t("res.glory"))}
+      <button type="button" class="pvp-rival-attack" data-stage="${s.id}" data-core-stage="${s.id}" ${locked ? "disabled" : ""}>${escapeHtml(t("ui.arena.attack"))}</button>
+    </article>`;
+  }).join("")}</div>`;
+}
+
+function renderGuildRaidRegionBody(): string {
+  if (!save.guildName) {
+    return `<div class="guild-join-actions">
+      <button type="button" class="auth-btn-ghost guild-ghost" id="btn-guild-join">${escapeHtml(t("ui.8b92576f2b"))}</button>
+      <button type="button" class="auth-btn-primary guild-cta" id="btn-guild-create">
+        <span class="guild-cta-label">${escapeHtml(t("ui.guild.create"))}</span>
+      </button>
+    </div>`;
+  }
+  const raidSave = syncRaidWeek(save);
+  const raidHp = raidSave.raidBossHp ?? RAID_BOSS_MAX_HP;
+  const raidLeft = raidAttemptsRemaining(raidSave);
+  const raidPct = RAID_BOSS_MAX_HP ? (raidHp / RAID_BOSS_MAX_HP) * 100 : 0;
+  const canFight = raidLeft > 0 && isStageUnlocked(save, "guild_raid_boss");
+  return `<section class="guild-raid-sheet">
+    <header class="guild-card-head">
+      <span class="guild-card-kicker">${escapeHtml(t("ui.3ea974d72f"))}</span>
+      <strong class="guild-card-val">${fmtRes(raidHp)} / ${fmtRes(RAID_BOSS_MAX_HP)}</strong>
+    </header>
+    ${guildBarHtml(raidPct, "hp")}
+    <div class="guild-card-foot">
+      <span class="guild-chip">${escapeHtml(t("ui.guild.raidAttempts"))}${guildAttemptPips(raidLeft, RAID_ATTEMPTS_DAILY)}</span>
+      <span class="guild-chip" title="${escapeHtml(t("res.guild"))}"><img class="res-ico" src="/art/ui/res/guild.svg" width="14" height="14" alt="" draggable="false" /><strong>${fmtRes(save.guildContribution ?? 0)}</strong></span>
+    </div>
+    <button type="button" class="auth-btn-primary full guild-cta" data-stage="guild_raid_boss" data-core-stage="guild_raid_boss" ${canFight ? "" : "disabled"}>
+      <span class="guild-cta-label">${escapeHtml(t("ui.stageBattle"))}</span>
+      ${resChip("/art/ui/res/energy.svg", GUILD_RAID_STAGES[0]?.energyCost ?? 10, t("res.energy"))}
+    </button>
+  </section>`;
+}
+
+function renderCairosRegionBody(): string {
+  const dungeons: { id: CairosDungeon; key: "ui.dungeon.giant" | "ui.dungeon.dragon" | "ui.dungeon.necro" }[] = [
+    { id: "giant", key: "ui.dungeon.giant" },
+    { id: "dragon", key: "ui.dungeon.dragon" },
+    { id: "necro", key: "ui.dungeon.necro" },
+  ];
+  if (!stagesDepthDungeon) {
+    return `<div class="dungeon-pick-list">${dungeons
+      .map((d) => {
+        const floors = cairosStagesFor(d.id);
+        const sample = floors[floors.length - 1] ?? floors[0]!;
+        return `<button type="button" class="dungeon-pick-card" data-depth-dungeon="${d.id}">
+          <img class="dungeon-pick-art" src="/art/battle/circle/cairos-${d.id}.webp" width="160" height="160" alt="" draggable="false" />
+          <strong class="dungeon-pick-name">${escapeHtml(t(d.key))}</strong>
+          ${stageDropPreview(sample, { keySets: true })}
+        </button>`;
+      })
+      .join("")}</div>`;
+  }
+  const floors = cairosStagesFor(stagesDepthDungeon);
+  const titleKey =
+    stagesDepthDungeon === "giant"
+      ? "ui.dungeon.giant"
+      : stagesDepthDungeon === "dragon"
+        ? "ui.dungeon.dragon"
+        : "ui.dungeon.necro";
+  return `<div class="dungeon-floor-wrap">
+    <button type="button" class="dungeon-floor-back" data-depth-back>${escapeHtml(t("ui.dungeon.back"))}</button>
+    <h3 class="dungeon-floor-title">${escapeHtml(t(titleKey))}</h3>
+    <div class="stage-list stage-list--expedition stage-list--dungeon">${stageButtons(floors, { drops: true })}</div>
+  </div>`;
+}
+
+function renderCadenceRegionBody(): string {
+  return `<div class="dungeon-pick-list dungeon-pick-list--cadence">${[...WEEKDAY_STAGES, ...TRIAL_STAGES]
+    .map((s) => {
+      const locked = !isStageUnlocked(save, s.id);
+      const cost = stageEnergyCost(s, stageEntryDiff);
+      return `<button type="button" class="dungeon-pick-card${locked ? " is-locked" : ""}" data-stage="${s.id}" data-core-stage="${s.id}" ${locked ? "disabled" : ""}>
+        <strong class="dungeon-pick-name">${escapeHtml(s.nameKo)}</strong>
+        ${stageDropPreview(s, { keySets: true })}
+        <span class="stage-sortie-cost" aria-hidden="true"><strong>${cost}</strong></span>
+      </button>`;
+    })
+    .join("")}</div>`;
+}
+
 function renderStagesRegionSheet(region: StagesRegion): string {
   const bans = save.arenaBanIds ?? [];
   const seasonWins = save.arenaSeasonWins ?? 0;
-  const claimed = save.seasonRewardsClaimed ?? 0;
-  const nextTierAt = (claimed + 1) * SEASON_REWARD_WINS;
   const energyNow = Math.floor(save.island.energy);
   const energyMax = save.island.energyMax ?? 100;
   const diffMeta =
@@ -17169,21 +18535,12 @@ function renderStagesRegionSheet(region: StagesRegion): string {
 
   let extras = "";
   if (region.equipWeekly) {
-    extras = `<p class="stages-note">${t('ui.e35b325054')} ${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT} ${MIDDOT} ${t('ui.6a432402bd')}</p>`;
-  }
-  if (region.guild) {
-    const raidSave = syncRaidWeek(save);
-    extras = `<p class="stages-note">${t('ui.fe2c5c3e7d')} ${save.guildContribution ?? 0} ${MIDDOT} ${t('ui.3ea974d72f')} +${save.guildRaidBest ?? 0} ${MIDDOT} ${t("ui.guild.raidHp")} ${raidSave.raidBossHp ?? RAID_BOSS_MAX_HP}/${RAID_BOSS_MAX_HP} ${MIDDOT} ${t("ui.guild.raidAttempts")} ${raidAttemptsRemaining(raidSave)}/${RAID_ATTEMPTS_DAILY}</p>`;
+    extras = `<div class="season-panel"><span class="guild-chip">${escapeHtml(t("ui.9cbaf58b88"))}<strong>${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT}</strong></span></div>`;
   }
   if (region.arena) {
     const attacksLeft = arenaAttacksRemaining(save);
-    const def = save.arenaDefense;
-    const defLabel = def
-      ? `${def.party.length}${t("ui.arena.defenseSet")}`
-      : t("ui.arena.defenseEmpty");
-    extras = `<div class="season-panel">
+    extras = `<div class="season-panel pvp-season-panel">
         <p class="season-panel-title">${t("ui.arena.attacksLeft")} ${attacksLeft}/${ARENA_ATTACKS_DAILY}</p>
-        <p class="muted stages-note">${t("ui.arena.setDefense")}: ${defLabel}</p>
         <button type="button" class="auth-btn-primary full" id="btn-arena-defense">${t("ui.arena.setDefense")}</button>
       </div>`;
   }
@@ -17193,14 +18550,7 @@ function renderStagesRegionSheet(region: StagesRegion): string {
     )
       .map((s) => s.nameKo)
       .join(` ${MIDDOT} `);
-    const openLine = openNames
-      ? `${t("ui.weekdayOpenToday")}: ${openNames}`
-      : t("ui.weekdayClosedToday");
-    extras = `<p class="stages-note">${escapeHtml(openLine)}</p><p class="muted stages-note">${escapeHtml(t("ui.weekdaySchedule"))}</p>${
-      (save.trialTokens ?? 0) > 0
-        ? `<p class="muted stages-note">${t("ui.trial.tokens")}: ${save.trialTokens}${save.trialTitleUnlocked ? ` ${MIDDOT} ${t("ui.trial.titleOn")}` : ""}</p>`
-        : ""
-    }`;
+    extras = `<p class="stages-note">${escapeHtml(openNames ? `${t("ui.weekdayOpenToday")}: ${openNames}` : t("ui.weekdayClosedToday"))}</p>`;
   }
   if (region.warena) {
     const banPool = [
@@ -17214,17 +18564,14 @@ function renderStagesRegionSheet(region: StagesRegion): string {
           <span class="ban-chip-mark" aria-hidden="true">${on ? Mark.banOn : Mark.banOff}</span>
           <span class="ban-chip-body">
             <strong>${m?.nameKo ?? id}</strong>
-            <small>${on ? t('ui.402782da6b') : t('ui.25a68ffa5c')}</small>
           </span>
         </button>`;
       })
       .join("");
-    extras = `<div class="season-panel">
-        <p class="season-panel-title">${t('ui.b78477b088')} ${seasonWins}</p>
-        <p class="muted stages-note">${t('ui.45e62f7d49')} ${nextTierAt}${t('ui.3b1908b79a')} ${MIDDOT} ${t('ui.d18227b255')} ${claimed}</p>
-        <button type="button" class="auth-btn-primary full" id="btn-season-claim">${t('ui.8b8572eda1')}</button>
+    extras = `<div class="season-panel pvp-season-panel">
+        <p class="season-panel-title">${t("ui.b78477b088")} ${seasonWins}</p>
+        <button type="button" class="auth-btn-primary full" id="btn-season-claim">${t("ui.8b8572eda1")}</button>
       </div>
-      <p class="stages-note">${t('ui.ca139249b0')} ${bans.length ? bans.map((id) => getMonster(id)?.nameKo ?? id).join(", ") : t('ui.d58fa73adc')} ${MIDDOT} ${t('ui.869e9feb1b')} 2</p>
       <div class="ban-row">${banRow}</div>`;
   }
 
@@ -17234,19 +18581,47 @@ function renderStagesRegionSheet(region: StagesRegion): string {
   const regionTitle = mqPin
     ? `<span class="stages-pin-num" aria-hidden="true">${mqPin.map}</span>${region.name}`
     : region.name;
+  const hideDiff = hideRegionDifficulty(region);
+  const sheetExtra = [
+    region.arena || region.warena ? "stages-region-sheet--pvp" : "",
+    region.id === "depth" ||
+    region.id === "cadence" ||
+    region.equipWeekly ||
+    region.guild
+      ? "stages-region-sheet--dungeon"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const pvpHero =
+    region.arena || region.warena
+      ? `<div class="pvp-sheet-hero" aria-hidden="true"><img src="/art/hub/mon-preview-arena-720.webp" width="560" height="200" alt="" draggable="false" /></div>`
+      : "";
 
-  return `<div class="stages-region-layer" id="stages-region-layer">
-    <button type="button" class="stages-region-backdrop" id="btn-region-close" data-core-region-close aria-label="${t('ui.94b7dba159')}"></button>
-    <div class="stages-region-sheet stages-region-sheet--card stages-region-sheet--sortie stages-region-sheet--${region.tone}" data-diff="${stageEntryDiff}" role="dialog" aria-modal="true" aria-labelledby="stages-region-title">
-      ${modalCloseX(t("ui.94b7dba159"), "btn-region-close")}
-      <header class="stages-region-head stages-region-head--sortie">
-        <h2 class="stages-region-title stages-region-title--sortie" id="stages-region-title">${regionTitle}</h2>
-        <label class="stages-region-diff-inline stages-region-diff-inline--sortie">
+  let listHtml = `<div class="stage-list stage-list--expedition">${stageButtons(region.stages, { equipWeekly: region.equipWeekly, drops: Boolean(region.equipWeekly) })}</div>`;
+  if (region.arena) listHtml = renderArenaRivalCards();
+  else if (region.warena) listHtml = renderWarenaMatchCards();
+  else if (region.guild) listHtml = renderGuildRaidRegionBody();
+  else if (region.id === "depth") listHtml = renderCairosRegionBody();
+  else if (region.id === "cadence") listHtml = renderCadenceRegionBody();
+
+  const diffSelect = hideDiff
+    ? ""
+    : `<label class="stages-region-diff-inline stages-region-diff-inline--sortie">
           <span class="stages-region-diff-label">${t("ui.stageDiff")}</span>
           <select class="stages-region-diff-select stages-region-diff-select--${stageEntryDiff}" id="region-diff-select" aria-label="${t('ui.1a3b3223e1')}" title="${diffMeta.blurb}">
             ${diffOptions}
           </select>
-        </label>
+        </label>`;
+
+  return `<div class="stages-region-layer" id="stages-region-layer">
+    <button type="button" class="stages-region-backdrop" id="btn-region-close" data-core-region-close aria-label="${t('ui.94b7dba159')}"></button>
+    <div class="stages-region-sheet stages-region-sheet--card stages-region-sheet--sortie stages-region-sheet--${region.tone} ${sheetExtra}" data-diff="${stageEntryDiff}" role="dialog" aria-modal="true" aria-labelledby="stages-region-title">
+      ${modalCloseX(t("ui.94b7dba159"), "btn-region-close")}
+      ${pvpHero}
+      <header class="stages-region-head stages-region-head--sortie">
+        <h2 class="stages-region-title stages-region-title--sortie" id="stages-region-title">${regionTitle}</h2>
+        ${diffSelect}
         <div class="stages-region-tools">
           <button type="button" class="stages-region-drop-btn${stagesDropInfoOpen ? " is-on" : ""}" id="btn-region-drop-info" aria-pressed="${stagesDropInfoOpen ? "true" : "false"}">${t("ui.stageDropInfo")}</button>
           <div class="stages-region-tools-stats">
@@ -17258,7 +18633,7 @@ function renderStagesRegionSheet(region: StagesRegion): string {
         </div>
       </header>
       ${extras}
-      <div class="stage-list stage-list--expedition">${stageButtons(region.stages, { equipWeekly: region.equipWeekly })}</div>
+      ${listHtml}
     </div>
     ${renderStageDropInfoModal(region)}
   </div>`;
@@ -17423,12 +18798,37 @@ function renderBattle(manaPct: number): string {
       total: battle.totalWaves,
     }),
   );
+  const bossMode = isBossPrepStage(currentStage);
+  const boss = bossMode ? battleBossUnit(enemyUnits) : null;
+  const bossHpPct = boss
+    ? Math.round((boss.hp / Math.max(1, boss.stats.hp)) * 100)
+    : 0;
+  const raidHp = save.raidBossHp ?? RAID_BOSS_MAX_HP;
+  const raidPct = RAID_BOSS_MAX_HP ? (raidHp / RAID_BOSS_MAX_HP) * 100 : 0;
+  const bossBar = boss
+    ? `<div class="battle-boss-hp">
+        <span class="battle-boss-hp-fill" style="width:${bossHpPct}%"></span>
+        <strong>${fmtRes(boss.hp)} / ${fmtRes(boss.stats.hp)}</strong>
+      </div>${
+        currentStage.mode === "guild_raid"
+          ? `<div class="battle-raid-hp" title="${escapeHtml(t("ui.guild.raidHp"))}">
+        <span class="battle-raid-hp-fill" style="width:${raidPct}%"></span>
+        <strong>${fmtRes(raidHp)} / ${fmtRes(RAID_BOSS_MAX_HP)}</strong>
+      </div>`
+          : ""
+      }`
+    : "";
+  const bossSilhouette =
+    bossMode && currentStage.cairosDungeon
+      ? `<div class="battle-boss-silhouette" aria-hidden="true"><img src="/art/battle/circle/cairos-${currentStage.cairosDungeon}.webp" width="280" height="280" alt="" draggable="false" /></div>`
+      : "";
+  const chaseClass = pageTransitionFx ? ` is-page-${pageTransitionFx}` : "";
 
   return `<div class="battle-screen battle-screen--enter${
     onboard.step === "battle" && currentStage?.id === ONBOARD_FIRST_STAGE_ID
       ? " is-onboard-rite"
       : ""
-  }" data-bg="${battleBgIdForStage(currentStage)}">
+  }${bossMode ? " battle-screen--boss" : ""}${chaseClass}" data-bg="${battleBgIdForStage(currentStage)}">
     ${battleSkyHtml(currentStage)}
     <header class="battle-chrome">
       <div class="battle-stage-pill" title="${stageTitle}">
@@ -17451,6 +18851,8 @@ function renderBattle(manaPct: number): string {
         : ""
     }
     <div class="battle-lane enemy${waveEnterIds.size ? " is-wave-spawning" : ""}">
+      ${bossSilhouette}
+      ${bossBar}
       ${renderBattleFront(enemyUnits, "enemy", { targetable: awaitSkill })}
     </div>
     <div class="board-wrap board-wrap--stage${canPlaceStone ? " is-live" : ""}">
@@ -17530,6 +18932,16 @@ function refreshBattleView(): boolean {
   const nextBg = next.getAttribute("data-bg");
   if (nextBg) screen.setAttribute("data-bg", nextBg);
   else screen.removeAttribute("data-bg");
+  screen.classList.toggle(
+    "battle-screen--boss",
+    next.classList.contains("battle-screen--boss"),
+  );
+  for (const name of [...screen.classList]) {
+    if (name.startsWith("is-page-")) screen.classList.remove(name);
+  }
+  for (const name of next.classList) {
+    if (name.startsWith("is-page-")) screen.classList.add(name);
+  }
 
   const nextSky = next.querySelector(".battle-sky");
   if (sky && nextSky) nextSky.replaceWith(sky);
@@ -17562,6 +18974,37 @@ function bindStonePickTaps(): void {
     ev.preventDefault();
     onCellClick(Number(btn.dataset.x), Number(btn.dataset.y));
   });
+}
+
+function leaveBattleOrResultScreen(): void {
+  viewHistoryLock = true;
+  autoMode = false;
+  battleAutoSettingsOpen = false;
+  rememberOverlayClose("battle-auto-settings");
+  softRemoveOverlay("battle-auto-settings");
+  clearAutoTimer();
+  clearBattleSkipTimer();
+  battleSkipTimeReady = false;
+  battleSkipReady = false;
+  battleSkipSeq += 1;
+  if (battle?.finishReason) grantRewardIfNeeded();
+  if (view === "result") {
+    leaveResultView("stages");
+    lastTrackedView = view;
+    viewHistoryLock = false;
+    return;
+  }
+  battle = null;
+  currentStage = null;
+  lastReward = null;
+  lastScrollGain = 0;
+  lastScrollPremiumGain = 0;
+  dmgFloats = [];
+  clearBattleSkillSelection();
+  view = "stages";
+  render();
+  lastTrackedView = view;
+  viewHistoryLock = false;
 }
 
 /** Rebind combat controls after a soft battle DOM patch. */
@@ -17716,28 +19159,7 @@ function bindBattleInteractive(): void {
   });
 
   app.querySelector("#btn-back")?.addEventListener("click", () => {
-    autoMode = false;
-    battleAutoSettingsOpen = false;
-    softRemoveOverlay("battle-auto-settings");
-    clearAutoTimer();
-    clearBattleSkipTimer();
-    battleSkipTimeReady = false;
-    battleSkipReady = false;
-    battleSkipSeq += 1;
-    if (battle?.finishReason) grantRewardIfNeeded();
-    if (view === "result") {
-      leaveResultView("stages");
-      return;
-    }
-    battle = null;
-    currentStage = null;
-    lastReward = null;
-    lastScrollGain = 0;
-    lastScrollPremiumGain = 0;
-    dmgFloats = [];
-    clearBattleSkillSelection();
-    view = "stages";
-    render();
+    leaveBattleOrResultScreen();
   });
 }
 
@@ -18393,8 +19815,397 @@ function bindIslandLayoutEdit(): void {
   });
 }
 
+const GAME_VIEWS = new Set<View>([
+  "auth",
+  "home",
+  "summon",
+  "enhance",
+  "summoner",
+  "shop",
+  "pond",
+  "mine",
+  "wish",
+  "glory",
+  "fusion",
+  "party",
+  "guild",
+  "dojo",
+  "stages",
+  "battle",
+  "result",
+]);
+
+function isGameView(v: string): v is View {
+  return GAME_VIEWS.has(v as View);
+}
+
+function noteViewChange(): void {
+  if (view === lastTrackedView) return;
+  if (!viewHistoryLock && lastTrackedView !== "auth") {
+    const prev = lastTrackedView;
+    if (viewHistory[viewHistory.length - 1] !== prev) {
+      viewHistory.push(prev);
+      if (viewHistory.length > 24) viewHistory.shift();
+    }
+  }
+  lastTrackedView = view;
+}
+
+function closeHudSheetsForNav(): void {
+  closeSysConfirm();
+  settingsOpen = false;
+  mailboxOpen = false;
+  notifOpen = false;
+  summonerPickerOpen = false;
+  resMoreOpen = false;
+  missionOpen = false;
+  communityOpen = false;
+  shopOpen = false;
+  applySettingsOpen();
+  applyMailboxOpen();
+  applyNotifOpen();
+  applySummonerPickerOpen();
+  applyResMoreOpen();
+  applyMissionOpen();
+  applyCommunityOpen();
+  applyShopOpen();
+  closeChatOverlay();
+  closeDojoInscUpgradeSoft();
+}
+
+function applyViewChange(next: View, opts?: { fromBack?: boolean }): void {
+  if (next === view) return;
+  if (opts?.fromBack) viewHistoryLock = true;
+  closeHudSheetsForNav();
+  if (view === "result" || view === "battle") {
+    autoMode = false;
+    clearAutoTimer();
+    if (next !== "battle" && next !== "result") {
+      battle = null;
+      dmgFloats = [];
+      if (next === "home") {
+        currentStage = null;
+        lastReward = null;
+        lastScrollGain = 0;
+        lastScrollPremiumGain = 0;
+      }
+    }
+  }
+  if (next === "party") {
+    preparePartyHall();
+  } else if (view === "party") {
+    commitPartyDraftOnLeave();
+  }
+  if (next !== "stages") {
+    stagesRegion = null;
+    stageEntryId = null;
+    stagesDropInfoOpen = false;
+    rememberOverlayClose("stage-prep");
+    rememberOverlayClose("stages-region");
+  }
+  if ((view === "home" || isFacilityView()) && next !== "home" && islandLayoutEdit) {
+    if (islandLayoutDraft) writeIslandLayout(islandLayoutDraft);
+    islandLayoutEdit = false;
+    islandLayoutDraft = null;
+    islandSpotDrag = null;
+    clearIslandLongPress();
+    rememberOverlayClose("island-layout-edit");
+  }
+  if (next === "enhance") {
+    enhanceTab = "monsters";
+    enhanceSkillFeedAllowed = true;
+    selectFirstEnhanceRosterSlot();
+  }
+  if (next === "stages") {
+    patchOnboard({ openedStages: true });
+  }
+  if (next === "home") {
+    enhanceSkillFeedAllowed = false;
+    skillFeedModalOpen = false;
+    skillFeedFodderUid = null;
+    closeMonRiteModal();
+  }
+  if (next === "enhance" || next === "home" || next === "summoner") {
+    codexOpen = false;
+    codexDetailMonsterId = null;
+  }
+  const stayOnIsland =
+    (view === "home" || isFacilityView(view)) &&
+    (next === "home" || isFacilityView(next)) &&
+    Boolean(app.querySelector(".home-island"));
+  view = next;
+  if (stayOnIsland) renderPreservingIsland();
+  else render();
+  lastTrackedView = view;
+  viewHistoryLock = false;
+}
+
+function overlayLayerDismissSelector(): string {
+  return [
+    "button.settings-backdrop",
+    "button.stages-region-backdrop",
+    "button.stage-prep-backdrop",
+    "button.stage-drop-info-backdrop",
+    "button.stage-prep-info-backdrop",
+    "button[id$='-close']",
+    "button[id$='-dismiss']",
+    "button[id$='-cancel']",
+    "button[id$='-skip']",
+    "[data-core-region-close]",
+    "[data-core-prep-action='cancel']",
+  ].join(", ");
+}
+
+function isOverlayIdOpen(id: string): boolean {
+  switch (id) {
+    case "island-spot-menu":
+      return !!islandSpotMenuId;
+    case "res-more":
+      return resMoreOpen;
+    case "gear-bag-filter":
+      return gearBagFilterOpen;
+    case "island-layout-edit":
+      return islandLayoutEdit;
+    case "battle-auto-settings":
+      return battleAutoSettingsOpen;
+    case "stages-region":
+      return view === "stages" && !!stagesRegion && !stageEntryId;
+    case "stage-prep":
+      return !!stageEntryId;
+    case "onboard-welcome":
+      return onboardWelcomeOpen;
+    case "sys-confirm-layer":
+      return sysConfirmKind !== null;
+    default: {
+      const el = app.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+      return !!el && overlayDomIsOpen(el);
+    }
+  }
+}
+
+function closeOverlayById(id: string): boolean {
+  if (id === "sys-confirm-layer") {
+    if (sysConfirmKind === "exit") {
+      void exitNativeApp();
+      return true;
+    }
+    closeSysConfirm();
+    return true;
+  }
+  if (id === "island-spot-menu") {
+    setIslandSpotMenu(null);
+    return true;
+  }
+  if (id === "res-more") {
+    resMoreOpen = false;
+    applyResMoreOpen();
+    return true;
+  }
+  if (id === "gear-bag-filter") {
+    if (!gearBagFilterOpen) return false;
+    gearBagFilterOpen = false;
+    rememberOverlayClose("gear-bag-filter");
+    clearGearBagFilterMenuPortal();
+    if (!refreshSumGearPane()) render();
+    return true;
+  }
+  if (id === "island-layout-edit") {
+    if (!islandLayoutEdit) return false;
+    exitIslandLayoutEdit(false);
+    return true;
+  }
+  if (id === "battle-auto-settings") {
+    battleAutoSettingsOpen = false;
+    applyBattleAutoSettingsOpen();
+    return true;
+  }
+  if (id === "stage-prep") {
+    if (!stageEntryId) return false;
+    closeStagePrep();
+    return true;
+  }
+  if (id === "stages-region") {
+    if (!stagesRegion) return false;
+    stagesRegion = null;
+    stageEntryId = null;
+    stagesDropInfoOpen = false;
+    applyStagesRegionOpen();
+    return true;
+  }
+  if (id === "onboard-welcome") {
+    if (!onboardWelcomeOpen) return false;
+    onboardWelcomeOpen = false;
+    patchOnboard({ welcomeSeen: true });
+    app.querySelector("#onboard-welcome")?.remove();
+    rememberOverlayClose("onboard-welcome");
+    return true;
+  }
+  if (id === GROWTH_REVEAL_LAYER_ID && growthRevealIsOpen()) {
+    const layer = app.querySelector<HTMLElement>(`#${GROWTH_REVEAL_LAYER_ID}`);
+    const skip = layer?.querySelector<HTMLButtonElement>(
+      "#btn-growth-reveal-skip, #btn-growth-reveal-close, #btn-growth-reveal-ok",
+    );
+    if (skip) {
+      skip.click();
+      return true;
+    }
+    abortGrowthReveal();
+    return true;
+  }
+  if (id === WISH_REVEAL_LAYER_ID && wishRevealIsOpen()) {
+    const layer = app.querySelector<HTMLElement>(`#${WISH_REVEAL_LAYER_ID}`);
+    const skip = layer?.querySelector<HTMLButtonElement>(
+      "#btn-wish-rite-close, #btn-wish-rite-ok",
+    );
+    if (skip) {
+      skip.click();
+      return true;
+    }
+    abortWishReveal();
+    return true;
+  }
+
+  const el = app.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+  if (!el || !overlayDomIsOpen(el)) return false;
+  const btn = el.querySelector<HTMLElement>(overlayLayerDismissSelector());
+  if (btn) {
+    btn.click();
+    rememberOverlayClose(id);
+    return true;
+  }
+  return false;
+}
+
+function closeTopOverlay(): boolean {
+  while (overlayBackStack.length) {
+    const id = overlayBackStack[overlayBackStack.length - 1]!;
+    if (!isOverlayIdOpen(id)) {
+      overlayBackStack.pop();
+      continue;
+    }
+    if (id === "nick-setup-layer" || id === "starter-summoner-layer") {
+      return true;
+    }
+    return closeOverlayById(id);
+  }
+  return false;
+}
+
+function closeLeftoverTransientUi(): boolean {
+  if (sysConfirmKind === "exit") {
+    void exitNativeApp();
+    return true;
+  }
+  if (sysConfirmKind) {
+    closeSysConfirm();
+    return true;
+  }
+  if (chatProfileUid) {
+    closeChatProfile();
+    return true;
+  }
+  if (stagePrepInfo) {
+    stagePrepInfo = null;
+    applyStagePrepInfo();
+    return true;
+  }
+  if (stagesDropInfoOpen) {
+    stagesDropInfoOpen = false;
+    stagesDropSetExpand = false;
+    applyStageDropInfo();
+    return true;
+  }
+  if (stageEntryId) {
+    closeStagePrep();
+    return true;
+  }
+  if (view === "stages" && stagesRegion) {
+    stagesRegion = null;
+    applyStagesRegionOpen();
+    return true;
+  }
+  if (islandSpotMenuId) {
+    setIslandSpotMenu(null);
+    return true;
+  }
+  if (resMoreOpen) {
+    resMoreOpen = false;
+    applyResMoreOpen();
+    return true;
+  }
+  if (gearBagFilterOpen) {
+    return closeOverlayById("gear-bag-filter");
+  }
+  if (islandLayoutEdit) {
+    exitIslandLayoutEdit(false);
+    return true;
+  }
+  if (battleAutoSettingsOpen) {
+    battleAutoSettingsOpen = false;
+    applyBattleAutoSettingsOpen();
+    return true;
+  }
+  if (onboardWelcomeOpen) {
+    return closeOverlayById("onboard-welcome");
+  }
+  return false;
+}
+
+function goToPreviousScreen(): boolean {
+  if (view === "battle" || view === "result") {
+    leaveBattleOrResultScreen();
+    return true;
+  }
+  if (view === "auth" || view === "home") return false;
+
+  let prev: View | undefined;
+  while (viewHistory.length) {
+    const candidate = viewHistory.pop()!;
+    if (candidate === view) continue;
+    if (candidate === "battle" || candidate === "result" || candidate === "auth") continue;
+    prev = candidate;
+    break;
+  }
+  if (!prev && isFacilityView()) prev = "home";
+  if (!prev) return false;
+  applyViewChange(prev, { fromBack: true });
+  return true;
+}
+
+function handleAuthHardwareBack(): void {
+  if (
+    authUi.pane === "login" ||
+    authUi.pane === "register" ||
+    authUi.pane === "privacy" ||
+    authUi.pane === "terms"
+  ) {
+    authUi.pane = "gate";
+    if (location.hash === "#privacy" || location.hash === "#terms") {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
+    render();
+    return;
+  }
+  openSysConfirm("exit");
+}
+
+function handleHardwareBack(): void {
+  if (closeTopOverlay()) return;
+  if (closeLeftoverTransientUi()) return;
+  if (view === "auth") {
+    handleAuthHardwareBack();
+    return;
+  }
+  if (nicknameSetupOpen || needsStarterSummonerPick()) return;
+  if (goToPreviousScreen()) return;
+  if (view === "home") {
+    openSysConfirm("login");
+  }
+}
+
 function bind(): void {
   ensureModalXDelegate();
+  ensureSysConfirmDelegate();
   bindSettingsAudio();
 
   if (view === "auth") {
@@ -18411,6 +20222,7 @@ function bind(): void {
     maybeFocusOnboardIslandSpot();
   }
   bindChatUi();
+  bindCommunityTabs(app);
   bindProfileUi();
   bindNickSetupUi();
   bindStarterSummonerUi();
@@ -18586,8 +20398,7 @@ function bind(): void {
       applyShopOpen();
     }
     applyCommunityOpen();
-  });
-  app.querySelector("#btn-community-close")?.addEventListener("click", () => {
+    if (communityOpen) void refreshSocialThenCommunity();
     communityOpen = false;
     applyCommunityOpen();
   });
@@ -18710,30 +20521,14 @@ function bind(): void {
 
   app.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      settingsOpen = false;
-      mailboxOpen = false;
-      notifOpen = false;
-      summonerPickerOpen = false;
-      resMoreOpen = false;
-      missionOpen = false;
-      communityOpen = false;
-      shopOpen = false;
-      applySettingsOpen();
-      applyMailboxOpen();
-      applyNotifOpen();
-      applySummonerPickerOpen();
-      applyResMoreOpen();
-      applyMissionOpen();
-      applyCommunityOpen();
-      applyShopOpen();
-      closeChatOverlay();
-      closeDojoInscUpgradeSoft();
       const nav = btn.dataset.nav;
       if (nav === "guild") {
+        closeHudSheetsForNav();
         openCommunityModalSoft();
         return;
       }
       if (nav === "shop") {
+        closeHudSheetsForNav();
         if (view === "result" || view === "battle") {
           autoMode = false;
           clearAutoTimer();
@@ -18745,23 +20540,8 @@ function bind(): void {
         openShopModalSoft();
         return;
       }
-      if (view === "result" || view === "battle") {
-        autoMode = false;
-        clearAutoTimer();
-        if (nav !== "battle" && nav !== "result") {
-          battle = null;
-          dmgFloats = [];
-          if (nav === "home" || nav === "enhance" || nav === "shop" || nav === "party" || nav === "summoner") {
-            if (nav === "home") {
-              currentStage = null;
-              lastReward = null;
-              lastScrollGain = 0;
-              lastScrollPremiumGain = 0;
-            }
-          }
-        }
-      }
       if (nav === "collect") {
+        closeHudSheetsForNav();
         const now = Date.now();
         save.island = {
           ...save.island,
@@ -18780,47 +20560,8 @@ function bind(): void {
         render();
         return;
       }
-      if (nav === "party") {
-        preparePartyHall();
-      } else if (view === "party" && nav !== "party") {
-        commitPartyDraftOnLeave();
-      }
-      if (nav !== "stages") {
-        stagesRegion = null;
-      }
-      if ((view === "home" || isFacilityView()) && nav !== "home" && islandLayoutEdit) {
-        if (islandLayoutDraft) writeIslandLayout(islandLayoutDraft);
-        islandLayoutEdit = false;
-        islandLayoutDraft = null;
-        islandSpotDrag = null;
-        clearIslandLongPress();
-      }
-      if (nav === "enhance") {
-        enhanceTab = "monsters";
-        enhanceSkillFeedAllowed = true;
-        selectFirstEnhanceRosterSlot();
-      }
-      if (nav === "stages") {
-        patchOnboard({ openedStages: true });
-      }
-      if (nav === "home") {
-        enhanceSkillFeedAllowed = false;
-        skillFeedModalOpen = false;
-        skillFeedFodderUid = null;
-        closeMonRiteModal();
-      }
-      if (nav === "enhance" || nav === "home" || nav === "summoner") {
-        codexOpen = false;
-        codexDetailMonsterId = null;
-      }
-      const next = nav as View;
-      const stayOnIsland =
-        (view === "home" || isFacilityView(view)) &&
-        (next === "home" || isFacilityView(next)) &&
-        Boolean(app.querySelector(".home-island"));
-      view = next;
-      if (stayOnIsland) renderPreservingIsland();
-      else render();
+      if (!nav || !isGameView(nav)) return;
+      applyViewChange(nav);
     });
   });
 
@@ -19175,9 +20916,13 @@ function bind(): void {
   bindEnhanceTransientModals();
 
   bindShopBuyButtons();
+  bindShopTabs();
   bindCommunityActions();
 
   app.querySelector("#btn-arena-defense")?.addEventListener("click", () => {
+    if ((app.querySelector("#btn-arena-defense") as HTMLElement | null)?.closest("#stages-region-host")) {
+      return;
+    }
     const r = runSetArenaDefense(save);
     save = r.save;
     persist();
@@ -19477,27 +21222,7 @@ function bind(): void {
   });
 
   app.querySelector("#btn-back")?.addEventListener("click", () => {
-    autoMode = false;
-    battleAutoSettingsOpen = false;
-    softRemoveOverlay("battle-auto-settings");
-    clearAutoTimer();
-    clearBattleSkipTimer();
-    battleSkipTimeReady = false;
-    battleSkipReady = false;
-    battleSkipSeq += 1;
-    if (battle?.finishReason) grantRewardIfNeeded();
-    if (view === "result") {
-      leaveResultView("stages");
-      return;
-    }
-    battle = null;
-    currentStage = null;
-    lastReward = null;
-    lastScrollGain = 0;
-    lastScrollPremiumGain = 0;
-    dmgFloats = [];
-    view = "stages";
-    render();
+    leaveBattleOrResultScreen();
   });
 
   app.querySelector("#btn-result-continue")?.addEventListener("click", () => {
@@ -19594,11 +21319,13 @@ function bind(): void {
   applyNicknameSetupOpen();
   applyStarterSummonerOpen();
   applySummonerUnlockOpen();
+  applySysConfirmOpen();
   if (growthRevealIsOpen()) remountGrowthReveal();
   if (wishRevealIsOpen()) remountWishReveal();
 }
 
 async function boot(): Promise<void> {
+  bindSaveFlush();
   const health = await apiJson<{ ok?: boolean; db?: string }>("/api/health");
   ephemeralStore = health?.db === "memory";
   const me = await apiJson<{ user: SessionUser }>("/api/me");
@@ -19623,4 +21350,5 @@ async function boot(): Promise<void> {
 }
 
 initI18n();
+installHardwareBack(handleHardwareBack);
 void boot();

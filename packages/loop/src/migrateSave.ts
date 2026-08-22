@@ -21,6 +21,7 @@ import {
   type PlayerSave,
   type SummonerElement,
 } from "./loop.js";
+import { normalizeDailyActivity } from "./dailyMissions.js";
 
 function normalizeOnboardRite(raw: unknown): OnboardRiteSave | null {
   if (!raw || typeof raw !== "object") return null;
@@ -135,6 +136,8 @@ export function migrateSave(raw: unknown): PlayerSave | null {
       ? p.gearBag.map((g) => normalizeGearPiece(g, g.slot)).slice(0, 40)
       : [],
     gloryPoints: typeof p.gloryPoints === "number" ? p.gloryPoints : 0,
+    friendshipPoints:
+      typeof p.friendshipPoints === "number" ? Math.max(0, Math.floor(p.friendshipPoints)) : 0,
     jinmunStones: typeof p.jinmunStones === "number" ? p.jinmunStones : 0,
     gloryLevels: p.gloryLevels ?? {},
     arenaBanIds: Array.isArray(p.arenaBanIds)
@@ -313,6 +316,11 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     claimedMailIds: Array.isArray(p.claimedMailIds)
       ? p.claimedMailIds.filter((id): id is string => typeof id === "string")
       : [],
+    updatedAt:
+      typeof p.updatedAt === "number" && Number.isFinite(p.updatedAt)
+        ? Math.max(0, Math.floor(p.updatedAt))
+        : 0,
+    dailyActivity: normalizeDailyActivity(p.dailyActivity),
     claimedMissionKeys: Array.isArray(p.claimedMissionKeys)
       ? p.claimedMissionKeys.filter(
           (id): id is string => typeof id === "string",
@@ -356,4 +364,35 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     partyPresets: presets,
     activePartyPreset,
   };
+}
+
+function saveProgressScore(save: PlayerSave): number {
+  const daily = save.dailyActivity;
+  let dailySum = 0;
+  if (daily) {
+    for (const value of Object.values(daily)) {
+      if (typeof value === "number") dailySum += value;
+    }
+  }
+  return (
+    (save.claimedMainQuestIds?.length ?? 0) * 1_000_000 +
+    (save.claimedMissionKeys?.length ?? 0) * 10_000 +
+    dailySum * 100 +
+    (save.clearedStages?.length ?? 0) * 10 +
+    Math.floor(save.island?.mana ?? 0)
+  );
+}
+
+/** Prefer the freshest client save so a stale cloud blob cannot wipe mission progress. */
+export function pickPreferredSave(
+  local: PlayerSave | null,
+  remote: PlayerSave | null,
+): PlayerSave {
+  if (!local && !remote) return createNewSave();
+  if (!local) return remote!;
+  if (!remote) return local;
+  const localAt = local.updatedAt ?? 0;
+  const remoteAt = remote.updatedAt ?? 0;
+  if (localAt !== remoteAt) return localAt > remoteAt ? local : remote;
+  return saveProgressScore(local) >= saveProgressScore(remote) ? local : remote;
 }

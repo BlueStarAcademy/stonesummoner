@@ -16,6 +16,10 @@ import {
   runBuyEnergy,
   ENERGY_BUY_AMOUNT,
   runBuyGrindstone,
+  runBuyArenaShop,
+  runBuyFriendShop,
+  runBuyCashPack,
+  grantFriendshipPoints,
   GRINDSTONE_BUY_CRYSTAL_COST,
   SCROLL_PREMIUM_BUY_CRYSTAL_COST,
   catalogShopRemaining,
@@ -69,6 +73,10 @@ import {
   unclaimedMailCount,
   runClaimMail,
   runClaimDailyMission,
+  visibleDailyMissions,
+  isDailyMissionComplete,
+  dailyMissionProgress,
+  mergeDailyMissionState,
   runImprintSymbol,
   runJoinGuild,
   runCreateGuild,
@@ -95,6 +103,8 @@ import {
   ARENA_ATTACKS_DAILY,
   RAID_BOSS_MAX_HP,
   RAID_ATTEMPTS_DAILY,
+  RAID_DAMAGE_BASE,
+  RAID_COMBAT_TO_BOSS,
   GUILD_WEEK_CONTRIB_GOAL,
   GUILD_CREATE_CRYSTAL_COST,
   applyRewards,
@@ -110,7 +120,7 @@ import {
   isMainQuestUnlocked,
   runClaimMainQuest,
 } from "./mainQuest.js";
-import { migrateSave } from "./migrateSave.js";
+import { migrateSave, pickPreferredSave } from "./migrateSave.js";
 import { expForStage } from "./progress.js";
 import { FUSION_RECIPES, isFusionOnlyFamily } from "stonesummoner-data";
 
@@ -374,6 +384,8 @@ describe("game loop", () => {
         "tower_2_7",
       ],
     };
+    assert.equal(isStageUnlocked(save, "guild_raid_boss"), false);
+    save = { ...save, guildName: "테스트길드" };
     assert.equal(isStageUnlocked(save, "guild_raid_boss"), true);
     assert.equal(isStageUnlocked(save, "warena_qual"), true);
 
@@ -910,6 +922,7 @@ describe("game loop", () => {
         mana: 100,
         energy: 50,
         energyMax: 100,
+        summonerLevel: 8,
       },
       claimedMissionKeys: [],
     };
@@ -934,6 +947,7 @@ describe("game loop", () => {
           mana: 100,
           energy: 95,
           energyMax: 100,
+          summonerLevel: 8,
         },
         claimedMissionKeys: [],
       },
@@ -946,8 +960,19 @@ describe("game loop", () => {
       ...blocked.save,
       dojoDrillDay: day,
       dojoDrillsToday: 1,
+      dailyActivity: {
+        ...blocked.save.dailyActivity,
+        day,
+        dojo: 1,
+      },
       claimedMissionKeys: blocked.save.claimedMissionKeys,
-      island: { ...blocked.save.island, mana: 100, energy: 40, energyMax: 100 },
+      island: {
+        ...blocked.save.island,
+        mana: 100,
+        energy: 40,
+        energyMax: 100,
+        summonerLevel: 8,
+      },
     };
     const dojo = runClaimDailyMission(
       save,
@@ -956,6 +981,89 @@ describe("game loop", () => {
     );
     assert.match(dojo.message, /일일 미션/);
     assert.equal(dojo.save.island.mana, 250);
+  });
+
+  it("unlocks daily missions by summoner level and tracks SW-style goals", () => {
+    const later = Date.now() + 3_600_000;
+    let save = createNewSave();
+    const earlyIds = visibleDailyMissions(save).map((m) => m.id);
+    assert.deepEqual(earlyIds, ["collect", "summon", "enhanceMon", "sortie", "all"]);
+    assert.equal(isDailyMissionComplete(save, "dungeon"), false);
+    assert.ok(!earlyIds.includes("wish"));
+    assert.ok(!earlyIds.includes("enhanceSymbol"));
+
+    const pond = homeCollect(save, later);
+    assert.ok((pond.save.dailyActivity?.collect ?? 0) >= 1);
+    const collectClaim = runClaimDailyMission(pond.save, "collect", later);
+    assert.match(collectClaim.message, /일일 미션/);
+
+    const summoned = runSummon(collectClaim.save, "normal", () => 0.2);
+    assert.equal(summoned.save.dailyActivity?.summon, 1);
+    assert.equal(isDailyMissionComplete(summoned.save, "summon"), true);
+
+    save = {
+      ...summoned.save,
+      island: { ...summoned.save.island, summonerLevel: 12, mana: 8000 },
+      clearedStages: ["garen_1_1", "garen_1_2", "garen_1_3", "garen_1_4", "garen_1_5"],
+    };
+    const lateIds = visibleDailyMissions(save).map((m) => m.id);
+    assert.ok(lateIds.includes("wish"));
+    assert.ok(lateIds.includes("dungeon"));
+    assert.ok(lateIds.includes("enhanceSymbol"));
+    assert.ok(lateIds.includes("enhanceGear"));
+    assert.ok(lateIds.includes("arena"));
+    assert.ok(lateIds.includes("grindSymbol"));
+
+    const enhanced = runEnhanceSymbol(save, "0");
+    assert.equal(enhanced.save.dailyActivity?.enhanceSymbol, 1);
+    assert.equal(isDailyMissionComplete(enhanced.save, "enhanceSymbol"), true);
+
+    const stage = getStage("giant_b1")!;
+    const depth = applyRewards(enhanced.save, stage, true, () => 0.99);
+    assert.ok((depth.save.dailyActivity?.dungeon ?? 0) >= 1);
+    assert.ok((depth.save.dailyActivity?.battle ?? 0) >= 1);
+    const sortie = visibleDailyMissions(depth.save).find((m) => m.id === "sortie");
+    assert.ok(sortie);
+    assert.equal(
+      dailyMissionProgress(depth.save, sortie),
+      depth.save.dailyActivity?.battle,
+    );
+  });
+
+  it("keeps local mission progress over a stale cloud save", () => {
+    const now = Date.now();
+    const day = new Date(now).toISOString().slice(0, 10);
+    const blank = createNewSave(now);
+    const local = {
+      ...blank,
+      updatedAt: now,
+      claimedMissionKeys: [`collect:${day}`],
+      claimedMainQuestIds: ["forest1"],
+      dailyActivity: {
+        ...blank.dailyActivity,
+        day,
+        collect: 1,
+        battle: 3,
+      },
+    };
+    const remote = {
+      ...blank,
+      updatedAt: now - 60_000,
+      claimedMissionKeys: [],
+      claimedMainQuestIds: [],
+      dailyActivity: { ...blank.dailyActivity, day: null },
+    };
+    const picked = pickPreferredSave(local, remote);
+    assert.equal(picked.updatedAt, local.updatedAt);
+    const merged = mergeDailyMissionState(picked, remote, now);
+    assert.equal(merged.dailyActivity.collect, 1);
+    assert.equal(merged.dailyActivity.battle, 3);
+    assert.ok(merged.claimedMissionKeys.includes(`collect:${day}`));
+    assert.ok(merged.claimedMainQuestIds.includes("forest1"));
+
+    const fromStalePrimary = mergeDailyMissionState(remote, local, now);
+    assert.equal(fromStalePrimary.dailyActivity.battle, 3);
+    assert.ok(fromStalePrimary.claimedMissionKeys.includes(`collect:${day}`));
   });
 
   it("claims one-time main quest rewards from stages and cairos", () => {
@@ -1766,6 +1874,49 @@ describe("game loop", () => {
     assert.match(capped.message, /한도/);
   });
 
+  it("blocks guild raid without a guild and pays damage on defeat", () => {
+    const stage = getStage("guild_raid_boss")!;
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      island: { ...save.island, energy: 50, summonerLevel: 12 },
+      clearedStages: ["garen_1_5"],
+      raidBossHp: RAID_BOSS_MAX_HP,
+    };
+    const blocked = runSortie(save, "guild_raid_boss", { rng: () => 0.05 });
+    assert.match(blocked.message, /잠김/);
+
+    save = { ...save, guildName: "테스트길드" };
+    const none = applyRewards(save, stage, false, () => 0.5, "normal", {
+      damageDealt: 0,
+    });
+    assert.equal(none.reward.victory, false);
+    assert.equal(none.reward.raidDamage ?? 0, 0);
+    assert.equal(none.save.raidBossHp ?? RAID_BOSS_MAX_HP, RAID_BOSS_MAX_HP);
+    assert.equal(none.reward.contribution ?? 0, 0);
+
+    const dmg = 50_000;
+    const paid = applyRewards(save, stage, false, () => 0.5, "normal", {
+      damageDealt: dmg,
+    });
+    const expectChip = Math.round(dmg * RAID_COMBAT_TO_BOSS);
+    assert.equal(paid.reward.raidDamage, expectChip);
+    assert.ok((paid.reward.contribution ?? 0) > 0);
+    assert.ok((paid.reward.glory ?? 0) > 0);
+    assert.equal(
+      paid.save.raidBossHp ?? RAID_BOSS_MAX_HP,
+      RAID_BOSS_MAX_HP - expectChip,
+    );
+    assert.ok(expectChip < RAID_DAMAGE_BASE * 2);
+
+    const win = applyRewards(save, stage, true, () => 0.99, "normal", {
+      damageDealt: dmg,
+    });
+    assert.equal(win.reward.victory, true);
+    assert.equal(win.reward.raidDamage, expectChip);
+    assert.ok((win.save.raidBossHp ?? RAID_BOSS_MAX_HP) < RAID_BOSS_MAX_HP);
+  });
+
   it("migrateSave preserves presets, premium scrolls, summoners, awaken", () => {
     const base = createNewSave(0);
     const raw = {
@@ -1807,6 +1958,8 @@ describe("game loop", () => {
     assert.deepEqual(round!.claimedMailIds, []);
     assert.deepEqual(round!.claimedMissionKeys, []);
     assert.deepEqual(round!.claimedMainQuestIds, []);
+    assert.ok(round!.dailyActivity);
+    assert.equal(round!.updatedAt ?? 0, 0);
     assert.equal(round!.onboardRite, null);
   });
 
@@ -1938,5 +2091,35 @@ describe("game loop", () => {
     assert.equal(broke.message, "crystal_short");
     const icon = runSetProfileIcon(second.save, second.save.roster[0]!.monsterId);
     assert.equal(icon.profileIconId, second.save.roster[0]!.monsterId);
+  });
+});
+
+describe("tab shops", () => {
+  it("spends glory in the arena shop", () => {
+    let save = createNewSave(0);
+    save = { ...save, gloryPoints: 40 };
+    const bought = runBuyArenaShop(save, "arena_gold");
+    assert.equal(bought.save.gloryPoints, 25);
+    assert.equal(bought.save.island.mana, save.island.mana + 50000);
+    const broke = runBuyArenaShop({ ...bought.save, gloryPoints: 0 }, "arena_gold");
+    assert.match(broke.message, /영광/);
+  });
+
+  it("spends friendship points in the social shop", () => {
+    let save = grantFriendshipPoints(createNewSave(0), 20);
+    const bought = runBuyFriendShop(save, "friend_energy");
+    assert.equal(bought.save.friendshipPoints, 15);
+    const broke = runBuyFriendShop({ ...bought.save, friendshipPoints: 0 }, "friend_gold");
+    assert.match(broke.message, /우정/);
+  });
+
+  it("grants cash pack crystals with a daily cap", () => {
+    const save = createNewSave(0);
+    const first = runBuyCashPack(save, "pack_crystal_250");
+    assert.equal(first.save.island.crystal, save.island.crystal + 250);
+    const second = runBuyCashPack(first.save, "pack_crystal_250");
+    const third = runBuyCashPack(second.save, "pack_crystal_250");
+    const blocked = runBuyCashPack(third.save, "pack_crystal_250");
+    assert.match(blocked.message, /한도/);
   });
 });

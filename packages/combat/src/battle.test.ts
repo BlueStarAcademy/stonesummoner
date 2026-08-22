@@ -99,6 +99,25 @@ describe("Battle flow", () => {
     assert.equal(b.attackTurnCount, 1);
   });
 
+  it("tracks ally damage actually applied to enemies", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("a-m1")!.atb = 100;
+    b.tickUntilReady();
+    b.autoStone();
+    const hpBefore = b.getUnit("e-m1")!.hp;
+    b.useSkill({ targetId: "e-m1" });
+    const hpAfter = b.getUnit("e-m1")!.hp;
+    assert.ok(b.allyDamageDealt > 0);
+    assert.equal(b.allyDamageDealt, hpBefore - hpAfter);
+  });
+
   it("skips stone when the same team acts again (Go alternation)", () => {
     const b = new Battle({
       boardSize: 5,
