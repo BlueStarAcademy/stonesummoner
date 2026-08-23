@@ -8,7 +8,7 @@ export {
   resolveMonsterId,
 } from "./monsters.js";
 export type { MonsterDef, Element, MonsterRole, FamilySeed } from "./monsters.js";
-export { SKILL_DMG_MUL } from "./combatTune.js";
+export { SKILL_DMG_MUL, scenarioEnemyHpMul } from "./combatTune.js";
 export { basicStrike, dmg } from "./skills.js";
 export type { SkillDef, SkillEffect, StatModAxis, CcKind } from "./skills.js";
 export { STONE_PASSIVE_LABEL } from "./stonePassives.js";

@@ -6960,24 +6960,40 @@ function keepBoardCellArt(from: HTMLElement, to: HTMLElement): void {
 }
 
 /**
- * Swap battle-layout children without taking #board-mini out of the document.
+ * Swap battle-layout children without taking overlays out of the document.
  * Moving the mini into a detached template unloads stone images and it flickers
  * back in on every combat tick.
  */
 function patchBattleLayout(live: HTMLElement, incoming: HTMLElement): void {
   live.className = incoming.className;
-  const mini = live.querySelector<HTMLElement>("#board-mini");
   const dmg = live.querySelector<HTMLElement>(".dmg-layer");
-  if (mini) incoming.querySelector("#board-mini")?.remove();
   if (dmg) incoming.querySelector(".dmg-layer")?.remove();
 
   for (const child of Array.from(live.children)) {
-    if (child !== mini && child !== dmg) child.remove();
+    if (child !== dmg) child.remove();
   }
 
   for (const child of Array.from(incoming.children)) {
-    if (mini) live.insertBefore(child, mini);
+    if (dmg) live.insertBefore(child, dmg);
     else live.appendChild(child);
+  }
+}
+
+/** Keep the live mini board mounted while refreshing stage chrome. */
+function patchBattleChrome(live: HTMLElement, incoming: HTMLElement): void {
+  const mini = live.querySelector<HTMLElement>("#board-mini");
+  if (mini) incoming.querySelector("#board-mini")?.remove();
+
+  for (const child of Array.from(live.children)) {
+    if (child !== mini) child.remove();
+  }
+
+  for (const child of Array.from(incoming.children)) {
+    if (child.id === "board-mini") {
+      if (!mini) live.appendChild(child);
+      continue;
+    }
+    live.appendChild(child);
   }
 }
 
@@ -15884,17 +15900,19 @@ function renderSumSkillsPaneHtml(activeEl: SummonerElement): string {
         : open
         ? `${sk.nameKo} · +${rank}/${MAX_MAGIC_RANK}`
         : `${sk.nameKo} · ${t("ui.stagePrepSkillLocked")}`;
-    const rankBadge = !open
-      ? ""
-      : enhanceLvLocked
-        ? `<span class="sum-magic-node-rank is-lv-locked">${CODEX_LOCK_HTML}<strong>${escapeHtml(t("summonerPicker.needLv", { n: needLv }))}</strong></span>`
-        : `<span class="sum-magic-node-rank">+${rank}</span>`;
+    const rankBadge = open ? `<span class="sum-magic-node-rank">+${rank}</span>` : "";
+    const needLvBadge = enhanceLvLocked
+      ? `<span class="sum-magic-node-need-lv" aria-hidden="true">${CODEX_LOCK_HTML}<strong>${escapeHtml(t("summonerPicker.needLv", { n: needLv }))}</strong></span>`
+      : "";
     return `<button type="button" class="sum-magic-node${open ? " is-on" : " is-locked"}${sumMagicDetailSlot === slot ? " is-active" : ""}" data-magic-detail-slot="${slot}" title="${escapeHtml(title)}">
       <div class="sum-magic-node-seal">
         ${summonerSkillArtImg(sk.id, "sum-magic-ico", 36)}
         ${rankBadge}
       </div>
-      <strong class="sum-magic-node-name">${escapeHtml(sk.nameKo)}</strong>
+      <div class="sum-magic-node-label">
+        ${needLvBadge}
+        <strong class="sum-magic-node-name">${escapeHtml(sk.nameKo)}</strong>
+      </div>
     </button>`;
   };
   const openA = unlockedIds.has(kit.skills.A.id);
@@ -19400,6 +19418,7 @@ function renderBattle(manaPct: number): string {
         <strong class="battle-stage-name">${stageTitle}</strong>
         <span class="battle-page">${pageLabel}</span>
       </div>
+      ${renderBoardMini()}
     </header>
     <div class="battle-layout battle-layout--framed battle-layout--stage${canPlaceStone ? " is-stone-pick" : ""}${awaitSkill ? " is-skill-pick" : ""}${stoneSummonFx ? " is-stone-summoning" : ""}">
     <div class="dmg-layer" aria-hidden="true">${renderDmgLayer()}</div>
@@ -19422,7 +19441,6 @@ function renderBattle(manaPct: number): string {
     <div class="board-wrap board-wrap--stage${canPlaceStone ? " is-live" : ""}">
       ${renderBoardTabs()}${renderBoard()}${renderCaptureShop()}
     </div>
-    ${renderBoardMini()}
     <div class="battle-lane ally">
       ${renderBattleFront(allyUnits, "ally")}
     </div>
@@ -19514,7 +19532,7 @@ function refreshBattleView(): boolean {
 
   const nextChrome = next.querySelector<HTMLElement>(".battle-chrome");
   if (nextChrome) {
-    if (chrome) chrome.replaceWith(nextChrome);
+    if (chrome) patchBattleChrome(chrome, nextChrome);
     else if (sky) sky.after(nextChrome);
     else screen.prepend(nextChrome);
   }

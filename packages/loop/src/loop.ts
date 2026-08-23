@@ -76,6 +76,7 @@ import {
   WEEKDAY_EVOLVE_MAT_DROP,
   WEEKDAY_SKILL_MAT_DROP,
   scenarioSymbolDropTable,
+  scenarioEnemyHpMul,
   SKILL_DMG_MUL,
   getFusionRecipe,
   planFusionRecipe,
@@ -1638,6 +1639,16 @@ function unitFromMonsterId(
     skills: skillsForMonster(m, 0),
     stonePassive: m.stonePassiveId,
   });
+}
+
+function scaleScenarioEnemyHp(unit: Unit, stage: StageDef): Unit {
+  const mul = scenarioEnemyHpMul(stage);
+  if (mul === 1) return unit;
+  const hp = Math.max(1, Math.round(unit.stats.hp * mul));
+  unit.stats = { ...unit.stats, hp };
+  unit.hp = hp;
+  if (unit.originalMaxHp != null) unit.originalMaxHp = hp;
+  return unit;
 }
 
 export function createNewSave(now = Date.now()): PlayerSave {
@@ -4499,7 +4510,10 @@ export function createStageBattle(
     1 + Math.floor(stage.stage / 2) + Math.floor(stage.map / 3) + diffBonus;
 
   const enemyMonsters = enemyIds.map((id, i) =>
-    unitFromMonsterId(id, "enemy", `e-w1-${i}`, enemyLevel()),
+    scaleScenarioEnemyHp(
+      unitFromMonsterId(id, "enemy", `e-w1-${i}`, enemyLevel()),
+      stage,
+    ),
   );
 
   const enemyUnits: Unit[] = [
@@ -4592,11 +4606,14 @@ export function createStageBattle(
     rng: opts?.rng,
     spawnWave: (wave) =>
       enemyIds.map((id, i) =>
-        unitFromMonsterId(
-          id,
-          "enemy",
-          `e-w${wave}-${i}`,
-          enemyLevel() + (wave - 1),
+        scaleScenarioEnemyHp(
+          unitFromMonsterId(
+            id,
+            "enemy",
+            `e-w${wave}-${i}`,
+            enemyLevel() + (wave - 1),
+          ),
+          stage,
         ),
       ),
   });

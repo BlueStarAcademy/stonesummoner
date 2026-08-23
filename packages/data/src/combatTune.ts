@@ -7,4 +7,16 @@
  *
  * SKILL_DMG_MUL lifts kit coefficients (~1.15 S1 → ~3.7, SW 370%).
  */
-export const SKILL_DMG_MUL = 3.2;
+export const SKILL_DMG_MUL = 3.4;
+
+/** Early scenario enemies were too spongy vs starter symbols. */
+export function scenarioEnemyHpMul(stage: {
+  mode: string;
+  map: number;
+}): number {
+  if (stage.mode !== "scenario") return 1;
+  if (stage.map <= 1) return 0.75;
+  if (stage.map <= 2) return 0.88;
+  if (stage.map <= 3) return 0.94;
+  return 1;
+}

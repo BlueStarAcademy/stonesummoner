@@ -8476,7 +8476,7 @@ main {
   z-index: 20;
   display: flex;
   align-items: flex-start;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
   padding:
     calc(8px + env(safe-area-inset-top))
@@ -8510,7 +8510,7 @@ main {
   flex: 0 1 auto;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 2px;
   max-width: min(56%, 240px);
   padding: 7px 12px 6px;
@@ -8521,7 +8521,7 @@ main {
     #1a152866;
   backdrop-filter: blur(8px);
   box-shadow: 0 2px 10px #0004, inset 0 1px 0 #fff1;
-  text-align: right;
+  text-align: left;
 }
 
 .battle-stage-pill .battle-stage-name {
@@ -11168,11 +11168,12 @@ button.battle-unit {
 }
 
 .board-mini {
-  position: absolute;
-  right: 4px;
-  top: 36%;
-  z-index: 5;
-  width: min(168px, 40vw);
+  position: relative;
+  top: auto;
+  right: auto;
+  flex: 0 0 auto;
+  z-index: 1;
+  width: min(132px, 34vw);
   pointer-events: none;
 }
 
@@ -28416,15 +28417,24 @@ button.linkish {
   pointer-events: none;
 }
 
-.sum-magic-node-rank.is-lv-locked {
+.sum-magic-node-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+}
+
+.sum-magic-node-need-lv {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  right: -6px;
-  min-width: 0;
-  height: 18px;
-  padding: 0 5px;
-  border-color: #f0d878cc;
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid #f0d878cc;
+  background: #120c0af5;
   color: #fff8d0;
   font-size: 0.56rem;
   font-weight: 900;
@@ -28432,13 +28442,13 @@ button.linkish {
   white-space: nowrap;
 }
 
-.sum-magic-node-rank.is-lv-locked .codex-lock-ico {
+.sum-magic-node-need-lv .codex-lock-ico {
   width: 9px;
   height: 9px;
   color: #f5e08a;
 }
 
-.sum-magic-node-rank.is-lv-locked strong {
+.sum-magic-node-need-lv strong {
   font-size: inherit;
   font-weight: 900;
   color: inherit;
@@ -28453,6 +28463,8 @@ button.linkish {
 }
 
 .sum-magic-node-name {
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 100%;
   color: #f5edd8;
   font-size: 0.68rem;
