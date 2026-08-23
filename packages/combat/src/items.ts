@@ -1,4 +1,4 @@
-/** Phase 1 board tokens — full Module A set (+ rare transform dust) */
+/** Phase 1 board tokens — full Module A set (+ HP orbs / bombs). */
 
 export type BoardItemId =
   | "crit_charm"
@@ -8,7 +8,9 @@ export type BoardItemId =
   | "seal_nail"
   | "element_ward"
   | "bait_stone"
-  | "transform_dust";
+  | "transform_dust"
+  | "heal_orb"
+  | "hp_bomb";
 
 export interface BoardItemDef {
   id: BoardItemId;
@@ -24,6 +26,8 @@ export const BOARD_ITEMS: BoardItemDef[] = [
   { id: "element_ward", nameKo: "속성의뢰" },
   { id: "bait_stone", nameKo: "미끼돌" },
   { id: "transform_dust", nameKo: "변환가루" },
+  { id: "heal_orb", nameKo: "회복구" },
+  { id: "hp_bomb", nameKo: "마력폭탄" },
 ];
 
 export interface BoardToken {
@@ -59,7 +63,8 @@ export function tokenBoardResource(id: BoardItemId): "gold" | "crystal" {
     id === "shield_core" ||
     id === "capture_magnet" ||
     id === "element_ward" ||
-    id === "transform_dust"
+    id === "transform_dust" ||
+    id === "heal_orb"
   ) {
     return "crystal";
   }
@@ -67,7 +72,7 @@ export function tokenBoardResource(id: BoardItemId): "gold" | "crystal" {
 }
 
 /** Base chance to spawn a token after a stone summon (before phase bonus). */
-export const ITEM_SPAWN_CHANCE = 0.28;
+export const ITEM_SPAWN_CHANCE = 0.32;
 
 /** Prefer magnet more often on higher empowered phases. Transform dust is rare. */
 export function weightedItemId(
@@ -76,14 +81,16 @@ export function weightedItemId(
 ): BoardItemId {
   const roll = rng();
   const weights: { id: BoardItemId; w: number }[] = [
-    { id: "capture_magnet", w: 0.15 + Math.min(0.12, boardPhase * 0.05) },
-    { id: "crit_charm", w: 0.17 },
-    { id: "shield_core", w: 0.15 },
-    { id: "stride_sand", w: 0.12 },
-    { id: "seal_nail", w: 0.11 },
-    { id: "element_ward", w: 0.11 },
-    { id: "bait_stone", w: 0.12 },
-    { id: "transform_dust", w: 0.07 },
+    { id: "capture_magnet", w: 0.12 + Math.min(0.1, boardPhase * 0.04) },
+    { id: "crit_charm", w: 0.13 },
+    { id: "shield_core", w: 0.11 },
+    { id: "stride_sand", w: 0.09 },
+    { id: "seal_nail", w: 0.08 },
+    { id: "element_ward", w: 0.08 },
+    { id: "bait_stone", w: 0.09 },
+    { id: "heal_orb", w: 0.12 },
+    { id: "hp_bomb", w: 0.11 },
+    { id: "transform_dust", w: 0.05 },
   ];
   let acc = 0;
   for (const { id, w } of weights) {

@@ -472,6 +472,42 @@ describe("Battle flow", () => {
     assert.match(b.log.join("\n"), /실드핵/);
   });
 
+  it("heal orb restores ally hp", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    const mon = b.getUnit("a-m1")!;
+    mon.hp = 100;
+    b.tokens = [{ id: "heal_orb", x: 2, y: 2 }];
+    assert.equal(b.playStone({ x: 2, y: 2 }), true);
+    assert.ok(mon.hp > 100);
+    assert.match(b.log.join("\n"), /회복구/);
+  });
+
+  it("hp bomb damages enemy monsters", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    const foe = b.getUnit("e-m1")!;
+    const before = foe.hp;
+    b.tokens = [{ id: "hp_bomb", x: 1, y: 1 }];
+    assert.equal(b.playStone({ x: 1, y: 1 }), true);
+    assert.ok(foe.hp < before);
+    assert.match(b.log.join("\n"), /마력폭탄/);
+  });
+
   it("capture magnet charges mana", () => {
     const b = new Battle({
       boardSize: 5,

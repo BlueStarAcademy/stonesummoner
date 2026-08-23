@@ -716,6 +716,18 @@ export class Battle {
       );
       return;
     }
+    if (token.id === "heal_orb") {
+      const healed = this.applyPercentHpToTeam(unit.team, 0.18, "heal");
+      this.log.push(`${unit.name} 획득 ${name} (아군 회복 ${healed})`);
+      return;
+    }
+    if (token.id === "hp_bomb") {
+      const foe = unit.team === "ally" ? "enemy" : "ally";
+      const dmg = this.applyPercentHpToTeam(foe, 0.16, "hurt");
+      if (unit.team === "ally" && dmg > 0) this.allyDamageDealt += dmg;
+      this.log.push(`${unit.name} 획득 ${name} (적 피해 ${dmg})`);
+      return;
+    }
     // capture_magnet
     const manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
@@ -1200,6 +1212,10 @@ export class Battle {
           this.lastEnemyStone = null;
         }
       }
+    }
+    this.checkFinish();
+    if (this.phase === "finished" || this.phase === "await_wave") {
+      return true;
     }
     if (this.pendingCaptureShop) {
       this.phase = "await_capture_shop";
@@ -2282,6 +2298,41 @@ export class Battle {
     };
   }
 
+  /** Circle pickups: heal the picker's team, or bomb the opposing monsters. */
+  private applyPercentHpToTeam(
+    team: TeamId,
+    pct: number,
+    mode: "heal" | "hurt",
+  ): number {
+    let total = 0;
+    for (const u of this.units) {
+      if (!u.alive || u.team !== team) continue;
+      if (mode === "hurt" && u.kind !== "monster") continue;
+      const amount = Math.round(u.stats.hp * pct);
+      if (mode === "heal") {
+        const before = u.hp;
+        u.hp = Math.min(u.stats.hp, u.hp + amount);
+        total += u.hp - before;
+        continue;
+      }
+      let rest = amount;
+      const shield = u.shieldHp ?? 0;
+      if (shield > 0) {
+        const soak = Math.min(shield, rest);
+        u.shieldHp = shield - soak;
+        rest -= soak;
+      }
+      const before = u.hp;
+      u.hp = Math.max(0, u.hp - rest);
+      total += before - u.hp;
+      if (u.hp <= 0) {
+        u.alive = false;
+        this.log.push(`${u.name} defeated`);
+      }
+    }
+    return total;
+  }
+
   private checkFinish(): void {
     // Defeat = all ally summons fallen.
     if (aliveSummons(this.units, "ally").length === 0) {
@@ -2436,6 +2487,8 @@ function tokenPickupHighlight(id: BoardItemId, unit: Unit): number {
   if (id === "element_ward") return 3;
   if (id === "bait_stone") return Math.round(unit.stats.hp * 0.1);
   if (id === "seal_nail") return 3;
+  if (id === "heal_orb") return Math.round(unit.stats.hp * 0.18);
+  if (id === "hp_bomb") return Math.round(unit.stats.hp * 0.16);
   return 1;
 }
 

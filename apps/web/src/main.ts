@@ -1834,19 +1834,19 @@ let stagePrepSuppressClick = false;
 let islandPan = { x: 0, y: 0 };
 let islandPanCentered = false;
 /** Bump when cover metrics change so the next bind re-centers once. */
-const ISLAND_COVER_FIT_VERSION = 15;
+const ISLAND_COVER_FIT_VERSION = 16;
 let islandCoverFitApplied = 0;
 /** Locked at 1 — framing comes from world %; zoom UI is unused. */
 let islandZoom = 1;
 const ISLAND_BASE_SCALE = 1.0;
 /**
- * Must stay in sync with --island-oversize on .island-world.
- * Default camera contain-fits the painted land (three islets), not cover-fit
- * of the full 2:3 bitmap. Cover / ~1.7 oversize crops to the main islet and
- * reads as the old single plateau. Zoom stays locked. Very tall screens
- * letterbox with sky.
+ * Must stay in sync with --island-oversize on .island-world. The world is sized
+ * at cover-width x this factor and keeps the bitmap's 2:3 ratio, so a spot's
+ * percent coords are the same percent coords as on the painted map. Cover sizing
+ * plus hard pan clamp keep the bitmap filling the viewport at every stop.
+ * Drag-pan to see the rest of the archipelago; zoom stays locked.
  */
-const ISLAND_WORLD_OVERSIZE = 1;
+const ISLAND_WORLD_OVERSIZE = 1.7;
 /** Active tri-island @2x bitmap (v2 — archipelago inset with sky margin). */
 const ISLAND_MAP_NATURAL = { w: 2880, h: 4320 } as const;
 const ISLAND_TRANSFORM_ORIGIN = { x: 0.5, y: 0.5 };
@@ -6673,9 +6673,16 @@ function renderBoardCells(canClick: boolean): string {
         (token.id === "shield_core" ||
           token.id === "capture_magnet" ||
           token.id === "element_ward" ||
-          token.id === "transform_dust")
+          token.id === "transform_dust" ||
+          token.id === "heal_orb")
           ? "crystal"
           : "gold";
+      const tokenTitle =
+        token?.id === "heal_orb"
+          ? t("ui.boardMarkHeal")
+          : token?.id === "hp_bomb"
+            ? t("ui.boardMarkBomb")
+            : "";
       const forbid = battle.isForbidden({ x, y });
       const forbidClass = forbid && !stone ? " forbid" : "";
       const starClass = starSet.has(key) && !stone ? " star" : "";
@@ -6720,7 +6727,7 @@ function renderBoardCells(canClick: boolean): string {
         : summoning
           ? `<i class="summon-seal" aria-hidden="true"><i></i></i>`
           : token
-          ? `<span class="token-mark token-mark--${tokenResource} token-mark--${token.id}">
+          ? `<span class="token-mark token-mark--${tokenResource} token-mark--${token.id}"${tokenTitle ? ` title="${escapeHtml(tokenTitle)}"` : ""}>
               <i class="board-mark-sigil"></i>
               <img class="token-item-img" src="${battleBoardMarkSrc(token.id)}" data-svg="${battleBoardMarkFallbackSrc(token.id)}" width="256" height="256" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" />
               <span class="token-resource-orbit" aria-hidden="true">
@@ -13817,6 +13824,9 @@ function renderSymbolDetailSheet(index: number, role: SymDetailRole): string {
   const grindable = canGrindSymbol(sym) && canAffordGrind();
   const maxed = sym.enhance >= MAX_SYMBOL_ENHANCE;
   const title = `${set?.nameKo ?? sym.setId} (${t("ui.slotN", { n: sym.slot })}) - ${rarity.label}`;
+  const equipTargetUid = slotEquipPick?.uid ?? selectedEnhanceUid;
+  const wornByTarget = Boolean(wornUid && equipTargetUid && wornUid === equipTargetUid);
+  const equipDisabled = equipTargetUid ? "" : " disabled";
   const badge =
     role === "equipped"
       ? `<span class="sym-detail-badge">${escapeHtml(t("ui.symCompareEquipped"))}</span>`
@@ -13827,10 +13837,10 @@ function renderSymbolDetailSheet(index: number, role: SymDetailRole): string {
     role === "equipped"
       ? `<button type="button" class="sym-detail-act" data-sym-detail-unequip data-sym-idx="${index}">${t("ui.unequip")}</button>`
       : role === "candidate"
-        ? `<button type="button" class="sym-detail-act" data-sym-detail-equip data-sym-idx="${index}">${t("ui.818a75cd98")}</button>`
-        : wornUid
+        ? `<button type="button" class="sym-detail-act" data-sym-detail-equip data-sym-idx="${index}"${equipDisabled}>${t("ui.818a75cd98")}</button>`
+        : wornByTarget
           ? `<button type="button" class="sym-detail-act" data-sym-detail-unequip data-sym-idx="${index}">${t("ui.unequip")}</button>`
-          : `<button type="button" class="sym-detail-act" data-sym-detail-equip data-sym-idx="${index}">${t("ui.818a75cd98")}</button>`;
+          : `<button type="button" class="sym-detail-act" data-sym-detail-equip data-sym-idx="${index}"${equipDisabled}>${t("ui.818a75cd98")}</button>`;
   const closeX =
     role === "single" ? modalCloseX("close", "btn-sym-detail-close") : "";
   const prefixHtml =
@@ -13908,6 +13918,44 @@ function openSymbolDetailFromSlot(uid: string, slot: number, symId: string): voi
     applySymbolInvSlotFilter(slot as SymbolSlotNum);
   }
   symbolInvFilterSets = new Set(SYMBOL_SETS.map((s) => s.id));
+  monDetailTab = "symbols";
+  applyMonDetailTabUi();
+  softOpenEnhanceTransientModals();
+}
+
+/** Inventory / dock: always open detail (or compare). Never auto-equip. */
+function openSymbolDetailFromInventory(idx: number): void {
+  const clicked = save.symbols[idx];
+  if (!clicked) return;
+  const targetUid = slotEquipPick?.uid ?? selectedEnhanceUid;
+  if (targetUid) {
+    const mon = save.roster.find((m) => m.uid === targetUid);
+    const equippedId = mon?.symbolSlots?.[clicked.slot - 1] ?? null;
+    if (equippedId && equippedId !== clicked.id) {
+      const eqIdx = findSymbolIndexById(equippedId);
+      if (eqIdx >= 0) {
+        symbolCompareIndex = eqIdx;
+        symbolDetailIndex = idx;
+        slotEquipPick = { uid: targetUid, slot: clicked.slot };
+        if (SYMBOL_SLOT_NUMS.includes(clicked.slot as SymbolSlotNum)) {
+          applySymbolInvSlotFilter(clicked.slot as SymbolSlotNum);
+        }
+        monDetailTab = "symbols";
+        applyMonDetailTabUi();
+        softOpenEnhanceTransientModals();
+        return;
+      }
+    }
+  }
+
+  symbolCompareIndex = null;
+  symbolDetailIndex = idx;
+  if (SYMBOL_SLOT_NUMS.includes(clicked.slot as SymbolSlotNum)) {
+    applySymbolInvSlotFilter(clicked.slot as SymbolSlotNum);
+    if (targetUid) {
+      slotEquipPick = { uid: targetUid, slot: clicked.slot };
+    }
+  }
   monDetailTab = "symbols";
   applyMonDetailTabUi();
   softOpenEnhanceTransientModals();
@@ -14319,76 +14367,7 @@ function bindSymbolInventoryInteractions(): void {
           return;
         }
 
-        // Inventory: empty-slot pick equips immediately; otherwise open detail/compare.
-        if (from === "inv" && slotEquipPick) {
-          if (clicked.slot !== slotEquipPick.slot) {
-            flash(
-              t("ui.symEquipWrongSlot", {
-                need: slotEquipPick.slot,
-                got: clicked.slot,
-              }),
-            );
-            return;
-          }
-          const mon = save.roster.find((m) => m.uid === slotEquipPick!.uid);
-          const equippedId = mon?.symbolSlots?.[slotEquipPick.slot - 1] ?? null;
-          if (equippedId && equippedId !== clicked.id) {
-            const eqIdx = findSymbolIndexById(equippedId);
-            if (eqIdx >= 0) {
-              symbolCompareIndex = eqIdx;
-              symbolDetailIndex = idx;
-              monDetailTab = "symbols";
-              applyMonDetailTabUi();
-              softOpenEnhanceTransientModals();
-              return;
-            }
-          }
-          if (!equippedId) {
-            const r = runEquipSymbol(save, slotEquipPick.uid, String(idx));
-            save = r.save;
-            persist();
-            patchOnboard({ equipped: true });
-            slotEquipPick = null;
-            symbolDetailIndex = null;
-            symbolCompareIndex = null;
-            applySymbolInvSlotFilter("all");
-            flash(r.message);
-            if (!refreshMonsterSymbolsPane()) render();
-            return;
-          }
-        }
-
-        if (from === "inv" && selectedEnhanceUid) {
-          const mon = save.roster.find((m) => m.uid === selectedEnhanceUid);
-          const equippedId = mon?.symbolSlots?.[clicked.slot - 1] ?? null;
-          if (equippedId && equippedId !== clicked.id) {
-            const eqIdx = findSymbolIndexById(equippedId);
-            if (eqIdx >= 0) {
-              symbolCompareIndex = eqIdx;
-              symbolDetailIndex = idx;
-              slotEquipPick = { uid: selectedEnhanceUid, slot: clicked.slot };
-              if (SYMBOL_SLOT_NUMS.includes(clicked.slot as SymbolSlotNum)) {
-                applySymbolInvSlotFilter(clicked.slot as SymbolSlotNum);
-              }
-              monDetailTab = "symbols";
-              applyMonDetailTabUi();
-              softOpenEnhanceTransientModals();
-              return;
-            }
-          }
-        }
-
-        symbolCompareIndex = null;
-        symbolDetailIndex = idx;
-        if (from === "inv" && SYMBOL_SLOT_NUMS.includes(clicked.slot as SymbolSlotNum)) {
-          applySymbolInvSlotFilter(clicked.slot as SymbolSlotNum);
-          if (selectedEnhanceUid) {
-            slotEquipPick = { uid: selectedEnhanceUid, slot: clicked.slot };
-          }
-        }
-        monDetailTab = "symbols";
-        applyMonDetailTabUi();
-        softOpenEnhanceTransientModals();
+        openSymbolDetailFromInventory(idx);
       },
       opts,
     );
@@ -14497,7 +14476,6 @@ function bindSymbolInventoryInteractions(): void {
           symbolDetailIndex = null;
           symbolCompareIndex = null;
         }
-        flash(r.message);
         softRefreshAfterSymbolModalAction();
       },
       opts,
@@ -14511,10 +14489,7 @@ function bindSymbolInventoryInteractions(): void {
         const idx = Number(btn.dataset.symIdx);
         if (!Number.isFinite(idx) || !save.symbols[idx]) return;
         const targetUid = slotEquipPick?.uid ?? selectedEnhanceUid;
-        if (!targetUid) {
-          flash(t("ui.symEquipNeedMonster"));
-          return;
-        }
+        if (!targetUid) return;
         const before = save.roster.find((m) => m.uid === targetUid);
         const r = runEquipSymbol(save, targetUid, String(idx));
         save = r.save;
@@ -14525,14 +14500,12 @@ function bindSymbolInventoryInteractions(): void {
           !!after &&
           JSON.stringify(before.symbolSlots ?? []) !==
             JSON.stringify(after.symbolSlots ?? []);
-        if (equippedOk) {
-          patchOnboard({ equipped: true });
-          symbolDetailIndex = null;
-          symbolCompareIndex = null;
-          slotEquipPick = null;
-          applySymbolInvSlotFilter("all");
-        }
-        flash(r.message);
+        if (!equippedOk) return;
+        patchOnboard({ equipped: true });
+        symbolDetailIndex = null;
+        symbolCompareIndex = null;
+        slotEquipPick = null;
+        applySymbolInvSlotFilter("all");
         softRefreshAfterSymbolModalAction();
       },
       opts,
@@ -19922,7 +19895,7 @@ function clampIslandPan(viewport: HTMLElement, world: HTMLElement): void {
   const vw = viewport.clientWidth;
   const vh = viewport.clientHeight;
   /* Hard edge clamp: never pan past the bitmap. If the world is smaller than
-     the viewport (contain-fit letterbox), center it. */
+     the viewport, center it. */
   const maxX = -ox * (1 - s);
   const minX = vw - W * s - ox * (1 - s);
   const maxY = -oy * (1 - s);
@@ -21890,30 +21863,7 @@ function bind(): void {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.equipSym);
       if (!Number.isFinite(idx) || !save.symbols[idx]) return;
-      const uid = selectedEnhanceUid;
-      if (!uid) {
-        flash(t("ui.symEquipNeedMonster"));
-        return;
-      }
-      const before = save.roster.find((m) => m.uid === uid);
-      const r = runEquipSymbol(save, uid, String(idx));
-      save = r.save;
-      persist();
-      const after = save.roster.find((m) => m.uid === uid);
-      if (
-        before &&
-        after &&
-        JSON.stringify(before.symbolSlots ?? []) !==
-          JSON.stringify(after.symbolSlots ?? [])
-      ) {
-        patchOnboard({ equipped: true });
-      }
-      slotEquipPick = null;
-      monDetailTab = "symbols";
-      monBookDock = "symbols";
-      enhanceTab = "monsters";
-      flash(r.message);
-      render();
+      openSymbolDetailFromInventory(idx);
     });
   });
 

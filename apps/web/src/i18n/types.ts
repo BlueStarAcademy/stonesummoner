@@ -158,6 +158,8 @@ export type MessageKey =
   | "ui.boardMarkForbid"
   | "ui.boardMarkBait"
   | "ui.boardMarkVictory"
+  | "ui.boardMarkHeal"
+  | "ui.boardMarkBomb"
   | "ui.b72f5a4752"
   | "ui.19d508040d"
   | "ui.62b39a7abd"

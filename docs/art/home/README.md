@@ -13,7 +13,7 @@ Palette locked to auth (`#0e0b16` / `#c9a227`).
 
 ## Layout (triangular archipelago v5)
 
-The pannable `island-world` keeps the bitmap's **2:3 ratio** and is sized at `min(100cqw / 0.92, 100cqh / 0.85) × 1` so the default camera **fits the painted land** (three islets). Zoom stays locked; building sprites stay ~88px. Do not switch to cover-fit (`max(100cqw, …)`) or raise oversize toward 1.7 — that crops to the main islet and reads as the old single-plateau hub. Very tall screens letterbox with the viewport sky color. Pan is hard-clamped to the bitmap edges (`rotateX` is 0).
+The pannable `island-world` keeps the bitmap's **2:3 ratio** and is sized at `max(100cqw, 66.67cqh) × 1.7` (`--island-oversize`, mirrored by `ISLAND_WORLD_OVERSIZE`). Zoom stays locked; building sprites stay ~88px so landmasses read larger beside them. Drag to pan across the triangular archipelago. Cover sizing plus hard pan clamp keep the bitmap filling the viewport at every stop (`rotateX` is 0). Do not contain-fit the land bbox into one screen — that was a regression of the drag map.
 
 **Coordinate rule:** spot positions are percentages of `island-world`, so the world box must never letterbox or crop the bitmap — hence the matching aspect ratio and `object-fit: fill` on `.island-map-img`. Any `cover`/`contain` mismatch slides every building off its painted pad by a screen-size-dependent amount.
 

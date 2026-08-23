@@ -6991,18 +6991,15 @@ main {
 
 .island-world {
   /*
-   * Fit the painted land bbox (~x 4–96%, y 23–79% of the 2:3 bitmap) in the
-   * viewport so all three islets stay on screen. Cover (max(100cqw, 66.67cqh))
-   * crops left/right on tall phones and the v2 archipelago reads as the old
-   * single plateau. 0.92 = land width fraction; 0.85 = land height × 3/2.
+   * Keep the bitmap's 2:3 ratio so spot % coords stay on painted pads.
+   * Width = cover width x ISLAND_WORLD_OVERSIZE (~1.7) — larger than the
+   * viewport so the default camera is zoomed in; drag to pan the rest.
    */
-  --island-oversize: 1;
+  --island-oversize: 1.7;
   position: absolute;
   left: 0;
   top: 0;
-  width: calc(100% * var(--island-zoom, 1));
-  height: calc(150% * var(--island-zoom, 1));
-  width: calc(min(100cqw / 0.92, 100cqh / 0.85) * var(--island-oversize) * var(--island-zoom, 1));
+  width: calc(max(100cqw, 66.67cqh) * var(--island-oversize) * var(--island-zoom, 1));
   aspect-ratio: 2880 / 4320;
   height: auto;
   will-change: transform;
@@ -7275,7 +7272,7 @@ main {
 }
 
 .island-spot {
-  /* Fixed sprite size on the contain-fit map (not tied to world %). */
+  /* Fixed sprite size so landmasses read larger beside ~88px buildings. */
   --spot-size: calc(88px * var(--spot-scale, 1));
   position: absolute;
   z-index: 2;
@@ -11086,17 +11083,68 @@ button.battle-unit {
   aspect-ratio: 1;
   background: transparent;
   box-shadow: none;
+  overflow: visible;
+}
+
+.board.stone-pick-board button.cell:not(.has-stone)::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56%;
+  height: 56%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 50% 38%, #d8ccff28 0%, #1c1638aa 58%, #0a0818cc 100%);
+  box-shadow:
+    inset 0 1px 2px #ffffff18,
+    inset 0 0 0 1px #b8a8e844;
+  opacity: 0.7;
+}
+
+.board.stone-pick-board button.cell.legal:not(:disabled)::before,
+.board.stone-pick-board button.cell.is-placeable::before {
+  width: 74%;
+  height: 74%;
+  opacity: 0.94;
+  background:
+    radial-gradient(circle at 50% 36%, #efe6ff77 0%, #4a3480bb 46%, #140e28e0 100%);
+  box-shadow:
+    inset 0 1px 3px #fff5,
+    inset 0 0 0 1px #e0d4ff99,
+    0 0 12px #8a78ff66;
 }
 
 .board.stone-pick-board button.cell.legal:not(:disabled),
 .board.stone-pick-board button.cell.is-placeable {
   background: transparent;
-  box-shadow: inset 0 0 0 1px #a898ff88, 0 0 10px #7b6cff55;
+  box-shadow: none;
+}
+
+.board.stone-pick-board button.cell.is-placeable:hover::before,
+.board.stone-pick-board button.cell.is-placeable:focus-visible::before {
+  background:
+    radial-gradient(circle at 50% 36%, #fff6c899 0%, #6a5070bb 48%, #1a1428e0 100%);
+  box-shadow:
+    inset 0 1px 3px #fff7,
+    inset 0 0 0 1px #f0d878aa,
+    0 0 16px #f0d87866;
 }
 
 .board.stone-pick-board button.cell.is-placeable:hover,
 .board.stone-pick-board button.cell.is-placeable:focus-visible {
-  box-shadow: inset 0 0 0 2px #f0d878cc, 0 0 14px #c9a22777;
+  box-shadow: none;
+}
+
+.board.stone-pick-board button.cell .node-mark,
+.board.stone-pick-board button.cell .board-mark,
+.board.stone-pick-board button.cell .token-mark,
+.board.stone-pick-board button.cell .magic-stone,
+.board.stone-pick-board button.cell .summon-seal {
+  z-index: 2;
 }
 
 .board.stone-pick-board button.cell.star:not(.forbid):not(.victory) {
@@ -12719,6 +12767,16 @@ button.battle-unit {
 .token-mark--crystal .board-mark-sigil {
   background: radial-gradient(ellipse at center, #8fd5ff55 0%, #2a80b022 42%, transparent 74%);
   box-shadow: 0 0 12px #62bfff55;
+}
+
+.token-mark--heal_orb .board-mark-sigil {
+  background: radial-gradient(ellipse at center, #6ef0a855 0%, #1a804022 42%, transparent 74%);
+  box-shadow: 0 0 14px #40e09066;
+}
+
+.token-mark--hp_bomb .board-mark-sigil {
+  background: radial-gradient(ellipse at center, #ff704055 0%, #80201022 42%, transparent 74%);
+  box-shadow: 0 0 14px #ff503066;
 }
 
 .board-mark-img {

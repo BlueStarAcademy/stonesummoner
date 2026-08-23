@@ -137,6 +137,8 @@ const messages: MessageDict = {
   "ui.boardMarkForbid": "Cannot place",
   "ui.boardMarkBait": "Bait",
   "ui.boardMarkVictory": "Victory point",
+  "ui.boardMarkHeal": "Heal orb",
+  "ui.boardMarkBomb": "Mana bomb",
   "ui.b72f5a4752": "Clear the previous stage first.",
   "ui.19d508040d": "각성 · 스킬트리 · 장비 · 상징",
   "ui.62b39a7abd": "추천 착수(1·2·3) 또는 칸 탭",

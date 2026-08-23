@@ -47,6 +47,8 @@ export const BATTLE_BOARD_MARK_IDS = [
   "element_ward",
   "bait_stone",
   "transform_dust",
+  "heal_orb",
+  "hp_bomb",
 ] as const;
 
 export type BattleBoardMarkId = (typeof BATTLE_BOARD_MARK_IDS)[number];
@@ -55,6 +57,9 @@ const BOARD_MARK_IDS = new Set<string>(BATTLE_BOARD_MARK_IDS);
 
 export function battleBoardMarkSrc(id: string): string {
   const key = BOARD_MARK_IDS.has(id) ? id : "star";
+  if (key === "heal_orb" || key === "hp_bomb") {
+    return `/art/battle/mark/${key}.svg`;
+  }
   return `/art/battle/mark/${key}.webp?v=1`;
 }
 

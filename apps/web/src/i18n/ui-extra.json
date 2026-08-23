@@ -255,6 +255,14 @@
     "ko": "필승점",
     "en": "Victory point"
   },
+  "ui.boardMarkHeal": {
+    "ko": "회복구",
+    "en": "Heal orb"
+  },
+  "ui.boardMarkBomb": {
+    "ko": "마력폭탄",
+    "en": "Mana bomb"
+  },
   "ui.b72f5a4752": {
     "ko": "이전 스테이지를 먼저 클리어하세요.",
     "en": "Clear the previous stage first."

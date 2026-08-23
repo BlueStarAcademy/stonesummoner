@@ -137,6 +137,8 @@ const messages: MessageDict = {
   "ui.boardMarkForbid": "착수 금지",
   "ui.boardMarkBait": "미끼",
   "ui.boardMarkVictory": "필승점",
+  "ui.boardMarkHeal": "회복구",
+  "ui.boardMarkBomb": "마력폭탄",
   "ui.b72f5a4752": "이전 스테이지를 먼저 클리어하세요.",
   "ui.19d508040d": "각성 · 스킬트리 · 장비 · 상징",
   "ui.62b39a7abd": "추천 착수(1·2·3) 또는 칸 탭",
