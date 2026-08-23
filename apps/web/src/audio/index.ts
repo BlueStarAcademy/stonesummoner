@@ -1,4 +1,15 @@
-export { initAudio, unlockAudio, playBgm, stopBgm, playSfx, duckBgm, getAudioPrefs, setAudioPrefs } from "./manager";
+export {
+  initAudio,
+  unlockAudio,
+  playBgm,
+  stopBgm,
+  playSfx,
+  duckBgm,
+  getAudioPrefs,
+  setAudioPrefs,
+  suspendAudioPlayback,
+  haltAudioForExit,
+} from "./manager";
 export { readAudioPrefs, writeAudioPrefs, type AudioPrefs } from "./prefs";
 export {
   bindUiSfx,

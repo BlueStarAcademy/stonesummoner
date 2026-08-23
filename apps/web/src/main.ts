@@ -102,9 +102,9 @@ import {
 } from "./ui/wishReveal";
 import { initUiScale } from "./ui/uiScale";
 import {
-  armBackHistoryTrap,
   exitNativeApp,
   installHardwareBack,
+  setBackHistoryTrapWanted,
 } from "./nav/hardwareBack";
 import { bindMonPreviewTurntable } from "./ui/monPreviewTurntable";
 import { bindCoreStageMapController } from "./core-loop/stages/mapController";
@@ -145,7 +145,6 @@ import {
 import {
   captureShopOffers,
   pickAutoSkillIndex,
-  starPoints,
   type Battle,
   type CaptureShopChoice,
   type SkillResult,
@@ -1650,6 +1649,21 @@ let buildingProdStatsModalAbort: AbortController | null = null;
 /** Soft confirm sheet for circle inscriptions in the dojo. */
 let circleInscConfirmId: CircleInscriptionId | null = null;
 let circleInscUpgradeModalAbort: AbortController | null = null;
+/** Soft confirm → play → result overlay for glory buildings. */
+let gloryUpgradeId: GloryBuildingId | null = null;
+let gloryUpgradePhase: "confirm" | "playing" | "result" = "confirm";
+let gloryUpgradeModalAbort: AbortController | null = null;
+let gloryUpgradeDonePreview: NonNullable<
+  ReturnType<typeof gloryUpgradePreview>
+> | null = null;
+let gloryUpgradeApplied = false;
+let gloryUpgradePlayTimer = 0;
+let gloryUpgradeLockTimer = 0;
+let gloryUpgradePlayStartedAt = 0;
+let gloryUpgradeSkipLocked = false;
+const GLORY_UP_LAYER_ID = "glory-up-layer";
+const GLORY_UP_PLAY_MS = 1800;
+const GLORY_UP_SKIP_LOCK_MS = 400;
 /** Queue of newly unlocked island buildings awaiting modal notice. */
 let pendingBuildingUnlockIds: BuildingId[] = [];
 /** Currently shown building unlock modal id (head of queue). */
@@ -5331,12 +5345,12 @@ function arenaStoneAppearMs(
 ): number {
   const base =
     kind === "capture-large"
-      ? 780
+      ? 980
       : kind === "capture"
-        ? 640
+        ? 820
         : team === "enemy"
-          ? 340
-          : 520;
+          ? 420
+          : 700;
   return fxDurationMs(base, battleSpeed);
 }
 
@@ -5408,9 +5422,14 @@ function pulseShapeBonusesAfterStone(
   color: "black" | "white",
 ): number {
   if (!battle?.modules.moduleB) return 0;
-  const shapes = detectShapeBonuses(battle.board, color, { x, y });
+  const shapes = detectShapeBonuses(
+    battle.board,
+    color,
+    { x, y },
+    battle.hoshiPoints,
+  );
   if (!shapes.length) return 0;
-  const shapeMs = fxDurationMs(720, battleSpeed);
+  const shapeMs = fxDurationMs(880, battleSpeed);
   shapeFlashIds = shapes.map((s) => s.id);
   shapeFlashUntil = Date.now() + fxDurationMs(900, battleSpeed);
   pulseCircleAbsorb(app, stoneColorTeam(color), "shape", shapeMs);
@@ -6510,7 +6529,7 @@ function renderBoardCells(canClick: boolean): string {
   const grid = battle.board.getBoard();
   const legalSet = new Set(legalHints.map((p) => `${p.x},${p.y}`));
   const starSet = new Set(
-    (battle.modules.moduleB ? starPoints(size) : []).map((p) => `${p.x},${p.y}`),
+    battle.hoshiPoints.map((p) => `${p.x},${p.y}`),
   );
   const victory =
     battle.victoryPoint && !battle.victoryPointClaimed
@@ -6696,11 +6715,24 @@ function renderBoard(): string {
         <div class="board-circle-ring" aria-hidden="true"></div>
         <div class="board-circle-absorb" aria-hidden="true">
           <svg class="board-absorb-sigil" viewBox="0 0 100 100" width="100%" height="100%">
+            <circle class="sigil-outer" cx="50" cy="50" r="48" fill="none" pathLength="100" />
             <circle class="sigil-rim" cx="50" cy="50" r="44" fill="none" pathLength="100" />
+            <polygon class="sigil-hex" points="50,16 79,33 79,67 50,84 21,67 21,33" fill="none" pathLength="100" />
             <circle class="sigil-mid" cx="50" cy="50" r="31" fill="none" pathLength="100" />
+            <polygon class="sigil-diamond" points="50,29 68,50 50,71 32,50" fill="none" pathLength="100" />
             <polygon class="sigil-star" points="50,20 55,38 74,38 59,49 64,67 50,56 36,67 41,49 26,38 45,38" fill="none" pathLength="100" />
             <path class="sigil-cross" d="M50 24 V76 M24 50 H76" fill="none" pathLength="100" />
             <circle class="sigil-core" cx="50" cy="50" r="9" fill="none" pathLength="100" />
+            <g class="sigil-ticks">
+              <line class="sigil-tick" x1="50" y1="4" x2="50" y2="11" />
+              <line class="sigil-tick" x1="96" y1="50" x2="89" y2="50" />
+              <line class="sigil-tick" x1="50" y1="96" x2="50" y2="89" />
+              <line class="sigil-tick" x1="4" y1="50" x2="11" y2="50" />
+              <line class="sigil-tick" x1="82.5" y1="17.5" x2="77.5" y2="22.5" />
+              <line class="sigil-tick" x1="82.5" y1="82.5" x2="77.5" y2="77.5" />
+              <line class="sigil-tick" x1="17.5" y1="82.5" x2="22.5" y2="77.5" />
+              <line class="sigil-tick" x1="17.5" y1="17.5" x2="22.5" y2="22.5" />
+            </g>
           </svg>
         </div>
       </div>
@@ -6708,12 +6740,12 @@ function renderBoard(): string {
   </div>`;
 }
 
-/** Always-mounted right-side Go readout; hidden while the large pick overlay is open. */
+/** Always-mounted right-side Go readout; stowed (not display:none) while the pick overlay is open. */
 function renderBoardMini(): string {
   if (!battle) return "";
   const size = battle.board.size;
   const show = !pickOverlayOpen();
-  return `<aside class="board-mini" id="board-mini"${show ? "" : ' hidden aria-hidden="true"'}>
+  return `<aside class="board-mini${show ? "" : " is-stowed"}" id="board-mini" aria-hidden="${show ? "false" : "true"}">
     <div class="board magic-circle board-mini-grid size-${size}" data-size="${size}" style="grid-template-columns:repeat(${size},minmax(0,1fr))"></div>
   </aside>`;
 }
@@ -6744,7 +6776,8 @@ function boardMiniContentKey(): string {
       : "";
   const summon = stoneSummonFx ? `${stoneSummonFx.x},${stoneSummonFx.y}` : "";
   const bait = battle.baitLure ? `${battle.baitLure.x},${battle.baitLure.y}` : "";
-  return `${stones}|t:${tokens}|v:${victory}|e:${enemy}|s:${summon}|b:${bait}`;
+  const hoshi = battle.hoshiPoints.map((p) => `${p.x},${p.y}`).join(".");
+  return `${stones}|t:${tokens}|v:${victory}|e:${enemy}|s:${summon}|b:${bait}|h:${hoshi}`;
 }
 
 /** Patch the live mini board in place so stone images do not reload. */
@@ -6753,7 +6786,9 @@ function syncBoardMini(): void {
   const mini = app.querySelector<HTMLElement>("#board-mini");
   if (!mini) return;
   const show = !pickOverlayOpen();
-  mini.hidden = !show;
+  mini.hidden = false;
+  mini.removeAttribute("hidden");
+  mini.classList.toggle("is-stowed", !show);
   mini.setAttribute("aria-hidden", show ? "false" : "true");
 
   const size = battle.board.size;
@@ -6794,9 +6829,46 @@ function syncBoardMini(): void {
       }
       continue;
     }
+    keepBoardCellArt(prevCell, nextCell);
     prevCell.replaceWith(nextCell);
   }
   grid.dataset.fp = fp;
+}
+
+/** Move already-decoded art into the replacement cell so one stone does not flash. */
+function keepBoardCellArt(from: HTMLElement, to: HTMLElement): void {
+  for (const sel of [
+    "img.magic-stone-img",
+    "img.board-mark-img",
+    "img.token-item-img",
+  ]) {
+    const prev = from.querySelector<HTMLImageElement>(sel);
+    const next = to.querySelector<HTMLImageElement>(sel);
+    if (!prev || !next) continue;
+    if (prev.getAttribute("src") === next.getAttribute("src")) {
+      next.replaceWith(prev);
+    }
+  }
+}
+
+/**
+ * Swap battle-layout children without taking #board-mini out of the document.
+ * Moving the mini into a detached template unloads stone images and it flickers
+ * back in on every combat tick.
+ */
+function patchBattleLayout(live: HTMLElement, incoming: HTMLElement): void {
+  live.className = incoming.className;
+  const mini = live.querySelector<HTMLElement>("#board-mini");
+  if (mini) incoming.querySelector("#board-mini")?.remove();
+
+  for (const child of Array.from(live.children)) {
+    if (child !== mini) child.remove();
+  }
+
+  for (const child of Array.from(incoming.children)) {
+    if (mini) live.insertBefore(child, mini);
+    else live.appendChild(child);
+  }
 }
 
 /**
@@ -6807,10 +6879,15 @@ function renderStonePickLayer(): string {
   if (!battle) return "";
   const size = battle.board.size;
   const open = pickOverlayOpen();
-  return `<div class="stone-pick-layer" id="stone-pick-layer"${open ? "" : ' hidden aria-hidden="true"'}>
+  const circleId = battleCircleIdForStage(currentStage);
+  const circleSrc = battleCircleSrc(circleId);
+  return `<div class="stone-pick-layer" id="stone-pick-layer"${open ? "" : ' hidden aria-hidden="true"'} data-circle="${circleId}">
     <div class="stone-pick-card">
       <div class="stone-pick-hit" aria-label="${escapeHtml(t("ui.onboard.battleTipStone"))}">
-        <div class="board magic-circle stone-pick-board size-${size}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${open ? renderBoardCells(true) : ""}</div>
+        <div class="stone-pick-circle">
+          <img class="stone-pick-circle-art" src="${circleSrc}" width="512" height="512" alt="" draggable="false" decoding="async" aria-hidden="true" />
+          <div class="board magic-circle stone-pick-board size-${size}" data-size="${size}" data-circle="${circleId}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${open ? renderBoardCells(true) : ""}</div>
+        </div>
       </div>
     </div>
   </div>`;
@@ -7664,7 +7741,7 @@ function applyResMoreOpen(): void {
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play",
+    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play, .glory-up-play",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -7749,6 +7826,7 @@ const APP_ROOT_OVERLAY_IDS = [
   "bldg-up-layer",
   "bldg-prod-layer",
   "dojo-insc-up-layer",
+  "glory-up-layer",
   "skill-feed-layer",
   "power-up-layer",
   "gear-detail-layer",
@@ -7793,6 +7871,7 @@ function softMountOverlay(layerId: string, html: string): HTMLElement | null {
 
 function softRemoveOverlay(layerId: string): void {
   app.querySelector(`#${layerId}`)?.remove();
+  rememberOverlayClose(layerId);
 }
 
 /** Toggle skill-feed modal without a full screen re-render. */
@@ -7804,6 +7883,8 @@ function applySkillFeedOpen(): void {
   if (skillFeedModalOpen) {
     promoteOverlayToAppRoot(layer);
     replayModalPop(layer);
+  } else {
+    rememberOverlayClose("skill-feed-layer");
   }
 }
 
@@ -7816,6 +7897,8 @@ function applyPowerUpOpen(): void {
   if (powerUpModalOpen) {
     promoteOverlayToAppRoot(layer);
     replayModalPop(layer);
+  } else {
+    rememberOverlayClose("power-up-layer");
   }
 }
 
@@ -8060,7 +8143,11 @@ function applyProfileOpen(): void {
       promoteOverlayToAppRoot(layer);
       replayModalPop(layer);
       dematteArtInTree(layer, "img.profile-icon-img");
+    } else {
+      rememberOverlayClose("profile-layer");
     }
+  } else if (!profileOpen) {
+    rememberOverlayClose("profile-layer");
   }
   cueModalSfx("profile", profileOpen);
 }
@@ -8481,7 +8568,11 @@ function applySettingsOpen(): void {
     if (settingsOpen) {
       promoteOverlayToAppRoot(layer);
       replayModalPop(layer);
+    } else {
+      rememberOverlayClose("settings-layer");
     }
+  } else if (!settingsOpen) {
+    rememberOverlayClose("settings-layer");
   }
   cueModalSfx("settings", settingsOpen);
 }
@@ -8501,7 +8592,11 @@ function applyMailboxOpen(): void {
     if (mailboxOpen) {
       promoteOverlayToAppRoot(layer);
       replayModalPop(layer);
+    } else {
+      rememberOverlayClose("mailbox-layer");
     }
+  } else if (!mailboxOpen) {
+    rememberOverlayClose("mailbox-layer");
   }
   cueModalSfx("mailbox", mailboxOpen);
 }
@@ -8521,7 +8616,11 @@ function applyNotifOpen(): void {
     if (notifOpen) {
       promoteOverlayToAppRoot(layer);
       replayModalPop(layer);
+    } else {
+      rememberOverlayClose("notif-layer");
     }
+  } else if (!notifOpen) {
+    rememberOverlayClose("notif-layer");
   }
   cueModalSfx("notif", notifOpen);
 }
@@ -8542,7 +8641,11 @@ function applyMissionOpen(): void {
     if (missionOpen) {
       promoteOverlayToAppRoot(layer);
       replayModalPop(layer);
+    } else {
+      rememberOverlayClose("mission-layer");
     }
+  } else if (!missionOpen) {
+    rememberOverlayClose("mission-layer");
   }
   cueModalSfx("mission", missionOpen);
 }
@@ -8783,7 +8886,11 @@ function applyCommunityOpen(): void {
     if (communityOpen) {
       promoteOverlayToAppRoot(layer);
       replayModalPop(layer);
+    } else {
+      rememberOverlayClose("community-layer");
     }
+  } else if (!communityOpen) {
+    rememberOverlayClose("community-layer");
   }
   cueModalSfx("community", communityOpen);
 }
@@ -9088,7 +9195,11 @@ function applyShopOpen(): void {
     if (shopOpen) {
       promoteOverlayToAppRoot(layer);
       replayModalPop(layer);
+    } else {
+      rememberOverlayClose("shop-layer");
     }
+  } else if (!shopOpen) {
+    rememberOverlayClose("shop-layer");
   }
   cueModalSfx("shop", shopOpen);
 }
@@ -9217,7 +9328,11 @@ function applySummonerPickerOpen(): void {
     if (summonerPickerOpen) {
       promoteOverlayToAppRoot(layer);
       replayModalPop(layer);
+    } else {
+      rememberOverlayClose("summoner-picker-layer");
     }
+  } else if (!summonerPickerOpen) {
+    rememberOverlayClose("summoner-picker-layer");
   }
   cueModalSfx("summoner-picker", summonerPickerOpen);
 }
@@ -10026,10 +10141,8 @@ function missionItemHtml(opts: {
         <i style="width:${pct}%"></i>
       </div>`
     : "";
-  const foot = showBar
-    ? `<div class="mission-item-foot">
-        <span class="mission-item-prog">${t("mission.progress", { cur: Math.min(opts.cur, opts.max), max: opts.max })}</span>
-      </div>`
+  const prog = showBar
+    ? ` <span class="mission-item-prog">(${t("mission.progress", { cur: Math.min(opts.cur, opts.max), max: opts.max })})</span>`
     : "";
   return `<article class="${cls}">
     ${seal}
@@ -10038,9 +10151,8 @@ function missionItemHtml(opts: {
         <strong class="mission-item-title"><span>${escapeHtml(opts.title)}</span>${rewards}</strong>
         <div class="mission-item-action">${action}</div>
       </div>
-      <p class="mission-item-desc">${escapeHtml(opts.desc)}</p>
+      <p class="mission-item-desc"><span class="mission-item-desc-text">${escapeHtml(opts.desc)}</span>${prog}</p>
       ${bar}
-      ${foot}
     </div>
   </article>`;
 }
@@ -10387,7 +10499,7 @@ function render(): void {
     const next = app.querySelector<HTMLElement>(".home-island");
     if (next && next !== keepIsland) next.replaceWith(keepIsland);
   }
-  armBackHistoryTrap();
+  setBackHistoryTrapWanted(view !== "auth");
 }
 
 /** Full re-render; island DOM is preserved by render() when staying on the island. */
@@ -10400,6 +10512,10 @@ function renderScreen(): void {
   clearWishCooldownTimer();
   if (view !== "wish") abortWishReveal();
   closeWishPoolTips();
+  if (view !== "glory") {
+    gloryUpgradeApplied = false;
+    closeGloryUpgradeSoft();
+  }
   gearBagFilterUiAbort?.abort();
   gearBagFilterUiAbort = null;
   clearGearBagFilterMenuPortal();
@@ -17204,19 +17320,57 @@ function gloryBldgArt(id: GloryBuildingId): { src: string; fallback: string } {
   };
 }
 
-function gloryPctLabel(frac: number): string {
+function gloryPctPlain(frac: number): string {
   const pct = Math.round(frac * 1000) / 10;
-  return `+${Number.isInteger(pct) ? String(pct) : pct.toFixed(1)}%`;
+  return `${Number.isInteger(pct) ? String(pct) : pct.toFixed(1)}%`;
+}
+
+function gloryPctLabel(frac: number): string {
+  return `+${gloryPctPlain(frac)}`;
+}
+
+function gloryEffectIco(g: GloryBuildingDef): string {
+  if (g.atkPct) return "/art/ui/skill/damage.webp";
+  if (g.defPct) return "/art/ui/skill/shield.webp";
+  if (g.hpPct) return "/art/ui/skill/heal.webp";
+  if (g.spdFlat) return "/art/ui/element/wind.webp";
+  return "/art/ui/res/gold.svg";
+}
+
+function gloryEffectLabel(g: GloryBuildingDef): string {
+  if (g.atkPct) return t("ui.statAtk");
+  if (g.defPct) return t("ui.statDef");
+  if (g.hpPct) return t("ui.statHp");
+  if (g.spdFlat) return t("ui.statSpd");
+  return t("res.gold");
+}
+
+function gloryEffectValue(g: GloryBuildingDef, lv: number): string {
+  const n = Math.max(0, lv);
+  if (g.atkPct) return gloryPctLabel(g.atkPct * n);
+  if (g.defPct) return gloryPctLabel(g.defPct * n);
+  if (g.hpPct) return gloryPctLabel(g.hpPct * n);
+  if (g.spdFlat) return `+${g.spdFlat * n}`;
+  if (g.manaProdPct) return gloryPctLabel(g.manaProdPct * n);
+  return EM_DASH;
+}
+
+function gloryEffectDelta(g: GloryBuildingDef): {
+  delta: number;
+  fmtDelta: (n: number) => string;
+} {
+  if (g.atkPct) return { delta: g.atkPct, fmtDelta: gloryPctPlain };
+  if (g.defPct) return { delta: g.defPct, fmtDelta: gloryPctPlain };
+  if (g.hpPct) return { delta: g.hpPct, fmtDelta: gloryPctPlain };
+  if (g.spdFlat) return { delta: g.spdFlat, fmtDelta: (n) => String(n) };
+  if (g.manaProdPct) return { delta: g.manaProdPct, fmtDelta: gloryPctPlain };
+  return { delta: 0, fmtDelta: () => EM_DASH };
 }
 
 function gloryEffectText(g: GloryBuildingDef, lv: number): string {
-  const n = Math.max(0, lv);
-  if (g.atkPct) return `${t("ui.statAtk")} ${gloryPctLabel(g.atkPct * n)}`;
-  if (g.defPct) return `${t("ui.statDef")} ${gloryPctLabel(g.defPct * n)}`;
-  if (g.hpPct) return `${t("ui.statHp")} ${gloryPctLabel(g.hpPct * n)}`;
-  if (g.spdFlat) return `${t("ui.statSpd")} +${g.spdFlat * n}`;
-  if (g.manaProdPct) return `${t("res.gold")} ${gloryPctLabel(g.manaProdPct * n)}`;
-  return "";
+  const value = gloryEffectValue(g, lv);
+  if (value === EM_DASH) return "";
+  return `${gloryEffectLabel(g)} ${value}`;
 }
 
 function gloryBuffChip(
@@ -17288,6 +17442,317 @@ function renderGlory(): string {
     </section>
     <div class="glory-list">${renderGloryListHtml()}</div>
   </div>`;
+}
+
+function gloryUpgradePreview(id: GloryBuildingId) {
+  const g = GLORY_BUILDINGS.find((b) => b.id === id);
+  if (!g) return null;
+  const lv = save.gloryLevels?.[id] ?? 0;
+  const maxed = lv >= g.maxLevel;
+  const cost = g.gloryCostPerLevel;
+  const art = gloryBldgArt(id);
+  const delta = gloryEffectDelta(g);
+  return {
+    id,
+    title: gloryBldgName(id),
+    art: art.src,
+    artFallback: art.fallback,
+    effectIco: gloryEffectIco(g),
+    effectLabel: gloryEffectLabel(g),
+    lv,
+    nextLv: Math.min(g.maxLevel, lv + 1),
+    cost,
+    maxed,
+    canBuy: !maxed && (save.gloryPoints ?? 0) >= cost,
+    fromValue: gloryEffectValue(g, lv),
+    toValue: gloryEffectValue(g, Math.min(g.maxLevel, lv + 1)),
+    delta: delta.delta,
+    fmtDelta: delta.fmtDelta,
+  };
+}
+
+function gloryUpgradePrefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function clearGloryUpgradePlayTimers(): void {
+  if (gloryUpgradePlayTimer) {
+    window.clearTimeout(gloryUpgradePlayTimer);
+    gloryUpgradePlayTimer = 0;
+  }
+  if (gloryUpgradeLockTimer) {
+    window.clearTimeout(gloryUpgradeLockTimer);
+    gloryUpgradeLockTimer = 0;
+  }
+}
+
+function renderGloryUpgradeBody(
+  preview: NonNullable<ReturnType<typeof gloryUpgradePreview>>,
+): string {
+  const done = gloryUpgradePhase === "result";
+  const lvLine = done
+    ? `Lv.${preview.nextLv}`
+    : t("ui.bldgUp.levelLine", { from: preview.lv, to: preview.nextLv });
+  const stats = done
+    ? buildingUpgradeResultRowHtml({
+        label: preview.effectLabel,
+        ico: preview.effectIco,
+        valueHtml: escapeHtml(preview.toValue),
+      })
+    : buildingUpgradeCompareRowHtml({
+        label: preview.effectLabel,
+        ico: preview.effectIco,
+        fromHtml: escapeHtml(preview.fromValue),
+        toHtml: escapeHtml(preview.toValue),
+        delta: preview.delta,
+        fmtDelta: preview.fmtDelta,
+      });
+  const foot = done
+    ? `<button type="button" class="auth-btn-primary full" id="btn-glory-up-ok">${escapeHtml(t("ui.bldgUp.doneOk"))}</button>`
+    : `<button type="button" class="auth-btn-primary bldg-up-confirm" id="btn-glory-up-confirm" ${preview.canBuy ? "" : "disabled"}>
+        <span class="bldg-up-confirm-price">
+          <img class="res-ico" src="/art/ui/res/glory.svg" width="20" height="20" alt="" draggable="false" />
+          <strong>${preview.cost}</strong>
+        </span>
+        <span class="bldg-up-confirm-sep" aria-hidden="true"></span>
+        <span class="bldg-up-confirm-label">${escapeHtml(t("ui.bldgUp.confirm"))}</span>
+      </button>`;
+  return `<div class="bldg-up-body glory-up-body" id="glory-up-body">
+    <div class="glory-up-hero">
+      <div class="glory-up-art" aria-hidden="true">
+        <img class="glory-up-hero-img" src="${preview.art}" width="192" height="144" alt="" draggable="false" onerror="this.onerror=null;this.src='${preview.artFallback}'" />
+      </div>
+      <strong class="bldg-up-name">${escapeHtml(preview.title)}</strong>
+      <span class="bldg-up-lv">${escapeHtml(lvLine)}</span>
+    </div>
+    <div class="bldg-up-stats" role="list">
+      ${stats}
+    </div>
+    <div class="bldg-up-foot" id="glory-up-foot">${foot}</div>
+  </div>`;
+}
+
+function renderGloryUpgradePlay(
+  preview: NonNullable<ReturnType<typeof gloryUpgradePreview>>,
+): string {
+  const lvLine = t("ui.bldgUp.levelLine", { from: preview.lv, to: preview.nextLv });
+  return `<button type="button" class="glory-up-play" id="btn-glory-up-skip" aria-label="${escapeHtml(preview.title)}">
+    <div class="glory-up-play-glow" aria-hidden="true"></div>
+    <div class="glory-up-play-art" aria-hidden="true">
+      <img class="glory-up-play-img" src="${preview.art}" width="220" height="176" alt="" draggable="false" onerror="this.onerror=null;this.src='${preview.artFallback}'" />
+    </div>
+    <strong class="glory-up-play-name">${escapeHtml(preview.title)}</strong>
+    <span class="glory-up-play-lv">${escapeHtml(lvLine)}</span>
+    <div class="glory-up-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="${escapeHtml(preview.title)}">
+      <span class="glory-up-meter-fill"></span>
+    </div>
+  </button>`;
+}
+
+function renderGloryUpgradeModal(): string {
+  if (!gloryUpgradeId) return "";
+  const preview =
+    gloryUpgradeDonePreview ?? gloryUpgradePreview(gloryUpgradeId);
+  if (!preview) return "";
+  if (gloryUpgradePhase === "playing") {
+    return `<div class="settings-layer glory-up-layer" id="${GLORY_UP_LAYER_ID}" aria-hidden="false">
+      <button type="button" class="settings-backdrop" id="btn-glory-up-close" aria-label="${escapeHtml(t("ui.bldgUp.close"))}"></button>
+      ${renderGloryUpgradePlay(preview)}
+    </div>`;
+  }
+  const title =
+    gloryUpgradePhase === "result"
+      ? t("ui.bldgUp.doneTitle")
+      : t("ui.bldgUp.title");
+  return `<div class="settings-layer glory-up-layer" id="${GLORY_UP_LAYER_ID}" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-glory-up-close" aria-label="${escapeHtml(t("ui.bldgUp.close"))}"></button>
+    <div class="settings-sheet bldg-up-sheet glory-up-sheet" role="dialog" aria-modal="true" aria-labelledby="glory-up-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.bldgUp.close"), "btn-glory-up-close")}
+      <h2 class="settings-title" id="glory-up-title">${escapeHtml(title)}</h2>
+      ${renderGloryUpgradeBody(preview)}
+    </div>
+  </div>`;
+}
+
+function syncGloryUpgradePlayMeter(layer: HTMLElement): void {
+  const fill = layer.querySelector<HTMLElement>(".glory-up-meter-fill");
+  const meter = layer.querySelector<HTMLElement>(".glory-up-meter");
+  if (!fill || !meter || gloryUpgradePhase !== "playing") return;
+  const elapsed = Math.max(0, Date.now() - gloryUpgradePlayStartedAt);
+  const pct = Math.max(
+    0,
+    Math.min(100, Math.round((elapsed / GLORY_UP_PLAY_MS) * 100)),
+  );
+  meter.setAttribute("aria-valuenow", String(pct));
+  fill.style.animation = "none";
+  void fill.offsetWidth;
+  fill.style.animation = `growth-rite-meter-fill ${GLORY_UP_PLAY_MS}ms linear ${-Math.min(elapsed, GLORY_UP_PLAY_MS)}ms forwards`;
+}
+
+function paintGloryUpgradeOverlay(): HTMLElement | null {
+  const layer = softMountOverlay(GLORY_UP_LAYER_ID, renderGloryUpgradeModal());
+  if (layer) {
+    bindGloryUpgradeModal();
+    if (gloryUpgradePhase === "playing") syncGloryUpgradePlayMeter(layer);
+  }
+  return layer;
+}
+
+function remountGloryUpgradeOverlay(): void {
+  if (!gloryUpgradeId) return;
+  paintGloryUpgradeOverlay();
+}
+
+function closeGloryUpgradeSoft(): void {
+  if (!gloryUpgradeId && !app.querySelector(`#${GLORY_UP_LAYER_ID}`)) return;
+  clearGloryUpgradePlayTimers();
+  gloryUpgradeId = null;
+  gloryUpgradePhase = "confirm";
+  gloryUpgradeDonePreview = null;
+  gloryUpgradeSkipLocked = false;
+  gloryUpgradeModalAbort?.abort();
+  gloryUpgradeModalAbort = null;
+  softRemoveOverlay(GLORY_UP_LAYER_ID);
+}
+
+function dismissGloryUpgradeSoft(): void {
+  const refresh = gloryUpgradeApplied;
+  gloryUpgradeApplied = false;
+  closeGloryUpgradeSoft();
+  syncHudResources();
+  if (!refresh) return;
+  if (!refreshGlorySoft()) render();
+  else bindGloryActions();
+}
+
+function reopenGloryUpgradeConfirmSoft(): void {
+  const id = gloryUpgradeId;
+  if (!id) {
+    dismissGloryUpgradeSoft();
+    return;
+  }
+  eatTrailingTap();
+  gloryUpgradePhase = "confirm";
+  gloryUpgradeDonePreview = null;
+  const preview = gloryUpgradePreview(id);
+  if (!preview || preview.maxed) {
+    dismissGloryUpgradeSoft();
+    return;
+  }
+  paintGloryUpgradeOverlay();
+}
+
+function finishGloryUpgradePlay(): void {
+  if (gloryUpgradePhase !== "playing") return;
+  clearGloryUpgradePlayTimers();
+  gloryUpgradePhase = "result";
+  gloryUpgradeSkipLocked = false;
+  eatTrailingTap();
+  paintGloryUpgradeOverlay();
+}
+
+function startGloryUpgradePlay(
+  preview: NonNullable<ReturnType<typeof gloryUpgradePreview>>,
+): void {
+  gloryUpgradeDonePreview = preview;
+  gloryUpgradeApplied = true;
+  if (gloryUpgradePrefersReducedMotion()) {
+    gloryUpgradePhase = "result";
+    gloryUpgradeSkipLocked = false;
+    eatTrailingTap();
+    paintGloryUpgradeOverlay();
+    return;
+  }
+  clearGloryUpgradePlayTimers();
+  gloryUpgradePhase = "playing";
+  gloryUpgradeSkipLocked = true;
+  gloryUpgradePlayStartedAt = Date.now();
+  eatTrailingTap();
+  paintGloryUpgradeOverlay();
+  void playSfx("ui-purchase");
+  gloryUpgradeLockTimer = window.setTimeout(() => {
+    gloryUpgradeSkipLocked = false;
+  }, GLORY_UP_SKIP_LOCK_MS);
+  gloryUpgradePlayTimer = window.setTimeout(() => {
+    finishGloryUpgradePlay();
+  }, GLORY_UP_PLAY_MS);
+}
+
+function bindGloryUpgradeModal(): void {
+  const layer = app.querySelector<HTMLElement>(`#${GLORY_UP_LAYER_ID}`);
+  if (!layer || !gloryUpgradeId) return;
+  gloryUpgradeModalAbort?.abort();
+  const ac = new AbortController();
+  gloryUpgradeModalAbort = ac;
+  const opts: AddEventListenerOptions = { signal: ac.signal };
+  dematteArtInTree(
+    layer,
+    "img.glory-up-hero-img, img.glory-up-play-img, img.bldg-up-cell .res-ico",
+  );
+  if (gloryUpgradePhase === "playing") {
+    const skip = (): void => {
+      if (gloryUpgradeSkipLocked) return;
+      finishGloryUpgradePlay();
+    };
+    layer.querySelector("#btn-glory-up-close")?.addEventListener("click", skip, opts);
+    layer.querySelector(".settings-backdrop")?.addEventListener("click", skip, opts);
+    layer.querySelector("#btn-glory-up-skip")?.addEventListener("click", skip, opts);
+    return;
+  }
+  const close = (): void => {
+    dismissGloryUpgradeSoft();
+  };
+  layer.querySelector("#btn-glory-up-close")?.addEventListener("click", close, opts);
+  layer.querySelector(".settings-backdrop")?.addEventListener("click", close, opts);
+  layer
+    .querySelector("#btn-glory-up-ok")
+    ?.addEventListener(
+      "click",
+      (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        reopenGloryUpgradeConfirmSoft();
+      },
+      opts,
+    );
+  layer
+    .querySelector<HTMLButtonElement>("#btn-glory-up-confirm")
+    ?.addEventListener(
+      "click",
+      (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const id = gloryUpgradeId;
+        if (!id || gloryUpgradePhase !== "confirm") return;
+        const preview = gloryUpgradePreview(id);
+        if (!preview || preview.maxed || !preview.canBuy) return;
+        const r = runBuyGlory(save, id);
+        save = r.save;
+        persist();
+        syncHudResources();
+        const lvNow = save.gloryLevels?.[id] ?? 0;
+        if (lvNow !== preview.nextLv) {
+          paintGloryUpgradeOverlay();
+          return;
+        }
+        if (refreshGlorySoft()) bindGloryActions();
+        startGloryUpgradePlay(preview);
+      },
+      opts,
+    );
+}
+
+function openGloryUpgradeSoft(id: GloryBuildingId): void {
+  const preview = gloryUpgradePreview(id);
+  if (!preview || preview.maxed) return;
+  clearGloryUpgradePlayTimers();
+  gloryUpgradeId = id;
+  gloryUpgradePhase = "confirm";
+  gloryUpgradeDonePreview = null;
+  gloryUpgradeApplied = false;
+  gloryUpgradeSkipLocked = false;
+  paintGloryUpgradeOverlay();
 }
 
 function renderCaptureShop(): string {
@@ -17806,12 +18271,7 @@ function bindGloryActions(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-glory]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.glory as GloryBuildingId;
-      const r = runBuyGlory(save, id);
-      save = r.save;
-      persist();
-      flash(r.message);
-      if (!refreshGlorySoft()) render();
-      else bindGloryActions();
+      openGloryUpgradeSoft(id);
     });
   });
 }
@@ -18908,7 +19368,7 @@ function restoreBattleArt(
 
 /**
  * Patch the live battle screen in place (no app.innerHTML wipe).
- * Preserves sky BG + unit art/spine so combat does not "flash refresh".
+ * Preserves sky BG, mini board, and unit art/spine so combat does not flash.
  */
 function refreshBattleView(): boolean {
   if (view !== "battle" || !battle || !currentStage) return false;
@@ -18919,7 +19379,8 @@ function refreshBattleView(): boolean {
   const manaPct = Math.round((allyMana.mana / allyMana.manaMax) * 100);
   const arts = captureBattleArtMap(screen);
   const sky = screen.querySelector<HTMLElement>(".battle-sky");
-  const mini = screen.querySelector<HTMLElement>("#board-mini");
+  const chrome = screen.querySelector<HTMLElement>(".battle-chrome");
+  const layout = screen.querySelector<HTMLElement>(".battle-layout");
 
   const wrap = document.createElement("div");
   wrap.innerHTML = renderBattle(manaPct);
@@ -18943,13 +19404,23 @@ function refreshBattleView(): boolean {
     if (name.startsWith("is-page-")) screen.classList.add(name);
   }
 
-  const nextSky = next.querySelector(".battle-sky");
-  if (sky && nextSky) nextSky.replaceWith(sky);
+  // Keep sky + mini in the live document. Parking them in the detached
+  // template (then replaceChildren) makes WebView dump decoded images.
+  next.querySelector(".battle-sky")?.remove();
 
-  const nextMini = next.querySelector("#board-mini");
-  if (mini && nextMini) nextMini.replaceWith(mini);
+  const nextChrome = next.querySelector<HTMLElement>(".battle-chrome");
+  if (nextChrome) {
+    if (chrome) chrome.replaceWith(nextChrome);
+    else if (sky) sky.after(nextChrome);
+    else screen.prepend(nextChrome);
+  }
 
-  screen.replaceChildren(...Array.from(next.childNodes));
+  const nextLayout = next.querySelector<HTMLElement>(".battle-layout");
+  if (nextLayout) {
+    if (layout) patchBattleLayout(layout, nextLayout);
+    else screen.appendChild(nextLayout);
+  }
+
   restoreBattleArt(screen, arts);
   bindBattleInteractive();
   mountUnitAnimHooks(screen);
@@ -19976,6 +20447,56 @@ function isOverlayIdOpen(id: string): boolean {
       return onboardWelcomeOpen;
     case "sys-confirm-layer":
       return sysConfirmKind !== null;
+    case "settings-layer":
+      return settingsOpen;
+    case "profile-layer":
+      return profileOpen;
+    case "mailbox-layer":
+      return mailboxOpen;
+    case "notif-layer":
+      return notifOpen;
+    case "mission-layer":
+      return missionOpen;
+    case "community-layer":
+      return communityOpen;
+    case "guild-form-layer":
+      return !!guildFormMode;
+    case "shop-layer":
+      return shopOpen;
+    case "summoner-picker-layer":
+      return summonerPickerOpen;
+    case "chat-layer":
+      return chatOpen;
+    case "chat-profile-layer":
+      return !!chatProfileUid;
+    case "skill-feed-layer":
+      return skillFeedModalOpen;
+    case "power-up-layer":
+      return powerUpModalOpen;
+    case "building-info-layer":
+      return !!buildingInfoId;
+    case "building-unlock-layer":
+      return !!buildingUnlockModalId;
+    case "codex-layer":
+      return codexOpen;
+    case "forge-reveal-layer":
+      return !!forgeReveal;
+    case "forge-confirm-layer":
+      return !!forgeConfirm;
+    case "gear-detail-layer":
+      return !!gearDetailTarget;
+    case "sym-detail-layer":
+      return symbolDetailIndex != null;
+    case "sym-bag-expand-layer":
+      return symbolBagExpandOpen;
+    case "summon-detail-layer":
+      return !!summonDetailUid;
+    case "summon-multi-result-layer":
+      return summonMultiRevealOpen;
+    case "stage-prep-info-layer":
+      return !!stagePrepInfo;
+    case "stage-drop-info-layer":
+      return stagesDropInfoOpen;
     default: {
       const el = app.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
       return !!el && overlayDomIsOpen(el);
@@ -19997,6 +20518,7 @@ function closeOverlayById(id: string): boolean {
     return true;
   }
   if (id === "res-more") {
+    if (!resMoreOpen) return false;
     resMoreOpen = false;
     applyResMoreOpen();
     return true;
@@ -20015,6 +20537,7 @@ function closeOverlayById(id: string): boolean {
     return true;
   }
   if (id === "battle-auto-settings") {
+    if (!battleAutoSettingsOpen) return false;
     battleAutoSettingsOpen = false;
     applyBattleAutoSettingsOpen();
     return true;
@@ -20024,7 +20547,7 @@ function closeOverlayById(id: string): boolean {
     closeStagePrep();
     return true;
   }
-  if (id === "stages-region") {
+  if (id === "stages-region" || id === "stages-region-layer") {
     if (!stagesRegion) return false;
     stagesRegion = null;
     stageEntryId = null;
@@ -20038,6 +20561,186 @@ function closeOverlayById(id: string): boolean {
     patchOnboard({ welcomeSeen: true });
     app.querySelector("#onboard-welcome")?.remove();
     rememberOverlayClose("onboard-welcome");
+    return true;
+  }
+  if (id === "settings-layer") {
+    if (!settingsOpen) return false;
+    settingsOpen = false;
+    applySettingsOpen();
+    return true;
+  }
+  if (id === "profile-layer") {
+    if (!profileOpen) return false;
+    closeProfileSoft();
+    return true;
+  }
+  if (id === "mailbox-layer") {
+    if (!mailboxOpen) return false;
+    mailboxOpen = false;
+    applyMailboxOpen();
+    return true;
+  }
+  if (id === "notif-layer") {
+    if (!notifOpen) return false;
+    notifOpen = false;
+    applyNotifOpen();
+    return true;
+  }
+  if (id === "mission-layer") {
+    if (!missionOpen) return false;
+    missionOpen = false;
+    applyMissionOpen();
+    return true;
+  }
+  if (id === "mission-reward-layer") {
+    closeMissionRewardReveal();
+    return true;
+  }
+  if (id === "community-layer") {
+    if (!communityOpen) return false;
+    communityOpen = false;
+    applyCommunityOpen();
+    return true;
+  }
+  if (id === "guild-form-layer") {
+    if (!guildFormMode && !app.querySelector("#guild-form-layer")) return false;
+    closeGuildFormSoft();
+    return true;
+  }
+  if (id === "shop-layer") {
+    if (!shopOpen) return false;
+    shopOpen = false;
+    applyShopOpen();
+    return true;
+  }
+  if (id === "summoner-picker-layer") {
+    if (!summonerPickerOpen) return false;
+    summonerPickerOpen = false;
+    applySummonerPickerOpen();
+    return true;
+  }
+  if (id === "chat-layer") {
+    if (!chatOpen) return false;
+    closeChatOverlay();
+    return true;
+  }
+  if (id === "chat-profile-layer") {
+    closeChatProfile();
+    return true;
+  }
+  if (id === "building-info-layer") {
+    closeBuildingInfoSoft();
+    return true;
+  }
+  if (id === "building-unlock-layer") {
+    if (!buildingUnlockModalId) return false;
+    dismissBuildingUnlockModal();
+    return true;
+  }
+  if (id === "bldg-up-layer") {
+    closeBuildingUpgradeSoft();
+    return true;
+  }
+  if (id === "bldg-prod-layer") {
+    closeBuildingProdStatsSoft();
+    return true;
+  }
+  if (id === "dojo-insc-up-layer") {
+    closeDojoInscUpgradeSoft();
+    return true;
+  }
+  if (id === GLORY_UP_LAYER_ID) {
+    if (!gloryUpgradeId) return false;
+    if (gloryUpgradePhase === "playing") {
+      finishGloryUpgradePlay();
+      return true;
+    }
+    dismissGloryUpgradeSoft();
+    return true;
+  }
+  if (id === "skill-feed-layer") {
+    if (!skillFeedModalOpen) return false;
+    skillFeedModalOpen = false;
+    skillFeedFodderUid = null;
+    applySkillFeedOpen();
+    return true;
+  }
+  if (id === "power-up-layer") {
+    if (!powerUpModalOpen) return false;
+    powerUpModalOpen = false;
+    applyPowerUpOpen();
+    return true;
+  }
+  if (id === "gear-sell-confirm-layer") {
+    closeGearSellConfirm();
+    return true;
+  }
+  if (id === "gear-detail-layer") {
+    closeGearSellConfirm();
+    gearDetailTarget = null;
+    softRefreshSumBookUi({ gear: true, modals: true });
+    return true;
+  }
+  if (id === "sum-magic-detail-layer") {
+    sumMagicDetailSlot = null;
+    softRefreshSumBookUi({ modals: true });
+    return true;
+  }
+  if (id === "sym-detail-layer") {
+    symbolDetailIndex = null;
+    symbolCompareIndex = null;
+    softOpenEnhanceTransientModals();
+    return true;
+  }
+  if (id === "sym-bag-expand-layer") {
+    if (!symbolBagExpandOpen) return false;
+    symbolBagExpandOpen = false;
+    softOpenEnhanceTransientModals();
+    return true;
+  }
+  if (id === "summon-detail-layer") {
+    closeSummonDetailSoft();
+    return true;
+  }
+  if (id === "summon-multi-result-layer") {
+    closeSummonMultiResultSoft();
+    return true;
+  }
+  if (id === "codex-layer") {
+    if (!codexOpen && !app.querySelector("#codex-layer")) return false;
+    closeCodexSoft();
+    return true;
+  }
+  if (id === "stage-prep-info-layer") {
+    if (!stagePrepInfo) return false;
+    stagePrepInfo = null;
+    applyStagePrepInfo();
+    return true;
+  }
+  if (id === "stage-drop-info-layer") {
+    if (!stagesDropInfoOpen) return false;
+    stagesDropInfoOpen = false;
+    stagesDropSetExpand = false;
+    applyStageDropInfo();
+    return true;
+  }
+  if (id === "forge-reveal-layer") {
+    if (!forgeReveal) return false;
+    forgeReveal = null;
+    softRemoveOverlay("forge-reveal-layer");
+    return true;
+  }
+  if (id === "forge-confirm-layer") {
+    if (!forgeConfirm) return false;
+    closeForgeConfirmSoft();
+    return true;
+  }
+  if (id === "mon-rite-layer") {
+    closeMonRiteModal();
+    return true;
+  }
+  if (id === "summoner-unlock-layer") {
+    closeSummonerUnlockSoft();
     return true;
   }
   if (id === GROWTH_REVEAL_LAYER_ID && growthRevealIsOpen()) {
@@ -20073,7 +20776,37 @@ function closeOverlayById(id: string): boolean {
     rememberOverlayClose(id);
     return true;
   }
-  return false;
+  rememberOverlayClose(id);
+  el.hidden = true;
+  el.setAttribute("aria-hidden", "true");
+  return true;
+}
+
+function topVisibleOverlayId(): string | null {
+  const layers: HTMLElement[] = [];
+  app.querySelectorAll<HTMLElement>(":scope > [id]").forEach((el) => {
+    if (!el.id) return;
+    if (el.id === "nick-setup-layer" || el.id === "starter-summoner-layer") return;
+    if (
+      !el.classList.contains("settings-layer") &&
+      !el.classList.contains("codex-layer") &&
+      !el.id.endsWith("-layer") &&
+      el.id !== "battle-auto-settings" &&
+      el.id !== "onboard-welcome"
+    ) {
+      return;
+    }
+    if (!overlayDomIsOpen(el)) return;
+    layers.push(el);
+  });
+  const region = app.querySelector<HTMLElement>("#stages-region-layer");
+  if (region && overlayDomIsOpen(region)) layers.push(region);
+  layers.sort(
+    (a, b) => Number(b.style.zIndex || 0) - Number(a.style.zIndex || 0),
+  );
+  if (layers[0]?.id) return layers[0].id;
+  if (stageEntryId) return "stage-prep";
+  return null;
 }
 
 function closeTopOverlay(): boolean {
@@ -20086,8 +20819,14 @@ function closeTopOverlay(): boolean {
     if (id === "nick-setup-layer" || id === "starter-summoner-layer") {
       return true;
     }
-    return closeOverlayById(id);
+    if (closeOverlayById(id)) {
+      rememberOverlayClose(id);
+      return true;
+    }
+    overlayBackStack.pop();
   }
+  const visible = topVisibleOverlayId();
+  if (visible) return closeOverlayById(visible);
   return false;
 }
 
@@ -20124,6 +20863,28 @@ function closeLeftoverTransientUi(): boolean {
     applyStagesRegionOpen();
     return true;
   }
+  if (settingsOpen) return closeOverlayById("settings-layer");
+  if (profileOpen) return closeOverlayById("profile-layer");
+  if (shopOpen) return closeOverlayById("shop-layer");
+  if (missionOpen) return closeOverlayById("mission-layer");
+  if (communityOpen) return closeOverlayById("community-layer");
+  if (guildFormMode) return closeOverlayById("guild-form-layer");
+  if (mailboxOpen) return closeOverlayById("mailbox-layer");
+  if (notifOpen) return closeOverlayById("notif-layer");
+  if (chatOpen) return closeOverlayById("chat-layer");
+  if (codexOpen) return closeOverlayById("codex-layer");
+  if (skillFeedModalOpen) return closeOverlayById("skill-feed-layer");
+  if (powerUpModalOpen) return closeOverlayById("power-up-layer");
+  if (summonerPickerOpen) return closeOverlayById("summoner-picker-layer");
+  if (buildingInfoId) return closeOverlayById("building-info-layer");
+  if (buildingUnlockModalId) return closeOverlayById("building-unlock-layer");
+  if (forgeReveal) return closeOverlayById("forge-reveal-layer");
+  if (forgeConfirm) return closeOverlayById("forge-confirm-layer");
+  if (gearDetailTarget) return closeOverlayById("gear-detail-layer");
+  if (symbolDetailIndex != null) return closeOverlayById("sym-detail-layer");
+  if (symbolBagExpandOpen) return closeOverlayById("sym-bag-expand-layer");
+  if (summonDetailUid) return closeOverlayById("summon-detail-layer");
+  if (summonMultiRevealOpen) return closeOverlayById("summon-multi-result-layer");
   if (islandSpotMenuId) {
     setIslandSpotMenu(null);
     return true;
@@ -21322,6 +22083,9 @@ function bind(): void {
   applySysConfirmOpen();
   if (growthRevealIsOpen()) remountGrowthReveal();
   if (wishRevealIsOpen()) remountWishReveal();
+  if (gloryUpgradeId && !app.querySelector(`#${GLORY_UP_LAYER_ID}`)) {
+    remountGloryUpgradeOverlay();
+  }
 }
 
 async function boot(): Promise<void> {

@@ -95,6 +95,28 @@ describe("Modules E/F/G/H", () => {
     assert.equal(b.activeBoardIndex, 1);
   });
 
+  it("rolls random hoshi seats at battle start", () => {
+    const a = new Battle({
+      boardSize: 7,
+      units: units(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.22,
+    });
+    const b = new Battle({
+      boardSize: 7,
+      units: units(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.81,
+    });
+    assert.equal(a.hoshiPoints.length, 5);
+    assert.equal(b.hoshiPoints.length, 5);
+    const keys = (pts: { x: number; y: number }[]) =>
+      pts.map((p) => `${p.x},${p.y}`).sort().join("|");
+    assert.notEqual(keys(a.hoshiPoints), keys(b.hoshiPoints));
+  });
+
   it("blocks forbidden zone plays", () => {
     const b = new Battle({
       boardSize: 5,
@@ -107,7 +129,8 @@ describe("Modules E/F/G/H", () => {
     assert.equal(b.forbiddenZone.length, 1);
     const u = b.tickUntilReady();
     assert.ok(u);
-    assert.equal(b.playStone({ x: 2, y: 2 }), false);
+    const zone = b.forbiddenZone[0]!;
+    assert.equal(b.playStone(zone), false);
     assert.match(b.log.join("\n"), /금기구역/);
   });
 
@@ -147,12 +170,12 @@ describe("Modules E/F/G/H", () => {
       rng: () => 0.1,
     });
     assert.equal(b.manaSealed, true);
-    assert.deepEqual(b.victoryPoint, { x: 2, y: 2 });
+    assert.ok(b.victoryPoint);
     assert.match(b.log.join("\n"), /필승점/);
 
     const u = b.tickUntilReady();
     assert.ok(u);
-    assert.equal(b.playStone({ x: 2, y: 2 }), true);
+    assert.equal(b.playStone(b.victoryPoint!), true);
     assert.equal(b.victoryPointClaimed, true);
     assert.equal(b.manaSealed, false);
     assert.ok(b.log.some((l) => /필승점 해금/.test(l)));

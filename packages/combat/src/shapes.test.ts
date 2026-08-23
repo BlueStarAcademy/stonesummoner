@@ -1,12 +1,25 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Board } from "stonesummoner-board";
-import { detectShapeBonuses, starPoints } from "./shapes.js";
+import { detectShapeBonuses, randomStarPoints, starPoints } from "./shapes.js";
 
 describe("shape bonuses (module B)", () => {
   it("lists star points for 9x9", () => {
     assert.equal(starPoints(9).length, 5);
     assert.equal(starPoints(13).length, 9);
+  });
+
+  it("randomizes star seats with a stable count", () => {
+    const a = randomStarPoints(7, () => 0.11);
+    const b = randomStarPoints(7, () => 0.73);
+    assert.equal(a.length, 5);
+    assert.equal(b.length, 5);
+    const keys = (pts: { x: number; y: number }[]) =>
+      pts.map((p) => `${p.x},${p.y}`).sort().join("|");
+    assert.notEqual(keys(a), keys(b));
+    for (const p of a) {
+      assert.ok(p.x >= 0 && p.x < 7 && p.y >= 0 && p.y < 7);
+    }
   });
 
   it("detects corner and star on play", () => {

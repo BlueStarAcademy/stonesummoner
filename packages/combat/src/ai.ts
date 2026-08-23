@@ -11,6 +11,8 @@ export interface StoneEval {
   hasToken: boolean;
   /** Opposite-team AI lure from 미끼돌. */
   baitLure?: boolean;
+  /** Random 화점 seat for this fight. */
+  hoshi?: boolean;
 }
 
 export interface StoneSuggestion {
@@ -65,10 +67,11 @@ export function rankStoneSuggestions(
     const dist = Math.abs(p.x - cx) + Math.abs(p.y - cy);
     const tokenBonus = ev.hasToken ? 2.5 : 0;
     const baitBonus = ev.baitLure ? 45 : 0;
+    const hoshiBonus = ev.hoshi ? 38 : 0;
     const openBonus =
       openingBias > 0 ? Math.max(0, boardSize - dist) * openingBias : 0;
     const score =
-      cap * 100 + tokenBonus * 10 + baitBonus + openBonus - dist;
+      cap * 100 + tokenBonus * 10 + baitBonus + hoshiBonus + openBonus - dist;
     const kind = classifyCapture(cap);
     const gains = gainsForBoardEvent(kind, cap, manaMul);
     const magnet = ev.hasToken

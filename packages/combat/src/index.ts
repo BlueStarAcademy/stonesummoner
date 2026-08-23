@@ -21,7 +21,7 @@ export {
 } from "./boardEvents.js";
 export { composeSummonerUlt } from "./summonerUlt.js";
 export type { ComposedSummonerUlt } from "./summonerUlt.js";
-export { detectShapeBonuses, starPoints } from "./shapes.js";
+export { detectShapeBonuses, randomStarPoints, starPoints } from "./shapes.js";
 export type { ShapeBonus, ShapeBonusId } from "./shapes.js";
 export {
   CIRCLE_EVENTS,
@@ -44,6 +44,8 @@ export {
   forbiddenZonePoints,
   modulesForStage,
   pickCircleElement,
+  randomForbiddenZone,
+  randomVictoryPoint,
 } from "./modules.js";
 export type { BattleModules } from "./modules.js";
 export {

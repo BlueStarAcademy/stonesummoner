@@ -245,7 +245,7 @@ function startBgmSource(buf: AudioBuffer, offsetSec: number): void {
   const offset = dur > 0 ? ((offsetSec % dur) + dur) % dur : 0;
   bgmOffset = offset;
   replaceBgmGain();
-  if (prefs.muted) {
+  if (prefs.muted || !pageIsAudible()) {
     clearMediaSession();
     return;
   }
@@ -285,11 +285,20 @@ export function setAudioPrefs(patch: Partial<AudioPrefs>): AudioPrefs {
   return getAudioPrefs();
 }
 
+function pageIsAudible(): boolean {
+  if (typeof document === "undefined") return false;
+  if (document.hidden) return false;
+  if (document.visibilityState && document.visibilityState !== "visible") {
+    return false;
+  }
+  return true;
+}
+
 export async function unlockAudio(): Promise<void> {
   unlocked = true;
   await ensureCtx();
   applyGains();
-  if (prefs.muted) return;
+  if (prefs.muted || !pageIsAudible()) return;
   if (bgmSource && ctx?.state === "running") return;
   const want = pendingBgm ?? currentBgm;
   if (!want) return;
@@ -299,33 +308,77 @@ export async function unlockAudio(): Promise<void> {
   await playBgm(want, { resumeOffset });
 }
 
+let audioListeners: AbortController | null = null;
+
+function onAudioBackground(): void {
+  hiddenPaused = true;
+  void suspendAudioPlayback();
+}
+
+function onAudioForeground(): void {
+  if (!pageIsAudible()) {
+    hiddenPaused = true;
+    void suspendAudioPlayback();
+    return;
+  }
+  if (!ctx) {
+    hiddenPaused = false;
+    return;
+  }
+  void ctx.resume().catch(() => undefined);
+  applyGains();
+  if (currentBgm && !prefs.muted && !bgmSource) {
+    void playBgm(currentBgm, { resumeOffset: bgmOffset });
+  }
+  hiddenPaused = false;
+}
+
 export function initAudio(): void {
   prefs = readAudioPrefs();
   if (typeof document === "undefined") return;
+  if (audioListeners) return;
+  audioListeners = new AbortController();
+  const { signal } = audioListeners;
   const unlock = (): void => {
     void unlockAudio();
   };
-  document.addEventListener("pointerdown", unlock, { capture: true, once: true });
-  document.addEventListener("keydown", unlock, { capture: true, once: true });
-  document.addEventListener("visibilitychange", () => {
-    if (!ctx) return;
-    if (document.hidden) {
-      hiddenPaused = true;
-      if (bgmSource) bgmOffset = currentBgmPlayhead();
-      void ctx.suspend().catch(() => undefined);
-    } else {
-      void ctx.resume().catch(() => undefined);
-      applyGains();
-      if (hiddenPaused && currentBgm && !prefs.muted) {
-        if (!bgmSource) {
-          void playBgm(currentBgm, { resumeOffset: bgmOffset });
-        } else {
-          clearMediaSession();
-        }
-      }
-      hiddenPaused = false;
-    }
-  });
+  document.addEventListener("pointerdown", unlock, { capture: true, once: true, signal });
+  document.addEventListener("keydown", unlock, { capture: true, once: true, signal });
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (!pageIsAudible()) onAudioBackground();
+      else onAudioForeground();
+    },
+    { signal },
+  );
+  window.addEventListener("pagehide", () => onAudioBackground(), { signal });
+  window.addEventListener(
+    "pageshow",
+    () => {
+      if (pageIsAudible()) onAudioForeground();
+      else onAudioBackground();
+    },
+    { signal },
+  );
+  window.addEventListener("beforeunload", () => onAudioBackground(), { signal });
+  document.addEventListener("freeze", () => onAudioBackground(), { signal });
+  void import("@capacitor/core")
+    .then(async ({ Capacitor }) => {
+      if (!Capacitor.isNativePlatform()) return;
+      const { App } = await import("@capacitor/app");
+      void App.addListener("pause", () => {
+        onAudioBackground();
+      });
+      void App.addListener("resume", () => {
+        onAudioForeground();
+      });
+      void App.addListener("appStateChange", (state) => {
+        if (state.isActive) onAudioForeground();
+        else onAudioBackground();
+      });
+    })
+    .catch(() => undefined);
 }
 
 export async function playBgm(
@@ -370,7 +423,7 @@ export async function playBgm(
   if (gen !== bgmGen) return;
   if (!buf) return;
 
-  if (!unlocked && audio.state !== "running") {
+  if (!pageIsAudible() || (!unlocked && audio.state !== "running")) {
     pendingBgm = id;
     bgmBuffer = buf;
     bgmOffset = resumeOffset;
@@ -392,6 +445,42 @@ export async function stopBgm(): Promise<void> {
   currentBgm = null;
   pendingBgm = null;
   stopBgmSource(false);
+}
+
+/** Pause beds when the activity backgrounds — Android finish() often skips document.hidden. */
+export async function suspendAudioPlayback(): Promise<void> {
+  if (bgmSource) bgmOffset = currentBgmPlayhead();
+  stopBgmSource(true);
+  clearMediaSession();
+  if (masterGain) snapGain(masterGain, 0);
+  if (ctx && ctx.state === "running") {
+    await ctx.suspend().catch(() => undefined);
+  }
+}
+
+/** Tear down Web Audio so BGM cannot leak after Activity.finish(). */
+export async function haltAudioForExit(): Promise<void> {
+  audioListeners?.abort();
+  audioListeners = null;
+  await stopBgm();
+  clearMediaSession();
+  if (masterGain) snapGain(masterGain, 0);
+  if (!ctx) return;
+  const audio = ctx;
+  ctx = null;
+  masterGain = null;
+  sfxBus = null;
+  bgmGain = null;
+  try {
+    await audio.suspend();
+  } catch {
+    /* ignore */
+  }
+  try {
+    await audio.close();
+  } catch {
+    /* ignore */
+  }
 }
 
 export function duckBgm(on: boolean): void {
@@ -443,4 +532,10 @@ export async function playSfx(
 
 export function currentBgmId(): BgmId | null {
   return currentBgm;
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    void haltAudioForExit();
+  });
 }

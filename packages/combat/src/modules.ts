@@ -1,6 +1,7 @@
 import type { Element } from "./types.js";
 import type { Point } from "stonesummoner-board";
 import type { StageDef } from "stonesummoner-data";
+import { allBoardPoints, pickRandomPoint, shufflePickPoints } from "./shapes.js";
 
 /** Magic-circle module flags (Module H content wiring). */
 export interface BattleModules {
@@ -67,10 +68,19 @@ export function pickCircleElement(rng: () => number = Math.random): Element {
   return pool[Math.floor(rng() * pool.length) % pool.length]!;
 }
 
-/** Center-ish victory point for boss boards. */
+/** Center-ish victory point for boss boards (fallback / tests). */
 export function bossVictoryPoint(size: number): Point {
   const m = Math.floor(size / 2);
   return { x: m, y: m };
+}
+
+/** Random 필승점, never on forbidden seats. */
+export function randomVictoryPoint(
+  size: number,
+  rng: () => number,
+  avoid: Point[] = [],
+): Point {
+  return pickRandomPoint(size, rng, avoid);
 }
 
 /** Forbidden zone points (금기구역): center, or 3×3 on large boards. */
@@ -84,6 +94,24 @@ export function forbiddenZonePoints(size: number): Point[] {
     }
   }
   return pts;
+}
+
+/** Random 금기구역: one cell, or a 3×3 block that fits on large boards. */
+export function randomForbiddenZone(
+  size: number,
+  rng: () => number,
+): Point[] {
+  if (size <= 7) return [pickRandomPoint(size, rng)];
+  const originMax = Math.max(0, size - 3);
+  const ox = Math.min(originMax, Math.max(0, Math.floor(rng() * (originMax + 1))));
+  const oy = Math.min(originMax, Math.max(0, Math.floor(rng() * (originMax + 1))));
+  const pts: Point[] = [];
+  for (let dy = 0; dy < 3; dy++) {
+    for (let dx = 0; dx < 3; dx++) {
+      pts.push({ x: ox + dx, y: oy + dy });
+    }
+  }
+  return pts.length ? pts : shufflePickPoints(allBoardPoints(size), 9, rng);
 }
 
 export const BRILLIANT_MISSION_GOAL = 3;

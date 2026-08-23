@@ -18,6 +18,7 @@ export interface ExpertStoneHints {
   hasToken?: (p: Point) => boolean;
   baitLure?: (p: Point) => boolean;
   openingBias?: boolean;
+  stars?: Point[];
 }
 
 function key(p: Point): string {
@@ -58,21 +59,28 @@ function edgePenalty(size: number, p: Point): number {
   return 0;
 }
 
-function openingShapeBonus(size: number, p: Point, stoneCount: number): number {
+function openingShapeBonus(
+  size: number,
+  p: Point,
+  stoneCount: number,
+  stars?: Point[],
+): number {
   if (stoneCount > 6) return 0;
   const m = (size - 1) / 2;
   const dist = Math.abs(p.x - m) + Math.abs(p.y - m);
   let s = Math.max(0, (size - dist) * 6);
-  if (size >= 7) {
-    const hoshi = [
-      { x: 2, y: 2 },
-      { x: 2, y: size - 3 },
-      { x: size - 3, y: 2 },
-      { x: size - 3, y: size - 3 },
-      { x: Math.floor(m), y: Math.floor(m) },
-    ];
-    if (hoshi.some((h) => h.x === p.x && h.y === p.y)) s += 38;
-  }
+  const hoshi =
+    stars ??
+    (size >= 7
+      ? [
+          { x: 2, y: 2 },
+          { x: 2, y: size - 3 },
+          { x: size - 3, y: 2 },
+          { x: size - 3, y: size - 3 },
+          { x: Math.floor(m), y: Math.floor(m) },
+        ]
+      : []);
+  if (hoshi.some((h) => h.x === p.x && h.y === p.y)) s += 38;
   return s;
 }
 
@@ -205,7 +213,7 @@ export function scoreExpertStone(
   if (!urgent) score -= edge;
 
   const stones = countStones(board);
-  score += openingShapeBonus(board.size, point, stones);
+  score += openingShapeBonus(board.size, point, stones, hints.stars);
   if (hints.openingBias) {
     const m = (board.size - 1) / 2;
     score += Math.max(0, board.size - (Math.abs(point.x - m) + Math.abs(point.y - m))) * 10;

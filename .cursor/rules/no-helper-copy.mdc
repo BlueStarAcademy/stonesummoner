@@ -24,7 +24,7 @@ Controls carry their own meaning. A title, field label, button label, and cost c
 <small>2–6 Hangul characters</small>
 ```
 
-Standing format hints, empty-state essays, and extra sentences under a title are helper copy. Show errors only after a failed action (toast / inline fail), not as always-visible instructions.
+Standing format hints, empty-state essays, and extra sentences under a title are helper copy. Show errors only after a failed action (inline on the sheet), not as always-visible instructions. Do not use toasts.
 
 ## Checklist
 1. New sheet has title + controls + actions — no hint paragraph.

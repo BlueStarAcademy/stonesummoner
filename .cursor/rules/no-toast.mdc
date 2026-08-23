@@ -1,0 +1,25 @@
+---
+description: Ban toast/flash for player-facing feedback; use confirm and result modals
+alwaysApply: true
+---
+
+# No toast messages
+
+## Hard rule
+**Do not use toasts** for player-facing feedback. That includes `flash()`, `mountGuideToast()`, `.toast`, and `.toast-portal`.
+
+Upgrade, buy, confirm, and result flows use a **confirm sheet** then a **result sheet** (soft overlay). Failures stay on the sheet: disable the action, or show inline fail after the tap. Never toast success or failure.
+
+## Disallowed
+```ts
+flash(r.message);
+toast = t("ui.bldgUp.doneTitle");
+```
+
+## Allowed
+- Confirm modal (image + before/after) → optional play 연출 → result modal
+- Disabled confirm when the player cannot pay
+- Inline fail on the open sheet after a failed action (not a standing hint)
+
+## Legacy
+Existing `flash()` calls are leftover. Do not add new ones. When you touch a flow that still toasts, replace it with a modal or a disabled control.

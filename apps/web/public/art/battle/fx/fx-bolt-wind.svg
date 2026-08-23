@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 44" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bwEdge" x1="6" y1="22" x2="90" y2="22" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8FFD8" stop-opacity=".12"/>
+      <stop offset=".4" stop-color="#7EF0A8"/>
+      <stop offset="1" stop-color="#F4FFF6"/>
+    </linearGradient>
+  </defs>
+  <path d="M8 30C22 8 52 4 90 24C64 14 34 18 8 30Z" fill="url(#bwEdge)" stroke="#E8FFF0" stroke-width="1.5"/>
+  <path d="M14 33C30 16 56 12 84 28" stroke="#F6FFF8" stroke-width="1.8" stroke-linecap="round" opacity=".85"/>
+  <path d="M18 26C34 12 58 10 80 22" stroke="#B8FFD0" stroke-width="1.1" stroke-linecap="round" opacity=".55"/>
+</svg>

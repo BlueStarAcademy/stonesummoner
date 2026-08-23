@@ -20,6 +20,11 @@ const config: CapacitorConfig = {
     CapacitorCookies: {
       enabled: true,
     },
+    // MainActivity owns hardware back. If Capacitor handles it, a missing JS
+    // listener falls through to WebView.goBack() / activity finish (BGM leak).
+    App: {
+      disableBackButtonHandler: true,
+    },
   },
 };
 

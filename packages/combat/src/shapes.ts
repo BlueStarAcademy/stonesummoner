@@ -25,7 +25,14 @@ const DIRS: Point[] = [
   { x: 0, y: -1 },
 ];
 
-/** Star (화점) coordinates by board size. */
+/** How many 화점 seats a board of this size carries. */
+export function starPointCount(size: number): number {
+  if (size <= 5) return 1;
+  if (size <= 9) return 5;
+  return 9;
+}
+
+/** Classic Go-style 화점 layout (tests / fallback). */
 export function starPoints(size: number): Point[] {
   if (size <= 5) return [{ x: 2, y: 2 }];
   if (size === 7) {
@@ -61,6 +68,60 @@ export function starPoints(size: number): Point[] {
     { x: m, y: a },
     { x: m, y: b },
   ];
+}
+
+export function allBoardPoints(size: number, avoid: Point[] = []): Point[] {
+  const banned = new Set(avoid.map((p) => `${p.x},${p.y}`));
+  const pool: Point[] = [];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (!banned.has(`${x},${y}`)) pool.push({ x, y });
+    }
+  }
+  return pool;
+}
+
+/** Fisher–Yates sample; `rng` is expected in [0, 1). */
+export function shufflePickPoints(
+  pool: Point[],
+  count: number,
+  rng: () => number,
+): Point[] {
+  const arr = pool.map((p) => ({ x: p.x, y: p.y }));
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.min(i, Math.max(0, Math.floor(rng() * (i + 1))));
+    const tmp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = tmp;
+  }
+  return arr.slice(0, Math.min(Math.max(0, count), arr.length));
+}
+
+/** Battle-start 화점: same count as the classic layout, any unique cells. */
+export function randomStarPoints(
+  size: number,
+  rng: () => number,
+  avoid: Point[] = [],
+): Point[] {
+  return shufflePickPoints(
+    allBoardPoints(size, avoid),
+    starPointCount(size),
+    rng,
+  );
+}
+
+export function pickRandomPoint(
+  size: number,
+  rng: () => number,
+  avoid: Point[] = [],
+): Point {
+  const pool = allBoardPoints(size, avoid);
+  if (!pool.length) {
+    const m = Math.floor(size / 2);
+    return { x: m, y: m };
+  }
+  const i = Math.min(pool.length - 1, Math.max(0, Math.floor(rng() * pool.length)));
+  return pool[i]!;
 }
 
 function isCorner(size: number, p: Point): boolean {
@@ -146,9 +207,9 @@ export function detectShapeBonuses(
   board: Board,
   color: StoneColor,
   last: Point,
+  stars: Point[] = starPoints(board.size),
 ): ShapeBonus[] {
   const out: ShapeBonus[] = [];
-  const stars = starPoints(board.size);
 
   if (isCorner(board.size, last)) {
     out.push({

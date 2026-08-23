@@ -6258,7 +6258,7 @@ main {
 .chat-sheet {
   display: flex;
   flex-direction: column;
-  max-height: min(78dvh, 560px);
+  max-height: min(86dvh, 680px);
   padding-bottom: 12px;
 }
 
@@ -6474,8 +6474,8 @@ main {
 
 .chat-log {
   flex: 1 1 auto;
-  min-height: 180px;
-  max-height: 42dvh;
+  min-height: 240px;
+  max-height: 52dvh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -7668,6 +7668,171 @@ main {
   height: 36px;
   object-fit: contain;
   filter: drop-shadow(0 4px 8px #0008);
+}
+
+.glory-up-sheet {
+  width: min(100%, 380px);
+  max-width: min(380px, calc(100vw - 24px));
+}
+
+.glory-up-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #c9a22744;
+  background:
+    radial-gradient(ellipse at 50% 0%, #c9a22728 0%, transparent 55%),
+    linear-gradient(165deg, #2a2216f4 0%, #14100cf8 100%);
+  text-align: center;
+}
+
+.glory-up-art {
+  width: 168px;
+  height: 132px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: radial-gradient(circle at 40% 30%, #3a2e18, #120e0a 75%);
+  overflow: hidden;
+}
+
+.glory-up-art img,
+.glory-up-play-img {
+  width: 156px;
+  height: 124px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px #000a);
+}
+
+.glory-up-hero .bldg-up-name,
+.glory-up-hero .bldg-up-lv {
+  max-width: 100%;
+}
+
+.glory-up-play {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  cursor: pointer;
+  width: min(calc(100% - 32px), 340px);
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  padding: 28px 16px 22px;
+  border-radius: 22px;
+  border: 1px solid #c9a22744;
+  background:
+    radial-gradient(ellipse at 50% 38%, #c9a22728 0%, transparent 52%),
+    radial-gradient(ellipse at 80% 90%, #7b6cff14 0%, transparent 40%),
+    linear-gradient(180deg, #1c1630d8 0%, #0c0a14f2 100%);
+  overflow: hidden;
+  pointer-events: auto;
+  color: #fff6e4;
+  box-shadow:
+    inset 0 1px 0 #e8d9a818,
+    0 14px 36px #0008;
+  animation: modal-pop 0.2s ease;
+}
+
+.glory-up-play-glow {
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  background: radial-gradient(circle at 50% 48%, #c9a22733 0%, transparent 48%);
+  animation: summon-glow 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.glory-up-play-art {
+  position: relative;
+  z-index: 2;
+  width: 200px;
+  height: 160px;
+  display: grid;
+  place-items: center;
+  animation: glory-up-rise 1.8s ease-out both;
+}
+
+.glory-up-play-art img {
+  width: 190px;
+  height: 152px;
+}
+
+.glory-up-play-name {
+  position: relative;
+  z-index: 2;
+  margin-top: 10px;
+  color: #fff6e4;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.glory-up-play-lv {
+  position: relative;
+  z-index: 2;
+  color: #e8d080;
+  font-size: 0.92rem;
+  font-weight: 750;
+}
+
+.glory-up-meter {
+  position: relative;
+  z-index: 2;
+  width: min(78%, 240px);
+  height: 10px;
+  margin: 14px 0 0;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid #c9a22788;
+  background: linear-gradient(180deg, #1a140ccc, #0c0906f2);
+  box-shadow: inset 0 1px 3px #0008;
+}
+
+.glory-up-meter-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: linear-gradient(90deg, #8a6a18 0%, #e8c84a 58%, #fff1b0 100%);
+  box-shadow: 0 0 10px #c9a22766;
+  animation: growth-rite-meter-fill 1.8s linear forwards;
+}
+
+@keyframes glory-up-rise {
+  0% {
+    transform: scale(0.86) translateY(12px);
+    opacity: 0.45;
+    filter: brightness(0.72);
+  }
+  42% {
+    transform: scale(1.08) translateY(-6px);
+    opacity: 1;
+    filter: brightness(1.28);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glory-up-play-glow,
+  .glory-up-play-art,
+  .glory-up-meter-fill {
+    animation: none;
+  }
+
+  .glory-up-meter-fill {
+    transform: scaleX(1);
+  }
 }
 
 .island-spot-art {
@@ -9677,11 +9842,14 @@ button.battle-unit {
   width: 100%;
   height: 100%;
   overflow: visible;
-  filter: drop-shadow(0 0 6px #c9a22788);
+  filter: drop-shadow(0 0 8px #c9a22799);
+  transform-origin: 50% 50%;
 }
 
 .board-absorb-sigil .sigil-rim,
+.board-absorb-sigil .sigil-hex,
 .board-absorb-sigil .sigil-mid,
+.board-absorb-sigil .sigil-diamond,
 .board-absorb-sigil .sigil-star,
 .board-absorb-sigil .sigil-cross,
 .board-absorb-sigil .sigil-core {
@@ -9694,14 +9862,33 @@ button.battle-unit {
   opacity: 0;
 }
 
+.board-absorb-sigil .sigil-outer {
+  fill: none;
+  stroke: #e8d9a8;
+  stroke-width: 0.85;
+  stroke-linecap: round;
+  stroke-dasharray: 3.2 4.4;
+  opacity: 0;
+}
+
 .board-absorb-sigil .sigil-rim {
-  stroke-width: 1.8;
+  stroke-width: 1.9;
   stroke: #f0d878;
+}
+
+.board-absorb-sigil .sigil-hex {
+  stroke-width: 1.15;
+  stroke: #e8c84a;
 }
 
 .board-absorb-sigil .sigil-mid {
   stroke-width: 1.15;
   stroke: #c9b06a;
+}
+
+.board-absorb-sigil .sigil-diamond {
+  stroke-width: 1.05;
+  stroke: #fff4c8;
 }
 
 .board-absorb-sigil .sigil-star,
@@ -9711,57 +9898,93 @@ button.battle-unit {
 }
 
 .board-absorb-sigil .sigil-core {
-  stroke-width: 1.4;
+  stroke-width: 1.5;
   stroke: #fff4c8;
 }
 
+.board-absorb-sigil .sigil-tick {
+  fill: none;
+  stroke: #fff4c8;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  opacity: 0;
+}
+
 .board-frame.is-absorb-enemy .board-absorb-sigil .sigil-rim,
-.board-frame.is-absorb-enemy .board-absorb-sigil .sigil-core {
+.board-frame.is-absorb-enemy .board-absorb-sigil .sigil-core,
+.board-frame.is-absorb-enemy .board-absorb-sigil .sigil-outer {
   stroke: #ff8aa0;
 }
 
 .board-frame.is-absorb-enemy .board-absorb-sigil .sigil-mid,
+.board-frame.is-absorb-enemy .board-absorb-sigil .sigil-hex,
+.board-frame.is-absorb-enemy .board-absorb-sigil .sigil-diamond,
 .board-frame.is-absorb-enemy .board-absorb-sigil .sigil-star,
-.board-frame.is-absorb-enemy .board-absorb-sigil .sigil-cross {
+.board-frame.is-absorb-enemy .board-absorb-sigil .sigil-cross,
+.board-frame.is-absorb-enemy .board-absorb-sigil .sigil-tick {
   stroke: #d080ff;
 }
 
+.board-frame.is-absorb .board-absorb-sigil {
+  animation: sigil-spin var(--absorb-ms, 700ms) ease-out both;
+}
+
+.board-frame.is-absorb .sigil-outer {
+  animation: sigil-tick-in calc(var(--absorb-ms, 700ms) * 0.4) ease-out forwards;
+}
+
 .board-frame.is-absorb .sigil-rim {
-  animation: sigil-draw calc(var(--absorb-ms, 520ms) * 0.38) ease-out forwards;
+  animation: sigil-draw calc(var(--absorb-ms, 700ms) * 0.4) ease-out forwards;
+  animation-delay: calc(var(--absorb-ms, 700ms) * 0.08);
+}
+
+.board-frame.is-absorb .sigil-hex {
+  animation: sigil-draw calc(var(--absorb-ms, 700ms) * 0.36) ease-out forwards;
+  animation-delay: calc(var(--absorb-ms, 700ms) * 0.16);
 }
 
 .board-frame.is-absorb .sigil-mid {
-  animation: sigil-draw calc(var(--absorb-ms, 520ms) * 0.34) ease-out forwards;
-  animation-delay: calc(var(--absorb-ms, 520ms) * 0.16);
+  animation: sigil-draw calc(var(--absorb-ms, 700ms) * 0.34) ease-out forwards;
+  animation-delay: calc(var(--absorb-ms, 700ms) * 0.24);
 }
 
 .board-frame.is-absorb .sigil-cross {
-  animation: sigil-draw calc(var(--absorb-ms, 520ms) * 0.3) ease-out forwards;
-  animation-delay: calc(var(--absorb-ms, 520ms) * 0.28);
+  animation: sigil-draw calc(var(--absorb-ms, 700ms) * 0.3) ease-out forwards;
+  animation-delay: calc(var(--absorb-ms, 700ms) * 0.34);
+}
+
+.board-frame.is-absorb .sigil-diamond {
+  animation: sigil-draw calc(var(--absorb-ms, 700ms) * 0.3) ease-out forwards;
+  animation-delay: calc(var(--absorb-ms, 700ms) * 0.4);
 }
 
 .board-frame.is-absorb .sigil-star {
-  animation: sigil-draw calc(var(--absorb-ms, 520ms) * 0.36) ease-out forwards;
-  animation-delay: calc(var(--absorb-ms, 520ms) * 0.36);
+  animation: sigil-draw calc(var(--absorb-ms, 700ms) * 0.36) ease-out forwards;
+  animation-delay: calc(var(--absorb-ms, 700ms) * 0.46);
 }
 
 .board-frame.is-absorb .sigil-core {
-  animation: sigil-draw calc(var(--absorb-ms, 520ms) * 0.28) ease-out forwards;
-  animation-delay: calc(var(--absorb-ms, 520ms) * 0.52);
+  animation: sigil-draw calc(var(--absorb-ms, 700ms) * 0.28) ease-out forwards;
+  animation-delay: calc(var(--absorb-ms, 700ms) * 0.58);
+}
+
+.board-frame.is-absorb .sigil-tick {
+  animation: sigil-tick-in calc(var(--absorb-ms, 700ms) * 0.22) ease-out forwards;
+  animation-delay: calc(var(--absorb-ms, 700ms) * 0.5);
 }
 
 .board-frame.is-absorb-capture .sigil-rim,
 .board-frame.is-absorb-shape .sigil-rim {
-  stroke-width: 2.2;
-  filter: drop-shadow(0 0 8px #f0d878cc);
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 10px #f0d878dd);
 }
 
 .board-frame.is-absorb .board-hit {
-  animation: circle-inscribe var(--absorb-ms, 520ms) ease-out forwards;
+  animation: circle-inscribe var(--absorb-ms, 700ms) ease-out forwards;
 }
 
 .board-frame.is-absorb .board-circle-art {
-  filter: saturate(1.22) brightness(1.14) contrast(1.08);
+  animation: circle-art-pulse var(--absorb-ms, 700ms) ease-out both;
 }
 
 @keyframes circle-inscribe {
@@ -9784,9 +10007,122 @@ button.battle-unit {
 }
 
 @keyframes sigil-draw {
-  0% { stroke-dashoffset: 100; opacity: 0.2; }
-  12% { opacity: 1; }
-  100% { stroke-dashoffset: 0; opacity: 0.92; }
+  0% { stroke-dashoffset: 100; opacity: 0.15; }
+  10% { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0.95; }
+}
+
+@keyframes sigil-tick-in {
+  0% { opacity: 0; }
+  100% { opacity: 0.92; }
+}
+
+@keyframes sigil-spin {
+  0% { transform: rotate(0deg); filter: drop-shadow(0 0 6px #c9a22766); }
+  42% { transform: rotate(10deg); filter: drop-shadow(0 0 14px #f0d878cc); }
+  100% { transform: rotate(18deg); filter: drop-shadow(0 0 10px #c9a227aa); }
+}
+
+@keyframes circle-art-pulse {
+  0% { filter: saturate(1) brightness(1) contrast(1); }
+  38% { filter: saturate(1.4) brightness(1.22) contrast(1.08) drop-shadow(0 0 16px #f0d878aa); }
+  100% { filter: saturate(1.18) brightness(1.1) contrast(1.04); }
+}
+
+.circle-rite {
+  position: absolute;
+  inset: -10%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.circle-rite-bloom {
+  position: absolute;
+  inset: 10%;
+  border-radius: 50%;
+  background: radial-gradient(circle, #f0d87855 0%, #c9a22722 42%, transparent 70%);
+  animation: rite-bloom var(--rite-ms, 700ms) ease-out both;
+}
+
+.circle-rite-ring {
+  position: absolute;
+  inset: 6%;
+  border: 2px solid #f0d878cc;
+  border-radius: 50%;
+  box-shadow: 0 0 18px #c9a22788, inset 0 0 14px #f0d87833;
+  animation: rite-ring var(--rite-ms, 700ms) ease-out both;
+}
+
+.circle-rite-ring.is-inner {
+  inset: 22%;
+  border-width: 1.5px;
+  animation-name: rite-ring-inner;
+}
+
+.circle-rite-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px;
+  border-radius: 50%;
+  background: #fff6c8;
+  box-shadow: 0 0 10px #f0d878;
+  --ang: calc(var(--spark-i, 0) * 360deg / var(--spark-n, 8));
+  animation: rite-spark var(--rite-ms, 700ms) ease-out both;
+  animation-delay: calc(var(--spark-i, 0) * 0.03s);
+}
+
+.circle-rite--capture .circle-rite-ring,
+.circle-rite--capture-large .circle-rite-ring,
+.circle-rite--shape .circle-rite-ring {
+  border-color: #ffe9a8;
+  box-shadow: 0 0 26px #f0d878cc, inset 0 0 16px #fff4c844;
+}
+
+.circle-rite--capture-large .circle-rite-bloom,
+.circle-rite--shape .circle-rite-bloom {
+  background: radial-gradient(circle, #fff4c866 0%, #f0d87833 46%, transparent 72%);
+}
+
+.board-frame.is-absorb-enemy .circle-rite-ring {
+  border-color: #ff8aa0cc;
+  box-shadow: 0 0 18px #d080ff88, inset 0 0 12px #ff8aa033;
+}
+
+.board-frame.is-absorb-enemy .circle-rite-bloom {
+  background: radial-gradient(circle, #ff8aa055 0%, #d080ff22 44%, transparent 70%);
+}
+
+.board-frame.is-absorb-enemy .circle-rite-spark {
+  background: #ffe0ea;
+  box-shadow: 0 0 10px #ff8aa0;
+}
+
+@keyframes rite-bloom {
+  0% { opacity: 0; transform: scale(0.72); }
+  22% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 0; transform: scale(1.18); }
+}
+
+@keyframes rite-ring {
+  0% { opacity: 0; transform: scale(0.62) rotate(0deg); }
+  16% { opacity: 1; transform: scale(0.96) rotate(8deg); }
+  58% { opacity: 0.9; transform: scale(1.04) rotate(16deg); }
+  100% { opacity: 0; transform: scale(1.22) rotate(26deg); }
+}
+
+@keyframes rite-ring-inner {
+  0% { opacity: 0; transform: scale(1.18) rotate(0deg); }
+  18% { opacity: 1; transform: scale(1.02) rotate(-10deg); }
+  100% { opacity: 0; transform: scale(0.82) rotate(-22deg); }
+}
+
+@keyframes rite-spark {
+  0% { opacity: 0; transform: rotate(var(--ang)) translateY(-38%) scale(0.25); }
+  16% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(calc(var(--ang) + 48deg)) translateY(-62%) scale(1.15); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -10657,22 +10993,60 @@ button.battle-unit {
   pointer-events: auto;
 }
 
-/* Large flat grid for easy taps; battle stage stays visible behind it. */
+/* Large flat grid for easy taps; map circle art sits under the intersections. */
+.stone-pick-circle {
+  position: relative;
+  width: min(420px, 94vw);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+}
+
+.stone-pick-circle-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 0;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0 46%, #000c 60%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 0 46%, #000c 60%, transparent 72%);
+}
+
 .board.stone-pick-board {
-  width: min(420px, 98%);
-  max-width: 98%;
+  position: relative;
+  z-index: 1;
+  width: 40%;
+  max-width: 40%;
   margin: 0 auto;
-  padding: 14px;
-  gap: 6px;
-  border-radius: 26px;
-  border: 2px solid #c9a227cc;
-  background: radial-gradient(circle at 50% 45%, #2a1f4ed9 0%, #120e1ce8 72%);
-  box-shadow:
-    inset 0 0 0 2px #f0d87855,
-    inset 0 0 48px #7b6cff55,
-    0 16px 34px #000a;
+  padding: 0.4%;
+  gap: 0;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   pointer-events: auto;
   overflow: visible;
+  animation: none;
+}
+
+.board.stone-pick-board.size-5 {
+  width: 42%;
+  max-width: 42%;
+  padding: 0.6%;
+}
+
+.board.stone-pick-board.size-7 {
+  width: 38%;
+  max-width: 38%;
+  padding: 0.2%;
+}
+
+.board.stone-pick-board.magic-circle::before,
+.board.stone-pick-board.magic-circle::after {
+  display: none;
 }
 
 .board.stone-pick-board button.cell {
@@ -10680,6 +11054,28 @@ button.battle-unit {
   -webkit-tap-highlight-color: transparent;
   min-height: 0;
   aspect-ratio: 1;
+  background: transparent;
+  box-shadow: none;
+}
+
+.board.stone-pick-board button.cell.legal:not(:disabled),
+.board.stone-pick-board button.cell.is-placeable {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px #a898ff88, 0 0 10px #7b6cff55;
+}
+
+.board.stone-pick-board button.cell.is-placeable:hover,
+.board.stone-pick-board button.cell.is-placeable:focus-visible {
+  box-shadow: inset 0 0 0 2px #f0d878cc, 0 0 14px #c9a22777;
+}
+
+.board.stone-pick-board button.cell.star:not(.forbid):not(.victory) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.board.stone-pick-board button.cell.victory {
+  background: transparent;
 }
 
 /* HUD stays reachable above the pick layer (speed / AUTO / back). */
@@ -10702,8 +11098,9 @@ button.battle-unit {
   pointer-events: none;
 }
 
-.board-mini[hidden] {
-  display: none;
+/* Opacity only — [hidden]/display:none dumps decoded stone images (WebView flicker). */
+.board-mini.is-stowed {
+  opacity: 0;
 }
 
 .board.board-mini-grid {
@@ -10972,9 +11369,9 @@ button.battle-unit {
 .skill-fx {
   position: absolute;
   left: 50%;
-  top: 42%;
-  width: 138%;
-  height: 138%;
+  top: 46%;
+  width: 122%;
+  height: 122%;
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 7;
@@ -10994,9 +11391,22 @@ button.battle-unit {
   top: 46%;
 }
 
-.skill-fx--shield {
-  width: 128%;
-  height: 128%;
+.skill-fx.is-cast {
+  width: 102%;
+  height: 102%;
+  top: 36%;
+}
+
+.skill-fx.is-cast.is-melee {
+  width: 158%;
+  height: 92%;
+  left: 64%;
+  top: 38%;
+}
+
+.skill-fx.is-cast img {
+  mix-blend-mode: screen;
+  filter: brightness(1.08) saturate(1.02);
 }
 
 .battle-front.enemy .skill-fx.is-melee {
@@ -11013,11 +11423,11 @@ button.battle-unit {
   object-fit: contain;
   pointer-events: none;
   mix-blend-mode: screen;
-  mix-blend-mode: plus-lighter;
 }
 
 .skfx-img--flash {
   z-index: 5;
+  mix-blend-mode: plus-lighter;
   animation: skfx-flash var(--skfx-ms, 0.56s) ease-out both;
 }
 
@@ -11160,31 +11570,51 @@ button.battle-unit {
   transform: translate(-50%, -50%) rotate(var(--rot, 0deg));
   pointer-events: none;
   z-index: 17;
-  animation: skfx-bolt var(--bolt-ms, 720ms) cubic-bezier(0.42, 0.02, 0.18, 1) both;
+  animation: skfx-bolt var(--bolt-ms, 460ms) cubic-bezier(0.42, 0.02, 0.18, 1) both;
 }
 
 .skill-bolt.is-ghost {
-  width: 56px;
-  height: 56px;
-  filter: blur(0.6px) brightness(1.18) opacity(0.5);
+  width: 48px;
+  height: 48px;
+  filter: blur(0.8px) brightness(1.2) opacity(0.42);
   z-index: 16;
+}
+
+.skill-bolt--fire {
+  width: 52px;
+  height: 52px;
+}
+
+.skill-bolt--water {
+  width: 86px;
+  height: 40px;
+}
+
+.skill-bolt--wind {
+  width: 92px;
+  height: 44px;
+}
+
+.skill-bolt--light {
+  width: 108px;
+  height: 28px;
+}
+
+.skill-bolt--dark {
+  width: 78px;
+  height: 42px;
 }
 
 .skill-bolt--heal,
 .skill-bolt--buff,
 .skill-bolt--shield {
-  width: 58px;
-  height: 58px;
-}
-
-.skill-bolt--slash {
-  width: 84px;
-  height: 56px;
+  width: 40px;
+  height: 40px;
 }
 
 .skill-bolt--hex {
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
 }
 
 .skill-bolt-wake {
@@ -11202,21 +11632,33 @@ button.battle-unit {
 }
 
 .skill-bolt--fire .skill-bolt-wake {
-  background: radial-gradient(ellipse at right, #ffb070aa 0%, transparent 72%);
+  right: 28%;
+  width: 88%;
+  height: 72%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at right, #ffb070bb 0%, transparent 70%);
 }
 .skill-bolt--water .skill-bolt-wake {
-  background: radial-gradient(ellipse at right, #90d8ffaa 0%, transparent 72%);
+  width: 160%;
+  height: 22%;
+  background: radial-gradient(ellipse at right, #90d8ffbb 0%, transparent 72%);
 }
 .skill-bolt--wind .skill-bolt-wake {
+  width: 150%;
+  height: 48%;
   background: radial-gradient(ellipse at right, #9aefc4aa 0%, transparent 72%);
 }
 .skill-bolt--light .skill-bolt-wake,
 .skill-bolt--slash .skill-bolt-wake {
-  background: radial-gradient(ellipse at right, #ffe9a8aa 0%, transparent 72%);
+  width: 190%;
+  height: 16%;
+  background: radial-gradient(ellipse at right, #ffe9a8cc 0%, transparent 74%);
 }
 .skill-bolt--dark .skill-bolt-wake,
 .skill-bolt--hex .skill-bolt-wake {
-  background: radial-gradient(ellipse at right, #b8a0ffaa 0%, transparent 72%);
+  width: 150%;
+  height: 28%;
+  background: radial-gradient(ellipse at right, #b8a0ffbb 0%, transparent 72%);
 }
 .skill-bolt--heal .skill-bolt-wake {
   background: radial-gradient(ellipse at right, #9dffc4aa 0%, transparent 72%);
@@ -11259,7 +11701,7 @@ button.battle-unit {
 }
 
 .skill-bolt.is-orb .skill-bolt-art {
-  animation: skfx-orb-spin var(--bolt-ms, 720ms) linear both;
+  animation: skfx-orb-spin var(--bolt-ms, 460ms) linear both;
 }
 
 .skill-field {
@@ -11286,11 +11728,10 @@ button.battle-unit {
 }
 
 @keyframes skfx-flash {
-  0% { opacity: 0; transform: scale(0.28) rotate(-10deg); }
-  8% { opacity: 1; transform: scale(1.12) rotate(0deg); }
-  22% { opacity: 1; transform: scale(1.2) rotate(2deg); }
-  58% { opacity: 0.75; transform: scale(1.28) rotate(4deg); }
-  100% { opacity: 0; transform: scale(1.48) rotate(8deg); }
+  0% { opacity: 0; transform: scale(0.4) rotate(-8deg); }
+  10% { opacity: 0.9; transform: scale(1.02) rotate(0deg); }
+  26% { opacity: 0.45; transform: scale(1.12) rotate(2deg); }
+  100% { opacity: 0; transform: scale(1.28) rotate(4deg); }
 }
 
 @keyframes skfx-slash-play {
@@ -11309,11 +11750,10 @@ button.battle-unit {
 }
 
 @keyframes skfx-burst-play {
-  0% { opacity: 0; transform: scale(0.22) rotate(-6deg); }
-  10% { opacity: 1; transform: scale(1.04) rotate(0deg); }
-  32% { opacity: 1; transform: scale(1.12) rotate(3deg); }
-  68% { opacity: 0.8; transform: scale(1.22) rotate(6deg); }
-  100% { opacity: 0; transform: scale(1.42) rotate(8deg); }
+  0% { opacity: 0; transform: scale(0.28) rotate(-4deg); }
+  12% { opacity: 1; transform: scale(1.02) rotate(0deg); }
+  36% { opacity: 0.92; transform: scale(1.08) rotate(2deg); }
+  100% { opacity: 0; transform: scale(1.22) rotate(5deg); }
 }
 
 @keyframes skfx-debris-play {
@@ -11390,10 +11830,10 @@ button.battle-unit {
 }
 
 @keyframes skfx-cast-play {
-  0% { opacity: 0; transform: scale(0.4) rotate(-12deg); }
-  14% { opacity: 1; transform: scale(1.02) rotate(-2deg); }
-  48% { opacity: 1; transform: scale(1.1) rotate(4deg); }
-  100% { opacity: 0; transform: scale(1.28) rotate(12deg); }
+  0% { opacity: 0; transform: translateY(16%) scale(0.62); }
+  16% { opacity: 0.9; transform: translateY(4%) scale(0.96); }
+  48% { opacity: 0.72; transform: translateY(-8%) scale(1.06); }
+  100% { opacity: 0; transform: translateY(-18%) scale(1.14); }
 }
 
 @keyframes skfx-crit-play {
@@ -11500,6 +11940,7 @@ button.battle-unit {
   .skfx-mote,
   .arena-stone-fx,
   .circle-absorb-fx,
+  .circle-rite,
   .arena-stone .arena-stone-ring,
   .board-absorb-sigil,
   .battle-screen.is-ult-cutin::after,
@@ -11569,24 +12010,64 @@ button.battle-unit {
 }
 
 @keyframes unit-hit-flash {
-  0% { filter: brightness(2.4) saturate(1.45); transform: translate(7px, -3px) scale(0.88); }
-  14% { filter: brightness(1.7) saturate(1.2); transform: translate(-6px, 4px) scale(1.06); }
-  36% { filter: brightness(1.3); transform: translate(3px, -1px) scale(1); }
+  0% { filter: brightness(1.85) saturate(1.2); transform: translateY(7%) scale(0.96); }
+  22% { filter: brightness(1.35); transform: translateY(4%) scale(1.02); }
+  100% { filter: brightness(1); transform: none; }
+}
+
+.battle-front.enemy .battle-unit.fx-hit .battle-unit-art {
+  animation-name: unit-hit-flash-enemy;
+}
+
+@keyframes unit-hit-flash-enemy {
+  0% { filter: brightness(1.85) saturate(1.2); transform: translateY(-7%) scale(0.96); }
+  22% { filter: brightness(1.35); transform: translateY(-4%) scale(1.02); }
   100% { filter: brightness(1); transform: none; }
 }
 
 @keyframes unit-ult-rise {
   0% { transform: scale(1); filter: brightness(1); }
-  18% { transform: scale(1.1); filter: brightness(1.4) drop-shadow(0 0 12px #7b6cff); }
-  52% { transform: scale(1.14); filter: brightness(1.5) drop-shadow(0 0 16px #c9a227aa); }
+  22% { transform: scale(1.08) translateY(-8%); filter: brightness(1.28) drop-shadow(0 0 12px #f0d878aa); }
+  58% { transform: scale(1.1) translateY(-10%); filter: brightness(1.35) drop-shadow(0 0 14px #c9a227aa); }
   100% { transform: scale(1); filter: brightness(1); }
 }
 
 @keyframes unit-cast-skill {
   0% { transform: translateY(0) scale(1); filter: brightness(1); }
-  16% { transform: translateY(-10%) scale(1.06); filter: brightness(1.28) drop-shadow(0 0 10px #c9a227aa); }
-  48% { transform: translateY(-16%) scale(1.1); filter: brightness(1.42) drop-shadow(0 0 14px #f0d878aa); }
+  28% { transform: translateY(-10%) scale(1.05); filter: brightness(1.18) drop-shadow(0 0 10px #c9a22788); }
+  62% { transform: translateY(-8%) scale(1.04); filter: brightness(1.22) drop-shadow(0 0 12px #f0d87866); }
   100% { transform: translateY(0) scale(1); filter: brightness(1); }
+}
+
+.battle-front.enemy .battle-unit.fx-cast-skill .battle-unit-art {
+  animation-name: unit-cast-skill-enemy;
+}
+
+@keyframes unit-cast-skill-enemy {
+  0% { transform: translateY(0) scale(1); filter: brightness(1); }
+  28% { transform: translateY(10%) scale(1.05); filter: brightness(1.18) drop-shadow(0 0 10px #c9a22788); }
+  62% { transform: translateY(8%) scale(1.04); filter: brightness(1.22) drop-shadow(0 0 12px #f0d87866); }
+  100% { transform: translateY(0) scale(1); filter: brightness(1); }
+}
+
+.battle-front.enemy .battle-unit.fx-hit-ice .battle-unit-art {
+  animation-name: unit-hit-ice-enemy;
+}
+
+.battle-front.enemy .battle-unit.fx-hit-dark .battle-unit-art {
+  animation-name: unit-hit-dark-enemy;
+}
+
+@keyframes unit-hit-ice-enemy {
+  0% { filter: brightness(1.55) saturate(0.7) drop-shadow(0 0 10px #7ecbffaa); transform: translateY(-6%) scale(0.97); }
+  28% { filter: brightness(1.2) saturate(0.85); transform: translateY(-3%) scale(1.02); }
+  100% { filter: brightness(1) saturate(1); transform: none; }
+}
+
+@keyframes unit-hit-dark-enemy {
+  0% { filter: brightness(0.7) saturate(1.3); transform: translateY(-6%) scale(0.96); }
+  24% { filter: brightness(1.4) drop-shadow(0 0 10px #7b6cffaa); transform: translateY(-2%) scale(1.02); }
+  100% { filter: brightness(1); transform: none; }
 }
 
 @keyframes unit-hit-heal {
@@ -11611,14 +12092,14 @@ button.battle-unit {
 }
 
 @keyframes unit-hit-ice {
-  0% { filter: brightness(1.8) saturate(0.55) drop-shadow(0 0 12px #7ecbffcc); transform: translate(6px, -2px) scale(0.9); }
-  22% { filter: brightness(1.4) saturate(0.7); transform: translate(-4px, 3px) scale(1.04); }
+  0% { filter: brightness(1.55) saturate(0.7) drop-shadow(0 0 10px #7ecbffaa); transform: translateY(6%) scale(0.97); }
+  28% { filter: brightness(1.2) saturate(0.85); transform: translateY(3%) scale(1.02); }
   100% { filter: brightness(1) saturate(1); transform: none; }
 }
 
 @keyframes unit-hit-dark {
-  0% { filter: brightness(0.45) saturate(1.4); transform: translate(-7px, 2px) scale(0.9); }
-  20% { filter: brightness(1.7) drop-shadow(0 0 12px #7b6cffcc); transform: translate(5px, -3px) scale(1.05); }
+  0% { filter: brightness(0.7) saturate(1.3); transform: translateY(6%) scale(0.96); }
+  24% { filter: brightness(1.4) drop-shadow(0 0 10px #7b6cffaa); transform: translateY(2%) scale(1.02); }
   100% { filter: brightness(1); transform: none; }
 }
 
@@ -26645,6 +27126,14 @@ button.linkish {
   font-size: 0.68rem;
   line-height: 1.35;
   color: var(--modal-muted);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mission-item-desc-text {
+  min-width: 0;
 }
 
 .mission-item-action {

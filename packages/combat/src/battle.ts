@@ -23,7 +23,7 @@ import {
   gainsForBoardEvent,
 } from "./boardEvents.js";
 import { composeSummonerUlt } from "./summonerUlt.js";
-import { detectShapeBonuses } from "./shapes.js";
+import { detectShapeBonuses, randomStarPoints } from "./shapes.js";
 import {
   circleEventName,
   rollCircleEvent,
@@ -56,10 +56,10 @@ import type {
   Unit,
 } from "./types.js";
 import {
-  bossVictoryPoint,
+  randomVictoryPoint,
   BRILLIANT_MISSION_GOAL,
   DUAL_BOARD_SWITCH_INTERVAL,
-  forbiddenZonePoints,
+  randomForbiddenZone,
   pickCircleElement,
   type BattleModules,
 } from "./modules.js";
@@ -214,6 +214,8 @@ export class Battle {
   victoryPoint: Point | null;
   manaSealed: boolean;
   victoryPointClaimed: boolean;
+  /** Random 화점 seats for this fight (shown from turn 1). */
+  hoshiPoints: Point[] = [];
   /** Module G: 묘수 hits toward mission. */
   brilliantCount = 0;
   brilliantGoal = BRILLIANT_MISSION_GOAL;
@@ -296,17 +298,22 @@ export class Battle {
     this.circleElement =
       config.circleElement ??
       (this.modules.moduleE ? pickCircleElement(this.rng) : null);
-    this.victoryPoint = this.modules.moduleF
-      ? bossVictoryPoint(config.boardSize)
-      : null;
     this.manaSealed = !!this.modules.moduleF;
     this.victoryPointClaimed = false;
     this.manaRaceWinner = null;
     this.pendingCaptureShop = null;
     this.forbiddenZone =
       this.modules.forbidZone || this.modules.moduleC
-        ? forbiddenZonePoints(config.boardSize)
+        ? randomForbiddenZone(config.boardSize, this.rng)
         : [];
+    this.victoryPoint = this.modules.moduleF
+      ? randomVictoryPoint(config.boardSize, this.rng, this.forbiddenZone)
+      : null;
+    this.hoshiPoints = randomStarPoints(
+      config.boardSize,
+      this.rng,
+      this.forbiddenZone,
+    );
     this.totalWaves = Math.max(1, config.totalWaves ?? 1);
     this.currentWave = 1;
     this.spawnWaveFn = config.spawnWave;
@@ -325,7 +332,7 @@ export class Battle {
       this.log.push(`맞마나 레이스: 먼저 마나 풀충전`);
     }
     if (this.forbiddenZone.length) {
-      this.log.push(`금기구역: 중앙 ${this.forbiddenZone.length}점 착수 금지`);
+      this.log.push(`금기구역: ${this.forbiddenZone.length}점 착수 금지`);
     }
     if (this.boards.length > 1) {
       this.log.push(`쌍국: A국·B국 — ${DUAL_BOARD_SWITCH_INTERVAL}수마다 전환`);
@@ -544,6 +551,7 @@ export class Battle {
           hasToken: (p) => !!this.tokenAt(p.x, p.y),
           baitLure: (p) => this.isBaitLureFor(unit.team, p),
           openingBias: this.openingBonusPending,
+          stars: this.hoshiPoints,
         }) ?? legal[0]!
       );
     }
@@ -578,6 +586,7 @@ export class Battle {
         capturedCount: Math.max(0, this.previewCapture(color, p)),
         hasToken: !!this.tokenAt(p.x, p.y),
         baitLure: this.isBaitLureFor(u.team, p),
+        hoshi: this.hoshiPoints.some((h) => h.x === p.x && h.y === p.y),
       }),
       manaMul,
       topN,
@@ -1007,7 +1016,12 @@ export class Battle {
     this.checkManaRace(unit.team);
 
     if (this.modules.moduleB) {
-      const shapes = detectShapeBonuses(this.board, color, point);
+      const shapes = detectShapeBonuses(
+        this.board,
+        color,
+        point,
+        this.hoshiPoints,
+      );
       for (const sh of shapes) {
         this.amplify = clampAmplify(
           this.amplify + sh.amplifyDelta,
