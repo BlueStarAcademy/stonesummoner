@@ -748,8 +748,14 @@ export function gearSellCrystal(piece: GearPiece): number {
   return Math.floor(spent / 2);
 }
 
-/** Max unequipped gear pieces in the bag. */
-export const MAX_GEAR_BAG = 20;
+/** Starting unequipped gear bag size. */
+export const GEAR_BAG_BASE_SLOTS = 20;
+/** Slots added per expand purchase. */
+export const GEAR_BAG_EXPAND_STEP = 10;
+/** Hard cap after repeated expands. */
+export const GEAR_BAG_MAX_SLOTS = 100;
+/** @deprecated Use GEAR_BAG_BASE_SLOTS; kept as the default bag size. */
+export const MAX_GEAR_BAG = GEAR_BAG_BASE_SLOTS;
 
 const STAR_WEIGHTS: { value: GearStars; w: number }[] = [
   { value: 1, w: 40 },

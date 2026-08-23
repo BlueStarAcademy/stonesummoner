@@ -1,5 +1,7 @@
 import {
   emptyMagicProgress,
+  GEAR_BAG_BASE_SLOTS,
+  GEAR_BAG_MAX_SLOTS,
   normalizeGearPiece,
   normalizeSummonerGear,
   stripUnenhancedStarterGear,
@@ -133,8 +135,21 @@ export function migrateSave(raw: unknown): PlayerSave | null {
       ),
     ),
     gearBag: Array.isArray(p.gearBag)
-      ? p.gearBag.map((g) => normalizeGearPiece(g, g.slot)).slice(0, 40)
+      ? p.gearBag
+          .map((g) => normalizeGearPiece(g, g.slot))
+          .slice(0, GEAR_BAG_MAX_SLOTS)
       : [],
+    gearBagSlots: (() => {
+      const bagLen = Array.isArray(p.gearBag) ? p.gearBag.length : 0;
+      const raw =
+        typeof p.gearBagSlots === "number"
+          ? p.gearBagSlots
+          : GEAR_BAG_BASE_SLOTS;
+      return Math.min(
+        GEAR_BAG_MAX_SLOTS,
+        Math.max(GEAR_BAG_BASE_SLOTS, Math.floor(raw), bagLen),
+      );
+    })(),
     gloryPoints: typeof p.gloryPoints === "number" ? p.gloryPoints : 0,
     friendshipPoints:
       typeof p.friendshipPoints === "number" ? Math.max(0, Math.floor(p.friendshipPoints)) : 0,

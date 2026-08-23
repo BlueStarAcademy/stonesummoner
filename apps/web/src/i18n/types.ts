@@ -788,6 +788,7 @@ export type MessageKey =
   | "ui.expandSymbolBagAdd"
   | "ui.expandSymbolBagPrice"
   | "ui.expandSymbolBagConfirm"
+  | "ui.expandGearBagTitle"
   | "chat.title"
   | "chat.open"
   | "chat.close"

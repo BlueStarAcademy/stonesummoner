@@ -33,6 +33,7 @@ import {
 } from "./i18n";
 import {
   battlePace,
+  clientPointInElement,
   fxDurationMs,
   mountUnitAnimHooks,
   pulseCircleAbsorb,
@@ -212,6 +213,7 @@ import {
   magicSkillPower,
   magicEnhanceManaCost,
   magicEnhanceCrystalCost,
+  magicEnhanceRequiredLevel,
   MAX_MAGIC_RANK,
   type MagicSkillSlot,
   type SummonerMagicProgress,
@@ -219,7 +221,8 @@ import {
   MONSTERS,
   resolveMonsterId,
   getStage,
-  MAX_GEAR_BAG,
+  GEAR_BAG_EXPAND_STEP,
+  GEAR_BAG_MAX_SLOTS,
   MAX_GEAR_ENHANCE,
   MAX_SYMBOL_ENHANCE,
   normalizeGearPiece,
@@ -331,6 +334,9 @@ import {
   SYMBOL_BAG_BASE_SLOTS,
   SYMBOL_BAG_EXPAND_STEP,
   SYMBOL_BAG_MAX_SLOTS,
+  runExpandGearBag,
+  gearBagCapacity,
+  gearBagExpandCost,
   runBuyGlory,
   runBuyScroll,
   runCraftEssence,
@@ -1105,8 +1111,12 @@ function refreshSumBookModals(): boolean {
   if (gearSellConfirmIndex != null && save.gearBag?.[gearSellConfirmIndex]) {
     softMountOverlay("gear-sell-confirm-layer", renderGearSellConfirmModal());
   }
+  softRemoveOverlay("gear-bag-expand-layer");
+  const gearExpand = renderGearBagExpandModal();
+  if (gearExpand) softMountOverlay("gear-bag-expand-layer", gearExpand);
   syncSumMagicNodeActive();
   bindSumBookModalInteractions();
+  bindGearBagExpandModal();
   return onBook;
 }
 
@@ -1120,11 +1130,80 @@ function refreshSumGearPane(): boolean {
   );
   bindSumGearSlotClicks();
   bindGearBagFilter();
+  bindGearBagExpandButton();
   syncGearBagFilterMenuUi();
   queueMicrotask(() => {
     enhanceFx = null;
   });
   return true;
+}
+
+function bindGearBagExpandButton(): void {
+  app.querySelector("[data-expand-gear-bag]")?.addEventListener("click", () => {
+    if (gearBagExpandCost(save) == null) return;
+    gearDetailTarget = null;
+    gearSellConfirmIndex = null;
+    gearBagFilterOpen = false;
+    gearBagExpandOpen = true;
+    softRefreshSumBookUi({ modals: true });
+  });
+}
+
+function bindGearBagExpandModal(): void {
+  const close = () => {
+    if (!gearBagExpandOpen) return;
+    gearBagExpandOpen = false;
+    softRefreshSumBookUi({ modals: true });
+  };
+  app.querySelectorAll("#btn-gear-bag-expand-close").forEach((el) => {
+    el.addEventListener("click", close);
+  });
+  app.querySelector("#btn-gear-bag-expand-cancel")?.addEventListener("click", close);
+  app.querySelector("#btn-gear-bag-expand-ok")?.addEventListener("click", () => {
+    const cost = gearBagExpandCost(save);
+    if (cost == null || save.island.crystal < cost) return;
+    const r = runExpandGearBag(save);
+    if (r.save === save) return;
+    save = r.save;
+    persist();
+    syncHudResources();
+    gearBagExpandOpen = false;
+    softRefreshSumBookUi({ gear: true, modals: true });
+  });
+}
+
+function renderGearBagExpandModal(): string {
+  if (!gearBagExpandOpen) return "";
+  const cur = gearBagCapacity(save);
+  const cost = gearBagExpandCost(save);
+  if (cost == null) return "";
+  const add = GEAR_BAG_EXPAND_STEP;
+  const next = Math.min(GEAR_BAG_MAX_SLOTS, cur + add);
+  const canPay = save.island.crystal >= cost;
+  return `<div class="settings-layer gear-bag-expand-layer" id="gear-bag-expand-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-gear-bag-expand-close" aria-label="close"></button>
+    <div class="sym-bag-expand-sheet" role="dialog" aria-modal="true" aria-labelledby="gear-bag-expand-title">
+      ${modalCloseX("close", "btn-gear-bag-expand-close")}
+      <h3 class="sym-bag-expand-title" id="gear-bag-expand-title">${escapeHtml(t("ui.expandGearBagTitle"))}</h3>
+      <div class="sym-bag-expand-rows">
+        <div class="sym-bag-expand-row">
+          <span>${escapeHtml(t("ui.expandSymbolBagCurrent"))}</span>
+          <strong>${cur}</strong>
+        </div>
+        <div class="sym-bag-expand-row">
+          <span>${escapeHtml(t("ui.expandSymbolBagAdd"))}</span>
+          <strong>+${add} ${MIDDOT} ${next}</strong>
+        </div>
+      </div>
+      <div class="sym-bag-expand-acts">
+        <button type="button" class="secondary" id="btn-gear-bag-expand-cancel">${escapeHtml(t("ui.19b2d19bc1"))}</button>
+        <button type="button" class="sym-bag-expand-ok" id="btn-gear-bag-expand-ok" ${canPay ? "" : "disabled"}>
+          <span>${escapeHtml(t("ui.expandSymbolBagConfirm"))}</span>
+          ${shopPriceCrystal(cost)}
+        </button>
+      </div>
+    </div>
+  </div>`;
 }
 
 function refreshSumSkillsPane(): boolean {
@@ -1436,12 +1515,11 @@ function bindSumBookModalInteractions(): void {
       const r = runEnhanceMagicSkill(save, id);
       const afterProg = r.save.summonerMagic?.[el] ?? emptyMagicProgress();
       const afterRank = magicRank(afterProg, id);
-      save = r.save;
-      persist();
       if (afterRank <= beforeRank) {
-        flash(r.message);
         return;
       }
+      save = r.save;
+      persist();
       const notes: string[] = [];
       if (!beforeProg.branch && afterProg.branch) {
         const next =
@@ -1530,6 +1608,8 @@ type RosterSortMode = "default" | "level" | "stars" | "element" | "party";
 let rosterSortMode: RosterSortMode = "default";
 /** Symbol bag expand confirm modal. */
 let symbolBagExpandOpen = false;
+/** Gear bag expand confirm modal. */
+let gearBagExpandOpen = false;
 /** Which symbol inventory filter dropdown is open (set / slot). */
 type SymbolInvFilterKind = "set" | "slot";
 const SYMBOL_SLOT_NUMS = [1, 2, 3, 4, 5, 6] as const;
@@ -1595,6 +1675,8 @@ let floatSeq = 0;
 let dmgLayoutRaf = 0;
 /** Last seen circle phase — detect empowered reset for board FX. */
 let lastSeenBoardPhase = 0;
+/** Last seen circle wipe — full-board and empowered rebuilds. */
+let lastSeenBoardClearSeq = 0;
 /** One-shot collapse/rekindle class on the board frame. */
 let boardRekindleFx = false;
 /** Tokens already shown on the active board; newly spawned tokens receive an entrance FX. */
@@ -1752,19 +1834,19 @@ let stagePrepSuppressClick = false;
 let islandPan = { x: 0, y: 0 };
 let islandPanCentered = false;
 /** Bump when cover metrics change so the next bind re-centers once. */
-const ISLAND_COVER_FIT_VERSION = 12;
+const ISLAND_COVER_FIT_VERSION = 15;
 let islandCoverFitApplied = 0;
 /** Locked at 1 — framing comes from world %; zoom UI is unused. */
 let islandZoom = 1;
 const ISLAND_BASE_SCALE = 1.0;
 /**
- * Must stay in sync with --island-oversize on .island-world. The world is sized
- * at cover-width x this factor and keeps the bitmap's 2:3 ratio, so a spot's
- * percent coords are the same percent coords as on the painted map. Cover sizing
- * plus hard pan clamp keep the full bitmap filling the viewport at every stop.
- * Drag-pan to see the rest of the archipelago; zoom stays locked.
+ * Must stay in sync with --island-oversize on .island-world.
+ * Default camera contain-fits the painted land (three islets), not cover-fit
+ * of the full 2:3 bitmap. Cover / ~1.7 oversize crops to the main islet and
+ * reads as the old single plateau. Zoom stays locked. Very tall screens
+ * letterbox with sky.
  */
-const ISLAND_WORLD_OVERSIZE = 1.7;
+const ISLAND_WORLD_OVERSIZE = 1;
 /** Active tri-island @2x bitmap (v2 — archipelago inset with sky margin). */
 const ISLAND_MAP_NATURAL = { w: 2880, h: 4320 } as const;
 const ISLAND_TRANSFORM_ORIGIN = { x: 0.5, y: 0.5 };
@@ -3745,6 +3827,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   selectedTargetId = null;
   clearBattleSkillSelection();
   lastSeenBoardPhase = 0;
+  lastSeenBoardClearSeq = 0;
   boardRekindleFx = false;
   seenBoardTokenKeys = new Set();
   shapeFlashIds = [];
@@ -3813,7 +3896,7 @@ function renderStagePrepDock(): string {
           <span class="mon-slot-art" aria-hidden="true">
             <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
           </span>
-          <span class="mon-slot-lv-overlay">Lv.${p.level}</span>
+          ${isSummonerSlotLocked(el) ? "" : `<span class="mon-slot-lv-overlay">Lv.${p.level}</span>`}
           ${summonerLockBadgeHtml(el)}
         </button>`;
       }).join("")}
@@ -4851,12 +4934,10 @@ function refreshLegal(): void {
   legalHints = [];
   stoneSuggestions = [];
   if (!battle || battle.phase !== "await_stone" || !battle.activeUnitId) return;
+  battle.ensurePlayableCircle();
   const unit = battle.getUnit(battle.activeUnitId);
   if (!unit) return;
-  const color = unit.team === "ally" ? "black" : "white";
-  legalHints = battle.board
-    .legalMoves(color)
-    .filter((p) => !battle!.isForbidden(p));
+  legalHints = battle.playableStonePoints(unit);
 }
 
 function clearBattleSkillSelection(): void {
@@ -5398,14 +5479,14 @@ function spawnSummonerManaFloat(
   const art =
     summoner?.querySelector<HTMLElement>(".battle-unit-art") ?? summoner;
   if (!layer || !art) return;
-  const layerRect = layer.getBoundingClientRect();
   const r = art.getBoundingClientRect();
-  if (r.width < 1 || r.height < 1) return;
+  if (r.width < 2 && r.height < 2) return;
+  const p = clientPointInElement(layer, r.left + r.width * 0.5, r.top + r.height * 0.22);
   const el = document.createElement("span");
   el.className = `mana-float${team === "enemy" ? " is-enemy" : ""}`;
   el.textContent = `+${n}`;
-  el.style.left = `${Math.round(r.left + r.width * 0.5 - layerRect.left)}px`;
-  el.style.top = `${Math.round(r.top + r.height * 0.22 - layerRect.top)}px`;
+  el.style.left = `${Math.round(p.x)}px`;
+  el.style.top = `${Math.round(p.y)}px`;
   layer.appendChild(el);
   summoner?.classList.add("is-mana-intake");
   const ms = fxDurationMs(720, battleSpeed);
@@ -5626,56 +5707,71 @@ function renderDmgLayer(): string {
 
 /**
  * Place HP change numbers over each hit unit's sprite.
- * Always host on `.dmg-layer` (above the board) using art getBoundingClientRect —
- * never fall back to the layout center (that looked like the magic circle).
+ * Host on `.dmg-layer` using local px (ui-scale aware). Reuse existing nodes
+ * so a soft battle patch does not restart the float animation.
  */
 function layoutDmgFloats(): void {
-  app.querySelectorAll(".dmg-float").forEach((el) => el.remove());
   const layer = app.querySelector<HTMLElement>(".dmg-layer");
-  if (!layer || !dmgFloats.length) return;
-  const layerRect = layer.getBoundingClientRect();
-  if (layerRect.width < 1 || layerRect.height < 1) return;
+  if (!layer) return;
+  if (!dmgFloats.length) {
+    layer.querySelectorAll(".dmg-float").forEach((el) => el.remove());
+    return;
+  }
 
+  const byId = new Map<string, HTMLElement>();
+  layer.querySelectorAll<HTMLElement>(".dmg-float").forEach((el) => {
+    const id = el.dataset.dmgId;
+    if (id) byId.set(id, el);
+  });
+
+  const keep = new Set<string>();
   const perTarget = new Map<string, number>();
   for (const f of dmgFloats) {
     const unit = app.querySelector<HTMLElement>(
       `.battle-unit[data-unit="${CSS.escape(f.targetId)}"]`,
     );
     const anchor =
-      unit?.querySelector<HTMLElement>(".battle-unit-art") ?? unit;
-    // Soft patch may briefly detach units — skip rather than paint board-center.
+      unit?.querySelector<HTMLElement>(".battle-unit-img") ??
+      unit?.querySelector<HTMLElement>(".unit-anim-hook") ??
+      unit?.querySelector<HTMLElement>(".battle-unit-art") ??
+      unit;
     if (!anchor) continue;
+    const r = anchor.getBoundingClientRect();
+    if (r.width < 2 && r.height < 2) continue;
 
     const stack = perTarget.get(f.targetId) ?? 0;
     perTarget.set(f.targetId, stack + 1);
-    const el = document.createElement("span");
-    el.className = `dmg-float${f.crit ? " crit" : ""}${f.ult ? " ult" : ""}`;
-    el.dataset.dmgId = String(f.id);
-    el.dataset.target = f.targetId;
+    const id = String(f.id);
+    keep.add(id);
+    let el = byId.get(id);
+    if (!el) {
+      el = document.createElement("span");
+      el.className = `dmg-float${f.crit ? " crit" : ""}${f.ult ? " ult" : ""}`;
+      el.dataset.dmgId = id;
+      el.dataset.target = f.targetId;
+      el.textContent = f.text;
+      layer.appendChild(el);
+    }
     el.style.setProperty("--i", String(stack));
-    el.textContent = f.text;
-
-    const r = anchor.getBoundingClientRect();
-    const ally = !!unit?.closest(".battle-lane.ally");
-    if (ally) el.classList.add("is-ally");
-    const x = r.left + r.width * 0.5 - layerRect.left;
-    // Sprites are bottom-aligned in a tall art box; sit numbers on the body.
-    const y = r.top + r.height * (ally ? 0.7 : 0.58) - layerRect.top;
-    const jitter = (stack % 3) * 6 - 6;
-    el.style.left = `${Math.round(x + jitter)}px`;
-    el.style.top = `${Math.round(y)}px`;
-    layer.appendChild(el);
+    if (unit?.closest(".battle-lane.ally")) el.classList.add("is-ally");
+    else el.classList.remove("is-ally");
+    const cx = r.left + r.width * 0.5;
+    const cy = r.top + r.height * 0.42;
+    const p = clientPointInElement(layer, cx, cy);
+    const jitter = (stack % 3) * 8 - 8;
+    el.style.left = `${Math.round(p.x + jitter)}px`;
+    el.style.top = `${Math.round(p.y)}px`;
+  }
+  for (const [id, el] of byId) {
+    if (!keep.has(id)) el.remove();
   }
 }
 
 function refreshDmgLayer(): void {
   const layer = app.querySelector<HTMLElement>(".dmg-layer");
-  if (layer) {
-    layer.querySelectorAll(".dmg-float").forEach((el) => el.remove());
-  }
+  if (!layer) return;
   layoutDmgFloats();
   if (dmgLayoutRaf) cancelAnimationFrame(dmgLayoutRaf);
-  // Double rAF: wait until soft-patched unit art has a real layout box.
   dmgLayoutRaf = requestAnimationFrame(() => {
     dmgLayoutRaf = requestAnimationFrame(() => {
       dmgLayoutRaf = 0;
@@ -5941,7 +6037,6 @@ async function resolveCombatUntilAllyInput(opts?: {
         }
         const before = battle.board.getBoard().map((row) => [...row]);
         if (!battle.autoStone()) {
-          // No legal stone — fall through to skill if phase advanced, else bail.
           if (battle.phase === "await_stone") break;
         } else {
           const report = battle.lastStoneReport;
@@ -6208,10 +6303,12 @@ async function playStrikeFx(
     speed: battleSpeed,
     ult: opts?.ult,
     crit,
-    onImpact: () => playCombatHitSfxForHits(hits, element),
+    onImpact: () => {
+      playCombatHitSfxForHits(hits, element);
+      pushDamageFloats(hits);
+    },
     playCasterClip: (id, clip, clipOpts) => playSpineClip(id, clip, clipOpts),
   });
-  pushDamageFloats(hits);
 }
 
 async function castSkillAsync(
@@ -6677,9 +6774,13 @@ function pickOverlayOpen(): boolean {
 function renderBoard(): string {
   if (!battle) return "";
   const phase = battle.circle.boardPhase;
-  if (phase > lastSeenBoardPhase) {
-    if (phase > 0) boardRekindleFx = true;
-    lastSeenBoardPhase = phase;
+  if (phase > lastSeenBoardPhase) lastSeenBoardPhase = phase;
+  if (battle.boardClearSeq > lastSeenBoardClearSeq) {
+    if (lastSeenBoardClearSeq >= 0 && battle.boardClearSeq > 0) {
+      boardRekindleFx = true;
+      void playSfx("board-reset");
+    }
+    lastSeenBoardClearSeq = battle.boardClearSeq;
   }
   const showRekindle = boardRekindleFx;
   if (showRekindle) {
@@ -6859,10 +6960,12 @@ function keepBoardCellArt(from: HTMLElement, to: HTMLElement): void {
 function patchBattleLayout(live: HTMLElement, incoming: HTMLElement): void {
   live.className = incoming.className;
   const mini = live.querySelector<HTMLElement>("#board-mini");
+  const dmg = live.querySelector<HTMLElement>(".dmg-layer");
   if (mini) incoming.querySelector("#board-mini")?.remove();
+  if (dmg) incoming.querySelector(".dmg-layer")?.remove();
 
   for (const child of Array.from(live.children)) {
-    if (child !== mini) child.remove();
+    if (child !== mini && child !== dmg) child.remove();
   }
 
   for (const child of Array.from(incoming.children)) {
@@ -7643,6 +7746,10 @@ function summonerLockNeedLv(el: SummonerElement): number | null {
   return nextSummonerUnlockLevel(unlockedSummonerList(save).length);
 }
 
+function isSummonerSlotLocked(el: SummonerElement): boolean {
+  return !isSummonerUnlocked(save, el) && !canUnlockAdditionalSummoner(save, el);
+}
+
 function summonerSlotClass(el: SummonerElement, extra = ""): string {
   const unlocked = isSummonerUnlocked(save, el);
   const unlockable = !unlocked && canUnlockAdditionalSummoner(save, el);
@@ -7655,11 +7762,11 @@ function summonerSlotClass(el: SummonerElement, extra = ""): string {
 function summonerLockBadgeHtml(el: SummonerElement): string {
   if (isSummonerUnlocked(save, el)) return "";
   if (canUnlockAdditionalSummoner(save, el)) {
-    return `<span class="summoner-lock-badge is-unlockable">${escapeHtml(t("summonerPicker.unlock"))}</span>`;
+    return `<span class="summoner-lock-badge is-unlockable">${CODEX_LOCK_HTML}<strong>${escapeHtml(t("summonerPicker.unlock"))}</strong></span>`;
   }
   const need = summonerLockNeedLv(el);
   if (need == null) return "";
-  return `<span class="summoner-lock-badge">${escapeHtml(t("summonerPicker.needLv", { n: need }))}</span>`;
+  return `<span class="summoner-lock-badge">${CODEX_LOCK_HTML}<strong>${escapeHtml(t("summonerPicker.needLv", { n: need }))}</strong></span>`;
 }
 
 function activateOrUnlockSummoner(el: SummonerElement): boolean {
@@ -7668,8 +7775,6 @@ function activateOrUnlockSummoner(el: SummonerElement): boolean {
   }
   if (!isSummonerUnlocked(save, el)) {
     if (!canUnlockAdditionalSummoner(save, el)) {
-      const need = summonerLockNeedLv(el);
-      if (need != null) flash(t("summonerPicker.needLv", { n: need }));
       return false;
     }
     const r = unlockAdditionalSummoner(save, el);
@@ -7834,6 +7939,7 @@ const APP_ROOT_OVERLAY_IDS = [
   "sum-magic-detail-layer",
   "sym-detail-layer",
   "sym-bag-expand-layer",
+  "gear-bag-expand-layer",
   "summon-detail-layer",
   "summon-multi-result-layer",
   "codex-layer",
@@ -10641,7 +10747,8 @@ function renderScreen(): void {
       <img class="summoner-pick-art" src="/art/summoner/${el}.webp" width="44" height="44" alt="" draggable="false" decoding="async" />
       <span class="summoner-pick-body">
         <strong>${escapeHtml(t("summonerPicker.summoner", { element: elementLabel(el) }))}</strong>
-        <small>Lv.${p.level} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}${on ? ` - ${escapeHtml(t("summonerPicker.active"))}` : ""} ${summonerLockBadgeHtml(el)}</small>
+        <small>${isSummonerSlotLocked(el) ? "" : `Lv.${p.level} `}${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}${on ? ` - ${escapeHtml(t("summonerPicker.active"))}` : ""}</small>
+        ${summonerLockBadgeHtml(el)}
       </span>
     </button>`;
   }).join("");
@@ -11080,7 +11187,7 @@ function renderHome(): string {
         : ""
     }
     <div class="island-viewport${islandLayoutEdit ? " is-layout-edit" : ""}" id="island-viewport">
-      <div class="island-world" id="island-world" style="--island-zoom:${islandZoom.toFixed(4)};transform:translate3d(${islandPan.x}px,${islandPan.y}px,0) rotateX(${ISLAND_ROTATE_X_DEG}deg) scale(${ISLAND_BASE_SCALE})">
+      <div class="island-world" id="island-world" style="--island-oversize:${ISLAND_WORLD_OVERSIZE};--island-zoom:${islandZoom.toFixed(4)};transform:translate3d(${islandPan.x}px,${islandPan.y}px,0) rotateX(${ISLAND_ROTATE_X_DEG}deg) scale(${ISLAND_BASE_SCALE})">
         <img
           class="island-map-img"
           src="/art/home/home-island-tri@2x.webp"
@@ -12119,7 +12226,7 @@ function renderPartyDock(): string {
           <span class="mon-slot-art" aria-hidden="true">
             <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
           </span>
-          <span class="mon-slot-lv-overlay">Lv.${p.level}</span>
+          ${isSummonerSlotLocked(el) ? "" : `<span class="mon-slot-lv-overlay">Lv.${p.level}</span>`}
           ${summonerLockBadgeHtml(el)}
         </button>`;
       }).join("")}
@@ -15208,18 +15315,16 @@ function renderSumMagicDetailModal(activeEl: SummonerElement): string {
       : [];
   const manaCost = magicEnhanceManaCost(rank);
   const crystalCost = magicEnhanceCrystalCost(rank);
+  const needLv = magicEnhanceRequiredLevel(rank);
+  const sumLv = save.summoners?.[activeEl]?.level ?? 1;
+  const levelLocked = open && rank < MAX_MAGIC_RANK && sumLv < needLv;
   const canEnhance =
     open &&
     rank < MAX_MAGIC_RANK &&
+    !levelLocked &&
     save.island.mana >= manaCost &&
     save.island.crystal >= crystalCost;
-  const action = !open
-    ? `<p class="sum-magic-detail-locked">${escapeHtml(lockedHint)}</p>`
-    : rank >= MAX_MAGIC_RANK
-      ? `<span class="sum-magic-max">MAX</span>`
-      : `<button type="button" class="auth-btn-primary sum-magic-enhance-btn" data-magic-enhance="${sk.id}" ${canEnhance ? "" : "disabled"}>
-          <span class="sum-magic-enhance-label">${escapeHtml(t("ui.sumBookEnhance"))} +1</span>
-          <span class="sum-magic-enhance-costs" aria-label="${escapeHtml(t("ui.sumMagicEnhanceCost"))}">
+  const enhanceCosts = `<span class="sum-magic-enhance-costs" aria-label="${escapeHtml(t("ui.sumMagicEnhanceCost"))}">
             <span class="sum-magic-detail-cost-chip${save.island.mana < manaCost ? " is-short" : ""}">
               <img src="/art/ui/res/gold.svg" width="18" height="18" alt="" draggable="false" />
               ${fmtRes(manaCost)}
@@ -15232,8 +15337,23 @@ function renderSumMagicDetailModal(activeEl: SummonerElement): string {
                   </span>`
                 : ""
             }
+          </span>`;
+  const enhanceBtn = levelLocked
+    ? `<button type="button" class="auth-btn-primary sum-magic-enhance-btn is-level-locked" disabled>
+          <span class="sum-lock-lv-chip">
+            ${CODEX_LOCK_HTML}
+            <strong>${escapeHtml(t("summonerPicker.needLv", { n: needLv }))}</strong>
           </span>
+        </button>`
+    : `<button type="button" class="auth-btn-primary sum-magic-enhance-btn" data-magic-enhance="${sk.id}" ${canEnhance ? "" : "disabled"}>
+          <span class="sum-magic-enhance-label">${escapeHtml(t("ui.sumBookEnhance"))} +1</span>
+          ${enhanceCosts}
         </button>`;
+  const action = !open
+    ? `<p class="sum-magic-detail-locked">${escapeHtml(lockedHint)}</p>`
+    : rank >= MAX_MAGIC_RANK
+      ? `<span class="sum-magic-max">MAX</span>`
+      : enhanceBtn;
 
   return `<div class="settings-layer sum-magic-detail-layer" id="sum-magic-detail-layer" aria-hidden="false">
     <button type="button" class="settings-backdrop" id="btn-sum-magic-detail-close" aria-label="close"></button>
@@ -15309,17 +15429,14 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
     </button>`;
   };
   const bag = save.gearBag ?? [];
+  const cap = gearBagCapacity(save);
   const visible = bag
     .map((p, i) => ({ piece: normalizeGearPiece(p, p.slot), i }))
     .filter(
       ({ piece }) => gearBagFilterSlot === "all" || piece.slot === gearBagFilterSlot,
     )
     .sort(compareGearBagPieces);
-  const emptySilhouette = (e: number): GearSlot =>
-    gearBagFilterSlot === "all"
-      ? GEAR_SLOTS[e % GEAR_SLOTS.length]!
-      : gearBagFilterSlot;
-  const emptyCount = Math.max(0, MAX_GEAR_BAG - bag.length);
+  const emptyCount = Math.max(0, cap - bag.length);
   const filledCells = visible.map(({ piece, i }) => {
     const grade = gearStarsToInvGrade(piece.stars);
     const art = gearSlotArtSrc(piece.slot, piece.element, piece.setId);
@@ -15334,13 +15451,17 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
       ? [
           `<p class="gear-bag-empty muted">${escapeHtml(t("ui.gearFilterEmpty"))}</p>`,
         ]
-      : Array.from({ length: emptyCount }, (_, e) => {
-          const slot = emptySilhouette(e);
-          return `<span class="gear-bag-slot gear-bag-slot--empty" title="${escapeHtml(gearSlotLabel(slot))}" aria-hidden="true">
-            ${gearEmptySlotImg(slot, "gear-empty-sil", 42)}
+      : Array.from({ length: emptyCount }, () => {
+          return `<span class="gear-bag-slot gear-bag-slot--empty" aria-hidden="true">
+            <img class="gear-empty-sil" src="/art/ui/gear/empty-slot.svg" width="42" height="42" alt="" draggable="false" decoding="async" />
           </span>`;
         });
   const bagSlots = [...filledCells, ...emptyCells].join("");
+  const expandCost = gearBagExpandCost(save);
+  const atMax = expandCost == null;
+  const expandTitle = atMax
+    ? t("ui.expandSymbolBagMax")
+    : t("ui.expandSymbolBag", { cost: expandCost! });
 
   return `<div class="sum-gear-panel">
     <section class="sum-gear-equip-panel">
@@ -15358,8 +15479,11 @@ function renderGearDollHtml(activeEl: SummonerElement): string {
     </section>
     <section class="sum-gear-bag-panel">
       <div class="sum-gear-bag-head">
-        <p class="section-label">${escapeHtml(t("ui.sumBookGearBag", { n: bag.length, max: MAX_GEAR_BAG }))}</p>
-        ${renderGearBagFilterDropdown()}
+        <p class="section-label">${escapeHtml(t("ui.sumBookGearBag", { n: bag.length, max: cap }))}</p>
+        <div class="sum-gear-bag-head-meta">
+          ${renderGearBagFilterDropdown()}
+          <button type="button" class="mon-sym-inv-expand" data-expand-gear-bag ${atMax ? "disabled" : ""} title="${escapeHtml(expandTitle)}" aria-label="${escapeHtml(expandTitle)}">+</button>
+        </div>
       </div>
       <div class="gear-bag-grid" role="list">${bagSlots}</div>
     </section>
@@ -15571,8 +15695,9 @@ function renderCodexLayer(): string {
         <strong>${escapeHtml(leader.nameKo)}</strong>
         <small class="codex-summoner-meta">
           <img class="codex-detail-el" src="${elSrc}" width="18" height="18" alt="" draggable="false" />
-          Lv.${p.level} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")} ${summonerLockBadgeHtml(el)}
+          ${isSummonerSlotLocked(el) ? "" : `Lv.${p.level} `}${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}
         </small>
+        ${summonerLockBadgeHtml(el)}
       </button>`;
     }).join("");
     body = `<div class="codex-summoner-grid">${cards}</div>`;
@@ -15775,15 +15900,22 @@ function renderSumSkillsPaneHtml(activeEl: SummonerElement): string {
     const sk = kit.skills[slot];
     const open = unlockedIds.has(sk.id);
     const rank = magicRank(prog, sk.id);
+    const needLv = magicEnhanceRequiredLevel(rank);
+    const sumLv = save.summoners?.[activeEl]?.level ?? 1;
+    const enhanceLvLocked = open && rank < MAX_MAGIC_RANK && sumLv < needLv;
     const lockedHint = sumMagicLockedHint(activeEl, slot, prog);
     const title = lockedHint
       ? `${sk.nameKo} · ${lockedHint}`
-      : open
+      : enhanceLvLocked
+        ? `${sk.nameKo} · ${t("summonerPicker.needLv", { n: needLv })}`
+        : open
         ? `${sk.nameKo} · +${rank}/${MAX_MAGIC_RANK}`
         : `${sk.nameKo} · ${t("ui.stagePrepSkillLocked")}`;
-    const rankBadge = open
-      ? `<span class="sum-magic-node-rank">+${rank}</span>`
-      : "";
+    const rankBadge = !open
+      ? ""
+      : enhanceLvLocked
+        ? `<span class="sum-magic-node-rank is-lv-locked">${CODEX_LOCK_HTML}<strong>${escapeHtml(t("summonerPicker.needLv", { n: needLv }))}</strong></span>`
+        : `<span class="sum-magic-node-rank">+${rank}</span>`;
     return `<button type="button" class="sum-magic-node${open ? " is-on" : " is-locked"}${sumMagicDetailSlot === slot ? " is-active" : ""}" data-magic-detail-slot="${slot}" title="${escapeHtml(title)}">
       <div class="sum-magic-node-seal">
         ${summonerSkillArtImg(sk.id, "sum-magic-ico", 36)}
@@ -15991,8 +16123,8 @@ function renderSummonerBook(): string {
       const on = el === activeEl;
       return `<button type="button" class="sum-rail-slot el-${el}${on ? " is-active" : ""} ${summonerSlotClass(el)}" data-select-summoner="${el}" role="option" aria-selected="${on ? "true" : "false"}" title="${escapeHtml(elementLabel(el))}">
         <img class="sum-rail-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
-        <span class="sum-rail-lv">Lv.${p.level}</span>
-        <span class="sum-rail-aw">${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--rail")}</span>
+        ${isSummonerSlotLocked(el) ? "" : `<span class="sum-rail-lv">Lv.${p.level}</span>`}
+        ${isSummonerSlotLocked(el) ? "" : `<span class="sum-rail-aw">${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--rail")}</span>`}
         ${summonerLockBadgeHtml(el)}
       </button>`;
     }).join("")}
@@ -19294,7 +19426,6 @@ function renderBattle(manaPct: number): string {
       <div class="battle-stage-pill" title="${stageTitle}">
         <strong class="battle-stage-name">${stageTitle}</strong>
         <span class="battle-page">${pageLabel}</span>
-        <span class="battle-board-meta">${currentStage.boardSize}${TIMES}${currentStage.boardSize}</span>
       </div>
     </header>
     <div class="battle-layout battle-layout--framed battle-layout--stage${canPlaceStone ? " is-stone-pick" : ""}${awaitSkill ? " is-skill-pick" : ""}${stoneSummonFx ? " is-stone-summoning" : ""}">
@@ -19776,6 +19907,7 @@ function islandOriginPx(world: HTMLElement): { ox: number; oy: number } {
 function applyIslandPan(): void {
   const world = app.querySelector<HTMLElement>("#island-world");
   if (world) {
+    world.style.setProperty("--island-oversize", String(ISLAND_WORLD_OVERSIZE));
     world.style.setProperty("--island-zoom", islandZoom.toFixed(4));
     world.style.transform = `translate3d(${islandPan.x}px,${islandPan.y}px,0) rotateX(${ISLAND_ROTATE_X_DEG}deg) scale(${ISLAND_BASE_SCALE})`;
   }
@@ -19789,7 +19921,8 @@ function clampIslandPan(viewport: HTMLElement, world: HTMLElement): void {
   const { ox, oy } = islandOriginPx(world);
   const vw = viewport.clientWidth;
   const vh = viewport.clientHeight;
-  // Hard edge clamp: map always covers the viewport; never show empty past the bitmap.
+  /* Hard edge clamp: never pan past the bitmap. If the world is smaller than
+     the viewport (contain-fit letterbox), center it. */
   const maxX = -ox * (1 - s);
   const minX = vw - W * s - ox * (1 - s);
   const maxY = -oy * (1 - s);
@@ -20489,6 +20622,8 @@ function isOverlayIdOpen(id: string): boolean {
       return symbolDetailIndex != null;
     case "sym-bag-expand-layer":
       return symbolBagExpandOpen;
+    case "gear-bag-expand-layer":
+      return gearBagExpandOpen;
     case "summon-detail-layer":
       return !!summonDetailUid;
     case "summon-multi-result-layer":
@@ -20698,6 +20833,12 @@ function closeOverlayById(id: string): boolean {
     softOpenEnhanceTransientModals();
     return true;
   }
+  if (id === "gear-bag-expand-layer") {
+    if (!gearBagExpandOpen) return false;
+    gearBagExpandOpen = false;
+    softRefreshSumBookUi({ modals: true });
+    return true;
+  }
   if (id === "summon-detail-layer") {
     closeSummonDetailSoft();
     return true;
@@ -20883,6 +21024,7 @@ function closeLeftoverTransientUi(): boolean {
   if (gearDetailTarget) return closeOverlayById("gear-detail-layer");
   if (symbolDetailIndex != null) return closeOverlayById("sym-detail-layer");
   if (symbolBagExpandOpen) return closeOverlayById("sym-bag-expand-layer");
+  if (gearBagExpandOpen) return closeOverlayById("gear-bag-expand-layer");
   if (summonDetailUid) return closeOverlayById("summon-detail-layer");
   if (summonMultiRevealOpen) return closeOverlayById("summon-multi-result-layer");
   if (islandSpotMenuId) {
@@ -21619,6 +21761,7 @@ function bind(): void {
 
   bindSumGearSlotClicks();
   bindGearBagFilter();
+  bindGearBagExpandButton();
   syncGearBagFilterMenuUi();
   bindSumMagicNodeClicks();
   bindSumBookModalInteractions();

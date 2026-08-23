@@ -767,6 +767,7 @@ const messages: MessageDict = {
   "ui.expandSymbolBagAdd": "Slots added",
   "ui.expandSymbolBagPrice": "Price",
   "ui.expandSymbolBagConfirm": "Expand",
+  "ui.expandGearBagTitle": "Expand gear bag",
   "chat.title": "World chat",
   "chat.open": "Open chat",
   "chat.close": "Close chat",

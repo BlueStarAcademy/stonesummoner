@@ -83,6 +83,20 @@ export function magicEnhanceCrystalCost(rank: number): number {
 
 export const MAX_MAGIC_RANK = 5;
 
+/** Summoner level required to enhance from current rank → rank+1. */
+export const MAGIC_ENHANCE_REQUIRED_LEVEL = [1, 5, 10, 15, 20] as const;
+
+export function magicEnhanceRequiredLevel(currentRank: number): number {
+  const i = Math.max(
+    0,
+    Math.min(
+      MAGIC_ENHANCE_REQUIRED_LEVEL.length - 1,
+      Math.floor(currentRank),
+    ),
+  );
+  return MAGIC_ENHANCE_REQUIRED_LEVEL[i]!;
+}
+
 export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
   fire: {
     element: "fire",

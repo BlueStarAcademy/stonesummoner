@@ -793,6 +793,59 @@ describe("Battle flow", () => {
     assert.match(b.log.join("\n"), /포석 보너스/);
   });
 
+  it("wipes the circle when no legal stone remains", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (let y = 0; y < b.board.size; y++) {
+      for (let x = 0; x < b.board.size; x++) {
+        const color = (x + y) % 2 === 0 ? "black" : "white";
+        assert.equal(b.board.forcePlace(color, { x, y }), true);
+      }
+    }
+    assert.equal(b.board.emptyPoints().length, 0);
+    assert.equal(b.board.legalMoves("black").length, 0);
+    assert.equal(b.board.legalMoves("white").length, 0);
+
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("a-m1")!.atb = 100;
+    b.lastStoneTeam = "enemy";
+    const unit = b.tickUntilReady();
+    assert.equal(unit?.id, "a-m1");
+    assert.equal(b.phase, "await_stone");
+    assert.ok(b.board.emptyPoints().length > 0);
+    assert.ok(b.boardClearSeq >= 1);
+    assert.equal(b.autoStone(), true);
+    assert.equal(b.phase, "await_skill");
+    assert.match(b.log.join("\n"), /진문 붕괴/);
+  });
+
+  it("autoStone unsticks a full circle without waiting for the next tick", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (let y = 0; y < b.board.size; y++) {
+      for (let x = 0; x < b.board.size; x++) {
+        const color = (x + y) % 2 === 0 ? "black" : "white";
+        assert.equal(b.board.forcePlace(color, { x, y }), true);
+      }
+    }
+    assert.equal(b.board.legalMoves("white").length, 0);
+    b.phase = "await_stone";
+    b.activeUnitId = "e-m1";
+    assert.equal(b.autoStone(), true);
+    assert.equal(b.phase, "await_skill");
+    assert.ok(b.boardClearSeq >= 1);
+  });
+
   it("applies opening bonus on the next stone after reset", () => {
     const b = new Battle({
       boardSize: 7,

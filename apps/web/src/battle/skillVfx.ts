@@ -5,6 +5,7 @@
 
 import type { CombatElement, CombatSfxKind } from "../audio";
 import {
+  clientPointInElement,
   fxDurationMs,
   playUltCutin,
   pulseUnitClass,
@@ -150,10 +151,20 @@ function boltVolley(kind: SkillBoltKind): number {
   return 1;
 }
 
-function boltPath(dx: number, dy: number, arc: number): string {
-  const qx = Math.round(dx * 0.5);
-  const qy = Math.round(dy * 0.5 - arc);
-  return `M 0 0 Q ${qx} ${qy} ${Math.round(dx)} ${Math.round(dy)}`;
+function boltPath(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  arc: number,
+): string {
+  const qx = Math.round(x0 + (x1 - x0) * 0.5);
+  const qy = Math.round(y0 + (y1 - y0) * 0.5 - arc);
+  return `M ${Math.round(x0)} ${Math.round(y0)} Q ${qx} ${qy} ${Math.round(x1)} ${Math.round(y1)}`;
+}
+
+function motionPathSupported(): boolean {
+  return typeof CSS !== "undefined" && CSS.supports("offset-distance", "0%");
 }
 
 function uniqueIds(ids: string[]): string[] {
@@ -384,12 +395,11 @@ export function spawnTravelBolt(
   const from = unitAnchor(root, fromId);
   const to = unitAnchor(root, toId);
   if (!from || !to) return;
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
+  const p0 = clientPointInElement(layer, from.x, from.y);
+  const p1 = clientPointInElement(layer, to.x, to.y);
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
   if (Math.hypot(dx, dy) < 10) return;
-  const layerRect = layer.getBoundingClientRect();
-  const x0 = from.x - layerRect.left;
-  const y0 = from.y - layerRect.top;
   const rot = (Math.atan2(dy, dx) * 180) / Math.PI;
   const orb = isOrbBolt(kind);
   const arc = boltArc(dx, dy, kind);
@@ -397,14 +407,20 @@ export function spawnTravelBolt(
   const bolt = document.createElement("span");
   bolt.className = `skill-bolt skill-bolt--${kind}${orb ? " is-orb" : " is-arc"}${opts?.ghost ? " is-ghost" : ""}`;
   bolt.setAttribute("aria-hidden", "true");
-  bolt.style.left = `${Math.round(x0)}px`;
-  bolt.style.top = `${Math.round(y0)}px`;
   bolt.style.setProperty("--dx", `${Math.round(dx)}px`);
   bolt.style.setProperty("--dy", `${Math.round(dy)}px`);
   bolt.style.setProperty("--rot", `${rot}deg`);
   bolt.style.setProperty("--bolt-ms", `${Math.max(80, ms)}ms`);
   if (delayMs) bolt.style.animationDelay = `${delayMs}ms`;
-  bolt.style.offsetPath = `path("${boltPath(dx, dy, arc)}")`;
+  if (motionPathSupported()) {
+    bolt.style.left = "0px";
+    bolt.style.top = "0px";
+    bolt.style.setProperty("offset-position", "0 0");
+    bolt.style.offsetPath = `path("${boltPath(p0.x, p0.y, p1.x, p1.y, arc)}")`;
+  } else {
+    bolt.style.left = `${Math.round(p0.x)}px`;
+    bolt.style.top = `${Math.round(p0.y)}px`;
+  }
   if (orb) bolt.style.offsetRotate = "0deg";
   const wake = document.createElement("span");
   wake.className = "skill-bolt-wake";
@@ -534,23 +550,23 @@ function spawnAoeField(
   preloadBattleFx();
   const layer = skillFxLayer(root);
   if (!layer) return;
-  const layerRect = layer.getBoundingClientRect();
   let sx = 0;
   let sy = 0;
   let n = 0;
   for (const id of targetIds) {
     const a = unitAnchor(root, id);
     if (!a) continue;
-    sx += a.x;
-    sy += a.y;
+    const p = clientPointInElement(layer, a.x, a.y);
+    sx += p.x;
+    sy += p.y;
     n += 1;
   }
   if (!n) return;
   const field = document.createElement("span");
   field.className = `skill-field skill-field--${element}${ult ? " is-ult" : ""}`;
   field.setAttribute("aria-hidden", "true");
-  field.style.left = `${Math.round(sx / n - layerRect.left)}px`;
-  field.style.top = `${Math.round(sy / n - layerRect.top)}px`;
+  field.style.left = `${Math.round(sx / n)}px`;
+  field.style.top = `${Math.round(sy / n)}px`;
   field.style.setProperty("--field-ms", `${Math.max(80, ms)}ms`);
   const img = document.createElement("img");
   img.className = "skill-field-art";

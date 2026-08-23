@@ -37,6 +37,26 @@ export function fxDurationMs(baseMs: number, speed: number): number {
   return Math.max(40, Math.round(baseMs / battlePace(speed)));
 }
 
+/**
+ * Viewport (getBoundingClientRect) → local px inside `el`.
+ * Needed because `#app` is `transform: scale(var(--ui-scale))`.
+ */
+export function clientPointInElement(
+  el: HTMLElement,
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } {
+  const r = el.getBoundingClientRect();
+  const rw = r.width || 1;
+  const rh = r.height || 1;
+  const lw = el.offsetWidth || rw;
+  const lh = el.offsetHeight || rh;
+  return {
+    x: ((clientX - r.left) / rw) * lw,
+    y: ((clientY - r.top) / rh) * lh,
+  };
+}
+
 export function waitFx(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

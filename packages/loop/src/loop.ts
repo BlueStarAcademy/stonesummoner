@@ -35,6 +35,9 @@ import {
   canUnlockSkillNode,
   resolveMonsterId,
   symbolCombatMods,
+  GEAR_BAG_BASE_SLOTS,
+  GEAR_BAG_EXPAND_STEP,
+  GEAR_BAG_MAX_SLOTS,
   MAX_GEAR_BAG,
   normalizeGearPiece,
   normalizeSummonerGear,
@@ -62,6 +65,7 @@ import {
   getSummonerLeader,
   magicEnhanceCrystalCost,
   magicEnhanceManaCost,
+  magicEnhanceRequiredLevel,
   magicRank,
   magicSkillPower,
   MAX_MAGIC_RANK,
@@ -90,7 +94,12 @@ import {
   type SymbolInstance,
   normalizeSymbol,
 } from "stonesummoner-data";
-export { MAX_GEAR_BAG };
+export {
+  MAX_GEAR_BAG,
+  GEAR_BAG_BASE_SLOTS,
+  GEAR_BAG_EXPAND_STEP,
+  GEAR_BAG_MAX_SLOTS,
+};
 import {
   collectCrystal,
   collectMana,
@@ -1215,6 +1224,8 @@ export interface PlayerSave {
   gear: SummonerGear;
   /** Unequipped gear drops (equip vault bag). */
   gearBag: GearPiece[];
+  /** Gear bag capacity (base 20 … max 100, +10 per expand). */
+  gearBagSlots: number;
   /** @deprecated Mirror of active summoner awaken — prefer summoners[active]. */
   summonerAwaken: number;
   /** Per-element summoner progression. */
@@ -1661,6 +1672,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     scrollsMystic,
     gear,
     gearBag: [],
+    gearBagSlots: GEAR_BAG_BASE_SLOTS,
     summonerAwaken: 0,
     summoners,
     activeSummoner: "light",
@@ -2025,6 +2037,68 @@ export function runExpandSymbolBag(save: PlayerSave): LoopStepResult {
       },
     },
     message: `상징 가방 +${SYMBOL_BAG_EXPAND_STEP} (−크리스탈 ${cost}) · ${next}/${SYMBOL_BAG_MAX_SLOTS}`,
+  };
+}
+
+export function gearBagCapacity(save: PlayerSave): number {
+  const raw =
+    typeof save.gearBagSlots === "number"
+      ? save.gearBagSlots
+      : GEAR_BAG_BASE_SLOTS;
+  return Math.min(
+    GEAR_BAG_MAX_SLOTS,
+    Math.max(GEAR_BAG_BASE_SLOTS, Math.floor(raw)),
+  );
+}
+
+export function gearBagExpandCount(save: PlayerSave): number {
+  return Math.max(
+    0,
+    Math.floor(
+      (gearBagCapacity(save) - GEAR_BAG_BASE_SLOTS) / GEAR_BAG_EXPAND_STEP,
+    ),
+  );
+}
+
+/** Crystal cost for the next +10 expand, matching symbol-bag prices. */
+export function gearBagExpandCost(save: PlayerSave): number | null {
+  if (gearBagCapacity(save) >= GEAR_BAG_MAX_SLOTS) return null;
+  const n = gearBagExpandCount(save);
+  return Math.min(
+    SYMBOL_BAG_EXPAND_COST_START + n * SYMBOL_BAG_EXPAND_COST_STEP,
+    SYMBOL_BAG_EXPAND_COST_CAP,
+  );
+}
+
+/** Buy +10 gear bag slots for crystal. */
+export function runExpandGearBag(save: PlayerSave): LoopStepResult {
+  const cost = gearBagExpandCost(save);
+  if (cost == null) {
+    return {
+      save,
+      message: `장비 가방 슬롯 최대 (${GEAR_BAG_MAX_SLOTS})`,
+    };
+  }
+  if (save.island.crystal < cost) {
+    return {
+      save,
+      message: `크리스탈 부족 (필요 ${cost}, 보유 ${save.island.crystal})`,
+    };
+  }
+  const next = Math.min(
+    GEAR_BAG_MAX_SLOTS,
+    gearBagCapacity(save) + GEAR_BAG_EXPAND_STEP,
+  );
+  return {
+    save: {
+      ...save,
+      gearBagSlots: next,
+      island: {
+        ...save.island,
+        crystal: save.island.crystal - cost,
+      },
+    },
+    message: `장비 가방 +${GEAR_BAG_EXPAND_STEP} (−크리스탈 ${cost}) · ${next}/${GEAR_BAG_MAX_SLOTS}`,
   };
 }
 /** 제작소: 진문석 + 골드 → 소환서 */
@@ -3009,7 +3083,7 @@ export function listGear(save: PlayerSave): string[] {
     ),
     `세트 ${sets || "없음"}`,
     `리더 합산 ATK +${leader}%`,
-    `가방 ${(save.gearBag ?? []).length}/${MAX_GEAR_BAG}`,
+    `가방 ${(save.gearBag ?? []).length}/${gearBagCapacity(save)}`,
   ];
 }
 
@@ -3916,6 +3990,14 @@ export function runEnhanceMagicSkill(
     return {
       save: synced,
       message: `${def.nameKo} 이미 최대(+${MAX_MAGIC_RANK})`,
+    };
+  }
+  const needLv = magicEnhanceRequiredLevel(cur);
+  const sumLv = synced.summoners[el]?.level ?? 1;
+  if (sumLv < needLv) {
+    return {
+      save: synced,
+      message: `${def.nameKo} — Lv.${needLv}`,
     };
   }
   const manaCost = magicEnhanceManaCost(cur);
@@ -4873,7 +4955,7 @@ export function applyRewards(
     ) {
       gearDrop = bumpGearEnhance(gearDrop);
     }
-    if (gearBag.length >= MAX_GEAR_BAG) {
+    if (gearBag.length >= gearBagCapacity(working)) {
       const sold = gearBag.shift()!;
       const gain = gearSellMana(sold);
       const crystalGain = gearSellCrystal(sold);

@@ -39,6 +39,7 @@ import {
   rollSymbolDrop,
   SCENARIO_NORMAL_STAR_WEIGHTS,
   scenarioSymbolDropTable,
+  magicEnhanceRequiredLevel,
   skillTreeBonuses,
   SKILL_TREE_NODES,
   stripUnenhancedStarterGear,
@@ -505,5 +506,13 @@ describe("phase1 data", () => {
     assert.ok(
       (b10.qualityWeights!.find((r) => r.value === "rare")?.w ?? 0) >= 55,
     );
+  });
+
+  it("gates magic skill enhance ranks by summoner level", () => {
+    assert.equal(magicEnhanceRequiredLevel(0), 1);
+    assert.equal(magicEnhanceRequiredLevel(1), 5);
+    assert.equal(magicEnhanceRequiredLevel(2), 10);
+    assert.equal(magicEnhanceRequiredLevel(3), 15);
+    assert.equal(magicEnhanceRequiredLevel(4), 20);
   });
 });

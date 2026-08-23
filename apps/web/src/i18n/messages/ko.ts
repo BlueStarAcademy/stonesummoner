@@ -767,6 +767,7 @@ const messages: MessageDict = {
   "ui.expandSymbolBagAdd": "추가 슬롯",
   "ui.expandSymbolBagPrice": "가격",
   "ui.expandSymbolBagConfirm": "확장하기",
+  "ui.expandGearBagTitle": "장비 가방 확장",
   "chat.title": "월드 채팅",
   "chat.open": "채팅 열기",
   "chat.close": "채팅 닫기",

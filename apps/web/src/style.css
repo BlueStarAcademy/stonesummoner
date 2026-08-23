@@ -6785,9 +6785,15 @@ main {
 .mon-slot.is-locked:not(.is-unlockable),
 .sum-rail-slot.is-locked:not(.is-unlockable),
 .codex-summoner-card.is-locked:not(.is-unlockable) {
-  opacity: 0.48;
-  filter: grayscale(0.35);
   cursor: default;
+}
+
+.summoner-pick.is-locked:not(.is-unlockable) .summoner-pick-art,
+.mon-slot.is-locked:not(.is-unlockable) .mon-slot-img,
+.sum-rail-slot.is-locked:not(.is-unlockable) .sum-rail-img,
+.codex-summoner-card.is-locked:not(.is-unlockable) .codex-summoner-art {
+  opacity: 0.42;
+  filter: grayscale(0.45);
 }
 
 .summoner-pick.is-unlockable,
@@ -6800,15 +6806,33 @@ main {
 .summoner-lock-badge {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   margin-left: 4px;
-  padding: 1px 6px;
+  padding: 3px 8px;
   border-radius: 999px;
-  border: 1px solid #c9a22755;
-  background: #1a140ccc;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: #e8d9a8;
+  border: 1px solid #f0d878cc;
+  background: #1a1008f2;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #fff6c8;
+  text-shadow: 0 1px 0 #000a;
+  box-shadow: 0 1px 0 #0008, 0 0 0 1px #0005, 0 3px 8px #0007;
+  white-space: nowrap;
+}
+
+.summoner-lock-badge .codex-lock-ico {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: #f5e08a;
+}
+
+.summoner-lock-badge strong {
+  font-size: inherit;
+  font-weight: 900;
+  color: #fff8d0;
+  line-height: 1;
 }
 
 .summoner-lock-badge.is-unlockable {
@@ -6816,12 +6840,29 @@ main {
   color: #f5e6b8;
 }
 
+.summoner-pick .summoner-lock-badge,
+.codex-summoner-card .summoner-lock-badge {
+  margin: 4px 0 0;
+  align-self: flex-start;
+}
+
+.codex-summoner-card .summoner-lock-badge {
+  grid-column: 2;
+  justify-self: start;
+}
+
 .mon-slot .summoner-lock-badge,
 .sum-rail-slot .summoner-lock-badge {
   position: absolute;
-  right: 4px;
-  bottom: 3px;
-  z-index: 2;
+  left: 50%;
+  right: auto;
+  bottom: 4px;
+  z-index: 5;
+  margin: 0;
+  transform: translateX(-50%);
+  padding: 3px 7px;
+  font-size: 0.76rem;
+  pointer-events: none;
 }
 
 .starter-summoner-sheet {
@@ -6950,19 +6991,18 @@ main {
 
 .island-world {
   /*
-   * The world box must keep the map bitmap's exact aspect ratio: spot positions
-   * are percentages of this box, so any letterbox/crop between box and bitmap
-   * would slide buildings off the painted pads (and by a different amount on
-   * every screen size). Width = cover width x ISLAND_WORLD_OVERSIZE, where the
-   * 66.67cqh term is the width needed to cover viewport height at 2:3.
+   * Fit the painted land bbox (~x 4–96%, y 23–79% of the 2:3 bitmap) in the
+   * viewport so all three islets stay on screen. Cover (max(100cqw, 66.67cqh))
+   * crops left/right on tall phones and the v2 archipelago reads as the old
+   * single plateau. 0.92 = land width fraction; 0.85 = land height × 3/2.
    */
-  --island-oversize: 1.7;
+  --island-oversize: 1;
   position: absolute;
   left: 0;
   top: 0;
-  width: calc(170% * var(--island-zoom, 1));
-  height: calc(255% * var(--island-zoom, 1));
-  width: calc(max(100cqw, 66.67cqh) * var(--island-oversize) * var(--island-zoom, 1));
+  width: calc(100% * var(--island-zoom, 1));
+  height: calc(150% * var(--island-zoom, 1));
+  width: calc(min(100cqw / 0.92, 100cqh / 0.85) * var(--island-oversize) * var(--island-zoom, 1));
   aspect-ratio: 2880 / 4320;
   height: auto;
   will-change: transform;
@@ -7235,7 +7275,7 @@ main {
 }
 
 .island-spot {
-  /* Fixed sprite size; map is 170% so islands feel large beside these. */
+  /* Fixed sprite size on the contain-fit map (not tied to world %). */
   --spot-size: calc(88px * var(--spot-scale, 1));
   position: absolute;
   z-index: 2;
@@ -8511,14 +8551,6 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
-.battle-stage-pill .battle-board-meta {
-  font-size: 0.58rem;
-  font-weight: 600;
-  color: #c4b8d4;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-}
-
 .battle-stage-pill .battle-wave {
   font-size: 0.58rem;
   font-weight: 600;
@@ -9678,8 +9710,7 @@ button.battle-unit {
 }
 
 .board-wrap--stage .board {
-  /* Design-canvas px — vw overflows #app; bare % can shrink-wrap to zero. */
-  width: min(420px, 100%);
+  width: 100%;
   padding: 14px;
   gap: 3px;
   border-radius: 22px;
@@ -9690,28 +9721,26 @@ button.battle-unit {
   background: transparent;
   border: 0;
   box-shadow: none;
-  /* Inner ritual floor only — keep corner cells inside the gold ring. */
-  width: 40%;
-  max-width: 40%;
+  width: 78%;
+  max-width: 78%;
   padding: 0.4%;
   gap: 0;
-  /* Perspective makes the ellipse read low; sit the grid on the painted floor. */
-  margin-top: -6%;
+  margin-top: -4%;
 }
 
 .board-frame--has-art.board-frame--tilted .board.size-5 {
-  width: 42%;
-  max-width: 42%;
-  padding: 0.6%;
-  margin-top: -6%;
+  width: 82%;
+  max-width: 82%;
+  padding: 0.8%;
+  margin-top: -4%;
 }
 
 .board-frame--has-art.board-frame--tilted .board.size-7 {
-  width: 38%;
-  max-width: 38%;
-  padding: 0.2%;
+  width: 80%;
+  max-width: 80%;
+  padding: 0.5%;
   gap: 0;
-  margin-top: -6%;
+  margin-top: -4%;
 }
 
 /*
@@ -10178,7 +10207,7 @@ button.battle-unit {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(420px, 94%);
+  width: 100%;
   aspect-ratio: 1;
   overflow: visible;
   transform: rotateX(var(--board-floor-tilt)) scaleX(var(--board-floor-widen));
@@ -10963,7 +10992,7 @@ button.battle-unit {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 6px 4px;
+  padding: 4px 0 56px;
   /* Keep the battle stage visible — no dim/blur veil. */
   background: transparent;
   pointer-events: none;
@@ -10996,7 +11025,8 @@ button.battle-unit {
 /* Large flat grid for easy taps; map circle art sits under the intersections. */
 .stone-pick-circle {
   position: relative;
-  width: min(420px, 94vw);
+  width: min(100%, calc(var(--design-h) * 0.78));
+  max-width: 100%;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -11018,8 +11048,8 @@ button.battle-unit {
 .board.stone-pick-board {
   position: relative;
   z-index: 1;
-  width: 40%;
-  max-width: 40%;
+  width: 78%;
+  max-width: 78%;
   margin: 0 auto;
   padding: 0.4%;
   gap: 0;
@@ -11033,15 +11063,15 @@ button.battle-unit {
 }
 
 .board.stone-pick-board.size-5 {
-  width: 42%;
-  max-width: 42%;
-  padding: 0.6%;
+  width: 82%;
+  max-width: 82%;
+  padding: 0.8%;
 }
 
 .board.stone-pick-board.size-7 {
-  width: 38%;
-  max-width: 38%;
-  padding: 0.2%;
+  width: 80%;
+  max-width: 80%;
+  padding: 0.5%;
 }
 
 .board.stone-pick-board.magic-circle::before,
@@ -11092,9 +11122,9 @@ button.battle-unit {
 .board-mini {
   position: absolute;
   right: 4px;
-  top: 38%;
+  top: 36%;
   z-index: 5;
-  width: min(118px, 28vw);
+  width: min(168px, 40vw);
   pointer-events: none;
 }
 
@@ -11873,6 +11903,9 @@ button.battle-unit {
 @supports (offset-distance: 0%) {
   .skill-bolt.is-arc,
   .skill-bolt.is-orb {
+    left: 0;
+    top: 0;
+    offset-position: 0 0;
     offset-anchor: 50% 50%;
     offset-rotate: auto;
     animation-name: skfx-bolt-arc;
@@ -12877,8 +12910,8 @@ button.battle-unit {
 }
 
 .board.stone-pick-board button.cell .magic-stone {
-  width: 58%;
-  height: 58%;
+  width: 70%;
+  height: 70%;
   border-radius: 50%;
 }
 
@@ -21563,8 +21596,9 @@ button.mon-sym-filter-row {
   min-width: 96px;
 }
 
-/* Symbol bag expand confirm */
-.sym-bag-expand-layer {
+/* Symbol / gear bag expand confirm */
+.sym-bag-expand-layer,
+.gear-bag-expand-layer {
   z-index: var(--z-modal-nested);
 }
 
@@ -21634,6 +21668,14 @@ button.mon-sym-filter-row {
 .sym-bag-expand-acts .sym-bag-expand-ok {
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.sym-bag-expand-ok {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 420px) {
@@ -28003,6 +28045,13 @@ button.linkish {
   min-width: 0;
 }
 
+.sum-gear-bag-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .sum-gear-bag-head .mon-sym-filter {
   flex: 0 0 auto;
 }
@@ -28209,6 +28258,36 @@ button.linkish {
   flex-wrap: wrap;
 }
 
+.sum-magic-enhance-btn.is-level-locked:disabled {
+  opacity: 1;
+  filter: none;
+  cursor: default;
+}
+
+.sum-lock-lv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #f0d878cc;
+  background: #1a1008f2;
+  color: #fff8d0;
+  font-size: 0.84rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 0 #000a;
+  white-space: nowrap;
+}
+
+.sum-lock-lv-chip .codex-lock-ico {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: #f5e08a;
+}
+
 .sum-magic-enhance-label {
   font-weight: 800;
 }
@@ -28277,6 +28356,34 @@ button.linkish {
   line-height: 14px;
   text-align: center;
   pointer-events: none;
+}
+
+.sum-magic-node-rank.is-lv-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  right: -6px;
+  min-width: 0;
+  height: 18px;
+  padding: 0 5px;
+  border-color: #f0d878cc;
+  color: #fff8d0;
+  font-size: 0.56rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sum-magic-node-rank.is-lv-locked .codex-lock-ico {
+  width: 9px;
+  height: 9px;
+  color: #f5e08a;
+}
+
+.sum-magic-node-rank.is-lv-locked strong {
+  font-size: inherit;
+  font-weight: 900;
+  color: inherit;
 }
 
 .sum-magic-node .sum-magic-ico {
@@ -28607,7 +28714,10 @@ button.linkish {
 }
 
 .gear-bag-slot--empty .gear-empty-sil {
-  opacity: 0.9;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  opacity: 0.88;
   filter: none;
 }
 

@@ -183,6 +183,8 @@ export class Battle {
   lastEnemyStone: { x: number; y: number; boardIndex: number } | null = null;
   /** UI readout for the stone that just landed. */
   lastStoneReport: StoneReport | null = null;
+  /** Bumps on every circle wipe (full board or empowered 7×7). UI rekindle FX. */
+  boardClearSeq = 0;
   /** One or two boards (쌍국). Prefer `board` getter for the active one. */
   readonly boards: Board[];
   activeBoardIndex = 0;
@@ -486,6 +488,7 @@ export class Battle {
         this.phase = this.needsStoneFor(unit.team)
           ? "await_stone"
           : "await_skill";
+        if (this.phase === "await_stone") this.ensurePlayableCircle();
         this.skillAmplifyBonus = 0;
         return unit;
       }
@@ -539,11 +542,48 @@ export class Battle {
     return r.ok ? r.capturedCount : -1;
   }
 
+  /** Legal, unsealed intersections the unit may play. */
+  playableStonePoints(unit: Unit): Point[] {
+    const color = teamStoneColor(unit.team);
+    return this.board.legalMoves(color).filter((p) => !this.isForbidden(p));
+  }
+
+  /**
+   * If the active unit has nowhere to play, wipe the circle so the turn
+   * can continue. Returns true when a wipe ran.
+   */
+  ensurePlayableCircle(): boolean {
+    const unit = this.activeUnitId ? this.getUnit(this.activeUnitId) : null;
+    if (!unit) return false;
+    if (this.playableStonePoints(unit).length > 0) return false;
+    this.wipeCircle("full");
+    return true;
+  }
+
+  private wipeCircle(kind: "empowered" | "full"): void {
+    for (const b of this.boards) resetBoardInPlace(b);
+    this.tokensByBoard = this.boards.map(() => []);
+    this.sealsByBoard = this.boards.map(() => []);
+    this.baitLure = null;
+    this.lastEnemyStone = null;
+    this.boardClearSeq += 1;
+    if (kind === "empowered") {
+      this.openingBonusPending = true;
+      this.log.push(
+        `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${this.phaseAmplifyCap()})`,
+      );
+      this.log.push(`진문 붕괴 → 재점화 · 다음 착수 포석 보너스`);
+      if (this.modules.moduleF) {
+        this.log.push(`진형파괴 — 보스 페이즈 보드 재건`);
+      }
+      return;
+    }
+    this.log.push(`진문 붕괴 → 재점화`);
+  }
+
   autoPickStone(unit: Unit): Point | null {
     const color = teamStoneColor(unit.team);
-    const legal = this.board
-      .legalMoves(color)
-      .filter((p) => !this.isForbidden(p));
+    const legal = this.playableStonePoints(unit);
     if (legal.length === 0) return null;
     if (unit.team === "enemy") {
       return (
@@ -567,9 +607,7 @@ export class Battle {
       (this.activeUnitId ? this.getUnit(this.activeUnitId) : undefined);
     if (!u) return [];
     const color = teamStoneColor(u.team);
-    const legal = this.board
-      .legalMoves(color)
-      .filter((p) => !this.isForbidden(p));
+    const legal = this.playableStonePoints(u);
     const manaMul =
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
       (1 + this.summonerOf(u.team).boardSense);
@@ -1102,19 +1140,7 @@ export class Battle {
     this.circle = prog.state;
     const placedBoardIndex = this.activeBoardIndex;
     if (prog.shouldReset) {
-      for (const b of this.boards) resetBoardInPlace(b);
-      this.tokensByBoard = this.boards.map(() => []);
-      this.sealsByBoard = this.boards.map(() => []);
-      this.baitLure = null;
-      this.lastEnemyStone = null;
-      this.openingBonusPending = true;
-      this.log.push(
-        `강화 진문 ${this.circle.boardPhase} — 보드 재건 (Amp상한 ${this.phaseAmplifyCap()})`,
-      );
-      this.log.push(`진문 붕괴 → 재점화 · 다음 착수 포석 보너스`);
-      if (this.modules.moduleF) {
-        this.log.push(`진형파괴 — 보스 페이즈 보드 재건`);
-      }
+      this.wipeCircle("empowered");
     } else {
       this.trySpawnItem();
       if (
@@ -1288,6 +1314,7 @@ export class Battle {
     if (!this.activeUnitId) return false;
     const unit = this.getUnit(this.activeUnitId);
     if (!unit) return false;
+    this.ensurePlayableCircle();
     const p = this.autoPickStone(unit);
     if (!p) return false;
     return this.playStone(p);

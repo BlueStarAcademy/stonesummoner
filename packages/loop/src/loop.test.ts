@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createStarterGear, createSymbol, getStage, CHAPTER1_STAGES } from "stonesummoner-data";
+import { createStarterGear, createSymbol, getStage, CHAPTER1_STAGES, GEAR_BAG_BASE_SLOTS, GEAR_BAG_EXPAND_STEP, GEAR_BAG_MAX_SLOTS } from "stonesummoner-data";
 import {
   createNewSave,
   createStageBattle,
@@ -30,6 +30,9 @@ import {
   SYMBOL_BAG_BASE_SLOTS,
   SYMBOL_BAG_EXPAND_STEP,
   SYMBOL_BAG_MAX_SLOTS,
+  runExpandGearBag,
+  gearBagCapacity,
+  gearBagExpandCost,
   runBuyGlory,
   runBuyScroll,
   runCraftEssence,
@@ -37,6 +40,7 @@ import {
   runDemoLoop,
   runEnhance,
   runPowerUpMonster,
+  runEnhanceMagicSkill,
   runEnhanceGear,
   runAffixGearSet,
   runEquipGearBag,
@@ -507,6 +511,45 @@ describe("game loop", () => {
     });
     assert.match(maxed.message, /최대/);
     assert.equal(symbolBagExpandCost(maxed.save), null);
+  });
+
+  it("expands gear bag slots at the same crystal prices as the symbol bag", () => {
+    let save = createNewSave(0);
+    assert.equal(gearBagCapacity(save), GEAR_BAG_BASE_SLOTS);
+    assert.equal(gearBagExpandCost(save), symbolBagExpandCost(save));
+    assert.equal(gearBagExpandCost(save), 10);
+
+    save = {
+      ...save,
+      island: { ...save.island, crystal: 10_000 },
+    };
+    const first = runExpandGearBag(save);
+    assert.equal(first.save.gearBagSlots, GEAR_BAG_BASE_SLOTS + GEAR_BAG_EXPAND_STEP);
+    assert.equal(first.save.island.crystal, 10_000 - 10);
+    assert.equal(gearBagExpandCost(first.save), 20);
+
+    const broke = runExpandGearBag({
+      ...save,
+      island: { ...save.island, crystal: 9 },
+    });
+    assert.equal(broke.save.gearBagSlots, GEAR_BAG_BASE_SLOTS);
+    assert.match(broke.message, /크리스탈/);
+
+    save = { ...first.save, gearBagSlots: GEAR_BAG_MAX_SLOTS };
+    const maxed = runExpandGearBag(save);
+    assert.match(maxed.message, /최대/);
+    assert.equal(gearBagExpandCost(maxed.save), null);
+  });
+
+  it("migrateSave defaults gearBagSlots and keeps expanded capacity", () => {
+    const base = createNewSave(0);
+    const legacy = { ...base };
+    delete (legacy as { gearBagSlots?: number }).gearBagSlots;
+    const round = migrateSave(JSON.parse(JSON.stringify(legacy)));
+    assert.equal(round!.gearBagSlots, GEAR_BAG_BASE_SLOTS);
+
+    const expanded = migrateSave({ ...base, gearBagSlots: 40 });
+    assert.equal(expanded!.gearBagSlots, 40);
   });
 
   it("sells symbols and runs practice dojo", () => {
@@ -1550,6 +1593,34 @@ describe("game loop", () => {
 
     const blocked = unlockAdditionalSummoner(picked, "water");
     assert.match(blocked.message, /불가/);
+  });
+
+  it("gates magic skill enhance by that summoner's level", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      island: { ...save.island, mana: 5000, crystal: 20 },
+      summoners: {
+        ...save.summoners,
+        light: { ...save.summoners.light, level: 1 },
+      },
+    };
+    const first = runEnhanceMagicSkill(save, "light_open", "light");
+    assert.equal(first.save.summonerMagic.light.ranks.light_open, 1);
+
+    const locked = runEnhanceMagicSkill(first.save, "light_open", "light");
+    assert.equal(locked.save.summonerMagic.light.ranks.light_open, 1);
+    assert.match(locked.message, /Lv\.5/);
+
+    save = {
+      ...first.save,
+      summoners: {
+        ...first.save.summoners,
+        light: { ...first.save.summoners.light, level: 5 },
+      },
+    };
+    const ok = runEnhanceMagicSkill(save, "light_open", "light");
+    assert.equal(ok.save.summonerMagic.light.ranks.light_open, 2);
   });
 
   it("unlocks summoner skill tree nodes with gates", () => {

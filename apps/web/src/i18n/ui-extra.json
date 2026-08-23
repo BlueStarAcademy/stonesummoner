@@ -2779,6 +2779,10 @@
     "ko": "확장하기",
     "en": "Expand"
   },
+  "ui.expandGearBagTitle": {
+    "ko": "장비 가방 확장",
+    "en": "Expand gear bag"
+  },
   "chat.title": {
     "ko": "월드 채팅",
     "en": "World chat"

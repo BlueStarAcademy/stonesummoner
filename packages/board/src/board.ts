@@ -58,7 +58,7 @@ export class Board {
     return b;
   }
 
-  /** Wipe all stones and ko (same size). Used for empowered 7×7 circle reset. */
+  /** Wipe all stones and ko (same size). Used when the circle is full or empowered. */
   clear(): void {
     this.grid = Array.from({ length: this.size }, () =>
       Array.from({ length: this.size }, () => null),
@@ -80,6 +80,14 @@ export class Board {
   forceClear(p: Point): boolean {
     if (!this.inBounds(p) || this.at(p) === null) return false;
     this.grid[p.y]![p.x] = null;
+    this.koPoint = null;
+    return true;
+  }
+
+  /** Occupy a point without capture / suicide checks (tests, events). */
+  forcePlace(color: StoneColor, p: Point): boolean {
+    if (!this.inBounds(p) || this.at(p) !== null) return false;
+    this.grid[p.y]![p.x] = color;
     this.koPoint = null;
     return true;
   }
