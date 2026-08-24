@@ -176,3 +176,42 @@ export const BATTLE_STILL_DEMATTE = {
   fit: "contain",
   quality: 90,
 };
+
+/** Preset for bust-cropped inventory / codex portraits (same matte rules as stills). */
+export const PORTRAIT_DEMATTE = {
+  size: 512,
+  lim: 44,
+  chromaMax: 8,
+  flatRange: 6,
+  quality: 90,
+};
+
+/**
+ * Dematte raw RGBA and write WebP (for custom crop pipelines).
+ * @param {Uint8ClampedArray} rgba
+ * @param {number} w
+ * @param {number} h
+ * @param {string} dstWebp
+ * @param {object} [opts]
+ */
+export async function rawRgbaToDematteWebp(rgba, w, h, dstWebp, opts = {}) {
+  const lim = opts.lim ?? PORTRAIT_DEMATTE.lim;
+  const chromaMax = opts.chromaMax ?? PORTRAIT_DEMATTE.chromaMax;
+  const flatRange = opts.flatRange ?? PORTRAIT_DEMATTE.flatRange;
+  await dematteBuffer(rgba, w, h, lim, { chromaMax, flatRange });
+  const buf = await sharp(Buffer.from(rgba), {
+    raw: { width: w, height: h, channels: 4 },
+  })
+    .webp({ quality: opts.quality ?? PORTRAIT_DEMATTE.quality, alphaQuality: 100 })
+    .toBuffer();
+  const tmp = `${dstWebp}.${process.pid}.tmp`;
+  await fs.promises.writeFile(tmp, buf);
+  try {
+    await fs.promises.unlink(dstWebp).catch(() => {});
+    await fs.promises.rename(tmp, dstWebp);
+  } catch {
+    await fs.promises.copyFile(tmp, dstWebp);
+    await fs.promises.unlink(tmp).catch(() => {});
+  }
+  await fs.promises.unlink(tmp).catch(() => {});
+}
