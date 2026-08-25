@@ -170,7 +170,7 @@ describe("Battle flow", () => {
     assert.equal(b.lastStoneReport?.team, "enemy");
   });
 
-  it("safe place grants flat mana with no combat aura chips", () => {
+  it("safe place grants mana and team combat aura chips", () => {
     const b = new Battle({
       boardSize: 5,
       units: roster(),
@@ -183,11 +183,12 @@ describe("Battle flow", () => {
     b.tickUntilReady();
     const mana0 = b.allySummoner.mana;
     assert.equal(b.autoStone(), true);
-    assert.ok(b.allySummoner.mana >= mana0 + 6);
+    assert.ok(b.allySummoner.mana >= mana0 + 10);
     assert.match(b.log.join("\n"), /일반 소환: 마력/);
     const kinds = (b.lastStoneReport?.chips ?? []).map((c) => c.kind);
     assert.ok(kinds.includes("mana"));
-    assert.ok(!kinds.some((k) => k === "atk" || k === "def" || k === "spd" || k === "crit"));
+    assert.ok(kinds.includes("atk"));
+    assert.ok(kinds.includes("spd"));
     b.useSkill();
     for (const u of b.units) u.atb = 0;
     b.getUnit("a-sum")!.atb = 100;
@@ -270,7 +271,7 @@ describe("Battle flow", () => {
     const b = new Battle({
       boardSize: 5,
       units: roster(),
-      allySummoner: summonerState("a-sum", 40),
+      allySummoner: summonerState("a-sum", 32),
       enemySummoner: summonerState("e-sum"),
       rng: () => 0.5,
     });
@@ -552,8 +553,8 @@ describe("Battle flow", () => {
     const ally = b.getUnit("a-m2")!;
     const before = ally.atb;
     assert.equal(b.playStone({ x: 2, y: 1 }), true);
-    assert.ok(ally.atb >= before + 30);
-    assert.equal(b.getUnit("a-m1")!.spdBoostTurns, 2);
+    assert.ok(ally.atb >= before + 45);
+    assert.equal(b.getUnit("a-m1")!.spdBoostTurns, 3);
     assert.match(b.log.join("\n"), /행마모래/);
   });
 
@@ -700,6 +701,34 @@ describe("Battle flow", () => {
     const blocked = b.useSkill({ skillIndex: 2, targetId: "e-m1" });
     assert.equal(blocked.length, 0);
     assert.match(b.log.join("\n"), /쿨다운/);
+  });
+
+  it("skill cooldown ticks only on the monster's own turn", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    b.autoStone();
+    b.useSkill({ skillIndex: 2, targetId: "e-m1" });
+    const cdAfterUse = b.getUnit("a-m1")!.skillCd?.[2] ?? 0;
+    assert.ok(cdAfterUse > 0);
+
+    for (const u of b.units) u.atb = u.id === "e-m1" ? 100 : 0;
+    b.tickUntilReady();
+    b.autoStone();
+    const cdAfterEnemy = b.getUnit("a-m1")!.skillCd?.[2] ?? 0;
+    assert.equal(cdAfterEnemy, cdAfterUse);
+
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    b.autoStone();
+    const cdAfterAlly = b.getUnit("a-m1")!.skillCd?.[2] ?? 0;
+    assert.equal(cdAfterAlly, cdAfterUse - 1);
   });
 
   it("heals ally_lowest and auto-picks heal skill", () => {
@@ -925,7 +954,7 @@ describe("Battle flow", () => {
     assert.match(b.log.join("\n"), /포석 보너스 \(중앙 국면\)/);
   });
 
-  it("capture grants N×10% next-monster damage and manaMax×12%×N", () => {
+  it("capture grants N×damage next-monster bonus and manaMax×frac×N", () => {
     const b = new Battle({
       boardSize: 5,
       units: roster(),
@@ -978,8 +1007,8 @@ describe("Battle flow", () => {
     b3.tickUntilReady();
     const m0 = b3.allySummoner.mana;
     assert.equal(b3.playStone({ x: 2, y: 3 }), true);
-    assert.equal(b3.pendingCaptureDamageBonus.ally, 0.1);
-    assert.ok(b3.allySummoner.mana >= m0 + 12); // 12% of 100
+    assert.equal(b3.pendingCaptureDamageBonus.ally, 0.18);
+    assert.ok(b3.allySummoner.mana >= m0 + 20); // 20% of 100
     assert.equal(b3.skillAmplifyBonus, 0);
     const hp0 = b3.getUnit("e-m1")!.hp;
     const hits = b3.useSkill({ targetId: "e-m1" });

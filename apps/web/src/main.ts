@@ -182,6 +182,7 @@ import {
   gloryBuffFromLevels,
   isWeekdayStageOpenToday,
   pickArenaRival,
+  type ArenaRivalDeck,
   canGrindSymbol,
   canImprintSymbol,
   listImprintMainOutcomes,
@@ -293,6 +294,8 @@ import {
   evolveManaCost,
   evolveMinLevel,
   isStageUnlocked,
+  isStageClearedOnDifficulty,
+  isStageUnlockedForDifficulty,
   isDifficultyOpen,
   nextStageInProgression,
   MAX_EVOLVE,
@@ -313,6 +316,7 @@ import {
   runEnhanceMagicSkill,
   runAffixGearSet,
   runEquipGearBag,
+  runUnequipGear,
   runSellGearBag,
   runBuyEnergy,
   runBuyGrindstone,
@@ -419,6 +423,9 @@ import {
   runSetArenaBans,
   runSetArenaDefense,
   ARENA_ATTACKS_DAILY,
+  DEFAULT_ARENA_RATING,
+  arenaOpponentRating,
+  estimateSortiePower,
   arenaAttacksRemaining,
   syncArenaAttackDay,
   RAID_BOSS_MAX_HP,
@@ -865,6 +872,8 @@ let gearDetailTarget: { kind: "equipped"; slot: GearSlot } | { kind: "bag"; inde
   null;
 /** Gear bag index waiting on the sell confirmation sheet. */
 let gearSellConfirmIndex: number | null = null;
+/** Equipped slot waiting on the enhance confirmation sheet. */
+let gearEnhanceConfirmSlot: GearSlot | null = null;
 /** Gear bag type filter (all or one slot). */
 let gearBagFilterSlot: GearSlot | "all" = "all";
 let gearBagFilterOpen = false;
@@ -1071,7 +1080,9 @@ function applySumDetailTabUi(): boolean {
   shell.querySelectorAll<HTMLElement>("[data-sum-pane]").forEach((pane) => {
     pane.hidden = pane.dataset.sumPane !== sumDetailTab;
   });
-  if (sumDetailTab !== "gear" && gearBagFilterOpen) {
+  if (sumDetailTab === "gear") {
+    refreshSumGearPane();
+  } else if (gearBagFilterOpen) {
     gearBagFilterOpen = false;
     clearGearBagFilterMenuPortal();
     refreshSumGearPane();
@@ -1104,12 +1115,19 @@ function refreshSumBookModals(): boolean {
     gearSellConfirmIndex = null;
     softRemoveOverlay("gear-sell-confirm-layer");
   }
+  if (gearEnhanceConfirmSlot == null || !getActiveGear(save)[gearEnhanceConfirmSlot]) {
+    gearEnhanceConfirmSlot = null;
+    softRemoveOverlay("gear-enhance-confirm-layer");
+  }
   const gear = renderGearDetailModal(el);
   const magic = renderSumMagicDetailModal(el);
   if (gear) softMountOverlay("gear-detail-layer", gear);
   if (magic) softMountOverlay("sum-magic-detail-layer", magic);
   if (gearSellConfirmIndex != null && save.gearBag?.[gearSellConfirmIndex]) {
     softMountOverlay("gear-sell-confirm-layer", renderGearSellConfirmModal());
+  }
+  if (gearEnhanceConfirmSlot != null && getActiveGear(save)[gearEnhanceConfirmSlot]) {
+    softMountOverlay("gear-enhance-confirm-layer", renderGearEnhanceConfirmModal());
   }
   softRemoveOverlay("gear-bag-expand-layer");
   const gearExpand = renderGearBagExpandModal();
@@ -1391,42 +1409,24 @@ function bindSumBookModalInteractions(): void {
 
   gearLayer?.querySelectorAll<HTMLButtonElement>("[data-gear-detail-enhance]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (growthRevealIsOpen()) return;
       const slot = parseGearSlot(btn.dataset.gearDetailEnhance);
-      const el = activeSummonerElement();
-      const before = getActiveGear(save)[slot];
-      if (!before) {
-        flash(t("ui.43d54a7358"));
-        return;
-      }
-      const beforeEnhance = before.enhance;
-      const r = runEnhanceGear(save, slot);
-      const after = getActiveGear(r.save)[slot];
+      if (!getActiveGear(save)[slot]) return;
+      openGearEnhanceConfirm(slot);
+    });
+  });
+
+  gearLayer?.querySelectorAll<HTMLButtonElement>("[data-gear-detail-unequip]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      const slot = parseGearSlot(btn.dataset.gearDetailUnequip);
+      const r = runUnequipGear(save, slot);
+      if (getActiveGear(r.save)[slot]) return;
       save = r.save;
       persist();
-      if (!after || after.enhance <= beforeEnhance) {
-        flash(r.message);
-        return;
-      }
-      enhanceFx = { kind: "gear", slot };
-      const art = gearSlotArtSrc(after.slot, after.element ?? el, after.setId);
-      const fallback = gearSlotArtFallbackSrc(
-        after.slot,
-        after.element ?? el,
-        after.setId,
-      );
-      beginGrowthReveal({
-        kind: "gear",
-        portraitHtml: `<img class="growth-rite-img" src="${art}" width="96" height="96" alt="" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />`,
-        name: describeGear(after),
-        heroLine: t("ui.growthGearEnhance", {
-          from: beforeEnhance,
-          to: after.enhance,
-        }),
-        stats: gearGrowthStatDeltas(before, after),
-        skills: [],
-        notes: [],
-      });
+      closeGearEnhanceConfirm();
+      closeGearSellConfirm();
+      gearDetailTarget = null;
+      softRefreshSumBookUi({ gear: true, modals: true });
     });
   });
 
@@ -1453,6 +1453,7 @@ function bindSumBookModalInteractions(): void {
 
   gearLayer?.querySelectorAll<HTMLButtonElement>("[data-gear-detail-equip]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (btn.disabled) return;
       const idx = Number(btn.dataset.gearDetailEquip ?? "-1");
       const bagPiece = save.gearBag?.[idx];
       if (bagPiece) {
@@ -1477,7 +1478,6 @@ function bindSumBookModalInteractions(): void {
       }
       closeGearSellConfirm();
       gearDetailTarget = null;
-      flash(r.message);
       softRefreshSumBookUi({ gear: true, modals: true });
     });
   });
@@ -1490,6 +1490,7 @@ function bindSumBookModalInteractions(): void {
     });
   });
   bindGearSellConfirm();
+  bindGearEnhanceConfirm();
 
   const closeSumMagicDetail = () => {
     sumMagicDetailSlot = null;
@@ -1659,7 +1660,7 @@ let stoneResultFx: StoneReport | null = null;
 /** Manual skill pick under the active unit (SW: select then tap enemy). */
 let selectedSkillIndex: number | null = null;
 type BattleSummonerSkillId = "open" | "declare" | "dual" | "clean" | "guard";
-let selectedSummonerSkill: BattleSummonerSkillId | null = null;
+let selectedSummonerSkill: string | null = null;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let energyRegenTimer: ReturnType<typeof setInterval> | null = null;
 let wishCooldownTimer: ReturnType<typeof setInterval> | null = null;
@@ -1696,6 +1697,8 @@ let starterSummonerDraft: SummonerElement | null = null;
 let summonerUnlockOpen = false;
 let summonerUnlockDraft: SummonerElement | null = null;
 let summonerUnlockPromptedCount = -1;
+let summonerInfoOpen = false;
+let summonerInfoEl: SummonerElement | null = null;
 let mailboxOpen = false;
 let notifOpen = false;
 let summonerPickerOpen = false;
@@ -1785,6 +1788,8 @@ type StagesRegionId =
 let stagesRegion: StagesRegionId | null = null;
 /** Cairos dungeon picked inside the depth region sheet. */
 let stagesDepthDungeon: CairosDungeon | null = null;
+/** Arena rival locked when prep opens (stable through battle). */
+let arenaPrepRival: ArenaRivalDeck | null = null;
 /** Scenario page-turn FX: enemy summoner flees, allies chase, last-page vanish. */
 let pageTransitionFx: "flee" | "chase" | "enter" | "vanish" | null = null;
 /** Last-page win dissolve already played for this fight. */
@@ -3765,7 +3770,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
     flash(t("ui.guild.unjoined"));
     return;
   }
-  if (!isStageUnlocked(save, stage.id)) {
+  if (!isStageUnlockedForDifficulty(save, stage.id, diff)) {
     flash(t('ui.b72f5a4752'));
     render();
     return;
@@ -3792,7 +3797,7 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
     }
   }
   const cost = stageEnergyCost(stage, diff);
-  if (Math.floor(save.island.energy) < cost) {
+  if (cost > 0 && Math.floor(save.island.energy) < cost) {
     flash(t('ui.711b4aaddc'));
     render();
     return;
@@ -3843,10 +3848,12 @@ function startBattle(stage: StageDef, diff: StageDifficulty = "normal"): void {
   armBattleSkipTimer();
   stageEntryId = null;
   onboardSkillCued = false;
-  const rivalEnemies =
+  const rivalDeck =
     stage.mode === "arena"
-      ? pickArenaRival(`${todayKey()}:${stage.id}`).enemyMonsterIds
-      : undefined;
+      ? arenaPrepRival ?? pickArenaRival(`${todayKey()}:${stage.id}`)
+      : null;
+  arenaPrepRival = null;
+  const rivalEnemies = rivalDeck?.enemyMonsterIds;
   battle = createStageBattle(stage, save, {
     banEnemyIds:
       stage.mode === "world_arena" ? save.arenaBanIds ?? [] : undefined,
@@ -3965,7 +3972,7 @@ function renderStagePrepDock(): string {
 
 /** Open party-setup gate before combat (SW-style sortie prep). */
 function openStagePrep(stage: StageDef): void {
-  if (!isStageUnlocked(save, stage.id)) {
+  if (!isStageUnlockedForDifficulty(save, stage.id, stageEntryDiff)) {
     flash(t("ui.b72f5a4752"));
     return;
   }
@@ -3983,6 +3990,11 @@ function openStagePrep(stage: StageDef): void {
   stagePrepMagicPendingId = null;
   clearStagePrepLongPress();
   stagePrepSuppressClick = false;
+  if (stage.mode === "arena") {
+    arenaPrepRival = pickArenaRival(`${todayKey()}:${stage.id}`);
+  } else {
+    arenaPrepRival = null;
+  }
   const presets = normalizePartyPresets(save, save.partyPresets);
   const idx = clampPartyPresetIndex(save.activePartyPreset);
   const preset = presets[idx]!;
@@ -4006,12 +4018,20 @@ function closeStagePrep(): void {
   clearStagePrepLongPress();
   stagePrepSuppressClick = false;
   partyDraft = null;
+  arenaPrepRival = null;
   applyStagesRegionOpen();
 }
 
 function confirmStagePrepStart(): void {
   const stage = stageEntryId ? getStage(stageEntryId) : null;
   if (!stage) return;
+  if (stage.mode === "arena") {
+    save = syncArenaAttackDay(save);
+    if (arenaAttacksRemaining(save) <= 0) {
+      flash(`${t("ui.arena.ticketsLeft")} 0/${ARENA_ATTACKS_DAILY}`);
+      return;
+    }
+  }
   const draft = ensurePartyDraft();
   if (draft.size < 1) {
     flash(t("ui.stagePrepNeedParty"));
@@ -4173,12 +4193,32 @@ function renderStageEntryModal(): string {
   const cost = stageEnergyCost(stage, stageEntryDiff);
   const energyNow = Math.floor(save.island.energy);
   const energyMax = save.island.energyMax ?? 100;
+  const isArena = stage.mode === "arena";
+  const attacksLeft = isArena ? arenaAttacksRemaining(save) : 0;
   const selected = ensurePartyDraft();
   const partyUids = [...selected];
   while (partyUids.length < 4) partyUids.push("");
   const activeEl = save.activeSummoner ?? "light";
   const activeSum = getActiveSummoner(save);
-  const enemyIds = (stage.enemyMonsterIds ?? []).slice(0, 4);
+  const arenaRival = isArena
+    ? arenaPrepRival ?? pickArenaRival(`${todayKey()}:${stage.id}`)
+    : null;
+  const enemyIds =
+    isArena && arenaRival
+      ? arenaRival.enemyMonsterIds.slice(0, 4)
+      : (stage.enemyMonsterIds ?? []).slice(0, 4);
+  const enemySummonerEl =
+    isArena && arenaRival ? arenaRival.summonerElement : "dark";
+  const oppRating = isArena ? arenaOpponentRating(stage.id) : 0;
+  const myRating = save.arenaRating ?? DEFAULT_ARENA_RATING;
+  const power =
+    isArena
+      ? estimateSortiePower(save, stage, {
+          enemyMonsterIds: enemyIds,
+          party: [...selected],
+        })
+      : null;
+  const powerGap = power ? power.ally - power.enemy : 0;
   const leader = stagePrepLeaderPassive(save);
   const presets = normalizePartyPresets(save, save.partyPresets);
   const presetIdx = clampPartyPresetIndex(save.activePartyPreset);
@@ -4232,8 +4272,43 @@ function renderStageEntryModal(): string {
   const titleText = hideDiffTitle
     ? stage.nameKo
     : `${stage.nameKo}(${diff.labelKo})`;
-  const canStart = selected.size > 0 && energyNow >= cost;
+  const canStart = isArena
+    ? selected.size > 0 && attacksLeft > 0
+    : selected.size > 0 && energyNow >= cost;
   const bossPrep = isBossPrepStage(stage);
+
+  const headerResource = isArena
+    ? `<div class="stage-prep-energy stage-prep-ticket">
+          <img class="res-ico" src="/art/ui/res/arena-ticket.svg" width="18" height="18" alt="" draggable="false" />
+          <strong>${attacksLeft}/${ARENA_ATTACKS_DAILY}</strong>
+        </div>`
+    : `<div class="stage-prep-energy">
+          <img class="res-ico" src="/art/ui/res/energy.svg" width="18" height="18" alt="" draggable="false" />
+          <strong>${energyNow}/${energyMax}</strong>
+          <button type="button" class="stage-prep-energy-buy" id="btn-stage-prep-buy-energy" title="${escapeHtml(t("ui.stagePrepEnergyBuy"))}" aria-label="${escapeHtml(t("ui.stagePrepEnergyBuy"))}">+</button>
+        </div>`;
+
+  const arenaMeta =
+    isArena && power
+      ? `<div class="stage-prep-arena-meta">
+          <span class="stage-prep-arena-rating">${escapeHtml(t("ui.arena.rating"))} <strong>${fmtRes(myRating)}</strong> vs <strong>${fmtRes(oppRating)}</strong></span>
+          <span class="stage-prep-arena-power">
+            <span>${escapeHtml(t("ui.arena.power"))} <strong>${fmtRes(power.ally)}</strong></span>
+            <span aria-hidden="true">VS</span>
+            <span><strong>${fmtRes(power.enemy)}</strong></span>
+            <span class="stage-prep-arena-gap${powerGap >= 0 ? " is-up" : " is-down"}">${powerGap >= 0 ? "+" : ""}${fmtRes(powerGap)}</span>
+          </span>
+        </div>`
+      : "";
+
+  const startCostChip = isArena
+    ? `<img src="/art/ui/res/arena-ticket.svg" width="15" height="15" alt="" draggable="false" />1`
+    : `<img src="/art/ui/res/energy.svg" width="15" height="15" alt="" draggable="false" />${cost}`;
+
+  const enemySummonerLabel =
+    isArena && arenaRival
+      ? arenaRival.nameKo
+      : t("ui.stagePrepEnemySummoner");
 
   const leaderMarkers = renderLeaderPassiveMarkerChips(leader.markers);
   const bossLeadId = stage.enemyMonsterIds[0];
@@ -4251,11 +4326,11 @@ function renderStageEntryModal(): string {
   const enemyBlock = bossPrep
     ? bossBlock
     : `<section class="stage-prep-team stage-prep-team--enemy" aria-label="${escapeHtml(t("ui.stagePrepEnemy"))}">
-        <h3 class="stage-prep-team-label stage-prep-team-label--enemy">${escapeHtml(t("ui.stagePrepEnemy"))}</h3>
+        <h3 class="stage-prep-team-label stage-prep-team-label--enemy">${escapeHtml(isArena && arenaRival ? arenaRival.nameKo : t("ui.stagePrepEnemy"))}</h3>
         <div class="stage-prep-slots">
-          <div class="stage-prep-slot stage-prep-slot--summoner el-dark" title="${escapeHtml(t("ui.stagePrepEnemySummoner"))}">
-            <img class="stage-prep-slot-img" src="${summonerArtSrc("dark")}" width="64" height="64" alt="" draggable="false" decoding="async" />
-            <span class="stage-prep-slot-tag">${escapeHtml(t("ui.stagePrepEnemySummoner"))}</span>
+          <div class="stage-prep-slot stage-prep-slot--summoner el-${enemySummonerEl}" title="${escapeHtml(enemySummonerLabel)}">
+            <img class="stage-prep-slot-img" src="${summonerArtSrc(enemySummonerEl)}" width="64" height="64" alt="" draggable="false" decoding="async" />
+            <span class="stage-prep-slot-tag">${escapeHtml(enemySummonerLabel)}</span>
           </div>
           ${enemyMonSlots}
         </div>
@@ -4268,13 +4343,10 @@ function renderStageEntryModal(): string {
       <header class="stage-prep-top stage-prep-top--board">
         <span class="stage-prep-team-label stage-prep-team-label--stage">${escapeHtml(t("ui.stagePrepTitle"))}</span>
         <h2 class="stage-prep-title" id="stage-entry-title">${escapeHtml(titleText)}</h2>
-        <div class="stage-prep-energy">
-          <img class="res-ico" src="/art/ui/res/energy.svg" width="18" height="18" alt="" draggable="false" />
-          <strong>${energyNow}/${energyMax}</strong>
-          <button type="button" class="stage-prep-energy-buy" id="btn-stage-prep-buy-energy" title="${escapeHtml(t("ui.stagePrepEnergyBuy"))}" aria-label="${escapeHtml(t("ui.stagePrepEnergyBuy"))}">+</button>
-        </div>
+        ${headerResource}
       </header>
 
+      ${arenaMeta}
       ${enemyBlock}
 
       <section class="stage-prep-team stage-prep-team--ally" aria-label="${escapeHtml(t("ui.stagePrepParty"))}">
@@ -4307,7 +4379,7 @@ function renderStageEntryModal(): string {
 
       <footer class="stage-prep-footer">
         <button type="button" class="stage-prep-start" id="btn-stage-entry-start" data-core-prep-action="start" ${canStart ? "" : "disabled"}>
-          <span class="stage-prep-start-cost" aria-hidden="true"><img src="/art/ui/res/energy.svg" width="15" height="15" alt="" draggable="false" />${cost}</span>
+          <span class="stage-prep-start-cost" aria-hidden="true">${startCostChip}</span>
           <span>${escapeHtml(t("ui.stagePrepStart"))}</span>
         </button>
         <button type="button" class="stage-prep-cancel" id="btn-stage-entry-cancel" data-core-prep-action="cancel">${escapeHtml(t("ui.stagePrepCancel"))}</button>
@@ -4423,7 +4495,8 @@ function renderStagePrepInfoModal(): string {
     <div class="stage-prep-info-section">
       <h3>${escapeHtml(t("ui.stagePrepInfoSkills"))}</h3>
       <div class="stage-prep-info-skills">${skillRow || `<p class="muted">${escapeHtml(t("ui.stagePrepSkillLocked"))}</p>`}</div>
-    </div>`;
+    </div>
+    ${renderSummonerInfoLockFooter(el)}`;
   } else if (info.kind === "monster") {
     const m = save.roster.find((x) => x.uid === info.uid);
     if (!m) {
@@ -4594,6 +4667,10 @@ function bindStagePrepInfoControls(host: ParentNode): void {
   host
     .querySelector(".stage-prep-info-backdrop")
     ?.addEventListener("click", close);
+  host.querySelector<HTMLButtonElement>("#btn-summoner-info-unlock")?.addEventListener("click", () => {
+    if (stagePrepInfo?.kind !== "summoner") return;
+    confirmSummonerUnlock(stagePrepInfo.element);
+  });
 }
 
 function bindStagePrepLongPress(host: ParentNode): void {
@@ -4721,8 +4798,14 @@ function bindStagePrepDockControls(host: ParentNode): void {
       if (consumeStagePrepSuppressClick()) return;
       const el = btn.dataset.stagePrepSummoner as SummonerElement | undefined;
       if (!el) return;
+      if (!isSummonerUnlocked(save, el)) {
+        openSummonerInfoSoft(el);
+        return;
+      }
       if (el !== (save.activeSummoner ?? "light")) {
-        if (!activateOrUnlockSummoner(el)) return;
+        save = setActiveSummoner(save, el);
+        persist();
+        flash(t("summonerPicker.switched", { element: elementLabel(el) }));
       }
       stagePrepInvTab = "summoner";
       stagePrepMagicPendingId = null;
@@ -4971,8 +5054,12 @@ function requireSelectedEnemyTarget(): string | undefined {
   return undefined;
 }
 
-function summonerSkillNeedsEnemyTarget(id: BattleSummonerSkillId): boolean {
-  return id === "open";
+function summonerSkillNeedsEnemyTarget(id: string, unit?: Unit | null): boolean {
+  if (id === "open") return true;
+  if (!battle || !unit) return false;
+  const def = battle.summonerOf(unit.team).magicSkills?.find((s) => s.id === id);
+  if (!def) return false;
+  return def.kind === "single_damage" || def.kind === "enemy_debuff";
 }
 
 function grantRewardIfNeeded(): void {
@@ -5102,8 +5189,8 @@ function resultExpCard(track: ExpTrackGain | null, kind: ExpTrackGain["kind"]): 
   </li>`;
 }
 
-function nextCampaignStage(stage: StageDef): StageDef | null {
-  return nextStageInProgression(save, stage);
+function nextCampaignStage(stage: StageDef, diff: StageDifficulty = stageEntryDiff): StageDef | null {
+  return nextStageInProgression(save, stage, diff);
 }
 
 function resultBattleAction(
@@ -5348,20 +5435,20 @@ function renderResult(): string {
   const loseNote = !win
     ? `<p class="result-empty">${escapeHtml(reward.expNote || t("ui.41281baf5a"))}</p>`
     : "";
-  const nextStage = win ? nextCampaignStage(stage) : null;
+  const nextStage = win ? nextCampaignStage(stage, stageEntryDiff) : null;
   const riteContinue =
     firstRite && onboard.step === "summon"
       ? `<button type="button" class="auth-btn-primary result-cta-primary result-onboard-cta" id="btn-result-onboard">${escapeHtml(t("ui.onboard.resultSummonCta"))}</button>`
       : "";
   const battleChoices = `<section class="result-battle-choices${firstRite ? " is-onboard-secondary" : ""}" aria-label="${escapeHtml(t("ui.be85833944"))}">
-    ${resultBattleAction(stage, "again", t("ui.03d1f975cb"))}
+    ${resultBattleAction(stage, "again", t("ui.03d1f975cb"), stageEntryDiff)}
     ${
       nextStage
         ? resultBattleAction(
             nextStage,
             "next",
             t("ui.resultNextStage"),
-            "normal",
+            stageEntryDiff,
           )
         : ""
     }
@@ -6234,11 +6321,11 @@ function setBattleAutoMode(on: boolean): void {
 }
 
 function castSkill(
-  mode: BattleSummonerSkillId | "ult" | "smart" | number,
+  mode: BattleSummonerSkillId | "ult" | "smart" | number | string,
   targetId?: string,
 ): void {
   // Legacy "ult" id maps to open.
-  const resolved: BattleSummonerSkillId | "smart" | number =
+  const resolved: BattleSummonerSkillId | "smart" | number | string =
     mode === "ult" ? "open" : mode;
   void castSkillAsync(resolved, targetId);
 }
@@ -6312,7 +6399,7 @@ async function playStrikeFx(
 }
 
 async function castSkillAsync(
-  mode: BattleSummonerSkillId | "smart" | number,
+  mode: BattleSummonerSkillId | "smart" | number | string,
   forcedTargetId?: string,
 ): Promise<void> {
   if (
@@ -6341,6 +6428,42 @@ async function castSkillAsync(
       await playStrikeFx(hits, opts);
       await resolveCombatUntilAllyInput({ holdBusy: true });
     };
+
+    const legacySummonerModes = new Set([
+      "open",
+      "declare",
+      "dual",
+      "clean",
+      "guard",
+    ]);
+    if (typeof mode === "string" && !legacySummonerModes.has(mode) && mode !== "smart") {
+      const magics = battle.summonerOf(unit.team).magicSkills ?? [];
+      const def = magics.find((s) => s.id === mode);
+      if (def) {
+        if (!battle.canUseMagicSkill(unit, mode)) {
+          flash(t("ui.711b4aaddc"));
+          render();
+          return;
+        }
+        const needsTarget =
+          def.kind === "single_damage" || def.kind === "enemy_debuff";
+        let targetId: string | undefined;
+        if (needsTarget) {
+          targetId = requireSelectedEnemyTarget();
+          if (!targetId) {
+            flash(t("ui.battlePickEnemy"));
+            render();
+            return;
+          }
+        }
+        const hits = battle.useSkill({ summonerSkill: mode, targetId });
+        await finish(hits, {
+          ult: def.manaCostFrac >= 0.95,
+          sfxKind: magicKindFromId(mode),
+        });
+        return;
+      }
+    }
 
     if (mode === "open") {
       const magics = battle.summonerOf(unit.team).magicSkills ?? [];
@@ -6458,14 +6581,19 @@ function renderSkillButtons(active: Unit | null, awaitSkill: boolean): string {
   const slots = [0, 1, 2].map((i) => {
     const sk = skills[i];
     const cd = cds[i] ?? 0;
-    const label = sk ? sk.nameKo : i === 0 ? t("ui.8a1893a931") : `S${i + 1}`;
-    const disabled = !awaitSkill || (sk ? cd > 0 : i > 0);
+    const label = sk
+      ? sk.nameKo
+      : i === 0
+        ? t("ui.8a1893a931")
+        : `S${i + 1}`;
+    const disabled = !awaitSkill || !sk || cd > 0;
     const selected =
       awaitSkill && !disabled && selectedSkillIndex === i ? " is-selected" : "";
     const state = cd > 0 ? " cooling" : awaitSkill && !disabled ? " ready" : "";
+    const slotIdx = monsterSkillSlotIndex(i, sk);
     const ico =
-      monId != null
-        ? monsterSkillArtImg(monId, i, sk, "skill-btn-ico", 40)
+      monId != null && sk
+        ? monsterSkillArtImg(monId, slotIdx, sk, "skill-btn-ico", 40)
         : `<img class="skill-btn-ico" src="${monsterSkillArtSrc(null, -1, sk)}" width="40" height="40" alt="" draggable="false" decoding="async" />`;
     return `<button type="button" class="skill-btn${state}${selected}" data-skill="${i}" ${disabled ? "disabled" : ""}>
       ${ico}
@@ -6481,51 +6609,17 @@ function renderSummonerSkillButtons(
   awaitSkill: boolean,
 ): string {
   if (!battle || !awaitSkill || active.kind !== "summoner") return "";
-  const items: {
-    id: BattleSummonerSkillId;
-    ready: boolean;
-    label: string;
-    art: string;
-  }[] = [
-    {
-      id: "open",
-      ready: battle.canUseSummonerSkill(active),
-      label: t("ui.2d99fde255"),
-      art: "open",
-    },
-    {
-      id: "declare",
-      ready: battle.canUseSummonerDeclare(active),
-      label: t("ui.bd1967124e"),
-      art: "declare",
-    },
-    {
-      id: "dual",
-      ready: battle.canUseSummonerDual(active),
-      label: t("ui.1fa6111a65"),
-      art: "dual",
-    },
-    {
-      id: "clean",
-      ready: battle.canUseSummonerClean(active),
-      label: t("ui.ac2f6c7ca5"),
-      art: "clean",
-    },
-    {
-      id: "guard",
-      ready: battle.canUseSummonerGuard(active),
-      label: t("ui.0be109c051"),
-      art: "guard",
-    },
-  ];
-  return items
-    .map((it) => {
+  const magics = battle.summonerOf(active.team).magicSkills ?? [];
+  if (magics.length === 0) return "";
+  return magics
+    .map((sk) => {
+      const ready = battle!.canUseMagicSkill(active, sk.id);
       const selected =
-        selectedSummonerSkill === it.id ? " is-selected" : "";
-      const state = it.ready ? " ready" : "";
-      return `<button type="button" class="summoner-sk skill-btn ${it.id}${state}${selected}" data-summoner-skill="${it.id}" ${it.ready ? "" : "disabled"}>
-        ${summonerSkillArtImg(it.art, "skill-btn-ico", 40)}
-        <span class="skill-btn-label">${it.label}</span>
+        selectedSummonerSkill === sk.id ? " is-selected" : "";
+      const state = ready ? " ready" : "";
+      return `<button type="button" class="summoner-sk skill-btn mag-${escapeHtml(sk.id)}${state}${selected}" data-summoner-skill="${escapeHtml(sk.id)}" ${ready ? "" : "disabled"}>
+        ${summonerSkillArtImg(sk.id, "skill-btn-ico", 40)}
+        <span class="skill-btn-label">${escapeHtml(sk.nameKo)}</span>
       </button>`;
     })
     .join("");
@@ -7792,6 +7886,179 @@ function summonerLockBadgeHtml(el: SummonerElement): string {
   return `<span class="summoner-lock-badge">${CODEX_LOCK_HTML}<strong>${escapeHtml(t("summonerPicker.needLv", { n: need }))}</strong></span>`;
 }
 
+function renderSummonerInfoLockFooter(el: SummonerElement): string {
+  if (isSummonerUnlocked(save, el)) return "";
+  if (canUnlockAdditionalSummoner(save, el)) {
+    return `<button type="button" class="auth-btn-primary summoner-info-unlock" id="btn-summoner-info-unlock">${escapeHtml(t("ui.summonerUnlock.confirm"))}</button>`;
+  }
+  const need = summonerLockNeedLv(el);
+  if (need == null) return "";
+  return `<p class="summoner-info-lock">${escapeHtml(t("ui.summonerInfo.unlockAt", { n: need }))}</p>`;
+}
+
+function renderSummonerInfoBody(el: SummonerElement): string {
+  const p = save.summoners?.[el] ?? { level: 1, exp: 0, awaken: 0 };
+  const kit = getSummonerKit(el);
+  const leader = kit.leader;
+  const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
+  const unlocked = unlockedMagicSkills(el, prog);
+  const leaderBits = stagePrepLeaderPassive({
+    ...save,
+    activeSummoner: el,
+  });
+  const leaderBuffs = renderLeaderBuffChips(leader, el);
+  const skillRow = unlocked
+    .map((sk) => {
+      const rank = magicRank(prog, sk.id);
+      return `<div class="stage-prep-info-skill">
+        ${summonerSkillArtImg(sk.id, "stage-prep-info-skill-img", 36)}
+        <span class="stage-prep-info-skill-copy">
+          <strong>${escapeHtml(sk.nameKo)}</strong>
+          <small>${escapeHtml(
+            t("ui.magicRankLabel", { rank, max: MAX_MAGIC_RANK }),
+          )}</small>
+        </span>
+      </div>`;
+    })
+    .join("");
+  const locked = !isSummonerUnlocked(save, el);
+  const levelLine = locked
+    ? escapeHtml(elementLabel(el))
+    : `${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${p.level} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}`;
+  return `<div class="summoner-info-body">
+    <div class="stage-prep-info-hero el-${el}">
+      <img class="stage-prep-info-art" src="${summonerArtSrc(el)}" width="88" height="88" alt="" draggable="false" decoding="async" />
+      <div class="stage-prep-info-hero-copy">
+        <strong>${escapeHtml(leader.nameKo)}</strong>
+        <small>${levelLine}</small>
+        <p class="stage-prep-info-leader"><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span></p>
+        <div class="stage-prep-leader-markers">${renderLeaderPassiveMarkerChips(leaderBits.markers)}</div>
+      </div>
+    </div>
+    <div class="stage-prep-info-section">
+      <h3>${escapeHtml(t("ui.sumBookLeader"))}</h3>
+      <div class="sum-leader-buffs">${leaderBuffs}</div>
+    </div>
+    <div class="stage-prep-info-section">
+      <h3>${escapeHtml(t("ui.stagePrepInfoSkills"))}</h3>
+      <div class="stage-prep-info-skills">${skillRow || `<p class="muted">${escapeHtml(t("ui.stagePrepSkillLocked"))}</p>`}</div>
+    </div>
+    ${renderSummonerInfoLockFooter(el)}
+  </div>`;
+}
+
+function renderSummonerInfoLayer(): string {
+  const el = summonerInfoEl;
+  const open = summonerInfoOpen && el != null;
+  const body = open ? renderSummonerInfoBody(el) : "";
+  const title = open
+    ? escapeHtml(getSummonerKit(el).leader.nameKo)
+    : escapeHtml(t("ui.summonerInfo.title"));
+  return `<div class="settings-layer" id="summoner-info-layer" ${open ? "" : "hidden"} aria-hidden="${open ? "false" : "true"}">
+    <button type="button" class="settings-backdrop" id="btn-summoner-info-close" aria-label="${escapeHtml(t("ui.summonerInfo.close"))}"></button>
+    <div class="settings-sheet summoner-info-sheet" role="dialog" aria-modal="true" aria-labelledby="summoner-info-title">
+      ${modalCloseX(t("ui.summonerInfo.close"), "btn-summoner-info-close")}
+      <h2 class="settings-title" id="summoner-info-title">${title}</h2>
+      <div id="summoner-info-body-host">${body}</div>
+    </div>
+  </div>`;
+}
+
+function applySummonerInfoOpen(): void {
+  const layer = app.querySelector<HTMLElement>("#summoner-info-layer");
+  const open = summonerInfoOpen && summonerInfoEl != null;
+  if (!layer) {
+    if (open) render();
+    return;
+  }
+  layer.hidden = !open;
+  layer.setAttribute("aria-hidden", open ? "false" : "true");
+  if (!open) {
+    cueModalSfx("summoner-info", false);
+    return;
+  }
+  const el = summonerInfoEl!;
+  const title = layer.querySelector<HTMLElement>("#summoner-info-title");
+  if (title) title.textContent = getSummonerKit(el).leader.nameKo;
+  const bodyHost = layer.querySelector<HTMLElement>("#summoner-info-body-host");
+  if (bodyHost) bodyHost.innerHTML = renderSummonerInfoBody(el);
+  promoteOverlayToAppRoot(layer);
+  replayModalPop(layer);
+  bindSummonerInfoUi();
+  cueModalSfx("summoner-info", true);
+}
+
+function closeSummonerInfoSoft(): void {
+  if (!summonerInfoOpen) return;
+  summonerInfoOpen = false;
+  summonerInfoEl = null;
+  applySummonerInfoOpen();
+}
+
+function openSummonerInfoSoft(el: SummonerElement): void {
+  summonerInfoEl = el;
+  summonerInfoOpen = true;
+  if (!app.querySelector("#summoner-info-layer")) {
+    render();
+    return;
+  }
+  applySummonerInfoOpen();
+}
+
+function confirmSummonerUnlock(el: SummonerElement): void {
+  if (!canUnlockAdditionalSummoner(save, el)) return;
+  const r = unlockAdditionalSummoner(save, el);
+  save = setActiveSummoner(r.save, el);
+  persist();
+  if (hasSpareSummonerUnlockSlot(save)) {
+    summonerUnlockPromptedCount = unlockedSummonerList(save).length;
+  }
+  closeSummonerInfoSoft();
+  stagePrepInfo = null;
+  applyStagePrepInfo();
+  if (view === "stages" && stageEntryId) applyStagesRegionOpen({ animate: false });
+  else if (view === "party") applyPartyHallOpen({ animate: false });
+  else render();
+  maybeOfferSummonerUnlock();
+}
+
+function bindSummonerInfoUi(): void {
+  const layer = app.querySelector("#summoner-info-layer");
+  if (!layer) return;
+  const close = () => closeSummonerInfoSoft();
+  const closeBtn = layer.querySelector<HTMLButtonElement>("#btn-summoner-info-close");
+  if (closeBtn) closeBtn.onclick = close;
+  const backdrop = layer.querySelector<HTMLButtonElement>(".settings-backdrop");
+  if (backdrop) backdrop.onclick = close;
+  const unlockBtn = layer.querySelector<HTMLButtonElement>("#btn-summoner-info-unlock");
+  if (unlockBtn) {
+    unlockBtn.onclick = () => {
+      const el = summonerInfoEl;
+      if (!el) return;
+      confirmSummonerUnlock(el);
+    };
+  }
+}
+
+function tapSummonerSlot(
+  el: SummonerElement,
+  opts?: { closePicker?: boolean },
+): boolean {
+  if (!isSummonerUnlocked(save, el)) {
+    openSummonerInfoSoft(el);
+    return false;
+  }
+  if (el === (save.activeSummoner ?? "light")) return false;
+  save = setActiveSummoner(save, el);
+  persist();
+  flash(t("summonerPicker.switched", { element: elementLabel(el) }));
+  if (opts?.closePicker) {
+    summonerPickerOpen = false;
+    applySummonerPickerOpen();
+  }
+  return true;
+}
+
 function activateOrUnlockSummoner(el: SummonerElement): boolean {
   if (el === (save.activeSummoner ?? "light") && isSummonerUnlocked(save, el)) {
     return false;
@@ -7869,7 +8136,7 @@ function applyResMoreOpen(): void {
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play, .glory-up-play",
+    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .building-unlock-sheet, .summoner-info-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play, .glory-up-play",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -7939,6 +8206,7 @@ const APP_ROOT_OVERLAY_IDS = [
   "nick-setup-layer",
   "starter-summoner-layer",
   "summoner-unlock-layer",
+  "summoner-info-layer",
   "mailbox-layer",
   "notif-layer",
   "mission-layer",
@@ -7959,6 +8227,7 @@ const APP_ROOT_OVERLAY_IDS = [
   "power-up-layer",
   "gear-detail-layer",
   "gear-sell-confirm-layer",
+  "gear-enhance-confirm-layer",
   "sum-magic-detail-layer",
   "sym-detail-layer",
   "sym-bag-expand-layer",
@@ -10763,10 +11032,7 @@ function renderScreen(): void {
   const summonerPickerList = SUMMONER_ELEMENTS.map((el) => {
     const p = rosterForPicker[el];
     const on = el === activeEl;
-    const unlocked = isSummonerUnlocked(save, el);
-    const unlockable = !unlocked && canUnlockAdditionalSummoner(save, el);
-    const locked = !unlocked && !unlockable;
-    return `<button type="button" class="summoner-pick${on ? " is-active" : ""}${summonerSlotClass(el, "") ? ` ${summonerSlotClass(el)}` : ""}" data-summoner="${el}" ${on || locked ? "disabled" : ""}>
+    return `<button type="button" class="summoner-pick${on ? " is-active" : ""}${summonerSlotClass(el, "") ? ` ${summonerSlotClass(el)}` : ""}" data-summoner="${el}" ${on ? "disabled" : ""}>
       <img class="summoner-pick-art" src="/art/summoner/${el}.webp" width="44" height="44" alt="" draggable="false" decoding="async" />
       <span class="summoner-pick-body">
         <strong>${escapeHtml(t("summonerPicker.summoner", { element: elementLabel(el) }))}</strong>
@@ -10929,6 +11195,7 @@ function renderScreen(): void {
     ${renderNickSetupLayer()}
     ${renderStarterSummonerLayer()}
     ${renderSummonerUnlockLayer()}
+    ${renderSummonerInfoLayer()}
     ${
       `<div class="settings-layer" id="summoner-picker-layer" ${summonerPickerOpen ? "" : "hidden"} aria-hidden="${summonerPickerOpen ? "false" : "true"}">
       <button type="button" class="settings-backdrop" id="btn-summoner-picker-close" aria-label="${escapeHtml(t("summonerPicker.close"))}"></button>
@@ -12435,8 +12702,14 @@ function bindPartyHallControls(): void {
       if (consumeStagePrepSuppressClick()) return;
       const el = btn.dataset.partyPickSummoner as SummonerElement | undefined;
       if (!el) return;
+      if (!isSummonerUnlocked(save, el)) {
+        openSummonerInfoSoft(el);
+        return;
+      }
       if (el !== (save.activeSummoner ?? "light")) {
-        if (!activateOrUnlockSummoner(el)) return;
+        save = setActiveSummoner(save, el);
+        persist();
+        flash(t("summonerPicker.switched", { element: elementLabel(el) }));
       }
       partyInvTab = "summoner";
       stagePrepMagicPendingId = null;
@@ -12560,17 +12833,30 @@ function monsterElementArtSrc(el: string | undefined | null): string | null {
   return `/art/ui/element/${el}.webp`;
 }
 
+function monsterSkillSlotIndex(
+  skillIndex: number,
+  skill?: { id?: string } | null,
+): number {
+  const id = skill?.id;
+  if (id === "s1") return 0;
+  if (id === "s2") return 1;
+  if (id === "s3") return 2;
+  return skillIndex;
+}
+
 function monsterSkillArtSrc(
   monsterId: string | undefined | null,
   skillIndex: number,
   skill?: {
+    id?: string;
     effects?: { kind: string }[];
   } | null,
 ): string {
-  if (monsterId && skillIndex >= 0 && skillIndex <= 2) {
+  const slotIdx = monsterSkillSlotIndex(skillIndex, skill);
+  if (monsterId && slotIdx >= 0 && slotIdx <= 2) {
     const def = getMonster(monsterId);
     const artKey = def?.artKey ?? getMonsterArtKey(monsterId) ?? monsterId;
-    return `/art/monster/skill/${artKey}-s${skillIndex + 1}.webp`;
+    return `/art/monster/skill/${artKey}-s${slotIdx + 1}.webp`;
   }
   const kind = skill?.effects?.[0]?.kind;
   if (kind === "heal") return "/art/ui/skill/heal.webp";
@@ -12582,18 +12868,21 @@ function monsterSkillArtSrc(
 function monsterSkillArtImg(
   monsterId: string | undefined | null,
   skillIndex: number,
-  skill: { effects?: { kind: string }[] } | null | undefined,
+  skill: { id?: string; effects?: { kind: string }[] } | null | undefined,
   className: string,
   size: number,
 ): string {
-  const src = monsterSkillArtSrc(monsterId, skillIndex, skill);
+  const slotIdx = monsterSkillSlotIndex(skillIndex, skill);
+  const src = monsterSkillArtSrc(monsterId, slotIdx, skill);
   const def = monsterId ? getMonster(monsterId) : null;
   const artKey = def?.artKey ?? getMonsterArtKey(monsterId) ?? monsterId;
   const el = def?.element;
+  const slot = slotIdx + 1;
   const fallbacks: string[] = [];
-  if (artKey && skillIndex >= 0 && skillIndex <= 2) {
-    if (el) fallbacks.push(`/art/monster/skill/${artKey}-${el}-s${skillIndex + 1}.svg`);
-    fallbacks.push(`/art/monster/skill/${artKey}-s${skillIndex + 1}.svg`);
+  if (artKey && slotIdx >= 0 && slotIdx <= 2) {
+    if (el) fallbacks.push(`/art/monster/skill/${artKey}-${el}-s${slot}.svg`);
+    fallbacks.push(`/art/monster/skill/${artKey}-s${slot}.svg`);
+    if (el) fallbacks.push(`/art/monster/skill/${artKey}-s${slot}.webp`);
   } else {
     const kind = skill?.effects?.[0]?.kind;
     if (kind === "heal") fallbacks.push("/art/ui/skill/heal.svg");
@@ -15073,6 +15362,157 @@ function gearSetSummaryHtml(gear: ReturnType<typeof getActiveGear>): string {
     .join("");
 }
 
+function canAffordGearEnhance(piece: GearPiece): boolean {
+  const mana = gearEnhanceManaCost(piece.enhance);
+  const crystal = gearEnhanceCrystalCost(piece.enhance);
+  return (
+    save.island.mana >= mana && (save.island.crystal ?? 0) >= crystal
+  );
+}
+
+function closeGearEnhanceConfirm(): void {
+  gearEnhanceConfirmSlot = null;
+  softRemoveOverlay("gear-enhance-confirm-layer");
+}
+
+function openGearEnhanceConfirm(slot: GearSlot): void {
+  if (!getActiveGear(save)[slot]) return;
+  gearEnhanceConfirmSlot = slot;
+  if (softMountOverlay("gear-enhance-confirm-layer", renderGearEnhanceConfirmModal())) {
+    bindGearEnhanceConfirm();
+  }
+}
+
+function executeGearEnhance(slot: GearSlot): void {
+  if (growthRevealIsOpen()) return;
+  const el = activeSummonerElement();
+  const before = getActiveGear(save)[slot];
+  if (!before) return;
+  const beforeEnhance = before.enhance;
+  const r = runEnhanceGear(save, slot);
+  const after = getActiveGear(r.save)[slot];
+  save = r.save;
+  persist();
+  syncHudResources();
+  if (!after || after.enhance <= beforeEnhance) return;
+  closeGearEnhanceConfirm();
+  gearDetailTarget = { kind: "equipped", slot };
+  enhanceFx = { kind: "gear", slot };
+  const art = gearSlotArtSrc(after.slot, after.element ?? el, after.setId);
+  const fallback = gearSlotArtFallbackSrc(
+    after.slot,
+    after.element ?? el,
+    after.setId,
+  );
+  beginGrowthReveal({
+    kind: "gear",
+    portraitHtml: `<img class="growth-rite-img" src="${art}" width="96" height="96" alt="" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />`,
+    name: describeGear(after),
+    heroLine: t("ui.growthGearEnhance", {
+      from: beforeEnhance,
+      to: after.enhance,
+    }),
+    stats: gearGrowthStatDeltas(before, after),
+    skills: [],
+    notes: [],
+  });
+}
+
+function executeGearSell(idx: number): void {
+  const piece = save.gearBag?.[idx];
+  if (!piece) return;
+  const el = activeSummonerElement();
+  const manaGain = gearSellMana(piece);
+  const crystalGain = gearSellCrystal(piece);
+  const art = gearSlotArtSrc(piece.slot, piece.element ?? el, piece.setId);
+  const fallback = gearSlotArtFallbackSrc(
+    piece.slot,
+    piece.element ?? el,
+    piece.setId,
+  );
+  const r = runSellGearBag(save, idx);
+  save = r.save;
+  persist();
+  syncHudResources();
+  closeGearSellConfirm();
+  gearDetailTarget = null;
+  beginGrowthReveal({
+    kind: "gear",
+    portraitHtml: `<img class="growth-rite-img" src="${art}" width="96" height="96" alt="" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />`,
+    name: describeGear(piece),
+    heroLine: t("ui.gearSellResultTitle"),
+    stats: [
+      ...(manaGain > 0
+        ? [{ id: "gold", label: t("res.gold"), from: 0, to: manaGain }]
+        : []),
+      ...(crystalGain > 0
+        ? [
+            {
+              id: "crystal",
+              label: t("res.crystal"),
+              from: 0,
+              to: crystalGain,
+            },
+          ]
+        : []),
+    ],
+    skills: [],
+    notes: [],
+  });
+}
+
+function bindGearEnhanceConfirm(): void {
+  const layer = app.querySelector<HTMLElement>("#gear-enhance-confirm-layer");
+  if (!layer) return;
+  layer.querySelectorAll("#btn-gear-enhance-close, #btn-gear-enhance-cancel").forEach((el) => {
+    el.addEventListener("click", () => {
+      closeGearEnhanceConfirm();
+    });
+  });
+  layer.querySelector("#btn-gear-enhance-ok")?.addEventListener("click", () => {
+    const slot = gearEnhanceConfirmSlot;
+    if (!slot) return;
+    executeGearEnhance(slot);
+  });
+}
+
+function renderGearEnhanceConfirmModal(): string {
+  if (gearEnhanceConfirmSlot == null) return "";
+  const piece = getActiveGear(save)[gearEnhanceConfirmSlot];
+  if (!piece) return "";
+  const mana = gearEnhanceManaCost(piece.enhance);
+  const crystal = gearEnhanceCrystalCost(piece.enhance);
+  const canPay = canAffordGearEnhance(piece);
+  const crystalRow =
+    crystal > 0
+      ? `<div class="gear-sell-price${save.island.crystal < crystal ? " is-short" : ""}">
+          <span>${escapeHtml(t("res.crystal"))}</span>
+          <strong><img src="/art/ui/res/crystal.svg" width="16" height="16" alt="" draggable="false" />${fmtRes(crystal)}</strong>
+        </div>`
+      : "";
+  return `<div class="settings-layer gear-enhance-confirm-layer" id="gear-enhance-confirm-layer" aria-hidden="false">
+    <button type="button" class="settings-backdrop" id="btn-gear-enhance-close" aria-label="${escapeHtml(t("ui.19b2d19bc1"))}"></button>
+    <div class="gear-sell-confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="gear-enhance-confirm-title">
+      ${modalCloseX(t("ui.19b2d19bc1"), "btn-gear-enhance-close")}
+      <h3 class="gear-sell-confirm-title" id="gear-enhance-confirm-title">${escapeHtml(t("ui.gearEnhanceConfirmTitle"))}</h3>
+      <p class="gear-sell-confirm-body">${escapeHtml(t("ui.gearEnhanceConfirmBody"))}</p>
+      <p class="gear-sell-confirm-name">${escapeHtml(describeGear(piece))}</p>
+      <div class="gear-sell-prices">
+        <div class="gear-sell-price-label">${escapeHtml(t("ui.sumAwakenCost"))}</div>
+        <div class="gear-sell-price${save.island.mana < mana ? " is-short" : ""}">
+          <span>${escapeHtml(t("res.gold"))}</span>
+          <strong><img src="/art/ui/res/gold.svg" width="16" height="16" alt="" draggable="false" />${fmtRes(mana)}</strong>
+        </div>
+        ${crystalRow}
+      </div>
+      <div class="gear-sell-acts">
+        <button type="button" class="secondary" id="btn-gear-enhance-cancel">${escapeHtml(t("ui.19b2d19bc1"))}</button>
+        <button type="button" class="auth-btn-primary" id="btn-gear-enhance-ok" ${canPay ? "" : "disabled"}>${escapeHtml(t("ui.sumBookEnhance"))} +1</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function closeGearSellConfirm(): void {
   gearSellConfirmIndex = null;
   softRemoveOverlay("gear-sell-confirm-layer");
@@ -15088,15 +15528,11 @@ function bindGearSellConfirm(): void {
   });
   layer.querySelector("#btn-gear-sell-ok")?.addEventListener("click", () => {
     const idx = gearSellConfirmIndex;
-    closeGearSellConfirm();
-    if (idx == null || !save.gearBag?.[idx]) return;
-    const r = runSellGearBag(save, idx);
-    save = r.save;
-    persist();
-    gearDetailTarget = null;
-    flash(r.message);
-    syncHudResources();
-    softRefreshSumBookUi({ gear: true, modals: true });
+    if (idx == null || !save.gearBag?.[idx]) {
+      closeGearSellConfirm();
+      return;
+    }
+    executeGearSell(idx);
   });
 }
 
@@ -15163,6 +15599,9 @@ function renderGearDetailSheet(
   const bonusLines = gearBonusLines(piece);
   const canEquip = canEquipGearOnElement(piece, activeEl);
   const bagIndex = opts?.bagIndex;
+  const isEquippedView = role === "equipped" || (role === "single" && bagIndex == null);
+  const bagFull = (save.gearBag ?? []).length >= gearBagCapacity(save);
+  const maxed = piece.enhance >= MAX_GEAR_ENHANCE;
   const badge =
     role === "equipped"
       ? `<span class="gear-detail-badge">${escapeHtml(t("ui.symCompareEquipped"))}</span>`
@@ -15172,35 +15611,46 @@ function renderGearDetailSheet(
   const closeX =
     role === "single" ? modalCloseX("close", "btn-gear-detail-close") : "";
   const titleAttrs = opts?.titleId ? ` id="${opts.titleId}"` : "";
-  const action =
-    role === "equipped" || (role === "single" && bagIndex == null)
-      ? `<button type="button" class="auth-btn-primary" data-gear-detail-enhance="${piece.slot}" ${piece.enhance >= MAX_GEAR_ENHANCE ? "disabled" : ""}>${escapeHtml(t("ui.sumBookEnhance"))} +1</button>`
-      : `<button type="button" class="auth-btn-primary${canEquip ? "" : " is-locked"}" data-gear-detail-equip="${bagIndex ?? -1}">${escapeHtml(t("ui.sumBookEquip"))}</button>
-         <button type="button" class="secondary" data-gear-detail-sell="${bagIndex ?? -1}">${escapeHtml(t("ui.sumBookSell"))}</button>`;
-  const setChoices =
-    role === "equipped" || (role === "single" && bagIndex == null)
-      ? `<div class="gear-detail-set-choices">${GEAR_SETS.map(
-          (entry) =>
-            `<button type="button" class="set-chip-btn${entry.id === piece.setId ? " is-active" : ""}" data-gear-detail-set="${piece.slot}" data-set-id="${entry.id}" ${entry.id === piece.setId ? "disabled" : ""}>${escapeHtml(entry.nameKo)}</button>`,
-        ).join("")}</div>`
-      : "";
+  const title = describeGear(piece);
+  const metaLine = `${gearSlotLabel(piece.slot)} ${MIDDOT} ${gearQualityLabel(piece.quality)} ${MIDDOT} ★${piece.stars} +${piece.enhance}`;
+  const setLine = set
+    ? `<p class="sym-detail-set"><span class="sym-detail-set-text">${escapeHtml(set.nameKo)}</span></p>`
+    : "";
+  const bonusHtml = bonusLines
+    .map((line) => `<p class="sym-detail-sub">${escapeHtml(line)}</p>`)
+    .join("");
+  const setChoices = isEquippedView
+    ? `<div class="gear-detail-set-choices">${GEAR_SETS.map(
+        (entry) =>
+          `<button type="button" class="set-chip-btn${entry.id === piece.setId ? " is-active" : ""}" data-gear-detail-set="${piece.slot}" data-set-id="${entry.id}" ${entry.id === piece.setId ? "disabled" : ""}>${escapeHtml(entry.nameKo)}</button>`,
+      ).join("")}</div>`
+    : "";
+  const actionHtml = isEquippedView
+    ? `<button type="button" class="sym-detail-act" data-gear-detail-enhance="${piece.slot}" ${maxed ? "disabled" : ""}>${escapeHtml(t("ui.sumBookEnhance"))} +1</button>
+       <button type="button" class="sym-detail-act" data-gear-detail-unequip="${piece.slot}" ${bagFull ? "disabled" : ""}>${escapeHtml(t("ui.unequip"))}</button>`
+    : `<button type="button" class="sym-detail-act" data-gear-detail-equip="${bagIndex ?? -1}" ${canEquip ? "" : "disabled"}>${escapeHtml(t("ui.sumBookEquip"))}</button>
+       <button type="button" class="sym-detail-act" data-gear-detail-sell="${bagIndex ?? -1}">${escapeHtml(t("ui.sumBookSell"))}</button>`;
 
   return `<div class="gear-detail-sheet gear-detail-sheet--${role} inv-grade--${grade}" role="${role === "single" ? "dialog" : "group"}"${role === "single" ? ' aria-modal="true" aria-labelledby="gear-detail-title"' : ""}>
       ${closeX}
       ${badge}
-      <div class="gear-detail-hero">
-        <img src="${art}" width="72" height="72" alt="" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />
-        <div>
-          <h3${titleAttrs}>${escapeHtml(describeGear(piece))}</h3>
-          <p>${escapeHtml(gearSlotLabel(piece.slot))} ${MIDDOT} ${escapeHtml(gearQualityLabel(piece.quality))}</p>
-          <p>${escapeHtml(set?.nameKo ?? piece.setId)} ${MIDDOT} ★${piece.stars} +${piece.enhance}</p>
+      <h3 class="sym-detail-title gear-detail-title"${titleAttrs}>${escapeHtml(title)}</h3>
+      <div class="sym-detail-body gear-detail-body">
+        <div class="sym-detail-left">
+          <div class="sym-detail-hero gear-detail-hero">
+            <img src="${art}" width="72" height="72" alt="" draggable="false" onerror="this.onerror=null;this.src='${fallback}'" />
+            <div class="sym-detail-main-wrap">
+              <p class="sym-detail-main gear-detail-meta">${escapeHtml(metaLine)}</p>
+            </div>
+          </div>
+          <div class="gear-detail-bonuses" aria-label="bonuses">${bonusHtml}</div>
+          ${setChoices}
+        </div>
+        <div class="sym-detail-right gear-detail-right">
+          ${setLine}
+          ${actionHtml}
         </div>
       </div>
-      <div class="gear-detail-bonuses">
-        ${bonusLines.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}
-      </div>
-      ${setChoices}
-      <div class="gear-detail-actions">${action}</div>
     </div>`;
 }
 
@@ -15783,8 +16233,14 @@ function bindCodexLayerInteractions(): void {
     btn.addEventListener("click", () => {
       const el = btn.dataset.codexSummoner as SummonerElement | undefined;
       if (!el) return;
-      if (el !== (save.activeSummoner ?? "light") && !activateOrUnlockSummoner(el)) {
+      if (!isSummonerUnlocked(save, el)) {
+        openSummonerInfoSoft(el);
         return;
+      }
+      if (el !== (save.activeSummoner ?? "light")) {
+        save = setActiveSummoner(save, el);
+        persist();
+        flash(t("summonerPicker.switched", { element: elementLabel(el) }));
       }
       closeCodexSoft();
       view = "summoner";
@@ -16661,6 +17117,7 @@ function closeGrowthPickers(): void {
   }
   if (gearDetailTarget) {
     closeGearSellConfirm();
+    closeGearEnhanceConfirm();
     gearDetailTarget = null;
     needSumModals = true;
   }
@@ -18510,9 +18967,9 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean; drops?: 
   return list
     .map((s, idx) => {
       const locked =
-        !isStageUnlocked(save, s.id) ||
+        !isStageUnlockedForDifficulty(save, s.id, stageEntryDiff) ||
         (vaultLeft !== null && vaultLeft <= 0);
-      const done = save.clearedStages.includes(s.id);
+      const done = isStageClearedOnDifficulty(save, s.id, stageEntryDiff);
       const diffOpen = isDifficultyOpen(save, s, stageEntryDiff);
       const cost = stageEnergyCost(s, stageEntryDiff);
       const canOpen = !locked && diffOpen;
@@ -18522,7 +18979,7 @@ function stageButtons(list: StageDef[], opts?: { equipWeekly?: boolean; drops?: 
       const battleAria = !diffOpen
         ? t("ui.4292516afd")
         : `${marker} ${s.nameKo} ${MIDDOT} ${t("ui.stageBattle")} ${MIDDOT} ${t("ui.7dcdb553c8")} ${costLabel}`;
-      const status = stageUnlockLabel(save, s);
+      const status = stageUnlockLabel(save, s, stageEntryDiff);
       const rowTitle =
         vaultLeft !== null
           ? `${s.nameKo} · ${t("ui.9cbaf58b88")} ${vaultLeft}/${EQUIP_VAULT_WEEKLY_LIMIT}`
@@ -18975,12 +19432,27 @@ function hideRegionDifficulty(region: StagesRegion): boolean {
 
 function isBossPrepStage(stage: StageDef): boolean {
   return (
-    stage.mode === "depth" ||
     stage.mode === "guild_raid" ||
     stage.mode === "weekday" ||
     stage.mode === "equip" ||
     stage.mode === "trial"
   );
+}
+
+function pvpRivalSummoner(el: SummonerElement, name: string): string {
+  return `<div class="pvp-rival-summoner el-${el}">
+    <img class="pvp-rival-sum-img" src="${summonerArtSrc(el)}" width="48" height="48" alt="" draggable="false" decoding="async" />
+    <span class="pvp-rival-sum-name">${escapeHtml(name)}</span>
+  </div>`;
+}
+
+function pvpRivalPowerRow(ally: number, enemy: number, gap: number): string {
+  return `<div class="pvp-rival-power" title="${escapeHtml(t("ui.arena.power"))}">
+    <span><strong>${fmtRes(ally)}</strong></span>
+    <span class="pvp-rival-power-vs" aria-hidden="true">VS</span>
+    <span><strong>${fmtRes(enemy)}</strong></span>
+    <span class="pvp-rival-power-gap${gap >= 0 ? " is-up" : " is-down"}">${gap >= 0 ? "+" : ""}${fmtRes(gap)}</span>
+  </div>`;
 }
 
 function pvpRivalPortraits(ids: string[]): string {
@@ -18996,14 +19468,28 @@ function pvpRivalPortraits(ids: string[]): string {
 
 function renderArenaRivalCards(): string {
   const attacksLeft = arenaAttacksRemaining(save);
+  const myRating = save.arenaRating ?? DEFAULT_ARENA_RATING;
   return `<div class="pvp-rival-list">${ARENA_STAGES.map((s) => {
     const rival = pickArenaRival(`${todayKey()}:${s.id}`);
     const locked = !isStageUnlocked(save, s.id) || attacksLeft <= 0;
+    const oppRating = arenaOpponentRating(s.id);
+    const power = estimateSortiePower(save, s, {
+      enemyMonsterIds: rival.enemyMonsterIds,
+    });
+    const gap = power.ally - power.enemy;
     return `<article class="pvp-rival-card${locked ? " is-locked" : ""}">
+      ${pvpRivalSummoner(rival.summonerElement, rival.nameKo)}
       ${pvpRivalPortraits(rival.enemyMonsterIds)}
-      <strong class="pvp-rival-name">${escapeHtml(rival.nameKo)}</strong>
+      <div class="pvp-rival-stats">
+        <span class="pvp-rival-rating">${escapeHtml(t("ui.arena.rating"))} <strong>${fmtRes(myRating)}</strong> vs <strong>${fmtRes(oppRating)}</strong></span>
+        ${pvpRivalPowerRow(power.ally, power.enemy, gap)}
+      </div>
+      <strong class="pvp-rival-name">${escapeHtml(s.nameKo)}</strong>
       ${resChip("/art/ui/res/glory.svg", s.gloryReward ?? 0, t("res.glory"))}
-      <button type="button" class="pvp-rival-attack" data-stage="${s.id}" data-core-stage="${s.id}" ${locked ? "disabled" : ""}>${escapeHtml(t("ui.arena.attack"))}</button>
+      <button type="button" class="pvp-rival-attack" data-stage="${s.id}" data-core-stage="${s.id}" ${locked ? "disabled" : ""}>
+        <span>${escapeHtml(t("ui.arena.attack"))}</span>
+        <span class="pvp-rival-ticket-cost" aria-hidden="true"><img class="res-ico" src="/art/ui/res/arena-ticket.svg" width="14" height="14" alt="" draggable="false" /><strong>1</strong></span>
+      </button>
     </article>`;
   }).join("")}</div>`;
 }
@@ -19122,8 +19608,10 @@ function renderStagesRegionSheet(region: StagesRegion): string {
   }
   if (region.arena) {
     const attacksLeft = arenaAttacksRemaining(save);
+    const myRating = save.arenaRating ?? DEFAULT_ARENA_RATING;
     extras = `<div class="season-panel pvp-season-panel">
-        <p class="season-panel-title">${t("ui.arena.attacksLeft")} ${attacksLeft}/${ARENA_ATTACKS_DAILY}</p>
+        <p class="season-panel-title">${escapeHtml(t("ui.arena.ticketsLeft"))} ${attacksLeft}/${ARENA_ATTACKS_DAILY}</p>
+        <p class="season-panel-title">${escapeHtml(t("ui.arena.rating"))} ${fmtRes(myRating)}</p>
         <button type="button" class="auth-btn-primary full" id="btn-arena-defense">${t("ui.arena.setDefense")}</button>
       </div>`;
   }
@@ -19188,6 +19676,19 @@ function renderStagesRegionSheet(region: StagesRegion): string {
   else if (region.id === "depth") listHtml = renderCairosRegionBody();
   else if (region.id === "cadence") listHtml = renderCadenceRegionBody();
 
+  const regionStatusChips = region.arena
+    ? `<span class="stages-region-status-chip stages-region-status-chip--ticket" title="${escapeHtml(t("res.arenaTicket"))}">
+            <img class="res-ico" src="/art/ui/res/arena-ticket.svg" width="16" height="16" alt="" draggable="false" />
+            <strong>${arenaAttacksRemaining(save)}/${ARENA_ATTACKS_DAILY}</strong>
+          </span>
+          <span class="stages-region-status-chip stages-region-status-chip--rating" title="${escapeHtml(t("ui.arena.rating"))}">
+            <strong>${fmtRes(save.arenaRating ?? DEFAULT_ARENA_RATING)}</strong>
+          </span>`
+    : `<span class="stages-region-status-chip stages-region-status-chip--energy" title="${escapeHtml(t("res.energy"))}">
+            <img class="res-ico" src="/art/ui/res/energy.svg" width="16" height="16" alt="" draggable="false" />
+            <strong>${energyNow}/${energyMax}</strong>
+          </span>`;
+
   const diffSelect = hideDiff
     ? ""
     : `<label class="stages-region-diff-inline stages-region-diff-inline--sortie">
@@ -19208,10 +19709,7 @@ function renderStagesRegionSheet(region: StagesRegion): string {
         <div class="stages-region-tools">
           <button type="button" class="stages-region-drop-btn${stagesDropInfoOpen ? " is-on" : ""}" id="btn-region-drop-info" aria-pressed="${stagesDropInfoOpen ? "true" : "false"}">${t("ui.stageDropInfo")}</button>
           <div class="stages-region-tools-stats">
-            <span class="stages-region-status-chip stages-region-status-chip--energy" title="${escapeHtml(t("res.energy"))}">
-              <img class="res-ico" src="/art/ui/res/energy.svg" width="16" height="16" alt="" draggable="false" />
-              <strong>${energyNow}/${energyMax}</strong>
-            </span>
+            ${regionStatusChips}
           </div>
         </div>
       </header>
@@ -19675,7 +20173,7 @@ function bindBattleInteractive(): void {
         render();
         return;
       }
-      if (selectedSummonerSkill && summonerSkillNeedsEnemyTarget(selectedSummonerSkill)) {
+      if (selectedSummonerSkill && summonerSkillNeedsEnemyTarget(selectedSummonerSkill, unit)) {
         castSkill(selectedSummonerSkill, selectedTargetId ?? undefined);
         return;
       }
@@ -19695,11 +20193,16 @@ function bindBattleInteractive(): void {
         !battle ||
         battle.phase !== "await_skill" ||
         (autoMode && battleAutoLive.combat) ||
-        battleFxBusy
+        battleFxBusy ||
+        btn.disabled
       )
         return;
       const idx = Number(btn.dataset.skill);
       if (!Number.isFinite(idx)) return;
+      const active = battle.activeUnitId
+        ? battle.getUnit(battle.activeUnitId)
+        : null;
+      if (!active || !battle.canUseSkill(active, idx)) return;
       selectedSummonerSkill = null;
       selectedSkillIndex = selectedSkillIndex === idx ? null : idx;
       render();
@@ -19718,10 +20221,13 @@ function bindBattleInteractive(): void {
           battleFxBusy
         )
           return;
-        const id = btn.dataset.summonerSkill as BattleSummonerSkillId | undefined;
+        const id = btn.dataset.summonerSkill;
         if (!id) return;
         selectedSkillIndex = null;
-        if (summonerSkillNeedsEnemyTarget(id)) {
+        const active = battle.activeUnitId
+          ? battle.getUnit(battle.activeUnitId)
+          : null;
+        if (summonerSkillNeedsEnemyTarget(id, active)) {
           selectedSummonerSkill =
             selectedSummonerSkill === id ? null : id;
           render();
@@ -20589,6 +21095,8 @@ function isOverlayIdOpen(id: string): boolean {
       return shopOpen;
     case "summoner-picker-layer":
       return summonerPickerOpen;
+    case "summoner-info-layer":
+      return summonerInfoOpen;
     case "chat-layer":
       return chatOpen;
     case "chat-profile-layer":
@@ -20609,6 +21117,10 @@ function isOverlayIdOpen(id: string): boolean {
       return !!forgeConfirm;
     case "gear-detail-layer":
       return !!gearDetailTarget;
+    case "gear-sell-confirm-layer":
+      return gearSellConfirmIndex != null;
+    case "gear-enhance-confirm-layer":
+      return gearEnhanceConfirmSlot != null;
     case "sym-detail-layer":
       return symbolDetailIndex != null;
     case "sym-bag-expand-layer":
@@ -20801,8 +21313,13 @@ function closeOverlayById(id: string): boolean {
     closeGearSellConfirm();
     return true;
   }
+  if (id === "gear-enhance-confirm-layer") {
+    closeGearEnhanceConfirm();
+    return true;
+  }
   if (id === "gear-detail-layer") {
     closeGearSellConfirm();
+    closeGearEnhanceConfirm();
     gearDetailTarget = null;
     softRefreshSumBookUi({ gear: true, modals: true });
     return true;
@@ -20873,6 +21390,10 @@ function closeOverlayById(id: string): boolean {
   }
   if (id === "summoner-unlock-layer") {
     closeSummonerUnlockSoft();
+    return true;
+  }
+  if (id === "summoner-info-layer") {
+    closeSummonerInfoSoft();
     return true;
   }
   if (id === GROWTH_REVEAL_LAYER_ID && growthRevealIsOpen()) {
@@ -21008,10 +21529,13 @@ function closeLeftoverTransientUi(): boolean {
   if (skillFeedModalOpen) return closeOverlayById("skill-feed-layer");
   if (powerUpModalOpen) return closeOverlayById("power-up-layer");
   if (summonerPickerOpen) return closeOverlayById("summoner-picker-layer");
+  if (summonerInfoOpen) return closeOverlayById("summoner-info-layer");
   if (buildingInfoId) return closeOverlayById("building-info-layer");
   if (buildingUnlockModalId) return closeOverlayById("building-unlock-layer");
   if (forgeReveal) return closeOverlayById("forge-reveal-layer");
   if (forgeConfirm) return closeOverlayById("forge-confirm-layer");
+  if (gearEnhanceConfirmSlot) return closeOverlayById("gear-enhance-confirm-layer");
+  if (gearSellConfirmIndex != null) return closeOverlayById("gear-sell-confirm-layer");
   if (gearDetailTarget) return closeOverlayById("gear-detail-layer");
   if (symbolDetailIndex != null) return closeOverlayById("sym-detail-layer");
   if (symbolBagExpandOpen) return closeOverlayById("sym-bag-expand-layer");
@@ -21121,6 +21645,7 @@ function bind(): void {
   bindNickSetupUi();
   bindStarterSummonerUi();
   bindSummonerUnlockUi();
+  bindSummonerInfoUi();
 
   app.querySelector("#btn-nav-summoner")?.addEventListener("click", (ev) => {
     ev.stopPropagation();
@@ -21161,10 +21686,8 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-summoner]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const el = btn.dataset.summoner as SummonerElement | undefined;
-      if (!el || el === (save.activeSummoner ?? "light")) return;
-      if (!activateOrUnlockSummoner(el)) return;
-      summonerPickerOpen = false;
-      render();
+      if (!el) return;
+      if (tapSummonerSlot(el, { closePicker: true })) render();
     });
   });
 
@@ -21596,9 +22119,8 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-select-summoner]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const el = btn.dataset.selectSummoner as SummonerElement | undefined;
-      if (!el || el === (save.activeSummoner ?? "light")) return;
-      if (!activateOrUnlockSummoner(el)) return;
-      render();
+      if (!el) return;
+      if (tapSummonerSlot(el)) render();
     });
   });
 
@@ -22017,7 +22539,7 @@ function bind(): void {
       }
       if (
         selectedSummonerSkill &&
-        summonerSkillNeedsEnemyTarget(selectedSummonerSkill)
+        summonerSkillNeedsEnemyTarget(selectedSummonerSkill, unit)
       ) {
         castSkill(selectedSummonerSkill, selectedTargetId ?? undefined);
         return;
@@ -22038,11 +22560,16 @@ function bind(): void {
         !battle ||
         battle.phase !== "await_skill" ||
         (autoMode && battleAutoLive.combat) ||
-        battleFxBusy
+        battleFxBusy ||
+        btn.disabled
       )
         return;
       const idx = Number(btn.dataset.skill);
       if (!Number.isFinite(idx)) return;
+      const active = battle.activeUnitId
+        ? battle.getUnit(battle.activeUnitId)
+        : null;
+      if (!active || !battle.canUseSkill(active, idx)) return;
       selectedSummonerSkill = null;
       selectedSkillIndex = selectedSkillIndex === idx ? null : idx;
       render();
@@ -22061,12 +22588,13 @@ function bind(): void {
           battleFxBusy
         )
           return;
-        const id = btn.dataset.summonerSkill as
-          | BattleSummonerSkillId
-          | undefined;
+        const id = btn.dataset.summonerSkill;
         if (!id) return;
         selectedSkillIndex = null;
-        if (summonerSkillNeedsEnemyTarget(id)) {
+        const active = battle.activeUnitId
+          ? battle.getUnit(battle.activeUnitId)
+          : null;
+        if (summonerSkillNeedsEnemyTarget(id, active)) {
           selectedSummonerSkill =
             selectedSummonerSkill === id ? null : id;
           render();
@@ -22121,7 +22649,9 @@ function bind(): void {
       const current = currentStage;
       if (!current) return;
       const next =
-        btn.dataset.resultBattle === "next" ? nextCampaignStage(current) : current;
+        btn.dataset.resultBattle === "next"
+          ? nextCampaignStage(current, stageEntryDiff)
+          : current;
       if (!next) return;
       const diff =
         btn.dataset.resultDiff === "hard" || btn.dataset.resultDiff === "hell"

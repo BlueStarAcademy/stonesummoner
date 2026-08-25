@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="atGold" x1="12" y1="8" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF4C8"/>
+      <stop offset=".45" stop-color="#D4B040"/>
+      <stop offset="1" stop-color="#6A4810"/>
+    </linearGradient>
+    <linearGradient id="atFace" x1="18" y1="14" x2="46" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8E8FF"/>
+      <stop offset=".5" stop-color="#B88AE8"/>
+      <stop offset="1" stop-color="#4A2878"/>
+    </linearGradient>
+    <radialGradient id="atGlow" cx="32" cy="32" r="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C9A8F0" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#atGlow)"/>
+  <path d="M10 22c0-2.2 1.8-4 4-4h36c2.2 0 4 1.8 4 4v6c0 2.2-1.8 4-4 4H14c-2.2 0-4-1.8-4-4v-6Z" fill="url(#atGold)" stroke="#5A3810" stroke-width="1.5"/>
+  <path d="M10 38c0-2.2 1.8-4 4-4h36c2.2 0 4 1.8 4 4v6c0 2.2-1.8 4-4 4H14c-2.2 0-4-1.8-4-4v-6Z" fill="url(#atGold)" stroke="#5A3810" stroke-width="1.5"/>
+  <rect x="28" y="18" width="8" height="28" rx="2" fill="#3A2818" opacity=".25"/>
+  <circle cx="32" cy="32" r="14" fill="url(#atFace)" stroke="#E8D0FF" stroke-width="1.5"/>
+  <path d="M26 30h12M26 36h8" stroke="#F8F0FF" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M32 22v4M32 42v4" stroke="#FFD878" stroke-width="2" stroke-linecap="round"/>
+</svg>

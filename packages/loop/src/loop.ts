@@ -164,6 +164,7 @@ import {
   expForStage,
   isDifficultyOpen,
   isStageUnlocked,
+  isStageUnlockedForDifficulty,
   stageUnlockLabel,
   type ScenarioDifficulty,
 } from "./progress.js";
@@ -253,7 +254,9 @@ export {
 export {
   expForStage,
   isDifficultyOpen,
+  isStageClearedOnDifficulty,
   isStageUnlocked,
+  isStageUnlockedForDifficulty,
   nextStageInProgression,
   stageUnlockLabel,
 } from "./progress.js";
@@ -304,6 +307,32 @@ export function equipVaultRemaining(
 
 /** Phase 3b: arena attacks per calendar day. */
 export const ARENA_ATTACKS_DAILY = 10;
+/** Default ELO rating for new arena players. */
+export const DEFAULT_ARENA_RATING = 1000;
+export const ARENA_ELO_K = 32;
+/** Opponent rating anchors per arena tier (offline rivals). */
+export const ARENA_TIER_RATINGS: Record<string, number> = {
+  arena_rookie: 1000,
+  arena_veteran: 1150,
+  arena_challenger: 1300,
+  arena_legend: 1450,
+};
+
+export function arenaOpponentRating(stageId: string): number {
+  return ARENA_TIER_RATINGS[stageId] ?? DEFAULT_ARENA_RATING;
+}
+
+export function applyArenaElo(
+  playerRating: number,
+  opponentRating: number,
+  won: boolean,
+  k = ARENA_ELO_K,
+): { rating: number; delta: number } {
+  const expected = 1 / (1 + 10 ** ((opponentRating - playerRating) / 400));
+  const score = won ? 1 : 0;
+  const delta = Math.round(k * (score - expected));
+  return { rating: Math.max(0, playerRating + delta), delta };
+}
 /** Phase 3g: weekly guild contribution goal. */
 export const GUILD_WEEK_CONTRIB_GOAL = 100;
 export const GUILD_CHECKIN_CONTRIB = 15;
@@ -1289,6 +1318,8 @@ export interface PlayerSave {
   arenaAttacksToday: number;
   /** Phase 3b: YYYY-MM-DD of arena attack counter. */
   arenaAttackDay: string | null;
+  /** Arena ELO rating (offline ladder). */
+  arenaRating: number;
   /** Phase 3c: shop rotation day key. */
   shopDayKey: string | null;
   /** Phase 3c: offer ids bought today. */
@@ -1715,6 +1746,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     arenaDefense: null,
     arenaAttacksToday: 0,
     arenaAttackDay: null,
+    arenaRating: DEFAULT_ARENA_RATING,
     shopDayKey: null,
     shopSoldIds: [],
     shopBuyCounts: {},
@@ -3772,6 +3804,29 @@ export function runAffixGearSet(
   };
 }
 
+/** Move an equipped piece into the gear bag. */
+export function runUnequipGear(
+  save: PlayerSave,
+  slot: GearSlot,
+): LoopStepResult {
+  const synced = syncSummonerMirrors(save);
+  const gearNorm = getActiveGear(synced);
+  const piece = gearNorm[slot];
+  if (!piece) {
+    return { save: withActiveGear(synced, gearNorm), message: "장착된 장비 없음" };
+  }
+  const bag = [...(synced.gearBag ?? [])];
+  if (bag.length >= gearBagCapacity(synced)) {
+    return { save: synced, message: "장비 가방 가득 참" };
+  }
+  bag.push(piece);
+  const gear = { ...gearNorm, [slot]: null };
+  return {
+    save: withActiveGear({ ...synced, gearBag: bag }, gear),
+    message: `장비 해제: ${describeGear(piece)}`,
+  };
+}
+
 /** Equip a bag piece onto its slot; displaced piece returns to the bag. */
 export function runEquipGearBag(
   save: PlayerSave,
@@ -4545,16 +4600,13 @@ export function createStageBattle(
   const modules = modulesForStage(stage);
   const enemyProfile = enemySummonerProfile(stage);
   const unlockedAllyMagic = unlockedMagicSkills(activeEl, magicProg);
-  const equippedMagicIds = new Set(
-    (save.summonerMagicLoadouts?.[activeEl] ?? []).filter(
-      (id): id is string => typeof id === "string",
-    ),
+  const loadout = save.summonerMagicLoadouts?.[activeEl] ?? [null, null];
+  const equippedIds = loadout.filter(
+    (id): id is string => typeof id === "string" && id.length > 0,
   );
-  const allyMagic = unlockedAllyMagic
-    .filter((sk) =>
-      // Preserve legacy saves until the player first changes their loadout.
-      equippedMagicIds.size === 0 || equippedMagicIds.has(sk.id),
-    )
+  const allyMagic = equippedIds
+    .map((id) => unlockedAllyMagic.find((sk) => sk.id === id))
+    .filter((sk): sk is NonNullable<typeof sk> => !!sk)
     .map((sk) => ({
       id: sk.id,
       nameKo: sk.nameKo,
@@ -4619,8 +4671,31 @@ export function createStageBattle(
   });
 }
 
+/** Ally vs enemy combat power for sortie prep (uses full summoner + party buffs). */
+export function estimateSortiePower(
+  save: PlayerSave,
+  stage: StageDef,
+  opts?: {
+    party?: string[];
+    enemyMonsterIds?: string[];
+    difficulty?: ScenarioDifficulty;
+  },
+): { ally: number; enemy: number } {
+  const tempSave = opts?.party ? { ...save, party: opts.party } : save;
+  const battle = createStageBattle(stage, tempSave, {
+    enemyMonsterIds: opts?.enemyMonsterIds,
+    difficulty: opts?.difficulty ?? "normal",
+  });
+  const ally = estimateCombatPower(
+    battle.units.filter((u) => u.team === "ally"),
+  );
+  const enemy = estimateCombatPower(
+    battle.units.filter((u) => u.team === "enemy"),
+  );
+  return { ally, enemy };
+}
+
 /**
- * Summoners War extra-loot crystals: rare, not a guaranteed payout.
  * Cairos community data is ~4–5% for 1–2; scenario extras sit a bit higher.
  */
 export function stageCrystalDropChance(stage: StageDef): number {
@@ -4777,6 +4852,20 @@ export function applyRewards(
   if (!victory) {
     if (stage.mode === "guild_raid") {
       return applyGuildRaidDefeatRewards(save, stage, opts?.damageDealt ?? 0);
+    }
+    if (stage.mode === "arena") {
+      const oppRating = arenaOpponentRating(stage.id);
+      const before = save.arenaRating ?? DEFAULT_ARENA_RATING;
+      const elo = applyArenaElo(before, oppRating, false);
+      return {
+        save: { ...save, arenaRating: elo.rating },
+        reward: {
+          mana: 0,
+          expNote: `패배 · ELO ${elo.rating} (${elo.delta >= 0 ? "+" : ""}${elo.delta})`,
+          victory: false,
+          expTracks: [],
+        },
+      };
     }
     return {
       save,
@@ -5083,6 +5172,13 @@ export function applyRewards(
 
   if (contributionGain > 0) extras.push(`기여도 +${contributionGain}`);
   if (stage.mode === "world_arena") extras.push(`시즌승 ${arenaSeasonWins}`);
+  if (stage.mode === "arena") {
+    const oppRating = arenaOpponentRating(stage.id);
+    const before = working.arenaRating ?? DEFAULT_ARENA_RATING;
+    const elo = applyArenaElo(before, oppRating, true);
+    working = { ...working, arenaRating: elo.rating };
+    extras.push(`ELO ${elo.rating} (+${elo.delta})`);
+  }
   if (gearDrop) extras.push(`장비 ${describeGear(gearDrop)} → 가방`);
   if (scrollsPremium > (save.scrollsPremium ?? 0))
     extras.push(`${SCROLL_KIND_LABEL.premium} +1`);
@@ -5128,6 +5224,7 @@ export function applyRewards(
       gloryLevels: working.gloryLevels ?? {},
       arenaBanIds: working.arenaBanIds ?? [],
       arenaSeasonWins,
+      arenaRating: working.arenaRating ?? DEFAULT_ARENA_RATING,
       guildContribution,
       dojoDrills: working.dojoDrills ?? 0,
       guildName: working.guildName ?? null,
@@ -5235,7 +5332,7 @@ export function runSortie(
       message: `에너지 부족 (필요 ${energyCost}, 보유 ${energy})`,
     };
   }
-  if (!isStageUnlocked(working, stageId)) {
+  if (!isStageUnlockedForDifficulty(working, stageId, difficulty)) {
     if (
       stage.mode === "weekday" &&
       working.clearedStages.includes("garen_1_3") &&
@@ -5292,6 +5389,7 @@ export function runSortie(
       stage.mode === "arena"
         ? (working.arenaAttackDay ?? todayKey(now))
         : (working.arenaAttackDay ?? null),
+    arenaRating: working.arenaRating ?? DEFAULT_ARENA_RATING,
     raidAttemptsDay:
       stage.mode === "guild_raid"
         ? (working.raidAttemptsDay ?? 0) + 1

@@ -74,11 +74,9 @@ function ensureSkillCd(unit: Unit): number[] {
   return unit.skillCd;
 }
 
-function tickSkillCooldowns(units: Unit[]): void {
-  for (const u of units) {
-    if (!u.alive || !u.skillCd) continue;
-    u.skillCd = u.skillCd.map((c) => Math.max(0, c - 1));
-  }
+function tickSkillCooldowns(unit: Unit): void {
+  if (!unit.alive || unit.kind !== "monster" || !unit.skillCd) return;
+  unit.skillCd = unit.skillCd.map((c) => Math.max(0, c - 1));
 }
 
 /** Auto skill pick: S3→S2→S1; healers prefer heal when ally < 55% HP. */
@@ -197,7 +195,7 @@ export class Battle {
   amplify = 1;
   skillAmplifyBonus = 0;
   /**
-   * Next monster hit damage mul bonus per team (from captures: N×0.10).
+   * Next monster hit damage mul bonus per team (from captures: N×CAPTURE_DAMAGE_PER_STONE).
    * Consumed on the next monster `applyHit` for that team.
    */
   pendingCaptureDamageBonus: Record<TeamId, number> = {
@@ -454,7 +452,7 @@ export class Battle {
         if ((unit.stunnedTurns ?? 0) > 0) {
           unit.stunnedTurns = (unit.stunnedTurns ?? 0) - 1;
           this.log.push(`${unit.name} 기절 — 행동 불가`);
-          tickSkillCooldowns(this.units);
+          tickSkillCooldowns(unit);
           continue;
         }
         if ((unit.shieldTurns ?? 0) > 0) {
@@ -464,7 +462,7 @@ export class Battle {
             unit.shieldHp = 0;
           }
         }
-        tickSkillCooldowns(this.units);
+        tickSkillCooldowns(unit);
         if ((unit.dotTicks ?? 0) > 0 && (unit.dotSourceAtk ?? 0) > 0) {
           const dotDmg = Math.round(
             (unit.dotSourceAtk ?? 0) * (unit.dotAtkCoeff ?? 0),
@@ -638,7 +636,7 @@ export class Battle {
     );
     const name = itemDef(token.id).nameKo;
     if (token.id === "crit_charm") {
-      const bonus = unit.stonePassive === "crit_charm_plus" ? 55 * 2 : 55;
+      const bonus = unit.stonePassive === "crit_charm_plus" ? 75 * 2 : 75;
       unit.critCharm = (unit.critCharm ?? 0) + bonus;
       this.log.push(
         `${unit.name} 획득 ${name} (치명↑${unit.stonePassive === "crit_charm_plus" ? "×2" : ""})`,
@@ -646,7 +644,7 @@ export class Battle {
       return;
     }
     if (token.id === "shield_core") {
-      const shield = Math.round(unit.stats.hp * 0.18);
+      const shield = Math.round(unit.stats.hp * 0.28);
       unit.shieldHp = (unit.shieldHp ?? 0) + shield;
       this.log.push(`${unit.name} 획득 ${name} (실드 +${shield})`);
       if (unit.stonePassive === "shield_core_heal") {
@@ -660,10 +658,10 @@ export class Battle {
       let boosted = 0;
       for (const u of this.units) {
         if (!u.alive || u.team !== unit.team || u.kind !== "monster") continue;
-        u.atb = Math.min(ATB_THRESHOLD, u.atb + 35);
+        u.atb = Math.min(ATB_THRESHOLD, u.atb + 50);
         boosted++;
       }
-      unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) + 2;
+      unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) + 3;
       this.log.push(
         `${unit.name} 획득 ${name} (아군 ATB↑×${boosted} · 공속 2행동)`,
       );
@@ -681,7 +679,7 @@ export class Battle {
       sm.elementWardElement = unit.element;
       sm.elementWardCharges = 3;
       this.amplify = clampAmplify(
-        this.amplify + 0.05,
+        this.amplify + 0.08,
         this.phaseAmplifyCap(),
         this.powerGapCap,
       );
@@ -691,10 +689,10 @@ export class Battle {
       return;
     }
     if (token.id === "bait_stone") {
-      const shield = Math.round(unit.stats.hp * 0.1);
+      const shield = Math.round(unit.stats.hp * 0.15);
       unit.shieldHp = (unit.shieldHp ?? 0) + shield;
       this.amplify = clampAmplify(
-        this.amplify + 0.03,
+        this.amplify + 0.05,
         this.phaseAmplifyCap(),
         this.powerGapCap,
       );
@@ -707,7 +705,7 @@ export class Battle {
     if (token.id === "transform_dust") {
       const flipped = this.applyTransformDust({ x: token.x, y: token.y });
       this.amplify = clampAmplify(
-        this.amplify + 0.04 + flipped * 0.02,
+        this.amplify + 0.06 + flipped * 0.03,
         this.phaseAmplifyCap(),
         this.powerGapCap,
       );
@@ -717,13 +715,13 @@ export class Battle {
       return;
     }
     if (token.id === "heal_orb") {
-      const healed = this.applyPercentHpToTeam(unit.team, 0.18, "heal");
+      const healed = this.applyPercentHpToTeam(unit.team, 0.28, "heal");
       this.log.push(`${unit.name} 획득 ${name} (아군 회복 ${healed})`);
       return;
     }
     if (token.id === "hp_bomb") {
       const foe = unit.team === "ally" ? "enemy" : "ally";
-      const dmg = this.applyPercentHpToTeam(foe, 0.16, "hurt");
+      const dmg = this.applyPercentHpToTeam(foe, 0.24, "hurt");
       if (unit.team === "ally" && dmg > 0) this.allyDamageDealt += dmg;
       this.log.push(`${unit.name} 획득 ${name} (적 피해 ${dmg})`);
       return;
@@ -936,6 +934,13 @@ export class Battle {
 
     if (kind === "safe_place") {
       this.log.push(`일반 소환: 마력 +${Math.round(gains.mana)}`);
+      this.applyBoardAuraToTeam(unit.team, {
+        atk: 0.1,
+        spd: 0.08,
+        turns: 3,
+      });
+      chips.push({ kind: "atk", n: 10 });
+      chips.push({ kind: "spd", n: 8 });
     }
 
     let ampDelta = gains.amplifyDelta;
@@ -973,7 +978,7 @@ export class Battle {
         (sm.elementWardCharges ?? 0) > 0 &&
         sm.elementWardElement === unit.element
       ) {
-        ampDelta += 0.07;
+        ampDelta += 0.1;
         sm.elementWardCharges = (sm.elementWardCharges ?? 0) - 1;
         this.log.push(
           `속성의뢰 (${unit.element}) 잔여 ${sm.elementWardCharges}`,
@@ -1047,10 +1052,23 @@ export class Battle {
     const sm = this.summonerOf(unit.team);
     if (gains.captureDamageBonus > 0) {
       this.pendingCaptureDamageBonus[unit.team] = gains.captureDamageBonus;
+      const auraAtk = Math.min(0.4, gains.captureDamageBonus * 0.85);
+      this.applyBoardAuraToTeam(unit.team, {
+        atk: auraAtk,
+        critRate: Math.min(0.2, gains.captureDamageBonus * 0.35),
+        turns: 3,
+      });
       chips.push({
         kind: "capture",
         n: Math.round(gains.captureDamageBonus * 100),
       });
+      chips.push({ kind: "atk", n: Math.round(auraAtk * 100) });
+      if (Math.min(0.2, gains.captureDamageBonus * 0.35) >= 0.05) {
+        chips.push({
+          kind: "crit",
+          n: Math.round(Math.min(0.2, gains.captureDamageBonus * 0.35) * 100),
+        });
+      }
       this.log.push(
         `따냄 버프: 다음 소환수 피해 +${Math.round(gains.captureDamageBonus * 100)}%`,
       );
@@ -1091,6 +1109,7 @@ export class Battle {
         } else {
           this.log.push(`형상 ${sh.labelKo}`);
         }
+        this.applyShapeBoardAura(unit.team, sh.id);
         if (sh.id === "axis") {
           unit.cutImmune = Math.max(unit.cutImmune ?? 0, 1);
           this.log.push(`형상 축 연결: 절단 면역 1회`);
@@ -1980,6 +1999,50 @@ export class Battle {
     return results;
   }
 
+  private applyBoardAuraToTeam(
+    team: TeamId,
+    opts: {
+      atk?: number;
+      def?: number;
+      spd?: number;
+      critRate?: number;
+      turns: number;
+    },
+  ): void {
+    for (const u of this.units) {
+      if (!u.alive || u.team !== team || u.kind !== "monster") continue;
+      if (opts.atk) this.applyStatBuff(u, "atk", opts.atk, opts.turns);
+      if (opts.def) this.applyStatBuff(u, "def", opts.def, opts.turns);
+      if (opts.spd) this.applyStatBuff(u, "spd", opts.spd, opts.turns);
+      if (opts.critRate) this.applyStatBuff(u, "critRate", opts.critRate, opts.turns);
+    }
+  }
+
+  private applyShapeBoardAura(team: TeamId, shapeId: string): void {
+    switch (shapeId) {
+      case "corner":
+        this.applyBoardAuraToTeam(team, { atk: 0.08, turns: 3 });
+        break;
+      case "star":
+        this.applyBoardAuraToTeam(team, { spd: 0.1, turns: 3 });
+        break;
+      case "star_control":
+        this.applyBoardAuraToTeam(team, { atk: 0.14, def: 0.1, turns: 3 });
+        break;
+      case "tiger":
+        this.applyBoardAuraToTeam(team, { def: 0.14, turns: 3 });
+        break;
+      case "kosumi":
+        this.applyBoardAuraToTeam(team, { spd: 0.08, critRate: 0.12, turns: 3 });
+        break;
+      case "axis":
+        this.applyBoardAuraToTeam(team, { atk: 0.12, turns: 3 });
+        break;
+      default:
+        break;
+    }
+  }
+
   private applyStatBuff(
     unit: Unit,
     axis: string,
@@ -2479,16 +2542,16 @@ export class Battle {
 
 function tokenPickupHighlight(id: BoardItemId, unit: Unit): number {
   if (id === "crit_charm") {
-    return unit.stonePassive === "crit_charm_plus" ? 110 : 55;
+    return unit.stonePassive === "crit_charm_plus" ? 150 : 75;
   }
-  if (id === "shield_core") return Math.round(unit.stats.hp * 0.18);
+  if (id === "shield_core") return Math.round(unit.stats.hp * 0.28);
   if (id === "capture_magnet") return 35;
-  if (id === "stride_sand") return 35;
+  if (id === "stride_sand") return 50;
   if (id === "element_ward") return 3;
-  if (id === "bait_stone") return Math.round(unit.stats.hp * 0.1);
+  if (id === "bait_stone") return Math.round(unit.stats.hp * 0.15);
   if (id === "seal_nail") return 3;
-  if (id === "heal_orb") return Math.round(unit.stats.hp * 0.18);
-  if (id === "hp_bomb") return Math.round(unit.stats.hp * 0.16);
+  if (id === "heal_orb") return Math.round(unit.stats.hp * 0.28);
+  if (id === "hp_bomb") return Math.round(unit.stats.hp * 0.24);
   return 1;
 }
 

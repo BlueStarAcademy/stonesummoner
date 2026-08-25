@@ -3227,6 +3227,18 @@
     "ko": "{element} 소환사 해금",
     "en": "Unlocked {element} Summoner"
   },
+  "ui.summonerInfo.title": {
+    "ko": "소환사 정보",
+    "en": "Summoner info"
+  },
+  "ui.summonerInfo.close": {
+    "ko": "닫기",
+    "en": "Close"
+  },
+  "ui.summonerInfo.unlockAt": {
+    "ko": "유저 레벨 {n}에 해금",
+    "en": "Unlocks at user level {n}"
+  },
   "ui.stagePrepTapRoster": {
     "ko": "소환수를 탭해 출전 / 해제",
     "en": "Tap monsters to deploy or remove"
@@ -3703,6 +3715,22 @@
     "ko": "판매 가격",
     "en": "Sell price"
   },
+  "ui.gearEnhanceConfirmTitle": {
+    "ko": "장비 강화",
+    "en": "Enhance gear"
+  },
+  "ui.gearEnhanceConfirmBody": {
+    "ko": "이 장비를 강화할까요?",
+    "en": "Enhance this gear?"
+  },
+  "ui.gearSellResultTitle": {
+    "ko": "판매 완료",
+    "en": "Sold"
+  },
+  "ui.gearBagFull": {
+    "ko": "장비 가방이 가득 찼습니다",
+    "en": "Gear bag is full"
+  },
   "ui.gearSlotWeapon": {
     "ko": "무기",
     "en": "Weapon"
@@ -3962,6 +3990,18 @@
   "ui.arena.attacksLeft": {
     "ko": "오늘 남은 공격",
     "en": "Attacks left today"
+  },
+  "ui.arena.ticketsLeft": {
+    "ko": "오늘 남은 입장권",
+    "en": "Tickets left today"
+  },
+  "ui.arena.rating": {
+    "ko": "점수",
+    "en": "Rating"
+  },
+  "ui.arena.power": {
+    "ko": "전투력",
+    "en": "Power"
   },
   "ui.arena.defenseSet": {
     "ko": "방어 덱 저장됨",

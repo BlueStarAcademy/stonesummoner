@@ -8,6 +8,7 @@ import {
   homeCollect,
   isoWeekKey,
   isStageUnlocked,
+  isStageUnlockedForDifficulty,
   isDifficultyOpen,
   nextStageInProgression,
   listGear,
@@ -112,6 +113,10 @@ import {
   GUILD_WEEK_CONTRIB_GOAL,
   GUILD_CREATE_CRYSTAL_COST,
   applyRewards,
+  applyArenaElo,
+  arenaOpponentRating,
+  DEFAULT_ARENA_RATING,
+  estimateSortiePower,
   rollStageCrystalDrop,
   stageCrystalDropChance,
   monsterExpToNext,
@@ -268,6 +273,34 @@ describe("game loop", () => {
     const buy = runBuyGlory(save, "ancient_sword");
     assert.match(buy.message, /고대의 검/);
     assert.equal(buy.save.gloryLevels.ancient_sword, 1);
+  });
+
+  it("updates arena ELO on win and loss", () => {
+    const stage = getStage("arena_rookie")!;
+    const opp = arenaOpponentRating(stage.id);
+    const win = applyArenaElo(DEFAULT_ARENA_RATING, opp, true);
+    assert.ok(win.delta > 0);
+    assert.equal(win.rating, DEFAULT_ARENA_RATING + win.delta);
+
+    const loss = applyArenaElo(DEFAULT_ARENA_RATING, opp, false);
+    assert.ok(loss.delta < 0);
+    assert.equal(loss.rating, DEFAULT_ARENA_RATING + loss.delta);
+
+    const victory = applyRewards(createNewSave(0), stage, true, () => 0.99);
+    assert.ok(victory.save.arenaRating > DEFAULT_ARENA_RATING);
+    assert.match(victory.reward.expNote, /ELO/);
+
+    const defeat = applyRewards(createNewSave(0), stage, false);
+    assert.ok(defeat.save.arenaRating < DEFAULT_ARENA_RATING);
+    assert.match(defeat.reward.expNote, /ELO/);
+  });
+
+  it("estimates sortie combat power for arena prep", () => {
+    const save = createNewSave(0);
+    const stage = getStage("arena_rookie")!;
+    const power = estimateSortiePower(save, stage);
+    assert.ok(power.ally > 0);
+    assert.ok(power.enemy > 0);
   });
 
   it("drops summoner gear randomly from scenario clears", () => {
@@ -1263,6 +1296,27 @@ describe("game loop", () => {
     save = { ...save, clearedHardStages: chapter1Ids };
     assert.equal(isDifficultyOpen(save, first, "hell"), true);
     assert.equal(isDifficultyOpen(save, map2, "hell"), false);
+  });
+
+  it("scenario hard and hell unlock stages sequentially on their own track", () => {
+    const chapter1Ids = CHAPTER1_STAGES.map((s) => s.id);
+    let save = createNewSave(0);
+    save = { ...save, clearedStages: chapter1Ids };
+
+    assert.equal(isStageUnlockedForDifficulty(save, "garen_1_1", "hard"), true);
+    assert.equal(isStageUnlockedForDifficulty(save, "garen_1_2", "hard"), false);
+    assert.equal(isStageUnlockedForDifficulty(save, "garen_1_7", "hard"), false);
+
+    save = { ...save, clearedHardStages: ["garen_1_1"] };
+    assert.equal(isStageUnlockedForDifficulty(save, "garen_1_2", "hard"), true);
+    assert.equal(isStageUnlockedForDifficulty(save, "garen_1_3", "hard"), false);
+
+    save = { ...save, clearedHardStages: chapter1Ids };
+    assert.equal(isStageUnlockedForDifficulty(save, "garen_1_1", "hell"), true);
+    assert.equal(isStageUnlockedForDifficulty(save, "garen_1_2", "hell"), false);
+
+    save = { ...save, clearedHellStages: ["garen_1_1"] };
+    assert.equal(isStageUnlockedForDifficulty(save, "garen_1_2", "hell"), true);
   });
 
   it("scenario normal drops almost only ★1 symbols (rare ★2)", () => {

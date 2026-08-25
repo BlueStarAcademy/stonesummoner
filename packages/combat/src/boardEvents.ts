@@ -18,20 +18,20 @@ export interface BoardEventGains {
    * `manaMax × CAPTURE_MANA_FRAC_PER_STONE × capturedCount` (not via this field).
    */
   mana: number;
-  /** Damage multiplier bonus for the next monster attack: `0.10 × N`. */
+  /** Damage multiplier bonus for the next monster attack: `CAPTURE_DAMAGE_PER_STONE × N`. */
   captureDamageBonus: number;
-  /** Mana as fraction of manaMax from captures: `0.12 × N`. */
+  /** Mana as fraction of manaMax from captures: `CAPTURE_MANA_FRAC_PER_STONE × N`. */
   captureManaFrac: number;
 }
 
-/** Per captured stone: +10% next-monster damage. */
-export const CAPTURE_DAMAGE_PER_STONE = 0.1;
-/** Per captured stone: +12%p summoner mana gauge. */
-export const CAPTURE_MANA_FRAC_PER_STONE = 0.12;
+/** Per captured stone: +18% next-monster damage. */
+export const CAPTURE_DAMAGE_PER_STONE = 0.18;
+/** Per captured stone: +20%p summoner mana gauge. */
+export const CAPTURE_MANA_FRAC_PER_STONE = 0.2;
 /** @deprecated Use CAPTURE_DAMAGE_PER_STONE. */
 export const CAPTURE_BONUS_PER_STONE = CAPTURE_DAMAGE_PER_STONE;
 /** Flat mana on a normal (non-capture) stone. */
-export const SAFE_PLACE_MANA = 6;
+export const SAFE_PLACE_MANA = 10;
 
 export function gainsForBoardEvent(
   kind: BoardEventKind,
@@ -40,8 +40,8 @@ export function gainsForBoardEvent(
 ): BoardEventGains {
   if (kind === "item_magnet") {
     return {
-      amplifyDelta: 0.05,
-      skillAmplifyBonus: 0.08,
+      amplifyDelta: 0.08,
+      skillAmplifyBonus: 0.14,
       mana: 35 * manaMul,
       captureDamageBonus: 0,
       captureManaFrac: 0,
@@ -50,8 +50,8 @@ export function gainsForBoardEvent(
   const n = Math.max(0, capturedCount);
   if (kind === "capture_large" || kind === "capture_small" || n >= 1) {
     return {
-      // Mild persistent Amp only — main payoff is N×10% damage + mana.
-      amplifyDelta: n >= 3 ? 0.03 : 0.02,
+      // Mild persistent Amp — main payoff is N×damage + mana + team aura.
+      amplifyDelta: n >= 3 ? 0.06 : 0.04,
       skillAmplifyBonus: 0,
       mana: 0,
       captureDamageBonus: CAPTURE_DAMAGE_PER_STONE * n,
@@ -59,8 +59,8 @@ export function gainsForBoardEvent(
     };
   }
   return {
-    amplifyDelta: 0.01,
-    skillAmplifyBonus: 0,
+    amplifyDelta: 0.025,
+    skillAmplifyBonus: 0.02,
     mana: SAFE_PLACE_MANA * manaMul,
     captureDamageBonus: 0,
     captureManaFrac: 0,

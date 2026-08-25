@@ -18,6 +18,15 @@ import type { PlayerSave } from "./loop.js";
 
 export type ScenarioDifficulty = "normal" | "hard" | "hell";
 
+function clearedForDifficulty(
+  save: PlayerSave,
+  difficulty: ScenarioDifficulty,
+): string[] {
+  if (difficulty === "hard") return save.clearedHardStages ?? [];
+  if (difficulty === "hell") return save.clearedHellStages ?? [];
+  return save.clearedStages;
+}
+
 function chainUnlocked(
   save: PlayerSave,
   stages: StageDef[],
@@ -27,6 +36,17 @@ function chainUnlocked(
   if (idx < 0) return false;
   if (idx === 0) return true;
   return save.clearedStages.includes(stages[idx - 1]!.id);
+}
+
+function chainUnlockedOnClears(
+  cleared: string[],
+  stages: StageDef[],
+  stageId: string,
+): boolean {
+  const idx = stages.findIndex((s) => s.id === stageId);
+  if (idx < 0) return false;
+  if (idx === 0) return true;
+  return cleared.includes(stages[idx - 1]!.id);
 }
 
 function mapBossId(map: number): string | undefined {
@@ -70,13 +90,25 @@ export function stageProgressionChain(stage: StageDef): StageDef[] | null {
 export function nextStageInProgression(
   save: PlayerSave,
   stage: StageDef,
+  difficulty: ScenarioDifficulty = "normal",
 ): StageDef | null {
   const chain = stageProgressionChain(stage);
   if (!chain) return null;
   const index = chain.findIndex((candidate) => candidate.id === stage.id);
   if (index < 0) return null;
   const next = chain[index + 1] ?? null;
-  return next && isStageUnlocked(save, next.id) ? next : null;
+  return next && isStageUnlockedForDifficulty(save, next.id, difficulty)
+    ? next
+    : null;
+}
+
+/** Whether a stage was cleared on the given scenario difficulty track. */
+export function isStageClearedOnDifficulty(
+  save: PlayerSave,
+  stageId: string,
+  difficulty: ScenarioDifficulty,
+): boolean {
+  return clearedForDifficulty(save, difficulty).includes(stageId);
 }
 
 /** Hard/Hell for a scenario map open only after every stage on that map is cleared. */
@@ -100,10 +132,29 @@ export function isDifficultyOpen(
   return (save.clearedHardStages ?? []).includes(stage.id);
 }
 
-/** Content unlock rules (Phase 1–2+). */
+/** Content unlock rules (Phase 1–2+). Normal track only — use with difficulty for scenario hard/hell. */
 export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
+  return isStageUnlockedForDifficulty(save, stageId, "normal");
+}
+
+/** Stage unlock for a scenario difficulty track (normal / hard / hell). */
+export function isStageUnlockedForDifficulty(
+  save: PlayerSave,
+  stageId: string,
+  difficulty: ScenarioDifficulty = "normal",
+): boolean {
   const stage = getStage(stageId);
   if (!stage) return false;
+
+  if (stage.mode === "scenario" && difficulty !== "normal") {
+    if (stage.map < 1 || stage.map > MAIN_QUEST_AREA_COUNT) return false;
+    const cleared = clearedForDifficulty(save, difficulty);
+    if (stage.map > 1) {
+      const prevBoss = mapBossId(stage.map - 1);
+      if (!prevBoss || !cleared.includes(prevBoss)) return false;
+    }
+    return chainUnlockedOnClears(cleared, stagesForMap(stage.map), stageId);
+  }
 
   switch (stage.mode) {
     case "scenario": {
@@ -147,12 +198,16 @@ export function isStageUnlocked(save: PlayerSave, stageId: string): boolean {
   }
 }
 
-export function stageUnlockLabel(save: PlayerSave, stage: StageDef): string {
-  if (save.clearedStages.includes(stage.id)) return "클리어";
+export function stageUnlockLabel(
+  save: PlayerSave,
+  stage: StageDef,
+  difficulty: ScenarioDifficulty = "normal",
+): string {
+  if (isStageClearedOnDifficulty(save, stage.id, difficulty)) return "클리어";
   if (stage.mode === "weekday" && !isWeekdayStageOpenToday(stage.id)) {
     return "오늘은 닫힘";
   }
-  if (isStageUnlocked(save, stage.id)) return "해금";
+  if (isStageUnlockedForDifficulty(save, stage.id, difficulty)) return "해금";
   return "잠김";
 }
 

@@ -1,15 +1,24 @@
 /** Scripted offline arena rival decks (fixed enemy monster id lists). */
 
+export type ArenaRivalSummonerElement =
+  | "fire"
+  | "water"
+  | "wind"
+  | "light"
+  | "dark";
+
 export interface ArenaRivalDeck {
   id: string;
   nameKo: string;
   enemyMonsterIds: string[];
+  summonerElement: ArenaRivalSummonerElement;
 }
 
 export const ARENA_RIVAL_DECKS: ArenaRivalDeck[] = [
   {
     id: "rival_rookies",
     nameKo: "신입 라이벌",
+    summonerElement: "wind",
     enemyMonsterIds: [
       "cinder_imp_fire",
       "dew_slime_water",
@@ -19,6 +28,7 @@ export const ARENA_RIVAL_DECKS: ArenaRivalDeck[] = [
   {
     id: "rival_guard",
     nameKo: "수호 라이벌",
+    summonerElement: "water",
     enemyMonsterIds: [
       "steel_armor_water",
       "dew_healer_water",
@@ -29,6 +39,7 @@ export const ARENA_RIVAL_DECKS: ArenaRivalDeck[] = [
   {
     id: "rival_storm",
     nameKo: "질풍 라이벌",
+    summonerElement: "light",
     enemyMonsterIds: [
       "storm_spearmaster_light",
       "lotus_dancer_wind",
@@ -38,6 +49,7 @@ export const ARENA_RIVAL_DECKS: ArenaRivalDeck[] = [
   {
     id: "rival_abyss",
     nameKo: "심연 라이벌",
+    summonerElement: "dark",
     enemyMonsterIds: [
       "abyss_priest_dark",
       "capture_hound_dark",
@@ -48,6 +60,7 @@ export const ARENA_RIVAL_DECKS: ArenaRivalDeck[] = [
   {
     id: "rival_legend",
     nameKo: "전설 라이벌",
+    summonerElement: "fire",
     enemyMonsterIds: [
       "dragon_knight_fire",
       "eternal_healer_water",
@@ -70,6 +83,7 @@ export function pickArenaRival(
     return {
       id: "rival_empty",
       nameKo: "빈 덱",
+      summonerElement: "dark",
       enemyMonsterIds: ["cinder_imp_fire"],
     };
   }

@@ -12,6 +12,7 @@ import {
   createNewSave,
   createEmptySummonerMagicLoadouts,
   createSummonerRoster,
+  DEFAULT_ARENA_RATING,
   MAX_SUMMONER_AWAKEN,
   normalizePartyPresets,
   normalizeUnlockedSummoners,
@@ -271,6 +272,10 @@ export function migrateSave(raw: unknown): PlayerSave | null {
         : 0,
     arenaAttackDay:
       typeof p.arenaAttackDay === "string" ? p.arenaAttackDay : null,
+    arenaRating:
+      typeof p.arenaRating === "number"
+        ? Math.max(0, Math.floor(p.arenaRating))
+        : DEFAULT_ARENA_RATING,
     shopDayKey: typeof p.shopDayKey === "string" ? p.shopDayKey : null,
     shopSoldIds: Array.isArray(p.shopSoldIds)
       ? p.shopSoldIds.filter((id): id is string => typeof id === "string")

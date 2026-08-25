@@ -6719,6 +6719,36 @@ main {
   gap: 8px;
 }
 
+.summoner-info-sheet {
+  width: min(420px, 100%);
+  max-height: min(78vh, 680px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.summoner-info-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summoner-info-lock {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #c9a22766;
+  background: #1a1408cc;
+  text-align: center;
+  font-weight: 800;
+  font-size: 0.88rem;
+  color: #f5e6b8;
+}
+
+.summoner-info-unlock {
+  width: 100%;
+  margin-top: 2px;
+}
+
 .summoner-pick {
   display: flex;
   align-items: center;
@@ -8330,7 +8360,7 @@ main {
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front {
-  transform: scale(0.96) translateY(18px);
+  transform: scale(0.96) translateY(34px);
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front::after {
@@ -8594,13 +8624,13 @@ main {
 
 /* Far rim — sit on the far floor band of the arena BG */
 .battle-lane.enemy {
-  padding-top: calc(72px + env(safe-area-inset-top));
+  padding-top: calc(68px + env(safe-area-inset-top));
   min-height: clamp(110px, 17dvh, 140px);
-  margin-bottom: -8px;
+  margin-bottom: 0;
 }
 
 .battle-lane.enemy .battle-front {
-  transform: scale(0.96) translateY(10px);
+  transform: scale(0.96) translateY(26px);
   transform-origin: center bottom;
   filter: brightness(0.98);
 }
@@ -8938,10 +8968,35 @@ main {
   inset: 0;
   display: grid;
   place-items: center;
-  background: #000a;
+  background: #000b;
   border-radius: 11px;
-  font-weight: 700;
-  font-size: 14px;
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1;
+  color: #f5edd8;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.battle-unit-skills .skill-btn.cooling,
+.battle-unit-skills .skill-btn:disabled {
+  opacity: 0.72;
+  filter: grayscale(0.35);
+  pointer-events: none;
+}
+
+.battle-unit-skills .skill-btn.cooling .skill-btn-cd {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000b;
+  border-radius: 11px;
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1;
+  color: #f5edd8;
+  z-index: 2;
 }
 
 .battle-util-row {
@@ -9690,7 +9745,7 @@ button.battle-unit {
 
 .board-wrap--stage {
   gap: 0;
-  padding: 0 2px 0;
+  padding: 8px 2px 0;
   border-radius: 14px;
   flex: 1 1 auto;
   min-height: 0;
@@ -9700,6 +9755,26 @@ button.battle-unit {
   box-shadow: none;
   /* Keep stone clicks above aura but under unit rims */
   z-index: 1;
+}
+
+/* Rebuild meter sat above the tilted circle and read as a stray gauge under the enemy rim. */
+.board-wrap--stage .board-phase-meter {
+  display: none;
+}
+
+.board-wrap--stage .board-phase-tag {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  z-index: 4;
+  pointer-events: none;
+  margin: 0;
+}
+
+.board-wrap--stage .board-frame--tilted {
+  position: relative;
+  margin-top: 4px;
 }
 
 .board-wrap--stage.is-live .board-frame--tilted .board {
@@ -9759,14 +9834,19 @@ button.battle-unit {
 
 .board-stage {
   perspective: 1600px;
-  perspective-origin: 50% 10%;
+  perspective-origin: 50% 14%;
   width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 4px 4px 10px;
+  padding: 8px 4px 12px;
   transform-style: preserve-3d;
   position: relative;
+}
+
+.board-wrap--stage .board-stage {
+  padding-top: 10px;
+  padding-bottom: 14px;
 }
 
 .board-circle-art {
@@ -11030,6 +11110,27 @@ button.battle-unit {
   pointer-events: auto;
 }
 
+/* Solid rear disc so empty intersections read clearly over the arena BG. */
+.stone-pick-circle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 84%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 50% 38%, #3a2f62f5 0%, #1c1630fa 54%, #0a0818fc 100%);
+  border: 1px solid #8870ff88;
+  box-shadow:
+    inset 0 2px 28px #000f,
+    inset 0 0 0 1px #c9a22766,
+    0 12px 32px #000c;
+}
+
 .stone-pick-circle-art {
   position: absolute;
   inset: 0;
@@ -11037,14 +11138,15 @@ button.battle-unit {
   height: 100%;
   object-fit: contain;
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
+  opacity: 0.92;
   -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0 46%, #000c 60%, transparent 72%);
   mask-image: radial-gradient(circle at 50% 50%, #000 0 46%, #000c 60%, transparent 72%);
 }
 
 .board.stone-pick-board {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   width: 78%;
   max-width: 78%;
   margin: 0 auto;
@@ -11091,18 +11193,19 @@ button.battle-unit {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 56%;
-  height: 56%;
+  width: 62%;
+  height: 62%;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(circle at 50% 38%, #d8ccff28 0%, #1c1638aa 58%, #0a0818cc 100%);
+    radial-gradient(circle at 50% 36%, #e8e0ff55 0%, #2a2048dd 56%, #100c20f0 100%);
   box-shadow:
-    inset 0 1px 2px #ffffff18,
-    inset 0 0 0 1px #b8a8e844;
-  opacity: 0.7;
+    inset 0 1px 3px #ffffff22,
+    inset 0 0 0 1px #c9b8f088,
+    0 0 8px #6a58c844;
+  opacity: 0.92;
 }
 
 .board.stone-pick-board button.cell.legal:not(:disabled)::before,
@@ -16029,13 +16132,114 @@ button.stage-prep-slot {
   padding: 2px 0 4px;
 }
 
-.pvp-rival-card {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-rows: auto auto;
-  gap: 6px 10px;
+.pvp-rival-summoner {
+  display: flex;
   align-items: center;
-  padding: 8px 10px;
+  gap: 8px;
+}
+
+.pvp-rival-sum-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.pvp-rival-sum-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #f2e6c4;
+}
+
+.pvp-rival-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pvp-rival-rating {
+  color: #d8c8a8;
+}
+
+.pvp-rival-power {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pvp-rival-power-vs {
+  opacity: 0.65;
+  font-size: 0.68rem;
+}
+
+.pvp-rival-power-gap.is-up {
+  color: #7ad888;
+}
+
+.pvp-rival-power-gap.is-down {
+  color: #f08080;
+}
+
+.pvp-rival-ticket-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+}
+
+.pvp-rival-attack {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage-prep-ticket {
+  border-color: #c9a22788;
+}
+
+.stage-prep-arena-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid #6a503266;
+  background: #1a1510cc;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage-prep-arena-power {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stage-prep-arena-gap.is-up {
+  color: #7ad888;
+}
+
+.stage-prep-arena-gap.is-down {
+  color: #f08080;
+}
+
+.stages-region-status-chip--ticket {
+  border-color: #c9a22766;
+}
+
+.stages-region-status-chip--rating {
+  border-color: #8a78c866;
+}
+
+.pvp-rival-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
   border-radius: 12px;
   border: 1px solid #c45c5c55;
   background: linear-gradient(180deg, #3a201cf4 0%, #1c1210f8 100%);
@@ -16046,9 +16250,9 @@ button.stage-prep-slot {
 }
 
 .pvp-rival-mons {
-  grid-row: 1 / span 2;
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .pvp-rival-mon {
@@ -28966,26 +29170,33 @@ button.linkish {
 }
 
 .gear-detail-bonuses {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  margin: 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #7a6a3a44;
 }
 
-.gear-detail-bonuses span {
-  padding: 6px 7px;
-  border: 1px solid #5a403055;
-  border-radius: 7px;
-  background: #100c0aaa;
-  font-size: 0.68rem;
-  color: #e8d9c8;
+.gear-detail-bonuses .sym-detail-sub {
+  margin: 0;
+}
+
+.gear-detail-meta {
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: #d8c8a8 !important;
+}
+
+.gear-detail-title {
+  margin-bottom: 12px;
 }
 
 .gear-detail-set-choices {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-bottom: 12px;
+  margin-top: 10px;
 }
 
 .gear-detail-actions {
@@ -29005,6 +29216,10 @@ button.linkish {
 
 .gear-detail-actions button.is-locked {
   opacity: 0.72;
+}
+
+.gear-enhance-confirm-layer {
+  z-index: var(--z-modal-nested);
 }
 
 .gear-sell-confirm-layer {
