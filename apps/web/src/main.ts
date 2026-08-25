@@ -21293,6 +21293,8 @@ function bind(): void {
     }
     applyCommunityOpen();
     if (communityOpen) void refreshSocialThenCommunity();
+  });
+  app.querySelector("#btn-community-close")?.addEventListener("click", () => {
     communityOpen = false;
     applyCommunityOpen();
   });
