@@ -1,5 +1,6 @@
 import { SKILL_DMG_MUL } from "./combatTune.js";
 import type { Element } from "./monsters.js";
+import { summonerSkillDescKo, summonerSkillVfx } from "./summonerSkillMeta.js";
 
 export type MagicBranch = "A" | "B";
 
@@ -63,6 +64,12 @@ export interface SummonerMagicSkillDef {
   turns?: number;
   /** Rank scaling per enhance level (added to power). */
   rankScale?: number;
+  /** Flavor description shown in UI. */
+  descKo?: string;
+  /** Battle VFX routing override. */
+  vfxFamily?: "melee" | "bolt" | "nova" | "support";
+  /** Projectile travels as a glowing orb. */
+  orbBolt?: boolean;
 }
 
 export interface SummonerKitDef {
@@ -625,6 +632,15 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
     },
   },
 };
+
+for (const kit of Object.values(SUMMONER_KITS)) {
+  for (const sk of Object.values(kit.skills)) {
+    const vfx = summonerSkillVfx(sk.kind, sk.manaCostFrac);
+    sk.descKo = summonerSkillDescKo(sk.kind, kit.element);
+    sk.vfxFamily = vfx.vfxFamily;
+    if (vfx.orbBolt) sk.orbBolt = true;
+  }
+}
 
 export function getSummonerKit(element: Element): SummonerKitDef {
   return SUMMONER_KITS[element];

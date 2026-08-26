@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { pngToDematteWebp, BATTLE_STILL_DEMATTE } from "./lib/dematte-webp.mjs";
+import { pngToDematteWebp, imageToDematteWebp, BATTLE_STILL_DEMATTE } from "./lib/dematte-webp.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -42,12 +42,19 @@ const paddedDir = path.join(workRoot, "padded");
 fs.mkdirSync(dematteDir, { recursive: true });
 fs.mkdirSync(paddedDir, { recursive: true });
 
-const pngs = fs.readdirSync(dir).filter((x) => x.endsWith(".png"));
+const inputs = fs
+  .readdirSync(dir)
+  .filter(
+    (x) =>
+      /\.(png|webp)$/i.test(x) &&
+      (x.includes("-front.") || x.includes("-back.")),
+  );
 let n = 0;
-for (const f of pngs) {
-  const png = path.join(dir, f);
+for (const f of inputs) {
+  if (!f.toLowerCase().endsWith(".png")) continue;
+  const src = path.join(dir, f);
   const webpName = f.replace(/\.png$/i, ".webp");
-  await pngToDematteWebp(png, path.join(dematteDir, webpName), BATTLE_STILL_DEMATTE);
+  await imageToDematteWebp(src, path.join(dematteDir, webpName), BATTLE_STILL_DEMATTE);
   n++;
   console.log("dematte", webpName);
 }

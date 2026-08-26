@@ -22,7 +22,11 @@ export function bindCoreStageMapController(
     if (!pin || !viewport.contains(pin)) return;
 
     // A pointer drag is not a pin activation.
-    if (viewport.getAttribute("data-pan-moved") === "1") return;
+    if (viewport.getAttribute("data-pan-moved") === "1") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
 
     event.preventDefault();
     event.stopImmediatePropagation();

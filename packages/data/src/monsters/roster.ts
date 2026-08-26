@@ -1,6 +1,6 @@
 import type { FamilyRosterEntry } from "./types.js";
 
-/** Compact Phase 2 roster — 50 families. artKey === familyId. */
+/** Compact Phase 2 roster — 50 families. artKey per element = `{familyId}_{element}`. */
 export const FAMILY_ROSTER: readonly FamilyRosterEntry[] = [
   // 1★
   { familyId: "stone_golem", nameKo: "돌골렘", naturalStars: 1, role: "tank", stonePassiveId: "high_amp_dr" },

@@ -211,6 +211,7 @@ export function dematteArtImg(img: HTMLImageElement): void {
   // dark armor/hair to alpha and leaves a half-drawn silhouette.
   if (
     img.hasAttribute("data-still-front") ||
+    /\/skill\//.test(src) ||
     (/\/art\/(?:monster|summoner)\//.test(src) && !/\/skill\//.test(src))
   ) {
     return;
@@ -227,7 +228,7 @@ export function dematteArtImg(img: HTMLImageElement): void {
 /** Apply dematte to all matching imgs under root (in place). */
 export function dematteArtInTree(
   root: ParentNode,
-  selector = "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.battle-unit-img, img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.summon-detail-img, img.summon-detail-skill-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.codex-cell-img, img.codex-detail-img",
+  selector = "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.battle-unit-img, img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.summon-detail-img, img.summon-detail-skill-img, img.mon-skill-ico-img, img.mon-skill-art-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.codex-cell-img, img.codex-detail-img",
 ): void {
   root.querySelectorAll<HTMLImageElement>(selector).forEach(dematteArtImg);
 }

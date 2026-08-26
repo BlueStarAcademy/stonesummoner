@@ -291,6 +291,10 @@ function pageIsAudible(): boolean {
   if (document.visibilityState && document.visibilityState !== "visible") {
     return false;
   }
+  // Cursor / VS Code Simple Browser often keeps visibility "visible" while unfocused.
+  if (typeof document.hasFocus === "function" && !document.hasFocus()) {
+    return false;
+  }
   return true;
 }
 
@@ -362,6 +366,15 @@ export function initAudio(): void {
     { signal },
   );
   window.addEventListener("beforeunload", () => onAudioBackground(), { signal });
+  window.addEventListener("blur", () => onAudioBackground(), { signal });
+  window.addEventListener(
+    "focus",
+    () => {
+      if (pageIsAudible()) onAudioForeground();
+      else onAudioBackground();
+    },
+    { signal },
+  );
   document.addEventListener("freeze", () => onAudioBackground(), { signal });
   void import("@capacitor/core")
     .then(async ({ Capacitor }) => {

@@ -1,0 +1,33 @@
+---
+description: HQ painted character portraits, battle stills, and arenas are the game's visual core — WebP-first, no tint fallbacks.
+alwaysApply: true
+---
+
+# HQ character & battle art — game core
+
+## Priority
+**Character portraits, battle stills, and battle arenas are the visual core of StoneSummoner.** UI work must showcase them at full painted quality — never treat art as secondary decoration.
+
+## Asset standard
+- **Painted WebP** (dematted alpha) is the ship target — not SVG placeholders, not CSS element tint, not procedural recolor bakes.
+- Portrait: `apps/web/public/art/monster/{artKey}.webp` (768²)
+- Battle still: `apps/web/public/art/monster/battle/{artKey}-front.webp` / `-back.webp` (1024²)
+- Skill icon: `apps/web/public/art/monster/skill/{familyId}-{element}-s{n}.webp` (painted, **locked** — use `npm run skill-art:install`, never `skill-art:gen-proc` on ship)
+- Battle BG: `apps/web/public/art/battle/bg/{id}.webp` (portrait arena, grounded floors)
+
+Specs and prompts: `docs/art/monster/prompts.md`, `docs/art/battle/prompts.md`, `docs/art/skill/prompts.md`.
+
+## Code rules
+1. **WebP first** in fallback chains; `familyId` paths before per-element `artKey` when HQ files use family naming.
+2. **Never add CSS element-color filters** on monster/portrait/battle images — element palette is baked in paint.
+3. **Run dematte** on displayed monster art (`dematteArtInTree`) — do not skip on new screens that show characters.
+4. **Do not replace** painted assets with generic `/art/ui/*` icons when a monster-specific path exists or is planned.
+5. Prefer `npm run monster-art:install` / `node scripts/install-battle-stills.mjs` over `monster-art:bake` (tint fallback = low quality).
+
+## UI rules
+- Give portraits and battle units enough size and `object-fit: contain` — cropping limbs or shrinking to icon scale hides the art investment.
+- Battle scene: keep arena BG + grounded unit placement readable; avoid overlays that obscure fighters.
+- Book/inspect slots: portrait + battle still paths via `monsterPortraitFallbacks` / `monsterBattleStillFallbacks`.
+
+## When adding features
+If a feature needs a new image slot for a monster or battle context, wire it to the existing HQ paths and dematte pipeline first — placeholder art is acceptable only as a **temporary** gap with a tracked family in the art roster, not as the long-term default.

@@ -9,6 +9,8 @@ export {
   LEGACY_MONSTER_IDS,
   getMonster,
   getMonsterArtKey,
+  getMonsterFamilyArtKey,
+  MONSTER_ART_KEYS,
   listMonsterFamilies,
   resolveMonsterId,
   expandFamily,

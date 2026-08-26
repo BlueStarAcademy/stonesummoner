@@ -19,6 +19,16 @@ export type GearQuality = "normal" | "advanced" | "rare" | "epic" | "legend";
 /** Shallow gear sets — do not compete with symbol set depth. */
 export type GearSetId = "mana" | "assault" | "guardian" | "sense" | "tempo";
 
+/** Non-weapon armor/accessory material — drives art + stat bias. */
+export type GearMaterialId = "cloth" | "leather" | "chain" | "plate";
+
+export interface GearMaterialDef {
+  id: GearMaterialId;
+  nameKo: string;
+  /** Multipliers applied to slot base stats (non-weapon only). */
+  statMul: Partial<GearSetBonus>;
+}
+
 export interface GearSetDef {
   id: GearSetId;
   nameKo: string;
@@ -58,6 +68,8 @@ export interface GearPiece {
   quality: GearQuality;
   enhance: number;
   setId: GearSetId;
+  /** Non-weapon material — art path + stat bias. */
+  materialId?: GearMaterialId;
   /** Required for weapons — element lock. */
   element?: Element;
   /** Added to manaRegenPerTick */
@@ -136,6 +148,54 @@ export const GEAR_SETS: GearSetDef[] = [
   },
 ];
 
+export const GEAR_MATERIALS: GearMaterialDef[] = [
+  {
+    id: "cloth",
+    nameKo: "천",
+    statMul: {
+      manaRegenBonus: 1.18,
+      boardSenseBonus: 1.14,
+      skillPowerBonus: 1.06,
+      summonerHpBonus: 0.82,
+      summonerDefBonus: 0.82,
+    },
+  },
+  {
+    id: "leather",
+    nameKo: "가죽",
+    statMul: {
+      startManaPct: 1.22,
+      leaderAtkBonus: 1.18,
+      manaRegenBonus: 1.06,
+      summonerDefBonus: 0.95,
+    },
+  },
+  {
+    id: "chain",
+    nameKo: "사슬",
+    statMul: {
+      summonerHpBonus: 1.12,
+      summonerDefBonus: 1.18,
+      skillPowerBonus: 1.08,
+      leaderAtkBonus: 1.05,
+    },
+  },
+  {
+    id: "plate",
+    nameKo: "판금",
+    statMul: {
+      summonerHpBonus: 1.28,
+      summonerDefBonus: 1.28,
+      manaRegenBonus: 0.88,
+      startManaPct: 0.9,
+    },
+  },
+];
+
+const MATERIAL_WEIGHTS: { value: GearMaterialId; w: number }[] = GEAR_MATERIALS.map(
+  (m) => ({ value: m.id, w: 1 }),
+);
+
 const DEFAULT_SET_BY_SLOT: Record<GearSlot, GearSetId> = {
   weapon: "assault",
   top: "guardian",
@@ -153,20 +213,36 @@ export function gearStarsToInvGrade(
   return (["gray", "green", "blue", "purple", "red"] as const)[n - 1]!;
 }
 
-export function gearStarMul(stars: GearStars): number {
-  return 0.7 + ((stars - 1) / 4) * 0.65;
+/** Player-facing gear tier label — follows ★ count, not the hidden quality roll. */
+export function gearStarsToQuality(stars: number): GearQuality {
+  const n = Math.max(1, Math.min(5, Math.floor(stars) || 1));
+  return (["normal", "advanced", "rare", "epic", "legend"] as const)[n - 1]!;
 }
 
+/** Per-★ combat multiplier — steep curve so ★5 reads clearly above ★1. */
+const GEAR_STAR_MUL: Record<GearStars, number> = {
+  1: 1,
+  2: 1.26,
+  3: 1.58,
+  4: 1.96,
+  5: 2.45,
+};
+
+export function gearStarMul(stars: GearStars): number {
+  return GEAR_STAR_MUL[normalizeGearStars(stars)];
+}
+
+/** Tier label multiplier (일반→전설) — stacks with ★ for readable grade jumps. */
 export function gearQualityMul(quality: GearQuality): number {
   switch (quality) {
     case "advanced":
-      return 1.08;
+      return 1.14;
     case "rare":
-      return 1.16;
+      return 1.32;
     case "epic":
-      return 1.28;
+      return 1.54;
     case "legend":
-      return 1.4;
+      return 1.8;
     default:
       return 1;
   }
@@ -222,20 +298,51 @@ export function migrateGearSlot(raw: string | undefined | null): GearSlot {
 }
 
 const WEAPON_NAMES: Record<Element, string[]> = {
-  fire: ["염화검", "작열창"],
-  water: ["해연검", "파도창"],
-  wind: ["질풍검", "폭풍창"],
-  light: ["성휘검", "광염창"],
-  dark: ["심연검", "그림자창"],
+  fire: ["염화검", "작열창", "폭염검", "광염대검", "멸화창"],
+  water: ["해연검", "파도창", "심해검", "해류대검", "청해창"],
+  wind: ["질풍검", "폭풍창", "돌풍검", "천풍대검", "극풍창"],
+  light: ["성휘검", "광염창", "성광검", "천광대검", "섬광창"],
+  dark: ["심연검", "그림자창", "암흑검", "심연대검", "망령창"],
 };
 
 const DROP_NAMES: Record<Exclude<GearSlot, "weapon">, string[]> = {
-  top: ["수호 상의", "비늘 상의", "요새 상의"],
-  bottom: ["지휘 하의", "전장 하의", "결속 하의"],
-  shoes: ["진액 신발", "질주 신발", "감응 신발"],
-  ring: ["결속 반지", "돌격 반지", "진액 반지"],
-  necklace: ["감응 목걸이", "국면 목걸이", "따냄 목걸이"],
+  top: ["수호 상의", "비늘 상의", "요새 상의", "철벽 상의", "성역 상의"],
+  bottom: ["지휘 하의", "전장 하의", "결속 하의", "궤도 하의", "정예 하의"],
+  shoes: ["진액 신발", "질주 신발", "감응 신발", "신속 신발", "천벌 신발"],
+  ring: ["결속 반지", "돌격 반지", "진액 반지", "현란 반지", "결정 반지"],
+  necklace: ["감응 목걸이", "국면 목걸이", "따냄 목걸이", "명상 목걸이", "영광 목걸이"],
 };
+
+function gearStarNameIndex(stars: GearStars, poolLen: number): number {
+  if (poolLen <= 0) return 0;
+  return Math.min(Math.max(1, stars) - 1, poolLen - 1);
+}
+
+/** Display name keyed by slot/element and ★1–5 (not stored nameKo). */
+export function gearDisplayNameKo(piece: GearPiece): string {
+  const stars = normalizeGearStars(piece.stars);
+  if (piece.slot === "weapon") {
+    const el = piece.element ?? "light";
+    const pool = WEAPON_NAMES[el];
+    return pool[gearStarNameIndex(stars, pool.length)] ?? piece.nameKo;
+  }
+  const pool = DROP_NAMES[piece.slot];
+  return pool[gearStarNameIndex(stars, pool.length)] ?? piece.nameKo;
+}
+
+function gearNameKoForSlot(
+  slot: GearSlot,
+  stars: GearStars,
+  element?: Element,
+): string {
+  if (slot === "weapon") {
+    const el = element ?? "light";
+    const pool = WEAPON_NAMES[el];
+    return pool[gearStarNameIndex(stars, pool.length)] ?? pool[0]!;
+  }
+  const pool = DROP_NAMES[slot];
+  return pool[gearStarNameIndex(stars, pool.length)] ?? pool[0]!;
+}
 
 function emptyBonus(): GearSetBonus {
   return {
@@ -279,14 +386,56 @@ export function isGearSetId(raw: string): raw is GearSetId {
   );
 }
 
-function scaleStat(base: number, stars: GearStars, quality: GearQuality): number {
-  return base * gearStarMul(stars) * gearQualityMul(quality);
+export function isGearMaterialId(raw: string): raw is GearMaterialId {
+  return raw === "cloth" || raw === "leather" || raw === "chain" || raw === "plate";
+}
+
+export function normalizeGearMaterial(raw: unknown): GearMaterialId {
+  if (typeof raw === "string" && isGearMaterialId(raw)) return raw;
+  return "cloth";
+}
+
+export function getGearMaterial(id: GearMaterialId): GearMaterialDef {
+  return GEAR_MATERIALS.find((m) => m.id === id) ?? GEAR_MATERIALS[0]!;
+}
+
+function applyMaterialBonuses<
+  T extends Pick<
+    GearPiece,
+    | "manaRegenBonus"
+    | "manaMaxBonus"
+    | "boardSenseBonus"
+    | "startManaPct"
+    | "skillPowerBonus"
+    | "summonerHpBonus"
+    | "summonerDefBonus"
+    | "leaderAtkBonus"
+  >,
+>(bonuses: T, materialId: GearMaterialId): T {
+  const mul = getGearMaterial(materialId).statMul;
+  const out = { ...bonuses };
+  for (const key of Object.keys(mul) as (keyof GearSetBonus)[]) {
+    const factor = mul[key];
+    if (factor == null || out[key] == null) continue;
+    const v = out[key];
+    if (typeof v === "number") {
+      (out as Record<string, number>)[key] =
+        key === "summonerHpBonus" || key === "summonerDefBonus" || key === "manaMaxBonus"
+          ? Math.round(v * factor)
+          : Number((v * factor).toFixed(4));
+    }
+  }
+  return out;
+}
+
+function scaleStat(base: number, stars: GearStars): number {
+  const tierQuality = gearStarsToQuality(stars);
+  return base * gearStarMul(stars) * gearQualityMul(tierQuality);
 }
 
 function baseBonusesForSlot(
   slot: GearSlot,
   stars: GearStars,
-  quality: GearQuality,
 ): Pick<
   GearPiece,
   | "manaRegenBonus"
@@ -298,7 +447,7 @@ function baseBonusesForSlot(
   | "summonerDefBonus"
   | "leaderAtkBonus"
 > {
-  const s = (n: number) => scaleStat(n, stars, quality);
+  const s = (n: number) => scaleStat(n, stars);
   switch (slot) {
     case "weapon":
       return {
@@ -401,13 +550,17 @@ function basePiece(
     >,
 ): GearPiece {
   const stars = normalizeGearStars(partial.stars ?? 1);
-  const quality = normalizeGearQuality(partial.quality ?? "normal");
-  const scaled = baseBonusesForSlot(partial.slot, stars, quality);
+  const quality = gearStarsToQuality(stars);
+  const materialId =
+    partial.slot === "weapon" ? undefined : normalizeGearMaterial(partial.materialId);
+  let scaled = baseBonusesForSlot(partial.slot, stars);
+  if (materialId) scaled = applyMaterialBonuses(scaled, materialId);
   return {
     ...scaled,
     ...partial,
     stars,
     quality,
+    materialId,
   };
 }
 
@@ -455,6 +608,7 @@ export function createStarterGear(element: Element = "light"): SummonerGear {
       nameKo: "수호 상의",
       enhance: 0,
       setId: "guardian",
+      materialId: "plate",
       stars: 1,
       quality: "normal",
     }),
@@ -464,6 +618,7 @@ export function createStarterGear(element: Element = "light"): SummonerGear {
       nameKo: "지휘 하의",
       enhance: 0,
       setId: "guardian",
+      materialId: "chain",
       stars: 1,
       quality: "normal",
     }),
@@ -473,6 +628,7 @@ export function createStarterGear(element: Element = "light"): SummonerGear {
       nameKo: "진액 신발",
       enhance: 0,
       setId: "mana",
+      materialId: "leather",
       stars: 1,
       quality: "normal",
     }),
@@ -482,6 +638,7 @@ export function createStarterGear(element: Element = "light"): SummonerGear {
       nameKo: "결속 반지",
       enhance: 0,
       setId: "assault",
+      materialId: "plate",
       stars: 1,
       quality: "normal",
     }),
@@ -491,6 +648,7 @@ export function createStarterGear(element: Element = "light"): SummonerGear {
       nameKo: "감응 목걸이",
       enhance: 0,
       setId: "sense",
+      materialId: "cloth",
       stars: 1,
       quality: "normal",
     }),
@@ -508,15 +666,19 @@ export function normalizeGearPiece(
       ? piece.setId
       : DEFAULT_SET_BY_SLOT[slot];
   const stars = normalizeGearStars(piece.stars);
-  const quality = normalizeGearQuality(piece.quality);
+  const quality = gearStarsToQuality(stars);
   const element =
     slot === "weapon"
       ? ELEMENTS.includes(piece.element as Element)
         ? (piece.element as Element)
         : "light"
       : undefined;
-  const scaled = baseBonusesForSlot(slot, stars, quality);
-  return {
+  const materialId = slot === "weapon" ? undefined : normalizeGearMaterial(piece.materialId);
+  const enhance = Math.max(
+    0,
+    Math.min(MAX_GEAR_ENHANCE, Math.floor(Number(piece.enhance) || 0)),
+  );
+  let normalized = basePiece({
     id: piece.id ?? `gear_${slot}_migrated`,
     slot,
     nameKo:
@@ -524,20 +686,17 @@ export function normalizeGearPiece(
       (slot === "weapon"
         ? WEAPON_NAMES[element ?? "light"][0]!
         : DROP_NAMES[slot][0]!),
+    enhance: 0,
+    setId,
     stars,
     quality,
-    enhance: piece.enhance ?? 0,
-    setId,
     element,
-    manaRegenBonus: piece.manaRegenBonus ?? scaled.manaRegenBonus,
-    manaMaxBonus: piece.manaMaxBonus ?? scaled.manaMaxBonus,
-    boardSenseBonus: piece.boardSenseBonus ?? scaled.boardSenseBonus,
-    startManaPct: piece.startManaPct ?? scaled.startManaPct,
-    skillPowerBonus: piece.skillPowerBonus ?? scaled.skillPowerBonus,
-    summonerHpBonus: piece.summonerHpBonus ?? scaled.summonerHpBonus,
-    summonerDefBonus: piece.summonerDefBonus ?? scaled.summonerDefBonus,
-    leaderAtkBonus: piece.leaderAtkBonus ?? scaled.leaderAtkBonus,
-  };
+    materialId,
+  });
+  for (let i = 0; i < enhance; i++) {
+    normalized = bumpGearEnhance(normalized);
+  }
+  return normalized;
 }
 
 type LegacySummonerGear = Partial<SummonerGear> & {
@@ -659,66 +818,86 @@ export function gearEnhanceCrystalCost(enhance: number): number {
 /** Mana cost to re-affix a piece to another gear set. */
 export const GEAR_SET_AFFIX_MANA = 180;
 
+/**
+ * Per-step stat multiplier when going from `enhance` → `enhance+1`.
+ * Ramps past +9 (same band as mana/crystal enhance costs).
+ */
+export function gearEnhanceStepMul(enhance: number): number {
+  const e = Math.max(0, Math.min(MAX_GEAR_ENHANCE - 1, Math.floor(enhance) || 0));
+  if (e < 6) return 1 + e * 0.055;
+  if (e < 10) return 1.38 + (e - 6) * 0.12;
+  if (e < 12) return 1.92 + (e - 10) * 0.28;
+  return 2.56 + (e - 12) * 0.42;
+}
+
+function addEnhanceInt(current: number, delta: number, mul: number): number {
+  return Math.round(current + delta * mul);
+}
+
+function addEnhanceFrac(current: number, delta: number, mul: number): number {
+  return Number((current + delta * mul).toFixed(4));
+}
+
 /** Apply +1 enhance bonuses in place (returns new piece). */
 export function bumpGearEnhance(piece: GearPiece): GearPiece {
   const next = piece.enhance + 1;
+  const mul = gearEnhanceStepMul(piece.enhance);
   if (piece.slot === "weapon") {
     return {
       ...piece,
       enhance: next,
-      skillPowerBonus: piece.skillPowerBonus + 0.03,
-      manaRegenBonus: piece.manaRegenBonus + 0.005,
+      skillPowerBonus: addEnhanceFrac(piece.skillPowerBonus, 0.03, mul),
+      manaRegenBonus: addEnhanceFrac(piece.manaRegenBonus, 0.005, mul),
     };
   }
   if (piece.slot === "top") {
     return {
       ...piece,
       enhance: next,
-      summonerHpBonus: piece.summonerHpBonus + 25,
-      summonerDefBonus: piece.summonerDefBonus + 3,
-      manaMaxBonus: piece.manaMaxBonus + 2,
+      summonerHpBonus: addEnhanceInt(piece.summonerHpBonus, 25, mul),
+      summonerDefBonus: addEnhanceInt(piece.summonerDefBonus, 3, mul),
+      manaMaxBonus: addEnhanceInt(piece.manaMaxBonus, 2, mul),
     };
   }
   if (piece.slot === "bottom") {
     return {
       ...piece,
       enhance: next,
-      summonerHpBonus: piece.summonerHpBonus + 15,
-      summonerDefBonus: piece.summonerDefBonus + 2,
-      leaderAtkBonus: piece.leaderAtkBonus + 0.004,
+      summonerHpBonus: addEnhanceInt(piece.summonerHpBonus, 15, mul),
+      summonerDefBonus: addEnhanceInt(piece.summonerDefBonus, 2, mul),
+      leaderAtkBonus: addEnhanceFrac(piece.leaderAtkBonus, 0.004, mul),
     };
   }
   if (piece.slot === "shoes") {
     return {
       ...piece,
       enhance: next,
-      manaRegenBonus: piece.manaRegenBonus + 0.04,
-      manaMaxBonus: piece.manaMaxBonus + 5,
-      startManaPct: piece.startManaPct + 0.01,
+      manaRegenBonus: addEnhanceFrac(piece.manaRegenBonus, 0.04, mul),
+      manaMaxBonus: addEnhanceInt(piece.manaMaxBonus, 5, mul),
+      startManaPct: addEnhanceFrac(piece.startManaPct, 0.01, mul),
     };
   }
   if (piece.slot === "ring") {
     return {
       ...piece,
       enhance: next,
-      skillPowerBonus: piece.skillPowerBonus + 0.01,
-      leaderAtkBonus: piece.leaderAtkBonus + 0.005,
-      manaRegenBonus: piece.manaRegenBonus + 0.01,
+      skillPowerBonus: addEnhanceFrac(piece.skillPowerBonus, 0.01, mul),
+      leaderAtkBonus: addEnhanceFrac(piece.leaderAtkBonus, 0.005, mul),
+      manaRegenBonus: addEnhanceFrac(piece.manaRegenBonus, 0.01, mul),
     };
   }
   return {
     ...piece,
     enhance: next,
-    boardSenseBonus: piece.boardSenseBonus + 0.025,
-    skillPowerBonus: piece.skillPowerBonus + 0.005,
-    manaRegenBonus: piece.manaRegenBonus + 0.01,
+    boardSenseBonus: addEnhanceFrac(piece.boardSenseBonus, 0.025, mul),
+    skillPowerBonus: addEnhanceFrac(piece.skillPowerBonus, 0.005, mul),
+    manaRegenBonus: addEnhanceFrac(piece.manaRegenBonus, 0.01, mul),
   };
 }
 
 export function describeGear(piece: GearPiece): string {
   const set = getGearSet(piece.setId)?.nameKo ?? piece.setId;
-  const star = `★${piece.stars}`;
-  return `${piece.nameKo} ${star} +${piece.enhance} [${set}]`;
+  return `${gearDisplayNameKo(piece)} +${piece.enhance} [${set}]`;
 }
 
 /** True if a weapon can be worn by the given summoner element. */
@@ -746,6 +925,82 @@ export function gearSellCrystal(piece: GearPiece): number {
     spent += gearEnhanceCrystalCost(e);
   }
   return Math.floor(spent / 2);
+}
+
+export interface GearCodexEntry {
+  key: string;
+  piece: GearPiece;
+}
+
+/** Stable codex species key — slot/element/material + ★ (ignores set/quality/enhance). */
+export function gearCodexKey(
+  piece: Pick<GearPiece, "slot" | "stars" | "element" | "materialId">,
+): string {
+  const stars = normalizeGearStars(piece.stars);
+  if (piece.slot === "weapon") {
+    const el = piece.element ?? "light";
+    return `weapon:${el}:${stars}`;
+  }
+  const mat = normalizeGearMaterial(piece.materialId);
+  return `${piece.slot}:${mat}:${stars}`;
+}
+
+export function buildGearCodexPiece(params: {
+  slot: GearSlot;
+  stars: GearStars;
+  element?: Element;
+  materialId?: GearMaterialId;
+}): GearPiece {
+  const { slot, stars } = params;
+  const element = slot === "weapon" ? params.element ?? "light" : undefined;
+  const materialId =
+    slot === "weapon" ? undefined : normalizeGearMaterial(params.materialId);
+  const nameKo = gearNameKoForSlot(slot, stars, element);
+  return basePiece({
+    id: `codex_${gearCodexKey({ slot, stars, element, materialId })}`,
+    slot,
+    nameKo,
+    enhance: 0,
+    setId: DEFAULT_SET_BY_SLOT[slot],
+    stars,
+    quality: gearStarsToQuality(stars),
+    element,
+    materialId,
+  });
+}
+
+function buildGearCodexEntries(): GearCodexEntry[] {
+  const out: GearCodexEntry[] = [];
+  for (const el of ELEMENTS) {
+    for (let s = 1; s <= 5; s++) {
+      const stars = s as GearStars;
+      const piece = buildGearCodexPiece({ slot: "weapon", stars, element: el });
+      out.push({ key: gearCodexKey(piece), piece });
+    }
+  }
+  const armorSlots: Exclude<GearSlot, "weapon">[] = [
+    "top",
+    "bottom",
+    "shoes",
+    "ring",
+    "necklace",
+  ];
+  for (const slot of armorSlots) {
+    for (const mat of GEAR_MATERIALS) {
+      for (let s = 1; s <= 5; s++) {
+        const stars = s as GearStars;
+        const piece = buildGearCodexPiece({ slot, stars, materialId: mat.id });
+        out.push({ key: gearCodexKey(piece), piece });
+      }
+    }
+  }
+  return out;
+}
+
+export const GEAR_CODEX_ENTRIES: GearCodexEntry[] = buildGearCodexEntries();
+
+export function gearCodexEntryByKey(key: string): GearCodexEntry | undefined {
+  return GEAR_CODEX_ENTRIES.find((entry) => entry.key === key);
 }
 
 /** Starting unequipped gear bag size. */
@@ -809,22 +1064,16 @@ export function rollGearDrop(
   const setId =
     GEAR_SETS[Math.floor(rng() * GEAR_SETS.length) % GEAR_SETS.length]!.id;
   const stars = pickWeighted(opts.starWeights ?? STAR_WEIGHTS, rng);
-  const quality = pickWeighted(opts.qualityWeights ?? QUALITY_WEIGHTS, rng);
+  const quality = gearStarsToQuality(stars);
+  const materialId =
+    slot === "weapon" ? undefined : pickWeighted(MATERIAL_WEIGHTS, rng);
   const element =
     slot === "weapon"
       ? opts.preferredElement && ELEMENTS.includes(opts.preferredElement)
         ? opts.preferredElement
         : ELEMENTS[Math.floor(rng() * ELEMENTS.length) % ELEMENTS.length]!
       : undefined;
-  const nameKo =
-    slot === "weapon"
-      ? WEAPON_NAMES[element!][
-          Math.floor(rng() * WEAPON_NAMES[element!].length) %
-            WEAPON_NAMES[element!].length
-        ]!
-      : DROP_NAMES[slot][
-          Math.floor(rng() * DROP_NAMES[slot].length) % DROP_NAMES[slot].length
-        ]!;
+  const nameKo = gearNameKoForSlot(slot, stars, element);
   let piece = basePiece({
     id: `${idPrefix}_${slot}_${Math.floor(rng() * 1e6)}`,
     slot,
@@ -833,6 +1082,7 @@ export function rollGearDrop(
     setId,
     stars,
     quality,
+    materialId,
     element,
   });
   const bumps = Math.floor(rng() * 3); // +0..+2
@@ -840,4 +1090,41 @@ export function rollGearDrop(
     piece = bumpGearEnhance(piece);
   }
   return piece;
+}
+
+/** Public art stem without extension, e.g. `weapon-fire-s3` or `top-cloth-s5`. */
+export function gearArtStem(piece: GearPiece): string {
+  const stars = normalizeGearStars(piece.stars);
+  if (piece.slot === "weapon") {
+    const el = piece.element ?? "light";
+    return `weapon-${el}-s${stars}`;
+  }
+  const mat = normalizeGearMaterial(piece.materialId);
+  return `${piece.slot}-${mat}-s${stars}`;
+}
+
+export function gearArtFilename(piece: GearPiece, ext = "webp"): string {
+  return `${gearArtStem(piece)}.${ext}`;
+}
+
+/** Primary WebP path + ordered fallbacks for `<img onerror>`. */
+export function gearArtSrcPaths(
+  piece: GearPiece,
+  activeElement: Element = "light",
+): { primary: string; fallbacks: string[] } {
+  const primary = `/art/ui/gear/${gearArtFilename(piece)}`;
+  const fallbacks: string[] = [];
+  if (piece.slot === "weapon") {
+    const el = piece.element ?? activeElement;
+    fallbacks.push(`/art/ui/gear/weapon-${el}.webp`);
+    fallbacks.push(`/art/ui/gear/weapon-${el}.svg`);
+    fallbacks.push(`/art/ui/gear/${piece.slot}-${piece.setId}.webp`);
+  } else {
+    const mat = normalizeGearMaterial(piece.materialId);
+    fallbacks.push(`/art/ui/gear/${piece.slot}-${mat}.webp`);
+    fallbacks.push(`/art/ui/gear/${piece.slot}-${piece.setId}.webp`);
+  }
+  fallbacks.push(`/art/ui/gear/${piece.slot}.webp`);
+  fallbacks.push(`/art/ui/gear/${piece.slot}.svg`);
+  return { primary, fallbacks };
 }

@@ -1,6 +1,6 @@
 /**
- * Copy / assign Phase 2 monster portrait webps (placeholders).
- * Reuses Phase 1 art where silhouettes match; others copy wolf_fighter base.
+ * @deprecated Do not run — overwrites HQ per-element portraits.
+ * Use scripts/bake-monster-element-art.mjs or painted install pipeline.
  */
 import fs from "node:fs";
 import path from "node:path";

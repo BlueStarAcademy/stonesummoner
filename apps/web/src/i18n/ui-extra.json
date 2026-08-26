@@ -239,6 +239,22 @@
     "ko": "모두",
     "en": "All"
   },
+  "ui.battleMinimap": {
+    "ko": "미니맵",
+    "en": "Minimap"
+  },
+  "ui.battleSettings": {
+    "ko": "설정",
+    "en": "Settings"
+  },
+  "ui.battleSettingsTabScreen": {
+    "ko": "화면",
+    "en": "Screen"
+  },
+  "ui.battleSettingsTabAuto": {
+    "ko": "오토",
+    "en": "Auto"
+  },
   "ui.battleSkip": {
     "ko": "스킵",
     "en": "Skip"
@@ -364,8 +380,8 @@
     "en": "게스트로 플레이합니다."
   },
   "ui.1ab42b48a4": {
-    "ko": "레벨 · 각성 · 장비",
-    "en": "Level · Awaken · Gear"
+    "ko": "레벨 · 진화 · 장비",
+    "en": "Level · Evolve · Gear"
   },
   "ui.566fd24305": {
     "ko": "오늘은 이미 빌었습니다",
@@ -1048,8 +1064,8 @@
     "en": "상징 선택"
   },
   "ui.8c1a53b875": {
-    "ko": "각성·트리",
-    "en": "각성·트리"
+    "ko": "진화·트리",
+    "en": "Evolve·tree"
   },
   "ui.9a17e8caeb": {
     "ko": "스킬 트리",
@@ -2291,6 +2307,10 @@
     "ko": "위력 +{pct}%",
     "en": "Power +{pct}%"
   },
+  "ui.skillLvDmgPct": {
+    "ko": "피해량 {pct}%증가",
+    "en": "Damage +{pct}%"
+  },
   "ui.skillLvCd": {
     "ko": "쿨타임 1턴 감소",
     "en": "Cooltime Turn -1"
@@ -2438,6 +2458,66 @@
   "ui.skillFxDamageSingle": {
     "ko": "적 1명에게 공격력 {pct}% 피해",
     "en": "Deal {pct}% ATK damage to 1 enemy"
+  },
+  "ui.skillFlavorDmgSingle": {
+    "ko": "적 1명에게 피해를 입힙니다.",
+    "en": "Damages 1 enemy."
+  },
+  "ui.skillFlavorDmgAll": {
+    "ko": "모든 적에게 피해를 입힙니다.",
+    "en": "Damages all enemies."
+  },
+  "ui.skillFlavorHealSelf": {
+    "ko": "자신의 체력을 회복합니다.",
+    "en": "Recovers own HP."
+  },
+  "ui.skillFlavorHealAlly": {
+    "ko": "체력이 가장 낮은 아군의 체력을 회복합니다.",
+    "en": "Recovers HP of the ally with the lowest HP."
+  },
+  "ui.skillFlavorHealAll": {
+    "ko": "모든 아군의 체력을 회복합니다.",
+    "en": "Recovers HP of all allies."
+  },
+  "ui.skillFlavorShieldSelf": {
+    "ko": "자신에게 실드를 부여합니다.",
+    "en": "Grants a shield on self."
+  },
+  "ui.skillFlavorShieldAll": {
+    "ko": "모든 아군에게 실드를 부여합니다.",
+    "en": "Grants shields on all allies."
+  },
+  "ui.skillFlavorMana": {
+    "ko": "마나를 획득합니다.",
+    "en": "Gains mana."
+  },
+  "ui.skillFlavorBuff": {
+    "ko": "아군의 능력을 강화합니다.",
+    "en": "Buffs allies."
+  },
+  "ui.skillFlavorDebuff": {
+    "ko": "적의 능력을 약화시킵니다.",
+    "en": "Debuffs enemies."
+  },
+  "ui.skillFlavorProvoke": {
+    "ko": "적을 도발합니다.",
+    "en": "Provokes the enemy."
+  },
+  "ui.skillFlavorCc": {
+    "ko": "적에게 상태이상을 부여합니다.",
+    "en": "Inflicts a status effect."
+  },
+  "ui.skillFlavorDot": {
+    "ko": "지속 피해를 입힙니다.",
+    "en": "Inflicts continuous damage."
+  },
+  "ui.skillFlavorStrip": {
+    "ko": "적의 이익 효과를 제거합니다.",
+    "en": "Removes beneficial effects."
+  },
+  "ui.skillFlavorCleanse": {
+    "ko": "아군의 해로운 효과를 제거합니다.",
+    "en": "Removes harmful effects."
   },
   "ui.skillFxDamageAll": {
     "ko": "적 전체에게 공격력 {pct}% 피해",
@@ -3091,6 +3171,42 @@
     "ko": "강화에 사용할 다른 소환수가 없습니다.",
     "en": "There are no other monsters available as materials."
   },
+  "ui.monEvolveTitle": {
+    "ko": "소환수 진화",
+    "en": "Evolve Monster"
+  },
+  "ui.monEvolveConfirm": {
+    "ko": "진화하기",
+    "en": "Evolve"
+  },
+  "ui.monEvolveEmpty": {
+    "ko": "같은 성급의 재료 소환수가 없습니다.",
+    "en": "No same-grade material monsters available."
+  },
+  "ui.monEvolveFodderNeed": {
+    "ko": "재료 {cur}/{need}",
+    "en": "Materials {cur}/{need}"
+  },
+  "ui.monEvolveNeedMaxLv": {
+    "ko": "최대 레벨 필요",
+    "en": "Requires max level"
+  },
+  "ui.monEvolveStatAfter": {
+    "ko": "진화 후 능력치",
+    "en": "Stats after evolve"
+  },
+  "ui.monBookEvolvePerkStars": {
+    "ko": "별 {from} → {to}",
+    "en": "Stars {from} → {to}"
+  },
+  "ui.monBookAwakenPerkLook": {
+    "ko": "외형 변경",
+    "en": "New appearance"
+  },
+  "ui.monBookAwakenExp": {
+    "ko": "각성 경험치 {cur}/{need}",
+    "en": "Awakening XP {cur}/{need}"
+  },
   "ui.powerUpConfirm": {
     "ko": "강화하기",
     "en": "Power Up"
@@ -3523,6 +3639,10 @@
     "ko": "소환사",
     "en": "Summoners"
   },
+  "ui.codexTabGear": {
+    "ko": "장비",
+    "en": "Gear"
+  },
   "ui.codexFilterAll": {
     "ko": "전체",
     "en": "All"
@@ -3660,12 +3780,12 @@
     "en": "View details"
   },
   "ui.sumBookAwakenBtn": {
-    "ko": "각성 +{n}",
-    "en": "Awaken +{n}"
+    "ko": "진화 +{n}",
+    "en": "Evolve +{n}"
   },
   "ui.sumBookAwakenMax": {
-    "ko": "각성 MAX",
-    "en": "Awaken MAX"
+    "ko": "진화 MAX",
+    "en": "Evolve MAX"
   },
   "ui.sumBookAwakenNeedLv": {
     "ko": "소환사 Lv.{n}+ 필요",
@@ -4268,12 +4388,12 @@
     "en": "Summoner profile"
   },
   "ui.sumInfoAwaken": {
-    "ko": "각성",
-    "en": "Awaken"
+    "ko": "진화",
+    "en": "Evolve"
   },
   "ui.sumInfoAwakenEffects": {
-    "ko": "각성 효과",
-    "en": "Awaken bonuses"
+    "ko": "진화 효과",
+    "en": "Evolution bonuses"
   },
   "ui.sumBookAwakenCostWithMat": {
     "ko": "골드 {mana} · 크리스탈 {crystal} · {element} 정수 {mat}",
@@ -4284,8 +4404,8 @@
     "en": "Owned {have} / Need {need}"
   },
   "ui.sumAwakenPreview": {
-    "ko": "각성 미리보기",
-    "en": "Awaken preview"
+    "ko": "진화 미리보기",
+    "en": "Evolution preview"
   },
   "ui.sumAwakenCurrent": {
     "ko": "현재",
@@ -4294,6 +4414,10 @@
   "ui.sumAwakenNext": {
     "ko": "각성 후",
     "en": "After awaken"
+  },
+  "ui.sumEvolveNext": {
+    "ko": "진화 후",
+    "en": "After evolution"
   },
   "ui.sumAwakenLeaderBonus": {
     "ko": "리더 공격력",
@@ -4310,6 +4434,10 @@
   "ui.sumAwakenCost": {
     "ko": "각성 비용",
     "en": "Awaken cost"
+  },
+  "ui.sumEvolveCost": {
+    "ko": "진화 비용",
+    "en": "Evolution cost"
   },
   "ui.sumMagicDetailTitle": {
     "ko": "마법 스킬",

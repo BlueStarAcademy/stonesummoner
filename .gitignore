@@ -37,3 +37,7 @@ apps/web/android/captures/
 # Bulky battle BG PNG masters (WebP shipped)
 apps/web/public/art/battle/_src/
 apps/web/public/audio/_tmp/
+# Procedural skill previews (ship WebP is painted + locked)
+apps/web/public/art/monster/skill/_procedural/
+apps/web/public/art/ui/skill/_procedural/
+apps/web/public/art/summoner/skill/_procedural/

@@ -9,7 +9,6 @@ export {
   enhanceManaCost,
   evolveCrystalCost,
   evolveManaCost,
-  evolveMinLevel,
   homeCollect,
   homeCollectCrystal,
   isStageUnlocked,
@@ -140,7 +139,7 @@ export {
   runUnequipSymbol,
   previewOwnedCombatStats,
   runEvolve,
-  runFeedSameMonster,
+  runEvolveMonster,
   runFusion,
   runRecipeFusion,
   runGrindSymbol,
@@ -248,6 +247,15 @@ export {
   type CatalogShopSku,
 } from "./loop.js";
 export { migrateSave, pickPreferredSave } from "./migrateSave.js";
+export {
+  evolveFodderCount,
+  evolveManaCostForGrade,
+  maxEvolveSteps,
+  MONSTER_AWAKEN_EXP_GOAL,
+  WEEKDAY_AWAKEN_EXP_DROP,
+  ownedMonsterFamilyId,
+  ownedMonstersSameFamily,
+} from "./roster.js";
 export {
   MAIN_QUESTS,
   claimableMainQuestCount,

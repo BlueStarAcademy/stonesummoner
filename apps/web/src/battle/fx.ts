@@ -22,10 +22,10 @@ const VFX_SRC: Record<BattleVfxId, string> = {
 };
 
 /**
- * Labeled x1 / x2 / x3 multipliers. x1 is intentionally slower than raw
- * wall-clock so combat is readable by default.
+ * Labeled x1 / x2 / x3 multipliers. x1 matches base FX timing; higher tiers
+ * scale proportionally.
  */
-export const BATTLE_SPEED_UNIT = 0.5;
+export const BATTLE_SPEED_UNIT = 1;
 
 /** Effective pace used by waits / FX (higher = faster). */
 export function battlePace(speed: number): number {

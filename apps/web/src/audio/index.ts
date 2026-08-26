@@ -17,6 +17,7 @@ export {
   playCombatCastSfx,
   playCombatHitSfx,
   magicKindFromId,
+  magicKindFromKind,
   kindFromEffects,
   cueModalSfx,
   isBossStage,

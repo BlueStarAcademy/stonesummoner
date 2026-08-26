@@ -156,6 +156,11 @@ export function magicKindFromId(id: string | undefined): CombatSfxKind {
   return MAGIC_KIND[id] ?? "aoe";
 }
 
+export function magicKindFromKind(kind: string | undefined): CombatSfxKind {
+  if (!kind) return "aoe";
+  return MAGIC_KIND[kind] ?? "aoe";
+}
+
 export function kindFromEffects(
   effects: Array<{ kind: string; target?: string }> | undefined,
 ): CombatSfxKind {

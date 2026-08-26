@@ -126,7 +126,13 @@ import {
   enhanceManaCost,
   evolveCrystalCost,
   evolveManaCost,
+  evolveManaCostForGrade,
+  evolveFodderCount,
   evolveMinLevel,
+  maxEvolveSteps,
+  MONSTER_AWAKEN_EXP_GOAL,
+  WEEKDAY_AWAKEN_EXP_DROP,
+  monsterGrade,
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
   monsterExpToNext,
@@ -159,6 +165,8 @@ import {
   type OwnedMonster,
   type ScrollKind,
   addOwnedMonsterExp,
+  monsterPowerUpExp,
+  ownedMonstersSameFamily,
 } from "./roster.js";
 import {
   expForStage,
@@ -218,6 +226,9 @@ export type { OwnedMonster, ScrollKind } from "./roster.js";
 export {
   addOwnedMonsterExp,
   describeOwned,
+  ownedMonsterFamilyId,
+  ownedMonstersSameFamily,
+  monsterPowerUpExp,
   enhanceManaCost,
   evolveCrystalCost,
   evolveManaCost,
@@ -846,16 +857,19 @@ export function runLoadPartyPreset(
   };
 }
 
-/** Save current party + active summoner as arena defense deck. */
+/** Save a summoner + monster party as the arena defense deck. */
 export function runSetArenaDefense(
   save: PlayerSave,
-  partyUids?: string[],
+  opts?: { party?: string[]; summoner?: SummonerElement },
 ): LoopStepResult {
-  const summoner = isSummonerElement(save.activeSummoner)
-    ? save.activeSummoner
-    : "light";
+  const summoner =
+    opts?.summoner && isSummonerElement(opts.summoner)
+      ? opts.summoner
+      : isSummonerElement(save.activeSummoner)
+        ? save.activeSummoner
+        : "light";
   const rosterIds = new Set(save.roster.map((m) => m.uid));
-  const src = partyUids ?? save.party ?? [];
+  const src = opts?.party ?? save.party ?? [];
   const seen = new Set<string>();
   const party: string[] = [];
   for (const uid of src) {
@@ -2186,8 +2200,10 @@ export function runFusion(
       message: `골드 부족 (필요 ${FUSION_MANA_COST}, 보유 ${Math.floor(island.mana)})`,
     };
   }
+  const defA = getMonster(a.monsterId);
+  const evolveCap = defA ? maxEvolveSteps(defA.naturalStars) : MAX_EVOLVE;
   const keepEvolve = Math.min(
-    MAX_EVOLVE,
+    evolveCap,
     Math.max(a.evolve ?? 0, b.evolve ?? 0) + 1,
   );
   const keepLevel = Math.max(a.level, b.level);
@@ -3267,7 +3283,7 @@ export function runSummon(
 
 /**
  * Enhance on the monster screen — spend mana, +1 level (up to the current grade cap).
- * Like Summoners War power-up: also randomly levels one non-max skill.
+ * Skill levels rise only when feeding same-family duplicates via runPowerUpMonster.
  */
 export function runEnhance(
   save: PlayerSave,
@@ -3294,35 +3310,15 @@ export function runEnhance(
   }
 
   const nextLevel = owned.level + 1;
-  const levels = normalizeSkillLevels(owned.skillLevels);
-  const skillIdx = pickRandomSkillUpIndex(levels);
-  let nextLevels: [number, number, number] = levels;
-  let skillNote = "";
-  if (skillIdx != null) {
-    nextLevels = [levels[0]!, levels[1]!, levels[2]!];
-    nextLevels[skillIdx] = (levels[skillIdx] ?? 1) + 1;
-    const def = getMonster(owned.monsterId);
-    const skillName = def?.skills[skillIdx]?.nameKo ?? `S${skillIdx + 1}`;
-    skillNote = ` · ${skillName} Lv.${nextLevels[skillIdx]}`;
-  }
-
   const roster = save.roster.map((m) =>
-    m.uid === owned.uid
-      ? { ...m, level: nextLevel, skillLevels: nextLevels }
-      : m,
+    m.uid === owned.uid ? { ...m, level: nextLevel } : m,
   );
   const island = { ...save.island, mana: save.island.mana - cost };
 
   return {
     save: bumpDailyActivity({ ...save, island, roster }, "enhanceMon"),
-    message: `강화: ${describeOwned({ ...owned, level: nextLevel, skillLevels: nextLevels })}${skillNote} (−골드 ${cost})`,
+    message: `강화: ${describeOwned({ ...owned, level: nextLevel })} (−골드 ${cost})`,
   };
-}
-
-/** EXP a monster contributes when consumed as power-up material. */
-export function monsterPowerUpExp(fodder: OwnedMonster): number {
-  const stars = Math.max(1, getMonster(fodder.monsterId)?.naturalStars ?? 1);
-  return stars * 35 + fodder.level * 12 + (fodder.evolve ?? 0) * 25;
 }
 
 /** Mana cost for a material-based monster power-up. */
@@ -3346,12 +3342,7 @@ export function runPowerUpMonster(
     return { save, message: `소환수를 찾을 수 없음: ${targetUidOrIndex}` };
   }
   const maxLevel = monsterMaxLevel(target);
-  if (target.level >= maxLevel) {
-    return {
-      save,
-      message: `${describeOwned(target)} 이미 최대 레벨(${maxLevel})`,
-    };
-  }
+  const atMaxLevel = target.level >= maxLevel;
 
   const uniqueIds = [...new Set(fodderUidOrIndices)];
   if (uniqueIds.length === 0) {
@@ -3375,6 +3366,30 @@ export function runPowerUpMonster(
     return { save, message: "강화 재료 소환수를 찾을 수 없습니다" };
   }
   const materials = fodders as OwnedMonster[];
+  const matchingMaterials = materials.filter((fodder) =>
+    ownedMonstersSameFamily(target, fodder),
+  );
+  const canSkillUp = skillUpgradableIndices(target.skillLevels).length > 0;
+  if (atMaxLevel) {
+    if (!canSkillUp) {
+      return {
+        save,
+        message: `${describeOwned(target)} 스킬이 모두 최대입니다`,
+      };
+    }
+    if (matchingMaterials.length === 0) {
+      return {
+        save,
+        message: `${describeOwned(target)} 이미 최대 레벨 — 동일 소환수만 스킬 강화 재료로 사용할 수 있습니다`,
+      };
+    }
+    if (matchingMaterials.length !== materials.length) {
+      return {
+        save,
+        message: "최대 레벨에서는 동일 소환수만 재료로 사용할 수 있습니다",
+      };
+    }
+  }
   const cost = monsterPowerUpManaCost(materials);
   if (save.island.mana < cost) {
     return {
@@ -3383,15 +3398,16 @@ export function runPowerUpMonster(
     };
   }
 
-  const expGain = materials.reduce(
-    (total, fodder) => total + monsterPowerUpExp(fodder),
-    0,
-  );
-  const powered = addOwnedMonsterExp(target, expGain).monster;
+  const expGain = atMaxLevel
+    ? 0
+    : materials.reduce((total, fodder) => total + monsterPowerUpExp(fodder), 0);
+  const powered = atMaxLevel
+    ? target
+    : addOwnedMonsterExp(target, expGain).monster;
   const nextLevels = normalizeSkillLevels(target.skillLevels);
   let skillUps = 0;
   for (const fodder of materials) {
-    if (fodder.monsterId !== target.monsterId) continue;
+    if (!ownedMonstersSameFamily(target, fodder)) continue;
     const skillIdx = pickRandomSkillUpIndex(nextLevels, rng);
     if (skillIdx == null) continue;
     nextLevels[skillIdx] = (nextLevels[skillIdx] ?? 1) + 1;
@@ -3423,150 +3439,129 @@ export function runPowerUpMonster(
 }
 
 /**
- * Feed a same-species duplicate into target (Summoners War-style).
- * Consumes fodder and randomly levels one non-max skill on the target.
+ * Evolve a monster (Summoners War-style): max level + same-grade fodder → +1★ grade.
+ * Same-family fodder also randomly levels one non-max skill.
  */
-export function runFeedSameMonster(
+export function runEvolveMonster(
   save: PlayerSave,
   targetUidOrIndex: string,
-  fodderUidOrIndex: string,
+  fodderUidOrIndices: readonly string[],
+  rng: () => number = Math.random,
 ): LoopStepResult {
   const target = resolveOwned(save, targetUidOrIndex);
-  const fodder = resolveOwned(save, fodderUidOrIndex);
   if (!target) {
     return { save, message: `소환수를 찾을 수 없음: ${targetUidOrIndex}` };
   }
-  if (!fodder) {
-    return { save, message: `재료 소환수를 찾을 수 없음: ${fodderUidOrIndex}` };
-  }
-  if (target.uid === fodder.uid) {
-    return { save, message: "같은 소환수는 재료로 쓸 수 없습니다" };
-  }
-  if (save.party.includes(fodder.uid)) {
-    return {
-      save,
-      message: `${describeOwned(fodder)}는 파티 소환수라 재료로 사용할 수 없습니다`,
-    };
-  }
-  if (target.monsterId !== fodder.monsterId) {
-    return { save, message: "동일 소환수만 스킬 강화 재료로 사용할 수 있습니다" };
-  }
-
-  const levels = normalizeSkillLevels(target.skillLevels);
-  const skillIdx = pickRandomSkillUpIndex(levels);
-  if (skillIdx == null) {
-    return {
-      save,
-      message: `${describeOwned(target)} 스킬이 모두 최대입니다`,
-    };
-  }
-
-  const cost = enhanceManaCost(target.level);
-  if (save.island.mana < cost) {
-    return {
-      save,
-      message: `골드 부족 (필요 ${cost}, 보유 ${Math.floor(save.island.mana)})`,
-    };
-  }
-  const haveMats = save.skillMats ?? 0;
-  if (haveMats < SKILL_UP_MAT_COST) {
-    return {
-      save,
-      message: `스킬재료 부족 (필요 ${SKILL_UP_MAT_COST}, 보유 ${haveMats})`,
-    };
-  }
-
-  const nextLevels: [number, number, number] = [
-    levels[0]!,
-    levels[1]!,
-    levels[2]!,
-  ];
-  nextLevels[skillIdx] = (levels[skillIdx] ?? 1) + 1;
   const def = getMonster(target.monsterId);
-  const skillName = def?.skills[skillIdx]?.nameKo ?? `S${skillIdx + 1}`;
-
-  const roster = save.roster
-    .filter((m) => m.uid !== fodder.uid)
-    .map((m) =>
-      m.uid === target.uid ? { ...m, skillLevels: nextLevels } : m,
-    );
-  const party = save.party.filter((uid) => uid !== fodder.uid);
-  const updated = { ...target, skillLevels: nextLevels };
-  const island = { ...save.island, mana: save.island.mana - cost };
-
-  return {
-    save: bumpDailyActivity(
-      {
-        ...save,
-        island,
-        roster,
-        party,
-        skillMats: haveMats - SKILL_UP_MAT_COST,
-      },
-      "skillUp",
-    ),
-    message: `스킬업: ${describeOwned(updated)} · ${skillName} → Lv.${nextLevels[skillIdx]} (−${describeOwned(fodder)}, −골드 ${cost} · −스킬재료 ${SKILL_UP_MAT_COST})`,
-  };
-}
-
-/**
- * Evolve on the monster screen — raise evolve stage (cap MAX_EVOLVE).
- * Requires level gate + mana (+ crystal from 2nd evolve).
- */
-export function runEvolve(
-  save: PlayerSave,
-  uidOrIndex: string,
-): LoopStepResult {
-  const owned = resolveOwned(save, uidOrIndex);
-  if (!owned) {
-    return { save, message: `소환수를 찾을 수 없음: ${uidOrIndex}` };
+  if (!def) {
+    return { save, message: `몬스터 데이터 없음: ${target.monsterId}` };
   }
-  const evo = owned.evolve ?? 0;
-  if (evo >= MAX_EVOLVE) {
+  const grade = monsterGrade(target);
+  if (grade >= 6) {
+    return { save, message: `${describeOwned(target)} 이미 6성` };
+  }
+  const stepsLeft = maxEvolveSteps(def.naturalStars) - (target.evolve ?? 0);
+  if (stepsLeft <= 0) {
+    return { save, message: `${describeOwned(target)} 더 이상 진화할 수 없습니다` };
+  }
+  const needLv = monsterMaxLevel(target);
+  if (target.level < needLv) {
     return {
       save,
-      message: `${describeOwned(owned)} 이미 최대 진화(E${MAX_EVOLVE})`,
+      message: `진화 조건 — Lv.${needLv} 필요 (현재 ${target.level})`,
     };
   }
-  const needLv = evolveMinLevel(evo);
-  if (owned.level < needLv) {
+
+  const uniqueIds = [...new Set(fodderUidOrIndices)];
+  const needFodder = evolveFodderCount(grade);
+  if (uniqueIds.length !== needFodder) {
     return {
       save,
-      message: `진화 조건 미달 — Lv.${needLv} 필요 (현재 ${owned.level})`,
+      message: `진화 재료 ${needFodder}마리 필요 (선택 ${uniqueIds.length})`,
     };
   }
-  const manaCost = evolveManaCost(evo);
-  const crystalCost = evolveCrystalCost(evo);
+  if (uniqueIds.includes(target.uid)) {
+    return { save, message: "대상 소환수는 재료로 사용할 수 없습니다" };
+  }
+  const partyBlocked = uniqueIds.find((id) => save.party.includes(id));
+  if (partyBlocked) {
+    const blocked = resolveOwned(save, partyBlocked);
+    return {
+      save,
+      message: blocked
+        ? `${describeOwned(blocked)}는 파티 소환수라 재료로 사용할 수 없습니다`
+        : "파티 소환수는 재료로 사용할 수 없습니다",
+    };
+  }
+  const fodders = uniqueIds.map((id) => resolveOwned(save, id));
+  if (fodders.some((fodder) => !fodder)) {
+    return { save, message: "진화 재료 소환수를 찾을 수 없습니다" };
+  }
+  const materials = fodders as OwnedMonster[];
+  for (const fodder of materials) {
+    if (monsterGrade(fodder) !== grade) {
+      return {
+        save,
+        message: `${describeOwned(fodder)}는 ${grade}성 재료가 아닙니다`,
+      };
+    }
+  }
+
+  const manaCost = evolveManaCostForGrade(grade);
   if (save.island.mana < manaCost) {
     return {
       save,
       message: `골드 부족 (필요 ${manaCost}, 보유 ${Math.floor(save.island.mana)})`,
     };
   }
-  if (save.island.crystal < crystalCost) {
-    return {
-      save,
-      message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${save.island.crystal})`,
-    };
-  }
 
-  const nextEvo = evo + 1;
-  const roster = save.roster.map((m) =>
-    m.uid === owned.uid ? { ...m, evolve: nextEvo } : m,
-  );
-  const island = {
-    ...save.island,
-    mana: save.island.mana - manaCost,
-    crystal: save.island.crystal - crystalCost,
+  const nextEvo = (target.evolve ?? 0) + 1;
+  const nextLevels = normalizeSkillLevels(target.skillLevels);
+  let skillUps = 0;
+  for (const fodder of materials) {
+    if (!ownedMonstersSameFamily(target, fodder)) continue;
+    const skillIdx = pickRandomSkillUpIndex(nextLevels, rng);
+    if (skillIdx == null) continue;
+    nextLevels[skillIdx] = (nextLevels[skillIdx] ?? 1) + 1;
+    skillUps += 1;
+  }
+  const consumed = new Set(uniqueIds);
+  const roster = save.roster
+    .filter((monster) => !consumed.has(monster.uid))
+    .map((monster) =>
+      monster.uid === target.uid
+        ? {
+            ...monster,
+            evolve: nextEvo,
+            exp: 0,
+            skillLevels: nextLevels,
+          }
+        : monster,
+    );
+  const party = save.party.filter((uid) => !consumed.has(uid));
+  const island = { ...save.island, mana: save.island.mana - manaCost };
+  const updated = {
+    ...target,
+    evolve: nextEvo,
+    exp: 0,
+    skillLevels: nextLevels,
   };
-  const costNote =
-    crystalCost > 0
-      ? `−골드 ${manaCost} · −크리스탈 ${crystalCost}`
-      : `−골드 ${manaCost}`;
+  const skillNote = skillUps > 0 ? ` · 동일 소환수 스킬 +${skillUps}` : "";
 
   return {
-    save: { ...save, island, roster },
-    message: `진화: ${describeOwned({ ...owned, evolve: nextEvo })} (${costNote})`,
+    save: { ...save, island, roster, party },
+    message: `진화: ${describeOwned(updated)} · ${grade}★ → ${grade + 1}★${skillNote} (−골드 ${manaCost} · 재료 ${materials.length})`,
+  };
+}
+
+/** @deprecated Use runEvolveMonster with fodder. */
+export function runEvolve(
+  save: PlayerSave,
+  uidOrIndex: string,
+): LoopStepResult {
+  return {
+    save,
+    message: "진화 재료 소환수를 선택하세요",
   };
 }
 
@@ -3593,14 +3588,28 @@ export function runAwakenMonster(
       message: `${describeOwned(owned)} 이미 각성 완료`,
     };
   }
-  const needLv = monsterAwakenMinLevel(def.naturalStars);
+  const grade = monsterGrade(owned);
+  if (grade < 6) {
+    return {
+      save,
+      message: `${describeOwned(owned)} 6성 진화 후 각성 가능`,
+    };
+  }
+  const needLv = monsterMaxLevel(owned);
   if (owned.level < needLv) {
     return {
       save,
-      message: `각성 조건 미달 — Lv.${needLv} 필요 (현재 ${owned.level})`,
+      message: `각성 조건 — Lv.${needLv} 필요 (현재 ${owned.level})`,
     };
   }
-  const manaCost = monsterAwakenManaCost(cur);
+  const awakenExp = owned.awakenExp ?? 0;
+  if (awakenExp < MONSTER_AWAKEN_EXP_GOAL) {
+    return {
+      save,
+      message: `각성 경험치 부족 (${awakenExp}/${MONSTER_AWAKEN_EXP_GOAL})`,
+    };
+  }
+  const manaCost = monsterAwakenManaCost(def.naturalStars);
   const crystalCost = monsterAwakenCrystalCost(cur);
   const matCost = monsterAwakenMatCost(cur);
   const mats = save.awakenMats ?? {};
@@ -3625,7 +3634,9 @@ export function runAwakenMonster(
   }
   const nextAwaken = cur + 1;
   const roster = save.roster.map((m) =>
-    m.uid === owned.uid ? { ...m, awaken: nextAwaken } : m,
+    m.uid === owned.uid
+      ? { ...m, awaken: nextAwaken, awakenExp: 0 }
+      : m,
   );
   const island = {
     ...save.island,
@@ -3896,14 +3907,14 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
   if (cur >= MAX_SUMMONER_AWAKEN) {
     return {
       save: synced,
-      message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 각성 이미 최대(+${MAX_SUMMONER_AWAKEN})`,
+      message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 진화 이미 최대(+${MAX_SUMMONER_AWAKEN})`,
     };
   }
   const needLv = awakenMinLevel(cur);
   if (active.level < needLv) {
     return {
       save: synced,
-      message: `각성 해금: 소환사 Lv.${needLv}+ 필요 (현재 ${active.level})`,
+      message: `진화 해금: 소환사 Lv.${needLv}+ 필요 (현재 ${active.level})`,
     };
   }
   const manaCost = awakenManaCost(cur);
@@ -3949,7 +3960,7 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
         crystal: synced.island.crystal - crystalCost,
       },
     }),
-    message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 각성 +${next} (−골드 ${manaCost} · −크리스탈 ${crystalCost} · −정수 ${matCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
+    message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 진화 +${next} (−골드 ${manaCost} · −크리스탈 ${crystalCost} · −정수 ${matCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
   };
 }
 
@@ -4518,7 +4529,7 @@ export function createStageBattle(
   }
   const allySummonerUnit = makeUnit({
     id: "a-sum",
-    name: `${SUMMONER_ELEMENT_LABEL[activeEl]} 소환사 Lv.${lvl}${awaken > 0 ? ` · 각성${awaken}` : ""}`,
+    name: `${SUMMONER_ELEMENT_LABEL[activeEl]} 소환사 Lv.${lvl}${awaken > 0 ? ` · 진화${awaken}` : ""}`,
     team: "ally",
     kind: "summoner",
     element: activeEl,
@@ -4614,6 +4625,9 @@ export function createStageBattle(
       kind: sk.kind,
       power: magicSkillPower(sk, magicRank(magicProg, sk.id)),
       turns: sk.turns,
+      descKo: sk.descKo,
+      vfxFamily: sk.vfxFamily,
+      orbBolt: sk.orbBolt,
     }));
   const enemyEl: Element = "dark";
   const enemyMagic = unlockedMagicSkills(enemyEl, emptyMagicProgress()).map(
@@ -4624,6 +4638,9 @@ export function createStageBattle(
       kind: sk.kind,
       power: magicSkillPower(sk, 0),
       turns: sk.turns,
+      descKo: sk.descKo,
+      vfxFamily: sk.vfxFamily,
+      orbBolt: sk.orbBolt,
     }),
   );
 
@@ -5196,6 +5213,27 @@ export function applyRewards(
       [el]: (awakenMats[el] ?? 0) + WEEKDAY_EVOLVE_MAT_DROP,
     };
     extras.push(`${SUMMONER_ELEMENT_LABEL[el]} 정수 +${WEEKDAY_EVOLVE_MAT_DROP}`);
+    let awakenXpNote = 0;
+    working = {
+      ...working,
+      roster: working.roster.map((m) => {
+        if (!working.party.includes(m.uid)) return m;
+        if ((m.awaken ?? 0) >= MAX_MONSTER_AWAKEN) return m;
+        const mdef = getMonster(m.monsterId);
+        if (mdef?.element !== el) return m;
+        if (monsterGrade(m) < 6) return m;
+        const before = m.awakenExp ?? 0;
+        const next = Math.min(
+          MONSTER_AWAKEN_EXP_GOAL,
+          before + WEEKDAY_AWAKEN_EXP_DROP,
+        );
+        awakenXpNote += next - before;
+        return { ...m, awakenExp: next };
+      }),
+    };
+    if (awakenXpNote > 0) {
+      extras.push(`각성 경험치 +${awakenXpNote}`);
+    }
   } else if (stage.id === "weekday_skill") {
     skillMats += WEEKDAY_SKILL_MAT_DROP;
     extras.push(`스킬재료 +${WEEKDAY_SKILL_MAT_DROP}`);

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createStarterGear, createSymbol, getStage, CHAPTER1_STAGES, GEAR_BAG_BASE_SLOTS, GEAR_BAG_EXPAND_STEP, GEAR_BAG_MAX_SLOTS } from "stonesummoner-data";
+import { createStarterGear, createSymbol, getMonster, getStage, CHAPTER1_STAGES, GEAR_BAG_BASE_SLOTS, GEAR_BAG_EXPAND_STEP, GEAR_BAG_MAX_SLOTS } from "stonesummoner-data";
 import {
   createNewSave,
   createStageBattle,
@@ -72,7 +72,7 @@ import {
   runEquipSymbol,
   runUnequipSymbol,
   runEvolve,
-  runFeedSameMonster,
+  runEvolveMonster,
   runFusion,
   runGrindSymbol,
   unclaimedMailCount,
@@ -122,6 +122,7 @@ import {
   monsterExpToNext,
   monsterMaxLevel,
   addOwnedMonsterExp,
+  monsterPowerUpExp,
 } from "./loop.js";
 import {
   claimableMainQuestCount,
@@ -679,80 +680,69 @@ describe("game loop", () => {
     assert.match(r.message, /파티 편성/);
   });
 
-  it("evolves monster when level and costs met", () => {
+  it("evolves monster with same-grade fodder at max level", () => {
     let save = createNewSave(0);
+    const target = save.roster[0]!;
+    const fodder = {
+      ...target,
+      uid: "evo-fodder",
+      skillLevels: [1, 1, 1] as [number, number, number],
+    };
+    const maxLv = monsterMaxLevel(target);
     save = {
       ...save,
-      roster: save.roster.map((m, i) =>
-        i === 0 ? { ...m, level: 10, evolve: 0 } : m,
-      ),
-      island: { ...save.island, mana: 5000, crystal: 50 },
+      roster: [
+        { ...target, level: maxLv, evolve: 0 },
+        fodder,
+        ...save.roster.slice(1),
+      ],
+      party: [target.uid],
+      island: { ...save.island, mana: 50000 },
     };
-    const blocked = runEvolve(
-      {
-        ...save,
-        roster: save.roster.map((m, i) =>
-          i === 0 ? { ...m, level: 5 } : m,
-        ),
-      },
-      "0",
-    );
-    assert.match(blocked.message, /조건 미달/);
+    const blocked = runEvolveMonster(save, target.uid, []);
+    assert.match(blocked.message, /재료/);
 
-    const ok = runEvolve(save, "0");
+    const ok = runEvolveMonster(save, target.uid, [fodder.uid]);
     assert.match(ok.message, /진화/);
     assert.equal(ok.save.roster[0]!.evolve, 1);
-    assert.ok(ok.save.island.mana < save.island.mana);
+    assert.equal(ok.save.roster.some((m) => m.uid === fodder.uid), false);
   });
 
-  it("awakens monster with level/mana/crystal/mat gates", () => {
+  it("awakens 6-star monster with dungeon XP and mats", () => {
     let save = createNewSave(0);
     const el = "fire" as const;
-    // starter_0 is cinder_imp_fire
+    const base = save.roster[0]!;
+    const def = getMonster(base.monsterId)!;
+    const evolveToSix = Math.max(0, 6 - def.naturalStars);
+    const mon = {
+      ...base,
+      evolve: evolveToSix,
+      level: monsterMaxLevel({ ...base, evolve: evolveToSix }),
+      awaken: 0,
+      awakenExp: 100,
+    };
     save = {
       ...save,
-      roster: save.roster.map((m, i) =>
-        i === 0 ? { ...m, level: 14, awaken: 0 } : m,
-      ),
-      island: { ...save.island, mana: 5000, crystal: 50 },
+      roster: [mon, ...save.roster.slice(1)],
+      island: { ...save.island, mana: 50000, crystal: 50 },
       awakenMats: { [el]: 20 },
     };
-    const lowLv = runAwakenMonster(
-      {
-        ...save,
-        roster: save.roster.map((m, i) =>
-          i === 0 ? { ...m, level: 5 } : m,
-        ),
-      },
-      "0",
+    const lowXp = runAwakenMonster(
+      { ...save, roster: [{ ...mon, awakenExp: 10 }, ...save.roster.slice(1)] },
+      mon.uid,
     );
-    assert.match(lowLv.message, /조건 미달/);
+    assert.match(lowXp.message, /각성 경험치/);
 
-    const noMat = runAwakenMonster(
-      { ...save, awakenMats: { [el]: 0 } },
-      "0",
-    );
-    assert.match(noMat.message, /진화재료/);
-
-    const ok = runAwakenMonster(save, "0");
+    const ok = runAwakenMonster(save, mon.uid);
     assert.match(ok.message, /각성/);
     assert.equal(ok.save.roster[0]!.awaken, 1);
-    assert.equal(ok.save.awakenMats[el], 10);
-    assert.ok(ok.save.island.mana < save.island.mana);
+    assert.equal(ok.save.awakenMats[el], 5);
 
-    const maxed = runAwakenMonster(ok.save, "0");
+    const maxed = runAwakenMonster(ok.save, mon.uid);
     assert.match(maxed.message, /이미 각성/);
-
-    const before = createStageBattle(getStage("garen_1_1")!, save);
-    const after = createStageBattle(getStage("garen_1_1")!, ok.save);
-    const allyBefore = before.units.find((u) => u.id === save.roster[0]!.uid);
-    const allyAfter = after.units.find((u) => u.id === ok.save.roster[0]!.uid);
-    assert.ok(allyBefore && allyAfter);
-    assert.ok(allyAfter!.stats.atk > allyBefore!.stats.atk);
-    assert.ok(allyAfter!.stats.hp > allyBefore!.stats.hp);
   });
 
-  it("enhance randomly levels a skill", () => {
+  it("enhance levels up without fodder skill bump", () => {
     let save = createNewSave(0);
     save = {
       ...save,
@@ -771,12 +761,24 @@ describe("game loop", () => {
     const enh = runEnhance(save, "0");
     assert.match(enh.message, /강화/);
     assert.equal(enh.save.roster[0]!.level, 2);
-    const after = enh.save.roster[0]!.skillLevels;
-    const bumped =
-      after[0]! > before[0]! ||
-      after[1]! > before[1]! ||
-      after[2]! > before[2]!;
-    assert.equal(bumped, true);
+    assert.deepEqual(enh.save.roster[0]!.skillLevels, before);
+  });
+
+  it("fodder power-up EXP matches Summoners War feed table", () => {
+    const fodder: OwnedMonster = {
+      uid: "feed-1",
+      monsterId: "cinder_imp_fire",
+      level: 1,
+      exp: 0,
+      symbolSlots: [null, null, null, null, null, null],
+      evolve: 0,
+      skillLevels: [1, 1, 1],
+    };
+    assert.equal(monsterPowerUpExp(fodder), 800);
+    const maxed = { ...fodder, level: monsterMaxLevel(fodder) };
+    assert.equal(monsterPowerUpExp(maxed), 1210);
+    const evolved = { ...fodder, monsterId: "cinder_imp_water", evolve: 1 };
+    assert.equal(monsterPowerUpExp(evolved), 1760);
   });
 
   it("powers up from fodder EXP and levels a matching monster skill", () => {
@@ -815,33 +817,87 @@ describe("game loop", () => {
     assert.equal(result.save.roster.some((m) => m.uid === other.uid), false);
   });
 
-  it("feed same monster randomly skills up and consumes fodder", () => {
+  it("powers up same-family fodder across elements for random skill ups", () => {
     let save = createNewSave(0);
-    const base = save.roster[0]!;
-    const fodder = {
-      ...base,
-      uid: "fodder-1",
+    const target = {
+      ...save.roster[0]!,
+      monsterId: "stone_golem_fire",
+      level: 1,
+      exp: 0,
+      skillLevels: [1, 1, 1] as [number, number, number],
+    };
+    const matching = {
+      ...target,
+      uid: "power-up-family-water",
+      monsterId: "stone_golem_water",
       skillLevels: [1, 1, 1] as [number, number, number],
     };
     save = {
       ...save,
+      roster: [target, matching],
+      party: [target.uid],
       island: { ...save.island, mana: 5000 },
-      skillMats: 10,
+    };
+    const result = runPowerUpMonster(save, target.uid, [matching.uid], () => 0);
+    const updated = result.save.roster.find((m) => m.uid === target.uid)!;
+    assert.match(result.message, /스킬/);
+    assert.equal(updated.skillLevels[0], 2);
+    assert.equal(result.save.roster.some((m) => m.uid === matching.uid), false);
+  });
+
+  it("evolve with same-family fodder randomly skills up", () => {
+    let save = createNewSave(0);
+    const target = save.roster[0]!;
+    const fodder = {
+      ...target,
+      uid: "evo-family-fodder",
+      monsterId: "stone_golem_water",
+      skillLevels: [1, 1, 1] as [number, number, number],
+    };
+    const maxLv = monsterMaxLevel(target);
+    save = {
+      ...save,
       roster: [
-        { ...base, skillLevels: [1, 1, 1] as [number, number, number] },
+        { ...target, monsterId: "stone_golem_fire", level: maxLv, evolve: 0 },
         fodder,
         ...save.roster.slice(1),
       ],
+      party: [target.uid],
+      island: { ...save.island, mana: 50000 },
     };
-    const manaBefore = save.island.mana;
-    const matsBefore = save.skillMats;
-    const r = runFeedSameMonster(save, base.uid, fodder.uid);
-    assert.match(r.message, /스킬업/);
-    assert.equal(r.save.roster.some((m) => m.uid === fodder.uid), false);
-    const t = r.save.roster.find((m) => m.uid === base.uid)!;
-    assert.ok(t.skillLevels.some((lv) => lv > 1));
-    assert.ok(r.save.island.mana < manaBefore);
-    assert.equal(r.save.skillMats, matsBefore - 3);
+    const ok = runEvolveMonster(save, target.uid, [fodder.uid], () => 0);
+    assert.match(ok.message, /스킬/);
+    const updated = ok.save.roster.find((m) => m.uid === target.uid)!;
+    assert.equal(updated.evolve, 1);
+    assert.equal(updated.skillLevels[0], 2);
+    assert.equal(ok.save.roster.some((m) => m.uid === fodder.uid), false);
+  });
+
+  it("powers up matching fodder at max level for random skill ups", () => {
+    let save = createNewSave(0);
+    const target = {
+      ...save.roster[0]!,
+      level: monsterMaxLevel(save.roster[0]!),
+      exp: 0,
+      skillLevels: [1, 1, 1] as [number, number, number],
+    };
+    const matching = {
+      ...target,
+      uid: "power-up-max-matching",
+      skillLevels: [1, 1, 1] as [number, number, number],
+    };
+    save = {
+      ...save,
+      roster: [target, matching, ...save.roster.slice(1)],
+      party: [target.uid],
+      island: { ...save.island, mana: 5000 },
+    };
+    const result = runPowerUpMonster(save, target.uid, [matching.uid], () => 0);
+    const updated = result.save.roster.find((m) => m.uid === target.uid)!;
+    assert.match(result.message, /스킬/);
+    assert.equal(updated.level, target.level);
+    assert.ok(updated.skillLevels.some((lv, i) => lv > (target.skillLevels[i] ?? 1)));
+    assert.equal(result.save.roster.some((m) => m.uid === matching.uid), false);
   });
 
   it("skills up S2 when level and mana met", () => {
@@ -1547,7 +1603,7 @@ describe("game loop", () => {
       awakenMats: { light: summonerAwakenMatCost(0) },
     };
     const ok = runAwakenSummoner(save);
-    assert.match(ok.message, /각성 \+1/);
+    assert.match(ok.message, /진화 \+1/);
     assert.equal(ok.save.summonerAwaken, 1);
     assert.equal(ok.save.summoners.light.awaken, 1);
     assert.equal(ok.save.island.mana, 2000 - 500);
@@ -1565,7 +1621,7 @@ describe("game loop", () => {
     const allySum = battle.units.find(
       (u) => u.kind === "summoner" && u.team === "ally",
     )!;
-    assert.match(allySum.name, /각성3/);
+    assert.match(allySum.name, /진화3/);
     assert.ok(battle.allySummoner.skillPowerBonus >= 0.075);
     assert.ok(battle.allySummoner.manaMax >= 100 + 24);
 

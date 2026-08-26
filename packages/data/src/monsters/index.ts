@@ -1,6 +1,6 @@
 import { STONE_PASSIVE_LABEL } from "../stonePassives.js";
 import { baseStatsFor } from "./curves.js";
-import { kitsForRole } from "./kitFactory.js";
+import { kitsForFamily } from "./kitFactory.js";
 import { FAMILY_ROSTER } from "./roster.js";
 import {
   ELEMENTS,
@@ -37,7 +37,7 @@ export function expandFamily(seed: FamilySeed): MonsterDef[] {
       id: `${seed.familyId}_${element}`,
       familyId: seed.familyId,
       nameKo: seed.nameKo,
-      artKey: seed.artKey,
+      artKey: `${seed.familyId}_${element}`,
       element,
       naturalStars: seed.naturalStars,
       role: kit.role ?? seed.role,
@@ -58,7 +58,7 @@ export function buildFamilySeeds(): FamilySeed[] {
     role: entry.role,
     baseStats: baseStatsFor(entry.naturalStars, entry.role),
     stonePassiveId: entry.stonePassiveId,
-    kits: kitsForRole(entry.role, entry.naturalStars),
+    kits: kitsForFamily(entry),
   }));
 }
 
@@ -146,10 +146,35 @@ export function getMonster(id: string): MonsterDef | undefined {
 
 export function getMonsterArtKey(id: string | undefined | null): string | null {
   if (!id) return null;
-  const def = getMonster(id);
+  const resolved = resolveMonsterId(id);
+  const def = getMonster(resolved);
   if (def) return def.artKey;
-  return LEGACY_MONSTER_IDS[id] ? getMonster(id)?.artKey ?? id : id;
+  if (LEGACY_MONSTER_IDS[id]) {
+    return getMonster(LEGACY_MONSTER_IDS[id])?.artKey ?? LEGACY_MONSTER_IDS[id];
+  }
+  return id;
 }
+
+/** Family-only artKey fallback when per-element files are missing. */
+export function getMonsterFamilyArtKey(
+  id: string | undefined | null,
+): string | null {
+  if (!id) return null;
+  const resolved = resolveMonsterId(id);
+  const def = getMonster(resolved);
+  if (def) return def.familyId;
+  const artKey = getMonsterArtKey(id);
+  if (!artKey) return null;
+  const parts = artKey.split("_");
+  const tail = parts[parts.length - 1];
+  if (ELEMENTS.includes(tail as Element)) {
+    return parts.slice(0, -1).join("_");
+  }
+  return artKey;
+}
+
+/** All catalog art keys ({familyId}_{element}). */
+export const MONSTER_ART_KEYS: readonly string[] = MONSTERS.map((m) => m.artKey);
 
 export function listMonsterFamilies(): {
   familyId: string;

@@ -1,59 +1,15 @@
 /**
- * Family artKeys that have dedicated battle stills under
- * /art/monster/battle/{artKey}-front.webp (+ optional -back.webp).
- * Updated by scripts/gen-battle-stills install step.
+ * Catalog artKeys with dedicated battle still paths.
+ * All 250 monsters use `{familyId}_{element}` keys.
  */
-export const BATTLE_STILL_FAMILIES: readonly string[] = [
-  "stone_golem",
-  "forest_sprite",
-  "venom_stinger",
-  "cinder_imp",
-  "dew_slime",
-  "gale_bat",
-  "sand_lizard",
-  "moss_turtle",
-  "crow_scout",
-  "bone_thrall",
-  "mace_soldier",
-  "heal_priest",
-  "magic_archer",
-  "shadow_thief",
-  "thunder_spear",
-  "frost_witch",
-  "stone_fist",
-  "herb_alchemist",
-  "capture_hound",
-  "seal_apprentice",
-  "flame_warrior",
-  "abyss_pirate",
-  "gale_rider",
-  "sanctuary_guard",
-  "abyss_hexer",
-  "dew_healer",
-  "seal_elder",
-  "wolf_fighter",
-  "lotus_dancer",
-  "scout_sniper",
-  "steel_armor",
-  "mana_captor",
-  "magma_knight",
-  "glacier_mage",
-  "storm_spearmaster",
-  "angel_healer",
-  "demon_hexer",
-  "rune_scholar",
-  "golden_guardian",
-  "shadow_assassin",
-  "holy_judge",
-  "abyss_priest",
-  "wyrm_rider",
-  "capture_lord",
-  "dragon_knight",
-  "primordial_hierophant",
-  "doom_oracle",
-  "sky_warden",
-  "eternal_healer",
-  "absolute_captor",
-] as const;
+import { MONSTER_ART_KEYS } from "stonesummoner-data";
 
-export const BATTLE_STILL_FAMILY_SET = new Set<string>(BATTLE_STILL_FAMILIES);
+export const BATTLE_STILL_ART_KEYS: readonly string[] = MONSTER_ART_KEYS;
+
+export const BATTLE_STILL_ART_KEY_SET = new Set<string>(BATTLE_STILL_ART_KEYS);
+
+/** @deprecated use BATTLE_STILL_ART_KEYS */
+export const BATTLE_STILL_FAMILIES = BATTLE_STILL_ART_KEYS;
+
+/** @deprecated use BATTLE_STILL_ART_KEY_SET */
+export const BATTLE_STILL_FAMILY_SET = BATTLE_STILL_ART_KEY_SET;

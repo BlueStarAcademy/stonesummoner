@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "locked": {
+    "damage.webp": "painted",
+    "heal.webp": "painted",
+    "mana.webp": "painted",
+    "shield.webp": "painted"
+  }
+}

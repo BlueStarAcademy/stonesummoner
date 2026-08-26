@@ -1,7 +1,7 @@
 /**
  * Skill icons: element-colored frame/bg + role/skill motif (no ornate junk).
- * Output:
- *   /art/monster/skill/{familyId}-{element}-s{1|2|3}.svg
+ * Output (procedural preview only — never overwrites ship WebP):
+ *   /art/monster/skill/_procedural/{familyId}-{element}-s{1|2|3}.svg
  *   /art/ui/skill/{damage,heal,mana,shield}.svg
  *   /art/summoner/skill/{skillId}.svg
  */
@@ -10,9 +10,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const monsterOut = path.resolve(__dirname, "../public/art/monster/skill");
-const uiOut = path.resolve(__dirname, "../public/art/ui/skill");
-const summonerOut = path.resolve(__dirname, "../public/art/summoner/skill");
+const monsterOut = path.resolve(__dirname, "../public/art/monster/skill/_procedural");
+const uiOut = path.resolve(__dirname, "../public/art/ui/skill/_procedural");
+const summonerOut = path.resolve(__dirname, "../public/art/summoner/skill/_procedural");
 for (const d of [monsterOut, uiOut, summonerOut]) fs.mkdirSync(d, { recursive: true });
 
 const ELEMENTS = ["fire", "water", "wind", "light", "dark"];
@@ -20,39 +20,39 @@ const ELEMENTS = ["fire", "water", "wind", "light", "dark"];
 /** @type {Record<string, { bg: string[], frame: string[], accent: string[], glow: string, gem: string }>} */
 const EL = {
   fire: {
-    bg: ["#3a1810", "#140806"],
-    frame: ["#FFB06A", "#E07040", "#8A2818"],
-    accent: ["#FFE2A8", "#FF7A3A", "#B03018"],
-    glow: "#FF6A30",
-    gem: "#FF6A3A",
+    bg: ["#4a1c12", "#180806"],
+    frame: ["#FFC080", "#FF7030", "#A02818"],
+    accent: ["#FFE8B8", "#FF8838", "#C03820"],
+    glow: "#FF5828",
+    gem: "#FF7038",
   },
   water: {
-    bg: ["#102838", "#061018"],
-    frame: ["#A8E8FF", "#3AA8E0", "#185888"],
-    accent: ["#E0F8FF", "#4AB8F0", "#1878A8"],
-    glow: "#3EC8FF",
-    gem: "#3EC8FF",
+    bg: ["#0c3048", "#061018"],
+    frame: ["#B8F0FF", "#38B8F0", "#1868A0"],
+    accent: ["#E8FAFF", "#50C8FF", "#2088C0"],
+    glow: "#28C8FF",
+    gem: "#40D0FF",
   },
   wind: {
-    bg: ["#142818", "#081208"],
-    frame: ["#B8FFC8", "#48C870", "#287848"],
-    accent: ["#E0FFE8", "#58D878", "#289858"],
-    glow: "#58E088",
-    gem: "#5EE08A",
+    bg: ["#143020", "#081408"],
+    frame: ["#C8FFD8", "#50D880", "#289058"],
+    accent: ["#E8FFF0", "#68F090", "#30A868"],
+    glow: "#48E888",
+    gem: "#60F098",
   },
   light: {
-    bg: ["#2c2410", "#141008"],
-    frame: ["#FFF0A8", "#E8C84A", "#887818"],
-    accent: ["#FFF8D0", "#F0D060", "#A89028"],
-    glow: "#F0D050",
-    gem: "#FFE26A",
+    bg: ["#342810", "#141008"],
+    frame: ["#FFF8B8", "#F0D050", "#987818"],
+    accent: ["#FFFFE0", "#FFE870", "#B89830"],
+    glow: "#FFE838",
+    gem: "#FFE850",
   },
   dark: {
-    bg: ["#221430", "#0c0814"],
-    frame: ["#D8C0FF", "#8A68D0", "#402878"],
-    accent: ["#F0E4FF", "#A078E8", "#583898"],
-    glow: "#A078F0",
-    gem: "#B48CFF",
+    bg: ["#281438", "#0c0814"],
+    frame: ["#E8D0FF", "#9870E8", "#483090"],
+    accent: ["#F8F0FF", "#B088F8", "#6840B0"],
+    glow: "#9878F8",
+    gem: "#C098FF",
   },
 };
 
@@ -116,7 +116,7 @@ const ROLE_MOTIFS = {
   support: ["bolt", "heal_cross", "aegis"],
   tank: ["crush", "taunt", "barrier"],
   debuffer: ["curse", "weaken", "rupture"],
-  capturer: ["snare", "track", "bind"],
+  capturer: ["capture_orb", "track", "bind"],
   stonesage: ["seal", "siphon", "gate"],
 };
 
@@ -203,6 +203,13 @@ function motifPaths(motif, a1, a2, glow) {
       <circle cx="32" cy="32" r="10" fill="none" stroke="${glow}" stroke-width="2"/>
       <path d="M32 8V18M32 46V56M8 32H18M46 32H56" stroke="url(#${a2})" stroke-width="2.4" stroke-linecap="round"/>
       <circle cx="32" cy="32" r="3.5" fill="#fff"/>`;
+    case "capture_orb":
+      return `
+      <circle cx="32" cy="32" r="17" fill="url(#${a1})" opacity=".92"/>
+      <circle cx="26" cy="26" r="5.5" fill="#fff" opacity=".32"/>
+      <circle cx="32" cy="32" r="23" fill="none" stroke="url(#${a2})" stroke-width="2.6" stroke-dasharray="7 5" opacity=".9"/>
+      <ellipse cx="32" cy="48" rx="14" ry="4" fill="${glow}" opacity=".22"/>
+      <path d="M18 30C24 22 40 22 46 30" stroke="${glow}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".65"/>`;
     case "track":
       return `
       <path d="M12 40L28 16L36 24L22 44Z" fill="url(#${a1})"/>
@@ -314,7 +321,8 @@ function buildSvg(key, element, motif) {
     </linearGradient>
   </defs>
   <rect width="128" height="128" rx="16" fill="url(#${idBg})"/>
-  <circle cx="64" cy="60" r="36" fill="url(#${idGlow})"/>
+  <circle cx="64" cy="60" r="38" fill="url(#${idGlow})" opacity="0.92"/>
+  <circle cx="64" cy="60" r="22" fill="${pal.gem}" opacity="0.18"/>
   <g transform="translate(32,30)">${motifPaths(motif, idA1, idA2, pal.glow)}</g>
   <rect x="5" y="5" width="118" height="118" rx="14" fill="none" stroke="url(#${idFrame})" stroke-width="6"/>
   <rect x="10" y="10" width="108" height="108" rx="11" fill="none" stroke="url(#${idFrameDark})" stroke-width="2"/>

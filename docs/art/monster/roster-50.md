@@ -58,13 +58,11 @@ id = `{familyId}_{element}` · artKey = familyId (English snake).
 
 ## 아트
 
-- 전투 still: `/art/monster/battle/{artKey}-front.png` (적) / `-back.png` (아군, 전용 후면 일러스트)
-- 레거시 초상 백업: `/art/monster/{artKey}.webp`
-- 속성별 틴트: `.el-tint-*` CSS filter (동일 초상 × 5속성)
-- 방향: dark fantasy, 비치비, 검정 배경 → 클라 dematte
-- Spine (선택): `wolf_fighter`/`fire_fang` 파일럿 팩만 등록
-
-설치: `node scripts/install-battle-stills.mjs` (Cursor assets → public)
+- 전투 still: `/art/monster/battle/{familyId}_{element}-front.webp` / `-back.webp`
+- 각성 still: `/art/monster/battle/{familyId}_{element}-awaken-front.webp` / `-awaken-back.webp`
+- 초상: `/art/monster/{familyId}_{element}.webp` · 각성 `/art/monster/{familyId}_{element}_awaken.webp`
+- 속성별 painted 변형 (CSS 틴트 없음) — `node scripts/bake-monster-element-art.mjs`
+- Coverage: `node scripts/check-monster-art.mjs --strict`
 
 ## 레거시 매핑
 

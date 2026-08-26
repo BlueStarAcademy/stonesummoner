@@ -57,6 +57,10 @@ export function migrateSave(raw: unknown): PlayerSave | null {
       typeof m.awaken === "number"
         ? Math.max(0, Math.min(1, Math.floor(m.awaken)))
         : 0,
+    awakenExp:
+      typeof m.awakenExp === "number"
+        ? Math.max(0, Math.floor(m.awakenExp))
+        : 0,
     exp: typeof m.exp === "number" ? m.exp : 0,
     skillLevels: (m.skillLevels ?? [1, 1, 1]) as [number, number, number],
     symbolSlots: m.symbolSlots ?? [null, null, null, null, null, null],

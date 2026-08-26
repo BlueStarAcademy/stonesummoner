@@ -13,10 +13,12 @@ export interface OwnedMonster {
   exp?: number;
   /** Equipped symbol instance ids by slot index 0..5 (slot 1..6). */
   symbolSlots: (string | null)[];
-  /** Evolution stage 0–2 (강화진 진화 스텁). */
+  /** Evolution stage added to natural stars (display grade up to 6★). */
   evolve: number;
-  /** Awaken stage 0–1 (각성; separate from evolve). */
+  /** Awaken stage 0–1 (6★ only; changes appearance). */
   awaken?: number;
+  /** Awaken dungeon XP banked toward awakening (6★ only). */
+  awakenExp?: number;
   /** S1/S2/S3 skill levels (1..MAX_SKILL_LEVEL). */
   skillLevels: [number, number, number];
 }
@@ -25,9 +27,11 @@ export interface OwnedMonster {
 export const MAX_MONSTER_LEVEL = 40;
 /** @deprecated Use monsterExpToNext; monster EXP depends on grade and level. */
 export const MONSTER_EXP_PER_LEVEL = 460;
-export const MAX_EVOLVE = 2;
+export const MAX_EVOLVE = 5;
 export const MAX_MONSTER_AWAKEN = 1;
 export const MAX_SKILL_LEVEL = 3;
+export const MONSTER_AWAKEN_EXP_GOAL = 100;
+export const WEEKDAY_AWAKEN_EXP_DROP = 25;
 /** ATK/HP multiplier when awaken >= 1. */
 export const MONSTER_AWAKEN_STAT_PCT = 0.08;
 
@@ -55,6 +59,41 @@ export function monsterMaxLevel(owned: OwnedMonster): number {
 export function monsterExpToNext(owned: OwnedMonster, level = owned.level): number {
   const current = Math.max(1, Math.floor(level));
   return MONSTER_EXP_TABLE[monsterGrade(owned) - 1]?.[current - 1] ?? 0;
+}
+
+/** Summoners War Power-Up Circle fodder XP at Lv1 / grade max (per display ★). */
+const FODDER_FEED_EXP_AT_LV1: readonly number[] = [
+  800,
+  1760,
+  3200,
+  6724,
+  16000,
+  44001,
+];
+const FODDER_FEED_EXP_AT_MAX: readonly number[] = [
+  1210,
+  3086,
+  6204,
+  13851,
+  43708,
+  139356,
+];
+
+/**
+ * EXP granted when sacrificing a monster as power-up material.
+ * Uses display grade (natural + evolve) and level, matching SW feed table.
+ */
+export function monsterPowerUpExp(fodder: OwnedMonster): number {
+  const grade = monsterGrade(fodder);
+  const idx = Math.min(FODDER_FEED_EXP_AT_LV1.length - 1, grade - 1);
+  const atLv1 = FODDER_FEED_EXP_AT_LV1[idx] ?? 800;
+  const atMax = FODDER_FEED_EXP_AT_MAX[idx] ?? atLv1;
+  const maxLv = monsterMaxLevel(fodder);
+  const level = Math.max(1, Math.min(maxLv, Math.floor(fodder.level)));
+  if (level >= maxLv) return atMax;
+  if (level <= 1 || maxLv <= 1) return atLv1;
+  const t = (level - 1) / (maxLv - 1);
+  return Math.floor(atLv1 + (atMax - atLv1) * t);
 }
 
 export function addOwnedMonsterExp(
@@ -129,42 +168,61 @@ export function enhanceManaCost(level: number): number {
   return 80 + level * 40;
 }
 
-/** Minimum level required to evolve from current stage → stage+1 */
-export function evolveMinLevel(evolve: number): number {
-  return 10 + evolve * 5; // 10 → 15 → (cap)
+/** Display star grade (natural + evolve), capped at 6. */
+export function displayedMonsterStars(
+  naturalStars: number,
+  evolve = 0,
+): number {
+  return Math.max(1, Math.min(6, naturalStars + Math.max(0, evolve)));
 }
 
+/** Max evolve steps before reaching 6★. */
+export function maxEvolveSteps(naturalStars: number): number {
+  return Math.max(0, 6 - Math.max(1, naturalStars));
+}
+
+/** Same-grade fodder count required for the next evolve step. */
+export function evolveFodderCount(currentGrade: number): number {
+  return Math.max(1, Math.min(5, currentGrade));
+}
+
+/** Gold cost to evolve from `currentGrade` → grade+1. */
+export function evolveManaCostForGrade(currentGrade: number): number {
+  const g = Math.max(1, Math.min(5, currentGrade));
+  return 1500 * g * g;
+}
+
+/** @deprecated Use max level gate — kept for legacy callers. */
+export function evolveMinLevel(_evolve: number): number {
+  return 1;
+}
+
+/** @deprecated Use evolveManaCostForGrade. */
 export function evolveManaCost(evolve: number): number {
-  return 400 + evolve * 350;
+  return evolveManaCostForGrade(1 + evolve);
 }
 
-export function evolveCrystalCost(evolve: number): number {
-  return evolve === 0 ? 0 : 5 + evolve * 5;
+/** @deprecated Crystal no longer used for monster evolve. */
+export function evolveCrystalCost(_evolve: number): number {
+  return 0;
 }
 
-/** Minimum level to awaken (0 → 1). */
-export function monsterAwakenMinLevel(naturalStars: number): number {
-  return 10 + Math.max(1, naturalStars) * 2;
+/** Awaken requires max level at 6★. */
+export function monsterAwakenMinLevel(_naturalStars: number): number {
+  return MAX_MONSTER_LEVEL;
 }
 
-export function monsterAwakenManaCost(_awaken = 0): number {
-  return 600;
+export function monsterAwakenManaCost(naturalStars = 1): number {
+  return 12000 + Math.max(1, naturalStars) * 3500;
 }
 
 export function monsterAwakenCrystalCost(_awaken = 0): number {
-  return 5;
+  return 15;
 }
 
-/** Evolve-material count required by element for awaken. */
+/** Elemental essence required for awaken. */
 export function monsterAwakenMatCost(_awaken = 0): number {
-  return 10;
-}
-
-export function displayedMonsterStars(
-  naturalStars: number,
-  awaken = 0,
-): number {
-  return Math.max(1, naturalStars) + Math.max(0, Math.min(MAX_MONSTER_AWAKEN, awaken));
+  return 15;
 }
 
 export function defaultSkillLevels(): [number, number, number] {
@@ -184,6 +242,21 @@ export function normalizeSkillLevels(
 }
 
 /** Indices of skills that can still level up (0..2). */
+/** Same monster name/family regardless of element (Summoners War duplicate rules). */
+export function ownedMonsterFamilyId(
+  owned: OwnedMonster | { monsterId: string },
+): string {
+  const def = getMonster(owned.monsterId);
+  return def?.familyId ?? owned.monsterId;
+}
+
+export function ownedMonstersSameFamily(
+  a: OwnedMonster | { monsterId: string },
+  b: OwnedMonster | { monsterId: string },
+): boolean {
+  return ownedMonsterFamilyId(a) === ownedMonsterFamilyId(b);
+}
+
 export function skillUpgradableIndices(
   levels?: number[] | null,
 ): number[] {
@@ -335,6 +408,7 @@ export function createStarterRoster(): {
     symbolSlots: emptySymbolSlots(),
     evolve: 0,
     awaken: 0,
+    awakenExp: 0,
     skillLevels: defaultSkillLevels(),
   }));
   return {
@@ -368,7 +442,7 @@ export function describeOwned(m: OwnedMonster): string {
   const baseStars = def?.naturalStars ?? 0;
   const evo = m.evolve ?? 0;
   const awaken = m.awaken ?? 0;
-  const displayStars = displayedMonsterStars(baseStars, awaken);
+  const displayStars = displayedMonsterStars(baseStars, m.evolve ?? 0);
   const stars =
     "★".repeat(displayStars) + (evo > 0 ? `+${evo}` : "");
   const slots = m.symbolSlots ?? emptySymbolSlots();

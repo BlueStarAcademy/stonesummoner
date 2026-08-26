@@ -133,6 +133,9 @@ export interface SummonerState {
     kind: string;
     power: number;
     turns?: number;
+    descKo?: string;
+    vfxFamily?: "melee" | "bolt" | "nova" | "support";
+    orbBolt?: boolean;
   }>;
   /** Active summoner element for leader / kit. */
   summonerElement?: Element;

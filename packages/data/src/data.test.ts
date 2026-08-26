@@ -14,12 +14,17 @@ import {
   MAIN_QUEST_PIN_LAYOUT,
   MAIN_QUEST_STAGES,
   STAGES_PER_AREA,
+  bumpGearEnhance,
   canEquipGearOnElement,
   createEmptyGear,
   createStarterGear,
   createStarterHwalro,
   createSymbol,
+  gearArtFilename,
+  gearArtStem,
+  getGearMaterial,
   gearEnhanceCrystalCost,
+  gearEnhanceStepMul,
   grindEnhanceSubstat,
   grindSymbolPrefix,
   gearEnhanceManaCost,
@@ -27,8 +32,11 @@ import {
   gearSellMana,
   gearSetBonuses,
   gearStarsToInvGrade,
+  gearStarsToQuality,
+  normalizeGearPiece,
   getMonster,
   getStage,
+  getSummonerKit,
   bumpSymbolEnhance,
   imprintSymbolMain,
   mainStatAtEnhance,
@@ -82,9 +90,39 @@ describe("phase1 data", () => {
   it("gives each monster three skills", () => {
     for (const m of MONSTERS) {
       assert.equal(m.skills.length, 3);
+      assert.equal(m.skills[0]!.id, "s1");
       assert.equal(m.skills[0]!.cooldown, 0);
       assert.ok(m.skills[0]!.effects.some((e) => e.kind === "damage"));
+      assert.ok(m.skills[0]!.descKo);
+      assert.ok(m.skills[1]!.descKo);
+      assert.ok(m.skills[2]!.descKo);
+      assert.ok(m.skills[1]!.vfxFamily);
+      assert.ok(m.skills[2]!.vfxFamily);
     }
+  });
+
+  it("family s2/s3 differ by element", () => {
+    const impFire = getMonster("cinder_imp_fire")!;
+    const impWater = getMonster("cinder_imp_water")!;
+    const lizardFire = getMonster("sand_lizard_fire")!;
+    assert.notEqual(impFire.skills[1]!.descKo, impWater.skills[1]!.descKo);
+    assert.notEqual(impFire.skills[1]!.nameKo, impWater.skills[1]!.nameKo);
+    assert.notEqual(impFire.skills[2]!.descKo, impWater.skills[2]!.descKo);
+    assert.notEqual(impFire.skills[1]!.nameKo, lizardFire.skills[1]!.nameKo);
+    assert.equal(
+      impFire.skills[1]!.descKo,
+      lizardFire.skills[1]!.descKo,
+      "same role+element share action-only desc",
+    );
+  });
+
+  it("summoner magic skills have unique flavor and vfx hints", () => {
+    const fire = getSummonerKit("fire");
+    const water = getSummonerKit("water");
+    assert.ok(fire.skills.A.descKo);
+    assert.ok(fire.skills.A.vfxFamily);
+    assert.notEqual(fire.skills.A.descKo, water.skills.A.descKo);
+    assert.notEqual(fire.skills.B.nameKo, water.skills.B.nameKo);
   });
 
   it("uses Summoners War-like HP/ATK and S1 coefficients", () => {
@@ -218,12 +256,116 @@ describe("phase1 data", () => {
     assert.equal(canEquipGearOnElement(fire, "water"), false);
     assert.equal(canEquipGearOnElement(createStarterGear("fire").top!, "water"), true);
     assert.equal(gearStarsToInvGrade(1), "gray");
+    assert.equal(gearStarsToInvGrade(3), "blue");
     assert.equal(gearStarsToInvGrade(5), "red");
+    assert.equal(gearStarsToQuality(1), "normal");
+    assert.equal(gearStarsToQuality(3), "rare");
+    assert.equal(gearStarsToQuality(5), "legend");
     const drop = rollGearDrop(() => 0.01, "t", { preferredSlot: "weapon", preferredElement: "dark" });
     assert.equal(drop.slot, "weapon");
     assert.equal(drop.element, "dark");
     assert.ok(drop.stars >= 1 && drop.stars <= 5);
     assert.ok(drop.quality);
+    const armorDrop = rollGearDrop(() => 0.5, "t_armor", { preferredSlot: "top" });
+    assert.equal(armorDrop.slot, "top");
+    assert.ok(armorDrop.materialId);
+  });
+
+  it("scales gear enhance stat bumps by level", () => {
+    const base = normalizeGearPiece({
+      id: "t_enh",
+      slot: "top",
+      nameKo: "t",
+      enhance: 0,
+      setId: "guardian",
+      stars: 3,
+      quality: "rare",
+      materialId: "plate",
+    });
+    const plus1 = normalizeGearPiece({ ...base, enhance: 1 });
+    const plus12 = normalizeGearPiece({ ...base, enhance: 12 });
+    const plus11 = normalizeGearPiece({ ...base, enhance: 11 });
+    const earlyStep = plus1.summonerHpBonus - base.summonerHpBonus;
+    const lateStep = plus12.summonerHpBonus - plus11.summonerHpBonus;
+    assert.ok(earlyStep > 0);
+    assert.ok(lateStep > earlyStep * 1.8, `late ${lateStep} vs early ${earlyStep}`);
+    assert.ok(gearEnhanceStepMul(0) < gearEnhanceStepMul(14));
+  });
+
+  it("reapplies enhance bonuses when normalizing gear", () => {
+    let piece = normalizeGearPiece({
+      id: "t_norm_enh",
+      slot: "top",
+      nameKo: "t",
+      enhance: 0,
+      setId: "guardian",
+      stars: 4,
+      quality: "epic",
+      materialId: "chain",
+    });
+    for (let i = 0; i < 8; i++) piece = bumpGearEnhance(piece);
+    const norm = normalizeGearPiece(piece);
+    assert.equal(norm.enhance, 8);
+    assert.equal(norm.summonerHpBonus, piece.summonerHpBonus);
+    assert.equal(norm.summonerDefBonus, piece.summonerDefBonus);
+  });
+
+  it("scales gear stats steeply by star grade", () => {
+    const low = normalizeGearPiece({
+      id: "t_low",
+      slot: "top",
+      nameKo: "t",
+      enhance: 0,
+      setId: "guardian",
+      stars: 1,
+      quality: "legend",
+      materialId: "cloth",
+    });
+    const high = normalizeGearPiece({
+      id: "t_high",
+      slot: "top",
+      nameKo: "t",
+      enhance: 0,
+      setId: "guardian",
+      stars: 5,
+      quality: "normal",
+      materialId: "cloth",
+    });
+    assert.equal(low.quality, "normal");
+    assert.equal(high.quality, "legend");
+    const hpRatio = high.summonerHpBonus / low.summonerHpBonus;
+    assert.ok(hpRatio >= 3.8, `expected steep ★5/★1 hp ratio, got ${hpRatio}`);
+    assert.ok(high.skillPowerBonus >= low.skillPowerBonus);
+  });
+
+  it("maps gear art stems and material stat bias", () => {
+    const cloth = normalizeGearPiece({
+      id: "t_cloth",
+      slot: "top",
+      nameKo: "t",
+      enhance: 0,
+      setId: "guardian",
+      stars: 3,
+      quality: "normal",
+      materialId: "cloth",
+    });
+    const plate = normalizeGearPiece({
+      id: "t_plate",
+      slot: "top",
+      nameKo: "t",
+      enhance: 0,
+      setId: "guardian",
+      stars: 3,
+      quality: "normal",
+      materialId: "plate",
+    });
+    assert.ok(plate.summonerHpBonus > cloth.summonerHpBonus);
+    assert.equal(gearArtStem(cloth), "top-cloth-s3");
+    assert.equal(
+      gearArtFilename(createStarterGear("fire").weapon!),
+      "weapon-fire-s1.webp",
+    );
+    assert.equal(getGearMaterial("leather").nameKo, "가죽");
   });
 
   it("applies hwalro 2-set hp bonus", () => {

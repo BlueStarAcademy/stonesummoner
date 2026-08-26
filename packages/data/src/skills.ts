@@ -46,6 +46,12 @@ export type SkillEffect =
 export interface SkillDef {
   id: string;
   nameKo: string;
+  /** Flavor description (no numeric combat stats). */
+  descKo?: string;
+  /** Battle VFX routing override. */
+  vfxFamily?: "melee" | "bolt" | "nova" | "support";
+  /** Projectile travels as a glowing orb (capture / trap skills). */
+  orbBolt?: boolean;
   /** Turns of cooldown after use. S1 is usually 0. */
   cooldown: number;
   effects: SkillEffect[];
@@ -59,6 +65,7 @@ export function basicStrike(
   return {
     id,
     nameKo,
+    descKo: "적 1명에게 피해를 입힙니다.",
     cooldown: 0,
     effects: [{ kind: "damage", target: "single", coeff }],
   };
@@ -74,6 +81,10 @@ export function dmg(
   return {
     id,
     nameKo,
+    descKo:
+      target === "all_enemies"
+        ? "모든 적에게 피해를 입힙니다."
+        : "적 1명에게 피해를 입힙니다.",
     cooldown,
     effects: [{ kind: "damage", target, coeff }],
   };

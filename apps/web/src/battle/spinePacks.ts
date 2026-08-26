@@ -4,8 +4,7 @@
  * public/art/spine/pilot/; see docs/art/spine/fire_fang-brief.md).
  */
 
-import { getMonsterArtKey } from "stonesummoner-data";
-import { BATTLE_STILL_FAMILY_SET } from "./battleStills";
+import { getMonsterArtKey, getMonsterFamilyArtKey } from "stonesummoner-data";
 
 export type SpineClip =
   | "idle"
@@ -134,15 +133,13 @@ export function getSpinePack(packId: string): SpinePack | null {
 export function getBattleStillSrc(
   monsterId: string | undefined | null,
   facing: "front" | "back" = "front",
+  preferAwakened = false,
 ): string | null {
   const artKey = getMonsterArtKey(monsterId);
-  // Prefer painted family stills so Spine pilot packs don't steal other families
-  // (e.g. wolf_fighter must not show fire_fang stills).
-  if (artKey && BATTLE_STILL_FAMILY_SET.has(artKey)) {
-    if (facing === "back") {
-      return `/art/monster/battle/${artKey}-back.webp`;
-    }
-    return `/art/monster/battle/${artKey}-front.webp`;
+  if (artKey) {
+    const awakenMid = preferAwakened ? "-awaken" : "";
+    const suffix = facing === "back" ? "-back" : "-front";
+    return `/art/monster/battle/${artKey}${awakenMid}${suffix}.webp`;
   }
   const packId = resolveSpinePackId(monsterId);
   if (packId) {
