@@ -10,6 +10,7 @@ import {
   familyStemsFor,
 } from "./familySkillCatalog.js";
 import { skillDescForName } from "./skillDescKo.js";
+import { monsterSkillVfxId } from "../skillVisuals.js";
 
 function scale(stars: number, base: number): number {
   return Math.round((base + (stars - 3) * 0.08) * 100) / 100;
@@ -105,33 +106,41 @@ export function kitsForFamily(entry: FamilyRosterEntry): Record<Element, Element
     const s2Vfx = familySkillVfx(entry.role, "s2", el);
     const s3Vfx = familySkillVfx(entry.role, "s3", el);
 
+    const skills = [
+      buildS1(entry.role, el, entry.naturalStars),
+      skillVfx(
+        {
+          id: "s2",
+          nameKo: familySkillName(el, "s2", stems.s2),
+          descKo: familySkillDescKo(el, "s2", entry.role),
+          cooldown: s2Base.cooldown,
+          effects: s2Base.effects,
+        },
+        s2Vfx.vfxFamily,
+        s2Vfx.orbBolt,
+      ),
+      skillVfx(
+        {
+          id: "s3",
+          nameKo: familySkillName(el, "s3", stems.s3),
+          descKo: familySkillDescKo(el, "s3", entry.role),
+          cooldown: s3Base.cooldown,
+          effects: s3Base.effects,
+        },
+        s3Vfx.vfxFamily,
+        s3Vfx.orbBolt,
+      ),
+    ] as const;
     out[el] = {
       ...base,
-      skills: [
-        buildS1(entry.role, el, entry.naturalStars),
-        skillVfx(
-          {
-            id: "s2",
-            nameKo: familySkillName(el, "s2", stems.s2),
-            descKo: familySkillDescKo(el, "s2", entry.role),
-            cooldown: s2Base.cooldown,
-            effects: s2Base.effects,
-          },
-          s2Vfx.vfxFamily,
-          s2Vfx.orbBolt,
+      skills: skills.map((skill, index) => ({
+        ...skill,
+        vfxId: monsterSkillVfxId(
+          entry.familyId,
+          el,
+          (["s1", "s2", "s3"] as const)[index]!,
         ),
-        skillVfx(
-          {
-            id: "s3",
-            nameKo: familySkillName(el, "s3", stems.s3),
-            descKo: familySkillDescKo(el, "s3", entry.role),
-            cooldown: s3Base.cooldown,
-            effects: s3Base.effects,
-          },
-          s3Vfx.vfxFamily,
-          s3Vfx.orbBolt,
-        ),
-      ],
+      })),
     };
   }
   return out;

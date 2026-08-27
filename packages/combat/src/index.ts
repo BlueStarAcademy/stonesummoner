@@ -2,6 +2,7 @@ export { Battle, makeUnit, pickAutoSkillIndex } from "./battle.js";
 export type {
   BattleConfig,
   SkillResult,
+  SkillPresentation,
   StoneReport,
   StoneReportChip,
   StoneReportChipKind,

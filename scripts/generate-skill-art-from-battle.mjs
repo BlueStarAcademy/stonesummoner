@@ -132,42 +132,12 @@ for (const dir of [monsterStaging, uiStaging, summonerStaging]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-const artKeys = MONSTER_ART_KEYS.filter((k) =>
-  rosterFamilies.includes(familyIdFromArtKey(k)),
-);
-
-let monsterIcons = 0;
-let monsterMissing = 0;
-
-for (const artKey of artKeys) {
-  const familyId = familyIdFromArtKey(artKey);
-  const element = artKey.slice(familyId.length + 1);
-  const battlePath = path.join(battleDir, `${artKey}-front.webp`);
-  if (!fs.existsSync(battlePath)) {
-    monsterMissing += 1;
-    continue;
-  }
-  for (let slot = 1; slot <= 3; slot++) {
-    const png = await composeMonsterIcon(battlePath, element, slot);
-    const name = `${familyId}-${element}-s${slot}.png`;
-    fs.writeFileSync(path.join(monsterStaging, name), png);
-    monsterIcons += 1;
-  }
-}
-
-for (const familyId of rosterFamilies) {
-  const refKey = `${familyId}_fire`;
-  const battlePath = path.join(battleDir, `${refKey}-front.webp`);
-  if (!fs.existsSync(battlePath)) continue;
-  for (let slot = 1; slot <= 3; slot++) {
-    const png = await composeMonsterIcon(battlePath, "light", slot);
-    fs.writeFileSync(
-      path.join(monsterStaging, `${familyId}-s${slot}.png`),
-      png,
-    );
-    monsterIcons += 1;
-  }
-}
+// Character battle stills are intentionally not a skill-art source. Keeping
+// this staging directory available lets the dedicated painted skill pipeline
+// install assets supplied under assets/monster/skill without ever cropping a
+// monster portrait into a skill icon.
+const monsterIcons = 0;
+const monsterMissing = 0;
 
 let uiIcons = 0;
 if (fs.existsSync(uiProc)) {

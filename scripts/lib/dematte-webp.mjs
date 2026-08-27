@@ -1181,9 +1181,13 @@ async function writeWebpAtomic(dstWebp, buf) {
   const tmp = path.join(dir, `.${path.basename(dstWebp)}.${process.pid}.tmp`);
   await fs.promises.writeFile(tmp, buf);
   try {
+    // Windows does not replace an existing destination during rename.
+    // Remove it first so rebuilds do not fall through to a less reliable
+    // in-place write when the old WebP already exists.
+    await fs.promises.unlink(dstWebp).catch(() => {});
     await fs.promises.rename(tmp, dstWebp);
   } catch {
-    await fs.promises.writeFile(dstWebp, buf);
+    await fs.promises.copyFile(tmp, dstWebp);
   }
   await fs.promises.unlink(tmp).catch(() => {});
 }

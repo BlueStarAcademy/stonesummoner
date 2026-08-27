@@ -96,7 +96,49 @@ describe("Battle flow", () => {
     const hits = b.useSkill();
     assert.ok(hits.length >= 1);
     assert.ok(hits[0]!.damage > 0);
+    assert.ok(hits[0]!.skillId === "s1" || hits[0]!.skillId === "basic");
+    assert.deepEqual(hits[0]!.effectKinds, ["damage"]);
     assert.equal(b.attackTurnCount, 1);
+  });
+
+  it("returns presentation metadata for a non-damaging skill", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    const unit = b.getUnit("a-m1")!;
+    unit.skills = [
+      ...unit.skills!,
+      {
+        id: "s4",
+        vfxId: "monster:test:fire:s4",
+        nameKo: "강화",
+        cooldown: 2,
+        effects: [
+          {
+            kind: "buff",
+            target: "self",
+            axis: "atk",
+            amount: 0.2,
+            turns: 2,
+          },
+        ],
+      },
+    ];
+    unit.skillCd = [0, 0, 0, 0];
+    for (const u of b.units) u.atb = 0;
+    unit.atb = 100;
+    assert.equal(b.tickUntilReady()?.id, "a-m1");
+    assert.equal(b.autoStone(), true);
+    const result = b.useSkill({ skillIndex: 3 });
+    assert.equal(result.length, 0);
+    assert.equal(b.lastSkillPresentation?.targetIds[0], "a-m1");
+    assert.equal(b.lastSkillPresentation?.skillId, "s4");
+    assert.equal(b.lastSkillPresentation?.vfxId, "monster:test:fire:s4");
+    assert.deepEqual(b.lastSkillPresentation?.effectKinds, ["buff"]);
   });
 
   it("tracks ally damage actually applied to enemies", () => {

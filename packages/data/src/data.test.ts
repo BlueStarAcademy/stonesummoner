@@ -4,6 +4,7 @@ import {
   applySymbolsToStats,
   canGrindSymbol,
   symbolCombatMods,
+  describeSkillVfx,
   canImprintSymbol,
   CHAPTER1_STAGES,
   CAIROS_DRAGON_STAGES,
@@ -98,7 +99,35 @@ describe("phase1 data", () => {
       assert.ok(m.skills[2]!.descKo);
       assert.ok(m.skills[1]!.vfxFamily);
       assert.ok(m.skills[2]!.vfxFamily);
+      assert.ok(m.skills.every((skill) => skill.vfxId?.startsWith("monster:")));
     }
+  });
+
+  it("assigns unique visual identities to every runtime skill", () => {
+    const monsterVfxIds = MONSTERS.flatMap((m) =>
+      m.skills.map((skill) => skill.vfxId),
+    );
+    assert.equal(monsterVfxIds.length, 750);
+    assert.equal(new Set(monsterVfxIds).size, 750);
+
+    const summonerVfxIds = Object.values(
+      ["fire", "water", "wind", "light", "dark"] as const,
+    ).flatMap((element) =>
+      Object.values(getSummonerKit(element).skills).map((skill) => skill.vfxId),
+    );
+    assert.equal(summonerVfxIds.length, 50);
+    assert.equal(new Set(summonerVfxIds).size, 50);
+    assert.ok(summonerVfxIds.every((id) => id?.startsWith("summoner:")));
+
+    const sample = MONSTERS.find((m) => m.id === "magma_knight_fire")!.skills[2]!;
+    const descriptor = describeSkillVfx(sample.vfxId!, {
+      vfxFamily: sample.vfxFamily,
+      element: "fire",
+      slot: "s3",
+    });
+    assert.equal(descriptor.assetStem, "magma_knight-fire-s3");
+    assert.equal(descriptor.intensity, "ultimate");
+    assert.equal(descriptor.motion, sample.vfxFamily);
   });
 
   it("family s2/s3 differ by element", () => {

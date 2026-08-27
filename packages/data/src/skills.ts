@@ -48,6 +48,8 @@ export interface SkillDef {
   nameKo: string;
   /** Flavor description (no numeric combat stats). */
   descKo?: string;
+  /** Stable art/VFX identity. */
+  vfxId?: string;
   /** Battle VFX routing override. */
   vfxFamily?: "melee" | "bolt" | "nova" | "support";
   /** Projectile travels as a glowing orb (capture / trap skills). */

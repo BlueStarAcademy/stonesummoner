@@ -65,18 +65,53 @@ const ART = {
   hex: "/art/battle/fx/fx-hex.webp",
   cast: "/art/battle/fx/fx-cast.webp",
   bolt: "/art/battle/fx/fx-bolt.webp",
-  boltWater: "/art/battle/fx/fx-bolt-water.svg",
-  boltDark: "/art/battle/fx/fx-bolt-dark.svg",
-  boltFire: "/art/battle/fx/fx-bolt-fire.svg",
-  boltWind: "/art/battle/fx/fx-bolt-wind.svg",
-  boltLight: "/art/battle/fx/fx-bolt-light.svg",
-  orbHeal: "/art/battle/fx/fx-orb-heal.svg",
-  orbBuff: "/art/battle/fx/fx-orb-buff.svg",
-  orbShield: "/art/battle/fx/fx-orb-shield.svg",
+  boltWater: "/art/battle/fx/fx-bolt-water.webp",
+  boltDark: "/art/battle/fx/fx-bolt-dark.webp",
   shock: "/art/battle/fx/fx-shockwave.webp",
 } as const;
 
 type SkfxLayer = { src: string; cls: string };
+
+export interface SkillVfxProfile {
+  id: string;
+  variant: 0 | 1 | 2 | 3;
+  artSrc: string | null;
+}
+
+const skillVfxProfiles = new Map<string, SkillVfxProfile>();
+
+function skillArtSrc(vfxId: string | undefined): string | null {
+  if (!vfxId) return null;
+  const parts = vfxId.split(":");
+  if (parts[0] === "monster" && parts.length === 4) {
+    return `/art/monster/skill/${parts[1]}-${parts[2]}-${parts[3]}.webp`;
+  }
+  if (parts[0] === "summoner" && parts[1] && !parts[1].startsWith("legacy-")) {
+    return `/art/summoner/skill/${parts[1]}.webp`;
+  }
+  return null;
+}
+
+function profileVariant(id: string): 0 | 1 | 2 | 3 {
+  let hash = 0;
+  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  return Math.abs(hash) % 4 as 0 | 1 | 2 | 3;
+}
+
+export function resolveSkillVfxProfile(
+  vfxId: string | undefined,
+): SkillVfxProfile {
+  const id = vfxId ?? "fallback";
+  const cached = skillVfxProfiles.get(id);
+  if (cached) return cached;
+  const profile = {
+    id,
+    variant: profileVariant(id),
+    artSrc: skillArtSrc(vfxId),
+  } satisfies SkillVfxProfile;
+  skillVfxProfiles.set(id, profile);
+  return profile;
+}
 
 let fxPreloaded = false;
 
@@ -105,16 +140,14 @@ function slashArt(element: CombatElement): string {
 }
 
 function boltArt(kind: SkillBoltKind): string {
-  if (kind === "heal") return ART.orbHeal;
-  if (kind === "buff") return ART.orbBuff;
-  if (kind === "shield") return ART.orbShield;
+  if (kind === "heal") return ART.heal;
+  if (kind === "buff") return ART.buff;
+  if (kind === "shield") return ART.shield;
   if (kind === "slash") return ART.slash2;
   if (kind === "hex") return ART.hex;
   if (kind === "water") return ART.boltWater;
   if (kind === "dark") return ART.boltDark;
-  if (kind === "fire") return ART.boltFire;
-  if (kind === "wind") return ART.boltWind;
-  return ART.boltLight;
+  return ART.bolt;
 }
 
 function supportBoltKind(kind: CombatSfxKind): SkillBoltKind {
@@ -226,11 +259,23 @@ export function impactPreset(
 function presetLayers(
   preset: SkillVfxPreset,
   element: CombatElement,
-  opts?: { crit?: boolean; ult?: boolean; role?: "cast" | "hit" },
+  opts?: {
+    crit?: boolean;
+    ult?: boolean;
+    role?: "cast" | "hit";
+    vfxId?: string;
+  },
 ): SkfxLayer[] {
   const hit = hitArt(element);
   const slash = slashArt(element);
   const layers: SkfxLayer[] = [];
+  const signature = skillArtSrc(opts?.vfxId);
+  if (signature) {
+    layers.push({
+      src: signature,
+      cls: "skfx-img skfx-img--signature",
+    });
+  }
 
   const impactSeq = () => {
     layers.push({ src: ART.flash, cls: "skfx-img skfx-img--flash" });
@@ -342,6 +387,7 @@ export function spawnSkillFx(
     crit?: boolean;
     ult?: boolean;
     role?: "cast" | "hit";
+    vfxId?: string;
   },
 ): void {
   if (reduceMotion) return;
@@ -351,6 +397,9 @@ export function spawnSkillFx(
   const element = opts?.element ?? "light";
   const wrap = document.createElement("span");
   wrap.className = `skill-fx skill-fx--${preset} skill-fx--${element}`;
+  const profile = resolveSkillVfxProfile(opts?.vfxId);
+  wrap.classList.add(`skill-fx--profile-${profile.variant}`);
+  if (opts?.vfxId) wrap.dataset.vfxId = opts.vfxId;
   if (preset === "slash" || preset === "wind-cut") wrap.classList.add("is-melee");
   if (opts?.role === "cast") wrap.classList.add("is-cast");
   if (opts?.crit && opts?.role !== "cast") wrap.classList.add("is-crit");
@@ -701,6 +750,8 @@ export type SkillVfxPlayOpts = {
   crit?: boolean;
   vfxFamily?: SkillVfxFamily;
   orbBolt?: boolean;
+  vfxId?: string;
+  vfxId?: string;
   onImpact?: () => void;
   playCasterClip?: (
     unitId: string,
@@ -753,6 +804,7 @@ export async function playSkillVfx(
         ult: opts.ult,
         crit: opts.crit,
         role: "hit",
+      vfxId: opts.vfxId,
       });
       if (opts.orbBolt && id !== attackerId) {
         spawnTrapRingVfx(root, id, opts.element, impactMs);
@@ -770,6 +822,7 @@ export async function playSkillVfx(
     spawnSkillFx(root, attackerId, "cast", cutMs, {
       element: opts.element,
       role: "cast",
+      vfxId: opts.vfxId,
     });
     opts.playCasterClip?.(attackerId, "ult");
     const launchAt = Math.floor(cutMs * 0.5);
@@ -798,6 +851,7 @@ export async function playSkillVfx(
     spawnSkillFx(root, attackerId, "cast", Math.floor(lungeMs * 0.7), {
       element: opts.element,
       role: "cast",
+      vfxId: opts.vfxId,
     });
     opts.playCasterClip?.(attackerId, "run", { loop: false });
     const hitAt = Math.floor(lungeMs * 0.42);
@@ -809,6 +863,7 @@ export async function playSkillVfx(
       spawnSkillFx(root, attackerId, swing, fxDurationMs(360, opts.speed), {
         element: opts.element,
         role: "cast",
+        vfxId: opts.vfxId,
       });
       targets.forEach((id, i) => strikeTarget(id, i * 60, impactMs));
       opts.onImpact?.();
@@ -826,6 +881,7 @@ export async function playSkillVfx(
     spawnSkillFx(root, attackerId, "cast", chargeMs, {
       element: opts.element,
       role: "cast",
+      vfxId: opts.vfxId,
     });
     opts.playCasterClip?.(attackerId, "cast");
     const launchAt = Math.floor(chargeMs * 0.58);
@@ -852,6 +908,7 @@ export async function playSkillVfx(
     spawnSkillFx(root, attackerId, "cast", chargeMs, {
       element: opts.element,
       role: "cast",
+      vfxId: opts.vfxId,
     });
     opts.playCasterClip?.(attackerId, "cast");
     const launchAt = Math.floor(chargeMs * 0.55);
@@ -878,6 +935,7 @@ export async function playSkillVfx(
   spawnSkillFx(root, attackerId, "cast", chargeMs, {
     element: opts.element,
     role: "cast",
+    vfxId: opts.vfxId,
   });
   opts.playCasterClip?.(attackerId, "cast");
   const ids = targets.length ? targets : [attackerId];

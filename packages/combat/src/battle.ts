@@ -46,7 +46,11 @@ import {
   type BaitLure,
   type TempSeal,
 } from "./items.js";
-import { SKILL_DMG_MUL, type SkillDef } from "stonesummoner-data";
+import {
+  SKILL_DMG_MUL,
+  type SkillDef,
+  type SkillEffect,
+} from "stonesummoner-data";
 import type {
   BattlePhase,
   Element,
@@ -141,6 +145,21 @@ export interface SkillResult {
   damage: number;
   crit: boolean;
   usedSummonerSkill: boolean;
+  /** Stable skill identity for battle presentation and telemetry. */
+  skillId?: string;
+  /** Stable painted art/VFX identity. */
+  vfxId?: string;
+  /** All effects represented by this cast, including non-damage effects. */
+  effectKinds?: string[];
+}
+
+export interface SkillPresentation {
+  attackerId: string;
+  skillId: string;
+  vfxId?: string;
+  effectKinds: string[];
+  usedSummonerSkill: boolean;
+  targetIds: string[];
 }
 
 export type StoneReportChipKind =
@@ -206,6 +225,8 @@ export class Battle {
   activeUnitId: string | null = null;
   finishReason: FinishReason = null;
   log: string[] = [];
+  /** Metadata for the most recent cast, including non-damaging skills. */
+  lastSkillPresentation: SkillPresentation | null = null;
   /** Module C: fog reduces stone suggestion count. */
   fogTurns = 0;
   /** Module E/F. */
@@ -1369,6 +1390,72 @@ export class Battle {
     return sm.mana >= sm.manaMax * def.manaCostFrac;
   }
 
+  private presentationTargetIds(
+    unit: Unit,
+    effects: SkillEffect[],
+    targetId?: string,
+  ): string[] {
+    const ids = new Set<string>();
+    const foes = () =>
+      aliveSummons(
+        this.units,
+        unit.team === "ally" ? "enemy" : "ally",
+      ).map((u) => u.id);
+    const allies = () => aliveSummons(this.units, unit.team).map((u) => u.id);
+    for (const effect of effects) {
+      switch (effect.target) {
+        case "single":
+          ids.add(this.resolveSingleTarget(unit, targetId)?.id ?? unit.id);
+          break;
+        case "all_enemies":
+          foes().forEach((id) => ids.add(id));
+          break;
+        case "self":
+          ids.add(unit.id);
+          break;
+        case "ally_lowest":
+          ids.add(this.lowestAllyMonster(unit.team)?.id ?? unit.id);
+          break;
+        case "all_allies":
+          allies().forEach((id) => ids.add(id));
+          break;
+        default:
+          ids.add(unit.id);
+          break;
+      }
+    }
+    if (!ids.size) ids.add(unit.id);
+    return [...ids];
+  }
+
+  private tagSkillResults(
+    results: SkillResult[],
+    unit: Unit,
+    meta: {
+      skillId: string;
+      vfxId?: string;
+      effectKinds: string[];
+      usedSummonerSkill: boolean;
+    },
+    targetIds: string[],
+  ): SkillResult[] {
+    this.lastSkillPresentation = {
+      attackerId: unit.id,
+      skillId: meta.skillId,
+      vfxId: meta.vfxId,
+      effectKinds: meta.effectKinds,
+      usedSummonerSkill: meta.usedSummonerSkill,
+      targetIds,
+    };
+    return results.map((result) => ({
+      ...result,
+      skillId: meta.skillId,
+      vfxId: meta.vfxId,
+      effectKinds: meta.effectKinds,
+      usedSummonerSkill: meta.usedSummonerSkill || result.usedSummonerSkill,
+    }));
+  }
+
   private castMagicSkill(
     unit: Unit,
     skillId: string,
@@ -1381,6 +1468,29 @@ export class Battle {
     sm.mana = Math.max(0, sm.mana - cost);
     const power = def.power * (1 + (sm.skillPowerBonus ?? 0));
     const results: SkillResult[] = [];
+    const targetIds = this.presentationTargetIds(
+      unit,
+      [
+        ...(def.kind === "aoe_damage" || def.kind === "enemy_debuff"
+          ? [{ kind: "damage", target: "all_enemies", coeff: 0 } as const]
+          : def.kind === "single_damage"
+            ? [{ kind: "damage", target: "single", coeff: 0 } as const]
+            : [{ kind: "buff", target: "all_allies", axis: "atk", amount: 0, turns: 0 } as const]),
+      ],
+      targetId,
+    );
+    const finish = (): SkillResult[] =>
+      this.tagSkillResults(
+        results,
+        unit,
+        {
+          skillId: def.id,
+          vfxId: def.vfxId,
+          effectKinds: [def.kind],
+          usedSummonerSkill: true,
+        },
+        targetIds,
+      );
     this.log.push(`${unit.name} ${def.nameKo}`);
 
     switch (def.kind) {
@@ -1456,7 +1566,7 @@ export class Battle {
         if (this.isPhase("await_capture_shop")) {
           this.chooseCaptureShop(pickCaptureShopChoice(this.rng));
         }
-        return results;
+        return finish();
       }
       case "board_clean": {
         const center = this.pickCleanCenter(unit.team);
@@ -1487,7 +1597,7 @@ export class Battle {
     this.phase = "resolved";
     this.activeUnitId = null;
     this.checkFinish();
-    return results;
+    return finish();
   }
 
   /** 증폭선언: half mana (× cost mul) — short Amplify fix (no damage). */
@@ -1612,6 +1722,7 @@ export class Battle {
     if (this.phase !== "await_skill" || !this.activeUnitId) return [];
     const unit = this.getUnit(this.activeUnitId);
     if (!unit) return [];
+    this.lastSkillPresentation = null;
 
     const enemies = aliveSummons(
       this.units,
@@ -1773,13 +1884,38 @@ export class Battle {
           this.checkFinish();
           return results;
         }
-        results.push(this.applyHit(unit, target, unit.skillCoeff, false));
+        results.push({
+          ...this.applyHit(unit, target, unit.skillCoeff, false),
+          skillId: "basic",
+          effectKinds: ["damage"],
+        });
       }
     } else {
       // Requested summoner skill but not ready — no-op
       return [];
     }
 
+    const output = summonerSkill
+      ? this.tagSkillResults(
+          results,
+          unit,
+          {
+            skillId: summonerSkill,
+            vfxId: `summoner:legacy-${summonerSkill}`,
+            effectKinds: [summonerSkill],
+            usedSummonerSkill: true,
+          },
+          this.presentationTargetIds(
+            unit,
+            [
+              summonerSkill === "open"
+                ? ({ kind: "damage", target: "all_enemies", coeff: 0 } as const)
+                : ({ kind: "buff", target: "all_allies", axis: "atk", amount: 0, turns: 0 } as const),
+            ],
+            opts?.targetId,
+          ),
+        )
+      : results;
     this.attackTurnCount += 1;
     this.skillAmplifyBonus = 0;
     // Violent: extra turn (not from counter)
@@ -1795,12 +1931,12 @@ export class Battle {
       this.phase = "await_skill";
       this.activeUnitId = unit.id;
       this.checkFinish();
-      return results;
+      return output;
     }
     this.phase = "resolved";
     this.activeUnitId = null;
     this.checkFinish();
-    return results;
+    return output;
   }
 
   private resolveSingleTarget(
@@ -1832,6 +1968,7 @@ export class Battle {
     targetId?: string,
   ): SkillResult[] {
     const results: SkillResult[] = [];
+    const targetIds = this.presentationTargetIds(unit, skill.effects, targetId);
     this.log.push(`${unit.name} ${skill.nameKo}`);
     for (const effect of skill.effects) {
       if (effect.kind === "damage") {
@@ -1996,7 +2133,17 @@ export class Battle {
     }
     const cds = ensureSkillCd(unit);
     cds[skillIndex] = skill.cooldown;
-    return results;
+    return this.tagSkillResults(
+      results,
+      unit,
+      {
+        skillId: skill.id,
+        vfxId: skill.vfxId,
+        effectKinds: skill.effects.map((effect) => effect.kind),
+        usedSummonerSkill: false,
+      },
+      targetIds,
+    );
   }
 
   private applyBoardAuraToTeam(

@@ -33,6 +33,11 @@ const monsterOnly = args.includes("--monster-only");
 const SUMMONER_ELEMENTS = ["fire", "water", "wind", "light", "dark"];
 const monsterBattleAssets = path.join(root, "assets", "monster", "battle");
 const summonerBattleDir = path.join(root, "apps/web/public/art/summoner/battle");
+const summonerBattleAssetDirs = [
+  path.join(root, "assets", "summoner", "battle"),
+  path.join(root, "assets", "summoner"),
+  summonerBattleDir,
+];
 
 function log(msg) {
   const line = `[batch-transparent] ${msg}`;
@@ -80,14 +85,17 @@ async function installSummonerBattle() {
   let n = 0;
   for (const el of SUMMONER_ELEMENTS) {
     for (const facing of ["front", "back"]) {
-      const png = path.join(summonerBattleDir, `${el}-${facing}.png`);
+      const source = summonerBattleAssetDirs
+        .flatMap((dir) =>
+          [".webp", ".png"].map((ext) => path.join(dir, `${el}-${facing}${ext}`)),
+        )
+        .find((candidate) => fs.existsSync(candidate));
       const webp = path.join(summonerBattleDir, `${el}-${facing}.webp`);
-      if (!fs.existsSync(png)) {
-        log(`missing summoner ${el}-${facing}.png`);
+      if (!source) {
+        log(`missing summoner ${el}-${facing} source`);
         continue;
       }
-      if (!skipFix) await fixPngInPlace(png);
-      await installBattlePng(png, webp);
+      await installBattlePng(source, webp);
       n += 1;
       log(`summoner ${el}-${facing}.webp`);
     }
@@ -128,7 +136,12 @@ async function main() {
     const sn = await installSummonerBattle();
     log(`summoner battle webps=${sn}`);
     log("summoner + monster portraits...");
-    if (!runNodeScript("scripts/process-all-portraits.mjs")) {
+    if (
+      !runNodeScript(
+        "scripts/process-all-portraits.mjs",
+        summonerOnly ? ["--summoner-only"] : [],
+      )
+    ) {
       process.exit(1);
     }
   }

@@ -33,6 +33,7 @@ import {
   MONSTER_ART_KEYS,
   artKeysForFamilies,
   FAMILY_IDS,
+  familyIdFromArtKey,
 } from "./lib/monster-art-roster.mjs";
 import {
   PAINTED_BATTLE_DEMATTE,
@@ -63,6 +64,11 @@ const assetsRoot =
     process.env.USERPROFILE || "",
     ".cursor/projects/c-project-StoneSummoner/assets",
   );
+const transparentBattleAssetsDir = path.join(
+  assetsRoot,
+  "monster",
+  "battle-transparent",
+);
 const battleAssetsDir = path.join(assetsRoot, "monster", "battle");
 const portraitAssetsDir = path.join(assetsRoot, "monster", "portraits");
 const battleOutDir = path.join(root, "apps/web/public/art/monster/battle");
@@ -87,14 +93,22 @@ const MONSTER_ALIAS = {
   thunder_lancer: "thunder_spear_light",
 };
 
-const BUST_ZOOM = 0.52;
-const BUST_TOP_RATIO = 0.06;
+const BUST_ZOOM = 0.44;
+const BUST_TOP_RATIO = 0.03;
 
 function resolveImageSrc(name, kind = "battle") {
   const dirs =
     kind === "portrait"
       ? [portraitAssetsDir, assetsRoot]
-      : [battleAssetsDir, assetsRoot];
+      : [
+          transparentBattleAssetsDir,
+          path.join(
+            transparentBattleAssetsDir,
+            familyIdFromArtKey(name.replace(/-(?:awaken-)?(?:front|back)$/, "")),
+          ),
+          battleAssetsDir,
+          assetsRoot,
+        ];
   for (const dir of dirs) {
     const webp = path.join(dir, `${name}.webp`);
     if (fs.existsSync(webp)) return webp;

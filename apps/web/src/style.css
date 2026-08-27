@@ -11649,6 +11649,30 @@ button.battle-unit {
   mix-blend-mode: screen;
 }
 
+.skfx-img--signature {
+  z-index: 4;
+  inset: 12%;
+  width: 76%;
+  height: 76%;
+  opacity: 0.94;
+  animation: skfx-signature-play var(--skfx-ms, 0.56s) ease-out both;
+}
+
+.skill-fx--profile-1 {
+  --skfx-signature-start-rotate: 8deg;
+  --skfx-signature-end-rotate: -12deg;
+}
+
+.skill-fx--profile-2 {
+  --skfx-signature-start-rotate: -16deg;
+  --skfx-signature-end-rotate: 18deg;
+}
+
+.skill-fx--profile-3 {
+  --skfx-signature-start-rotate: 4deg;
+  --skfx-signature-end-rotate: 28deg;
+}
+
 .skfx-img--flash {
   z-index: 5;
   mix-blend-mode: plus-lighter;
@@ -12155,6 +12179,13 @@ button.battle-unit {
   10% { opacity: 0.9; transform: scale(1.02) rotate(0deg); }
   26% { opacity: 0.45; transform: scale(1.12) rotate(2deg); }
   100% { opacity: 0; transform: scale(1.28) rotate(4deg); }
+}
+
+@keyframes skfx-signature-play {
+  0% { opacity: 0; transform: scale(0.52) rotate(var(--skfx-signature-start-rotate, -8deg)); }
+  18% { opacity: 0.98; transform: scale(0.92) rotate(0deg); }
+  52% { opacity: 0.9; transform: scale(1.04) rotate(4deg); }
+  100% { opacity: 0; transform: scale(1.2) rotate(var(--skfx-signature-end-rotate, 10deg)); }
 }
 
 @keyframes skfx-slash-play {

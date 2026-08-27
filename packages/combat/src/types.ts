@@ -134,6 +134,7 @@ export interface SummonerState {
     power: number;
     turns?: number;
     descKo?: string;
+    vfxId?: string;
     vfxFamily?: "melee" | "bolt" | "nova" | "support";
     orbBolt?: boolean;
   }>;

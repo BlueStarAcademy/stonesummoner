@@ -15,7 +15,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
-import { PORTRAIT_DEMATTE, rawRgbaToWebp } from "./lib/dematte-webp.mjs";
+import {
+  PORTRAIT_DEMATTE,
+  TRANSPARENT_PORTRAIT_INSTALL,
+  detectChromaPlate,
+  detectCheckerboardPlate,
+  detectInteriorChromaPlate,
+  dematteBuffer,
+  processChromaBattleRgba,
+  rawRgbaToTransparentWebp,
+  rawRgbaToDematteWebp,
+} from "./lib/dematte-webp.mjs";
 import {
   MONSTER_ART_KEYS,
   familyIdFromArtKey,
@@ -39,8 +49,8 @@ const only = argVal("--only")
   .map((s) => s.trim())
   .filter(Boolean);
 
-const ZOOM = 0.52;
-const BUST_TOP_RATIO = 0.06;
+const ZOOM = 0.44;
+const BUST_TOP_RATIO = 0.03;
 const SIZE = PORTRAIT_DEMATTE.size;
 
 /** Legacy family aliases share one bust crop. */
@@ -65,7 +75,14 @@ async function bustCropRaw(srcPath) {
   const top = Math.max(0, Math.min(Math.round(h * BUST_TOP_RATIO), h - crop));
   return sharp(srcPath)
     .extract({ left, top, width: crop, height: crop })
-    .resize(SIZE, SIZE, { fit: "fill" })
+    .resize(SIZE - 96, SIZE - 96, { fit: "fill" })
+    .extend({
+      top: 48,
+      bottom: 48,
+      left: 48,
+      right: 48,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -115,7 +132,54 @@ function resolveStillSrc(battleDir, key, awaken = false) {
 async function writePortrait(srcPath, destWebp) {
   const { data, info } = await bustCropRaw(srcPath);
   const rgba = new Uint8ClampedArray(data);
-  await rawRgbaToWebp(rgba, info.width, info.height, destWebp, PORTRAIT_DEMATTE);
+  const hasChromaPlate =
+    (await detectChromaPlate(srcPath)) ||
+    (await detectInteriorChromaPlate(srcPath));
+  if (hasChromaPlate) {
+    await processChromaBattleRgba(
+      rgba,
+      info.width,
+      info.height,
+      TRANSPARENT_PORTRAIT_INSTALL,
+    );
+    await rawRgbaToTransparentWebp(
+      rgba,
+      info.width,
+      info.height,
+      destWebp,
+      TRANSPARENT_PORTRAIT_INSTALL,
+    );
+    return;
+  }
+  if (await detectCheckerboardPlate(srcPath)) {
+    await dematteBuffer(rgba, info.width, info.height, 36, {
+      plateCheckerboard: true,
+      checkerLumMin: 115,
+    });
+    await rawRgbaToTransparentWebp(
+      rgba,
+      info.width,
+      info.height,
+      destWebp,
+      TRANSPARENT_PORTRAIT_INSTALL,
+    );
+    return;
+  }
+  await rawRgbaToDematteWebp(
+    rgba,
+    info.width,
+    info.height,
+    destWebp,
+    {
+      ...PORTRAIT_DEMATTE,
+      // Battle stills can carry a near-black (not exact #000) plate.
+      // Keep the flatness gate, but allow the portrait dematte to remove it.
+      lim: 44,
+      plateOnly: false,
+      chromaMax: 8,
+      flatRange: 4,
+    },
+  );
 }
 
 async function processMonsterArtKey(key, battleDir, outDir, awaken = false) {
@@ -165,18 +229,9 @@ if (!summonerOnly) {
   const battleDir = path.join(root, "apps/web/public/art/monster/battle");
   const outDir = path.join(root, "apps/web/public/art/monster");
 
-  const keysFromDisk = fs
-    .readdirSync(battleDir)
-    .filter((f) => f.endsWith("-front.webp") || f.endsWith("-front.png"))
-    .map((f) =>
-      f
-        .replace(/-awaken-front\.(webp|png)$/i, "")
-        .replace(/-front\.(webp|png)$/i, ""),
-    )
-    .filter((k, i, arr) => arr.indexOf(k) === i)
-    .sort();
-
-  const keys = keysFromDisk.length > 0 ? keysFromDisk : [...MONSTER_ART_KEYS];
+  // Process catalog art keys only. Generic family files are legacy fallbacks
+  // and can produce tight, opaque portraits that are never selected in-game.
+  const keys = [...MONSTER_ART_KEYS];
 
   for (const key of keys) {
     if (!awakenOnly) {

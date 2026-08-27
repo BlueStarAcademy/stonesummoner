@@ -1,6 +1,7 @@
 import { SKILL_DMG_MUL } from "./combatTune.js";
 import type { Element } from "./monsters.js";
 import { summonerSkillDescKo, summonerSkillVfx } from "./summonerSkillMeta.js";
+import { summonerSkillVfxId } from "./skillVisuals.js";
 
 export type MagicBranch = "A" | "B";
 
@@ -66,6 +67,8 @@ export interface SummonerMagicSkillDef {
   rankScale?: number;
   /** Flavor description shown in UI. */
   descKo?: string;
+  /** Stable art/VFX identity. */
+  vfxId?: string;
   /** Battle VFX routing override. */
   vfxFamily?: "melee" | "bolt" | "nova" | "support";
   /** Projectile travels as a glowing orb. */
@@ -638,6 +641,7 @@ for (const kit of Object.values(SUMMONER_KITS)) {
     const vfx = summonerSkillVfx(sk.kind, sk.manaCostFrac);
     sk.descKo = summonerSkillDescKo(sk.kind, kit.element);
     sk.vfxFamily = vfx.vfxFamily;
+    sk.vfxId = summonerSkillVfxId(sk.id);
     if (vfx.orbBolt) sk.orbBolt = true;
   }
 }

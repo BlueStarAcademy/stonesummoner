@@ -13,6 +13,17 @@ export type { MonsterDef, Element, MonsterRole, FamilySeed } from "./monsters.js
 export { SKILL_DMG_MUL, scenarioEnemyHpMul } from "./combatTune.js";
 export { basicStrike, dmg } from "./skills.js";
 export type { SkillDef, SkillEffect, StatModAxis, CcKind } from "./skills.js";
+export {
+  describeSkillVfx,
+  monsterSkillVfxId,
+  summonerSkillVfxId,
+} from "./skillVisuals.js";
+export type {
+  SkillVisualDescriptor,
+  SkillVisualElement,
+  SkillVisualIntensity,
+  SkillVisualMotion,
+} from "./skillVisuals.js";
 export { STONE_PASSIVE_LABEL } from "./stonePassives.js";
 export type { StonePassiveId } from "./stonePassives.js";
 export {

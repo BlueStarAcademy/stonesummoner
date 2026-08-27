@@ -150,6 +150,7 @@ import {
   type Battle,
   type CaptureShopChoice,
   type SkillResult,
+  type SkillPresentation,
   type StoneReport,
   type StoneReportChip,
   type StoneSuggestion,
@@ -5999,6 +6000,8 @@ function resolveActiveUnitSkillHits(unit: Unit): {
   sfxKind: CombatSfxKind;
   vfxFamily?: import("./battle/skillVfx").SkillVfxFamily;
   orbBolt?: boolean;
+  vfxId?: string;
+  presentation?: SkillPresentation | null;
 } {
   if (!battle) return { hits: [], sfxKind: "single" };
   const magics = battle.summonerOf(unit.team).magicSkills ?? [];
@@ -6006,66 +6009,85 @@ function resolveActiveUnitSkillHits(unit: Unit): {
     (s) => s.manaCostFrac >= 0.95 && battle!.canUseMagicSkill(unit, s.id),
   );
   if (full) {
+    const hits = battle.useSkill({ summonerSkill: full.id });
     return {
-      hits: battle.useSkill({ summonerSkill: full.id }),
+      hits,
       sfxKind: magicKindFromKind(full.kind),
       vfxFamily: full.vfxFamily,
       orbBolt: full.orbBolt,
+      vfxId: full.vfxId,
+      presentation: battle.lastSkillPresentation,
     };
   }
   const any = magics.find((s) => battle!.canUseMagicSkill(unit, s.id));
   if (any) {
+    const hits = battle.useSkill({ summonerSkill: any.id });
     return {
-      hits: battle.useSkill({ summonerSkill: any.id }),
+      hits,
       sfxKind: magicKindFromKind(any.kind),
       vfxFamily: any.vfxFamily,
       orbBolt: any.orbBolt,
+      vfxId: any.vfxId,
+      presentation: battle.lastSkillPresentation,
     };
   }
   if (battle.canUseSummonerSkill(unit)) {
+    const hits = battle.useSkill({ summonerSkill: "open" });
     return {
-      hits: battle.useSkill({ summonerSkill: "open" }),
+      hits,
       sfxKind: magicKindFromId("open"),
+      presentation: battle.lastSkillPresentation,
     };
   }
   if (
     battle.canUseSummonerClean(unit) &&
     battle.countEnemyStones(unit.team) >= 4
   ) {
+    const hits = battle.useSkill({ summonerSkill: "clean" });
     return {
-      hits: battle.useSkill({ summonerSkill: "clean" }),
+      hits,
       sfxKind: magicKindFromId("clean"),
+      presentation: battle.lastSkillPresentation,
     };
   }
   if (
     battle.canUseSummonerGuard(unit) &&
     battle.allyMonstersWounded(unit.team, 0.55)
   ) {
+    const hits = battle.useSkill({ summonerSkill: "guard" });
     return {
-      hits: battle.useSkill({ summonerSkill: "guard" }),
+      hits,
       sfxKind: magicKindFromId("guard"),
+      presentation: battle.lastSkillPresentation,
     };
   }
   if (battle.canUseSummonerDeclare(unit)) {
+    const hits = battle.useSkill({ summonerSkill: "declare" });
     return {
-      hits: battle.useSkill({ summonerSkill: "declare" }),
+      hits,
       sfxKind: magicKindFromId("declare"),
+      presentation: battle.lastSkillPresentation,
     };
   }
   if (battle.canUseSummonerDual(unit)) {
+    const hits = battle.useSkill({ summonerSkill: "dual" });
     return {
-      hits: battle.useSkill({ summonerSkill: "dual" }),
+      hits,
       sfxKind: magicKindFromId("dual"),
+      presentation: battle.lastSkillPresentation,
     };
   }
   const targetId = unit.team === "ally" ? ensureTarget() : undefined;
   const skillIndex = pickAutoSkillIndex(unit, battle.units);
   const skill = unit.skills?.[skillIndex];
+  const hits = battle.useSkill({ skillIndex, targetId });
   return {
-    hits: battle.useSkill({ skillIndex, targetId }),
+    hits,
     sfxKind: kindFromEffects(skill?.effects),
     vfxFamily: skill?.vfxFamily,
     orbBolt: skill?.orbBolt,
+    vfxId: skill?.vfxId,
+    presentation: battle.lastSkillPresentation,
   };
 }
 
@@ -6262,16 +6284,35 @@ async function resolveCombatUntilAllyInput(opts?: {
           render();
           return;
         }
-        const { hits, sfxKind, vfxFamily, orbBolt } = resolveActiveUnitSkillHits(unit);
+        const { hits, sfxKind, vfxFamily, orbBolt, vfxId, presentation } =
+          resolveActiveUnitSkillHits(unit);
         refreshBattleSkipReady();
-        if (battle.phase === "await_skill" && !hits.length) {
+        if (battle.phase === "await_skill" && !hits.length && !presentation) {
           // Skill no-op / soft — end the turn so we never spin.
           battle.phase = "resolved";
           battle.activeUnitId = null;
           continue;
         }
-        const ult = hits.some((h) => h.usedSummonerSkill);
-        await playStrikeFx(hits, { ult, sfxKind, vfxFamily, orbBolt });
+        const visualHits = presentation
+          ? presentation.targetIds.map((targetId) => ({
+              attackerId: presentation.attackerId,
+              targetId,
+              damage: 0,
+              crit: false,
+              usedSummonerSkill: presentation.usedSummonerSkill,
+            }))
+          : hits;
+        const ult =
+          presentation?.usedSummonerSkill || hits.some((h) => h.usedSummonerSkill);
+        await playStrikeFx(visualHits, {
+          ult,
+          sfxKind,
+          vfxFamily,
+          orbBolt,
+          vfxId,
+          presentation,
+          resultHits: hits,
+        });
         if (battleSkipSeq !== skipSeq) return;
         refreshLegal();
         render();
@@ -6461,28 +6502,44 @@ async function playStrikeFx(
     sfxKind?: CombatSfxKind;
     vfxFamily?: import("./battle/skillVfx").SkillVfxFamily;
     orbBolt?: boolean;
+    vfxId?: string;
+    presentation?: SkillPresentation | null;
+    resultHits?: SkillResult[];
   },
 ): Promise<void> {
-  if (!hits.length) {
-    pushDamageFloats(hits);
+  const resultHits = opts?.resultHits ?? hits;
+  const visualHits =
+    hits.length > 0
+      ? hits
+      : opts?.presentation?.targetIds.map((targetId) => ({
+          attackerId: opts.presentation!.attackerId,
+          targetId,
+          damage: 0,
+          crit: false,
+          usedSummonerSkill: opts.presentation!.usedSummonerSkill,
+        })) ?? [];
+  if (!visualHits.length) {
+    pushDamageFloats(resultHits);
     return;
   }
-  const attacker = battle?.getUnit(hits[0]!.attackerId) ?? null;
+  const attacker = battle?.getUnit(visualHits[0]!.attackerId) ?? null;
   const element = combatElementOf(attacker);
-  const kind = opts?.sfxKind ?? inferCombatSfxKind(hits);
-  playCombatCastSfx(element, kind, { ult: opts?.ult });
-  const crit = hits.some((h) => h.crit);
-  await playSkillVfx(app, hits, {
+  const kind = opts?.sfxKind ?? inferCombatSfxKind(resultHits);
+  const ult = opts?.ult ?? resultHits.some((h) => h.usedSummonerSkill);
+  playCombatCastSfx(element, kind, { ult });
+  const crit = resultHits.some((h) => h.crit);
+  await playSkillVfx(app, visualHits, {
     kind,
     element,
     speed: battleSpeed,
-    ult: opts?.ult,
+    ult,
     crit,
     vfxFamily: opts?.vfxFamily,
     orbBolt: opts?.orbBolt,
+    vfxId: opts?.vfxId ?? opts?.presentation?.vfxId ?? resultHits[0]?.vfxId,
     onImpact: () => {
-      playCombatHitSfxForHits(hits, element);
-      pushDamageFloats(hits);
+      playCombatHitSfxForHits(resultHits, element);
+      pushDamageFloats(resultHits);
     },
     playCasterClip: (id, clip, clipOpts) => playSpineClip(id, clip, clipOpts),
   });
@@ -6515,12 +6572,16 @@ async function castSkillAsync(
         sfxKind?: CombatSfxKind;
         vfxFamily?: import("./battle/skillVfx").SkillVfxFamily;
         orbBolt?: boolean;
+        vfxId?: string;
       },
     ) => {
       refreshBattleSkipReady();
       clearBattleSkillSelection();
       selectedTargetId = null;
-      await playStrikeFx(hits, opts);
+      await playStrikeFx(hits, {
+        ...opts,
+        presentation: battle?.lastSkillPresentation,
+      });
       await resolveCombatUntilAllyInput({ holdBusy: true });
     };
 
@@ -6557,6 +6618,7 @@ async function castSkillAsync(
           sfxKind: magicKindFromKind(def.kind),
           vfxFamily: def.vfxFamily,
           orbBolt: def.orbBolt,
+          vfxId: def.vfxId,
         });
         return;
       }
@@ -6584,6 +6646,7 @@ async function castSkillAsync(
           sfxKind: magicKindFromKind(full.kind),
           vfxFamily: full.vfxFamily,
           orbBolt: full.orbBolt,
+          vfxId: full.vfxId,
         });
         return;
       }
@@ -6660,7 +6723,7 @@ async function castSkillAsync(
       return;
     }
     const hits = battle.useSkill({ skillIndex, targetId });
-    if (!hits.length) {
+    if (!hits.length && !battle.lastSkillPresentation) {
       flash(t("ui.b72f5a4752"));
       render();
       return;
@@ -6670,6 +6733,7 @@ async function castSkillAsync(
       sfxKind: kindFromEffects(skill?.effects),
       vfxFamily: skill?.vfxFamily,
       orbBolt: skill?.orbBolt,
+      vfxId: skill?.vfxId,
     });
   } finally {
     battleFxBusy = false;
@@ -13219,53 +13283,27 @@ function monsterElementArtSrc(el: string | undefined | null): string | null {
   return `/art/ui/element/${el}.webp`;
 }
 
-function monsterSkillSlotIndex(
-  skillIndex: number,
-  skill?: { id?: string } | null,
-): number {
-  const id = skill?.id;
-  if (id === "s1") return 0;
-  if (id === "s2") return 1;
-  if (id === "s3") return 2;
-  return skillIndex;
-}
-
 function monsterSkillArtFallbacks(
-  monsterId: string | undefined | null,
-  skillIndex: number,
+  _monsterId: string | undefined | null,
+  _skillIndex: number,
   skill?: {
     id?: string;
+    vfxId?: string;
     effects?: { kind: string }[];
   } | null,
 ): string[] {
-  const slotIdx = monsterSkillSlotIndex(skillIndex, skill);
-  const slot = slotIdx + 1;
-  const out: string[] = [];
-  const def = monsterId ? getMonster(monsterId) : null;
-  const familyKey = getMonsterFamilyArtKey(monsterId) ?? def?.familyId;
-  const el = def?.element;
-  const artKey = def?.artKey ?? getMonsterArtKey(monsterId);
-  const pushMonsterSkillPaths = (key: string, includeGeneric: boolean) => {
-    if (el) out.push(`/art/monster/skill/${key}-${el}-s${slot}.webp`);
-    if (includeGeneric) out.push(`/art/monster/skill/${key}-s${slot}.webp`);
-  };
-  if (slotIdx >= 0 && slotIdx <= 2 && familyKey) {
-    pushMonsterSkillPaths(familyKey, !el);
-    if (artKey && artKey !== familyKey) pushMonsterSkillPaths(artKey, !el);
-  }
   const kind = skill?.effects?.[0]?.kind;
-  if (!familyKey) {
-    if (kind === "heal") {
-      out.push("/art/ui/skill/heal.webp");
-    } else if (kind === "shield") {
-      out.push("/art/ui/skill/shield.webp");
-    } else if (kind === "mana") {
-      out.push("/art/ui/skill/mana.webp");
-    } else {
-      out.push("/art/ui/skill/damage.webp");
-    }
-  }
-  return [...new Set(out)];
+  const effectArt =
+    kind === "heal"
+      ? "/art/ui/skill/heal.webp"
+      : kind === "shield"
+        ? "/art/ui/skill/shield.webp"
+        : kind === "mana"
+          ? "/art/ui/skill/mana.webp"
+          : "/art/ui/skill/damage.webp";
+  // Monster battle art is never a skill-art fallback. Until a dedicated
+  // painted monster skill asset exists, use the semantic effect icon.
+  return [effectArt];
 }
 
 function monsterSkillArtSrc(
@@ -13273,6 +13311,7 @@ function monsterSkillArtSrc(
   skillIndex: number,
   skill?: {
     id?: string;
+    vfxId?: string;
     effects?: { kind: string }[];
   } | null,
 ): string {
@@ -13285,7 +13324,10 @@ function monsterSkillArtSrc(
 function monsterSkillArtImg(
   monsterId: string | undefined | null,
   skillIndex: number,
-  skill: { id?: string; effects?: { kind: string }[] } | null | undefined,
+  skill:
+    | { id?: string; vfxId?: string; effects?: { kind: string }[] }
+    | null
+    | undefined,
   className: string,
   size: number,
 ): string {
