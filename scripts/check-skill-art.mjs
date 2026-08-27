@@ -12,7 +12,13 @@ import { readLock, shipDir } from "./lib/skill-art-lock.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const strict = process.argv.includes("--strict");
-const MIN_PAINTED_BYTES = 20_000;
+const MIN_PAINTED_BYTES = {
+  // Monster skill art is painted character-specific art when supplied.
+  monster: 20_000,
+  // Effect and summoner icons are compact vector-derived painted WebP.
+  ui: 4_000,
+  summoner: 4_000,
+};
 const kinds = ["monster", "ui", "summoner"];
 
 const bad = [];
@@ -27,7 +33,7 @@ for (const kind of kinds) {
     const size = fs.statSync(full).size;
     const source = lock.locked?.[name];
     if (
-      size < MIN_PAINTED_BYTES ||
+      size < (MIN_PAINTED_BYTES[kind] ?? 4_000) ||
       source === "procedural-ship" ||
       (strict && source !== "painted")
     ) {

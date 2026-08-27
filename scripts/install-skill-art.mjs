@@ -83,6 +83,12 @@ if (fileStem) {
 } else {
   const staging = SOURCE_DIRS[0];
   if (!fs.existsSync(staging)) {
+    if (kind === "monster") {
+      console.log(
+        "No monster skill staging: runtime uses dedicated effect icons until painted monster skill art is supplied",
+      );
+      process.exit(0);
+    }
     console.error(`No staging dir: ${staging}`);
     console.error("Drop painted PNGs there, or pass --file stem --lock-ship");
     process.exit(1);

@@ -1,9 +1,11 @@
 /**
- * Generate painted-style skill icon PNGs from HQ battle stills → staging.
- * Then run: npm run skill-art:install (all kinds)
+ * Generate non-character skill icon PNGs for UI and summoner skills.
+ *
+ * Monster battle stills are deliberately excluded: a character image must
+ * never become a skill icon. Dedicated painted monster skill sources can be
+ * installed separately through scripts/install-skill-art.mjs.
  *
  *   node scripts/generate-skill-art-from-battle.mjs
- *   node scripts/generate-skill-art-from-battle.mjs --families wolf_fighter,cinder_imp
  */
 import fs from "node:fs";
 import path from "node:path";
