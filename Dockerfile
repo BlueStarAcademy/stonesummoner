@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY apps ./apps
 COPY packages ./packages
+COPY scripts ./scripts
 RUN npm install
 RUN npm run build
 
