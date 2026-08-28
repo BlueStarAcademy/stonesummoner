@@ -2,9 +2,9 @@
 	"skeleton": {
 		"hash": "fire_fang_pilot",
 		"spine": "4.2.33",
-		"x": -170.5,
+		"x": -163,
 		"y": 0,
-		"width": 341,
+		"width": 326,
 		"height": 512,
 		"images": "./",
 		"audio": ""
@@ -106,7 +106,7 @@
 				"body": {
 					"body": {
 						"name": "body_front",
-						"width": 341,
+						"width": 326,
 						"height": 512,
 						"x": 0,
 						"y": 256
@@ -120,7 +120,7 @@
 				"body": {
 					"body": {
 						"name": "body_front",
-						"width": 341,
+						"width": 326,
 						"height": 512,
 						"x": 0,
 						"y": 256
@@ -134,7 +134,7 @@
 				"body": {
 					"body": {
 						"name": "body_back",
-						"width": 341,
+						"width": 273,
 						"height": 512,
 						"x": 0,
 						"y": 256

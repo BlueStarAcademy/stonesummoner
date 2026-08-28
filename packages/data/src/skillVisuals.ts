@@ -27,6 +27,36 @@ export function summonerSkillVfxId(skillId: string): string {
   return `summoner:${skillId}`;
 }
 
+/**
+ * Resolve the single painted ship asset for a runtime skill.
+ *
+ * Deliberately has no generic, family, SVG, or procedural fallback: every
+ * runtime skill has a dedicated WebP and missing art must fail visibly.
+ */
+export function skillIconPath(vfxId: string | undefined | null): string | null {
+  if (!vfxId) return null;
+  const parts = vfxId.split(":");
+  if (
+    parts.length === 4 &&
+    parts[0] === "monster" &&
+    /^[a-z0-9_]+$/.test(parts[1]!) &&
+    (["fire", "water", "wind", "light", "dark"] as const).includes(
+      parts[2] as SkillVisualElement,
+    ) &&
+    (["s1", "s2", "s3"] as const).includes(parts[3] as "s1" | "s2" | "s3")
+  ) {
+    return `/art/monster/skill/${parts[1]}-${parts[2]}-${parts[3]}.webp`;
+  }
+  if (
+    parts.length === 2 &&
+    parts[0] === "summoner" &&
+    /^[a-z0-9_]+$/.test(parts[1]!)
+  ) {
+    return `/art/summoner/skill/${parts[1]}.webp`;
+  }
+  return null;
+}
+
 function intensityForSlot(slot: string): SkillVisualIntensity {
   if (slot === "s3" || slot === "A" || slot === "A3" || slot === "A4") {
     return "ultimate";

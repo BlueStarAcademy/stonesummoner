@@ -1,11 +1,8 @@
 /**
- * Process painted skill / gear / generic UI PNGs → WebP.
+ * Process painted gear / generic UI / battle PNGs → WebP.
  * Scans given dirs for *.png and converts.
  * Usage:
- *   node scripts/process-paint-icons.mjs ui-skill
  *   node scripts/process-paint-icons.mjs ui-gear
- *   node scripts/process-paint-icons.mjs monster-skill
- *   node scripts/process-paint-icons.mjs summoner-skill
  *   node scripts/process-paint-icons.mjs monster-portrait
  *   node scripts/process-paint-icons.mjs battle-still
  *   node scripts/process-paint-icons.mjs battle-fx
@@ -14,23 +11,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pngToDematteWebp } from "./lib/dematte-webp.mjs";
-import { lockFile } from "./lib/skill-art-lock.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAP = {
-  "ui-skill": { dir: "apps/web/public/art/ui/skill", size: 256, lockKind: "ui" },
   "ui-gear": { dir: "apps/web/public/art/ui/gear", size: 512 },
   "ui-res": { dir: "apps/web/public/art/ui/res", size: 256 },
-  "monster-skill": {
-    dir: "apps/web/public/art/monster/skill",
-    size: 256,
-    lockKind: "monster",
-  },
-  "summoner-skill": {
-    dir: "apps/web/public/art/summoner/skill",
-    size: 256,
-    lockKind: "summoner",
-  },
   "monster-portrait": { dir: "apps/web/public/art/monster", size: 768, flat: true },
   "battle-still": { dir: "apps/web/public/art/monster/battle", size: 1024 },
   "battle-fx": { dir: "apps/web/public/art/battle/fx", size: 512, fit: "contain", lim: 32 },
@@ -63,9 +48,6 @@ for (const f of files) {
     lim: cfg.lim,
   });
   fs.unlinkSync(png);
-  if (cfg.lockKind) {
-    lockFile(root, cfg.lockKind, path.basename(webp), "painted");
-  }
   n += 1;
   console.log(`wrote ${path.basename(webp)}`);
 }

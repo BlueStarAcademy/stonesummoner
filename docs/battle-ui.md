@@ -67,10 +67,18 @@ flowchart TB
 
 ### 캐릭터 아트 (Spine)
 
-- 등록 팩만 Spine 마운트: 현재 `fire_fang` ([`docs/art/spine/fire_fang-brief.md`](art/spine/fire_fang-brief.md))
+- 전열 기본 자산은 투명 1024×1024 front/back painted WebP
+- 아군/적군 전열은 공통 depth 변수로 perspective·거리·접지 그림자를 합성하며 원화 색상 필터는 사용하지 않음
+- 등록 팩만 Spine 마운트: 현재 파일럿 `fire_fang` ([`docs/art/spine/fire_fang-brief.md`](art/spine/fire_fang-brief.md))
 - 그 외 유닛/북 유닛은 WebP 전신 유지
+- Spine 로드 실패 시 painted WebP를 숨기지 않고 즉시 fallback
 - `public/art/spine/pilot/`(spineboy)는 개발용 — 전투/북에 노출하지 않음
 - 아군 레인 `back` / 적 레인 `front` 스킨 (미러만으로 대체 금지)
+
+파일럿 성능 기준:
+- 유닛당 canvas 1개, 렌더 해상도는 DPR 1.5 이하, `low-power` GPU 사용
+- 일반 88×132 슬롯의 최대 backing buffer는 약 132×198(단일 RGBA 버퍼 약 102KB)
+- 동시 Spine 확대 전 Android WebView에서 프레임·GPU 메모리를 다시 측정
 
 ---
 

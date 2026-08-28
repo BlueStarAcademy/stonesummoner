@@ -1,6 +1,4 @@
-/**
- * Ship skill WebP lock — procedural bake/gen must never overwrite these files.
- */
+/** Ship skill WebP lock — only approved painted installs may write entries. */
 import fs from "node:fs";
 import path from "node:path";
 
@@ -37,8 +35,7 @@ export function writeLock(root, kind, data) {
 export function isLocked(root, kind, fileName) {
   const data = readLock(root, kind);
   const entry = data.locked?.[fileName];
-  if (entry === "painted" || entry === "ship") return true;
-  return false;
+  return entry === "painted";
 }
 
 export function lockFile(root, kind, fileName, source = "painted") {
@@ -46,20 +43,4 @@ export function lockFile(root, kind, fileName, source = "painted") {
   data.locked ??= {};
   data.locked[fileName] = source;
   writeLock(root, kind, data);
-}
-
-export function lockAllShipWebp(root, kind = "monster") {
-  const dir = shipDir(root, kind);
-  if (!fs.existsSync(dir)) return 0;
-  const data = readLock(root, kind);
-  data.locked ??= {};
-  let n = 0;
-  for (const name of fs.readdirSync(dir)) {
-    if (!name.endsWith(".webp")) continue;
-    if (name.startsWith(".")) continue;
-    data.locked[name] = data.locked[name] ?? "ship";
-    n += 1;
-  }
-  writeLock(root, kind, data);
-  return n;
 }

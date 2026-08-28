@@ -12,7 +12,6 @@
  *   node scripts/install-skill-art.mjs
  *   node scripts/install-skill-art.mjs --kind ui
  *   node scripts/install-skill-art.mjs --file capture_hound-fire-s1
- *   node scripts/install-skill-art.mjs --lock-ship
  *   node scripts/install-skill-art.mjs --force
  */
 import fs from "node:fs";
@@ -22,9 +21,7 @@ import { imageToDematteWebp } from "./lib/dematte-webp.mjs";
 import {
   isLocked,
   lockFile,
-  lockAllShipWebp,
   shipDir,
-  SKILL_SHIP_DIRS,
 } from "./lib/skill-art-lock.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -59,12 +56,6 @@ const DEMATTE = {
   quality: 92,
 };
 
-if (args.includes("--lock-ship")) {
-  const n = lockAllShipWebp(root, kind);
-  console.log(`locked ${n} ship webp in ${SKILL_SHIP_DIRS[kind]}`);
-  process.exit(0);
-}
-
 function findSource(stem) {
   for (const dir of SOURCE_DIRS) {
     for (const ext of [".png", ".webp"]) {
@@ -90,7 +81,7 @@ if (fileStem) {
       process.exit(0);
     }
     console.error(`No staging dir: ${staging}`);
-    console.error("Drop painted PNGs there, or pass --file stem --lock-ship");
+    console.error("Drop painted PNGs there, or pass --file stem");
     process.exit(1);
   }
   for (const f of fs.readdirSync(staging)) {

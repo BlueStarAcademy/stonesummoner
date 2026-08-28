@@ -10,6 +10,7 @@
  *   node scripts/process-all-portraits.mjs --only wolf_fighter_fire,wolf_fighter_water
  *   node scripts/process-all-portraits.mjs --summoner-only
  *   node scripts/process-all-portraits.mjs --awaken-only
+ *   node scripts/process-all-portraits.mjs --derivatives-only
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -30,6 +31,12 @@ import {
   MONSTER_ART_KEYS,
   familyIdFromArtKey,
 } from "./lib/monster-art-roster.mjs";
+import {
+  inspectPortraitDerivative,
+  portraitDerivativePath,
+  PORTRAIT_DERIVATIVE_SIZES,
+  writePortraitDerivatives,
+} from "./lib/portrait-derivatives.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -44,6 +51,10 @@ const qa = args.includes("--qa");
 const summonerOnly = args.includes("--summoner-only");
 const monsterOnly = args.includes("--monster-only");
 const awakenOnly = args.includes("--awaken-only");
+const derivativesOnly = args.includes("--derivatives-only");
+// Bust portraits may intentionally reach the side edges; 20% clear perimeter
+// still catches opaque matte plates without rejecting wide silhouettes.
+const MIN_EDGE_CLEAR_RATIO = 0.2;
 const only = argVal("--only")
   ?.split(",")
   .map((s) => s.trim())
@@ -110,6 +121,24 @@ async function edgeClearRatio(webpPath) {
     sample(w - 1, y);
   }
   return edge > 0 ? clear / edge : 0;
+}
+
+async function processDerivatives(portraitPath, outDir, portraitName) {
+  if (!fs.existsSync(portraitPath)) return "missing-out";
+  if (!qa) {
+    await writePortraitDerivatives(portraitPath, outDir, portraitName);
+    return "ok";
+  }
+  let ok = true;
+  for (const size of PORTRAIT_DERIVATIVE_SIZES) {
+    const filePath = portraitDerivativePath(outDir, portraitName, size);
+    const result = await inspectPortraitDerivative(filePath, size);
+    if (!result.ok) {
+      console.warn("qa derivative", portraitName, size, result.issue);
+      ok = false;
+    }
+  }
+  return ok ? "ok" : "bad-derivative";
 }
 
 function resolveStillSrc(battleDir, key, awaken = false) {
@@ -185,22 +214,30 @@ async function writePortrait(srcPath, destWebp) {
 async function processMonsterArtKey(key, battleDir, outDir, awaken = false) {
   const onlyKey = awaken ? `${key}_awaken` : key;
   if (only && !only.includes(onlyKey) && !only.includes(key)) return "skip";
+  const dest = path.join(outDir, `${onlyKey}.webp`);
+  if (derivativesOnly) {
+    const result = await processDerivatives(dest, outDir, onlyKey);
+    if (result === "ok") console.log("derivatives", onlyKey);
+    return result;
+  }
   const src = resolveStillSrc(battleDir, key, awaken);
   if (!src) {
     console.warn("missing still", onlyKey);
     return "missing";
   }
-  const dest = path.join(outDir, `${onlyKey}.webp`);
   if (qa) {
     if (!fs.existsSync(dest)) return "missing-out";
     const ratio = await edgeClearRatio(dest);
     console.log("qa", onlyKey, `${Math.round(ratio * 100)}% edge clear`);
-    return ratio >= 0.25 ? "ok" : "bad-matte";
+    const derivativeResult = await processDerivatives(dest, outDir, onlyKey);
+    if (derivativeResult !== "ok") return derivativeResult;
+    return ratio >= MIN_EDGE_CLEAR_RATIO ? "ok" : "bad-matte";
   }
   await writePortrait(src, dest);
+  await writePortraitDerivatives(dest, outDir, onlyKey);
   const ratio = await edgeClearRatio(dest);
   console.log("portrait", onlyKey, `${Math.round(ratio * 100)}% edge clear`);
-  return ratio >= 0.25 ? "ok" : "warn-matte";
+  return ratio >= MIN_EDGE_CLEAR_RATIO ? "ok" : "warn-matte";
 }
 
 async function processSummonerElement(el, battleDir, outDir) {
@@ -215,12 +252,12 @@ async function processSummonerElement(el, battleDir, outDir) {
     if (!fs.existsSync(dest)) return "missing-out";
     const ratio = await edgeClearRatio(dest);
     console.log("qa summoner", el, `${Math.round(ratio * 100)}% edge clear`);
-    return ratio >= 0.25 ? "ok" : "bad-matte";
+    return ratio >= MIN_EDGE_CLEAR_RATIO ? "ok" : "bad-matte";
   }
   await writePortrait(src, dest);
   const ratio = await edgeClearRatio(dest);
   console.log("summoner", el, `${Math.round(ratio * 100)}% edge clear`);
-  return ratio >= 0.25 ? "ok" : "warn-matte";
+  return ratio >= MIN_EDGE_CLEAR_RATIO ? "ok" : "warn-matte";
 }
 
 const stats = { ok: 0, warn: 0, missing: 0, skip: 0 };
@@ -237,18 +274,26 @@ if (!summonerOnly) {
     if (!awakenOnly) {
       const r = await processMonsterArtKey(key, battleDir, outDir, false);
       if (r === "ok") stats.ok += 1;
-      else if (r === "warn-matte" || r === "bad-matte") stats.warn += 1;
+      else if (
+        r === "warn-matte" ||
+        r === "bad-matte" ||
+        r === "bad-derivative"
+      ) stats.warn += 1;
       else if (r === "missing" || r === "missing-out") stats.missing += 1;
       else stats.skip += 1;
     }
     const ra = await processMonsterArtKey(key, battleDir, outDir, true);
     if (ra === "ok") stats.ok += 1;
-    else if (ra === "warn-matte" || ra === "bad-matte") stats.warn += 1;
+    else if (
+      ra === "warn-matte" ||
+      ra === "bad-matte" ||
+      ra === "bad-derivative"
+    ) stats.warn += 1;
     else if (ra === "missing" || ra === "missing-out") stats.missing += 1;
     else stats.skip += 1;
   }
 
-  if (!qa && !awakenOnly) {
+  if (!qa && !awakenOnly && !derivativesOnly) {
     for (const [alias, target] of Object.entries(MONSTER_ALIAS)) {
       if (only && !only.includes(alias)) continue;
       const src = path.join(outDir, `${target}.webp`);
@@ -259,13 +304,14 @@ if (!summonerOnly) {
         continue;
       }
       await fs.promises.copyFile(src, dest);
+      await writePortraitDerivatives(dest, outDir, alias);
       console.log("alias", alias, "<-", target);
       stats.ok += 1;
     }
   }
 }
 
-if (!monsterOnly) {
+if (!monsterOnly && !derivativesOnly) {
   const battleDir = path.join(root, "apps/web/public/art/summoner/battle");
   const outDir = path.join(root, "apps/web/public/art/summoner");
   for (const el of SUMMONER_ELEMENTS) {

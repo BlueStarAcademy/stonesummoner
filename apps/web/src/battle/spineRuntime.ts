@@ -76,6 +76,18 @@ function ensurePixiCss(): void {
 const loadedPacks = new Set<string>();
 const failedPacks = new Set<string>();
 
+async function ensureRequiredAssets(pack: SpinePack): Promise<void> {
+  for (const url of pack.requiredAssets ?? []) {
+    const response = await fetch(url, { cache: "force-cache" });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok || contentType.includes("text/html")) {
+      throw new Error(`missing Spine asset: ${url}`);
+    }
+    const bytes = await response.arrayBuffer();
+    if (!bytes.byteLength) throw new Error(`empty Spine asset: ${url}`);
+  }
+}
+
 async function ensurePackLoaded(pack: SpinePack): Promise<void> {
   if (loadedPacks.has(pack.id)) return;
   if (failedPacks.has(pack.id)) {
@@ -84,6 +96,7 @@ async function ensurePackLoaded(pack: SpinePack): Promise<void> {
   const skAlias = `spine-skel:${pack.id}`;
   const atAlias = `spine-atlas:${pack.id}`;
   try {
+    await ensureRequiredAssets(pack);
     Assets.add({ alias: skAlias, src: pack.skeletonUrl });
     Assets.add({ alias: atAlias, src: pack.atlasUrl });
     await Assets.load([skAlias, atAlias]);
@@ -129,12 +142,18 @@ function layoutSpine(record: MountRecord): void {
   const h = Math.max(2, host.clientHeight || 120);
   app.renderer.resize(w, h);
   applyFacingSkin(record);
-  const s = (pack.scale * scaleMul * h) / 140;
+  const heightScale = (pack.scale * scaleMul * h) / 140;
+  const bounds = spine.getLocalBounds();
+  const widthScale =
+    bounds.width > 0 ? (w * 0.94) / bounds.width : heightScale;
+  const s = Math.min(heightScale, widthScale);
   // Prefer distinct back skin; only mirror when pack has no back skin.
   const mirrorBack = facing === "back" && !pack.skins?.back;
   spine.scale.set(mirrorBack ? -Math.abs(s) : Math.abs(s), Math.abs(s));
-  spine.x = w * 0.5;
-  spine.y = h - pack.offsetY;
+  spine.position.set(0, 0);
+  const rendered = spine.getBounds();
+  spine.x = w * 0.5 - (rendered.x + rendered.width * 0.5);
+  spine.y = h - pack.offsetY - (rendered.y + rendered.height);
 }
 
 /**
@@ -157,6 +176,8 @@ export async function mountSpineInHost(
   const pack = getSpinePack(packId);
   if (!pack) return null;
 
+  let app: Application | null = null;
+  let wrap: HTMLDivElement | null = null;
   try {
     await bootRegisteredPacks();
     if (!loadedPacks.has(pack.id)) {
@@ -166,23 +187,23 @@ export async function mountSpineInHost(
 
     host.querySelector(":scope > .spine-host")?.remove();
 
-    const wrap = document.createElement("div");
+    wrap = document.createElement("div");
     wrap.className = "spine-host";
     wrap.setAttribute("aria-hidden", "true");
     host.appendChild(wrap);
-    host.classList.add("has-spine");
     if (getComputedStyle(host).position === "static") {
       host.style.position = "relative";
     }
 
-    const app = new Application();
+    app = new Application();
     await app.init({
       width: Math.max(2, host.clientWidth || 120),
       height: Math.max(2, host.clientHeight || 140),
       backgroundAlpha: 0,
-      antialias: true,
-      resolution: Math.min(2, window.devicePixelRatio || 1),
+      antialias: false,
+      resolution: Math.min(1.5, window.devicePixelRatio || 1),
       autoDensity: true,
+      powerPreference: "low-power",
     });
     wrap.appendChild(app.canvas);
 
@@ -196,8 +217,12 @@ export async function mountSpineInHost(
     spine.state.data.defaultMix = 0.15;
     const idleName = pack.clips.idle ?? "idle";
     try {
-      const frontSkin = pack.skins?.front ?? "front";
-      spine.skeleton.setSkinByName(frontSkin);
+      const initialFacing = opts.facing ?? "front";
+      const initialSkin =
+        initialFacing === "back"
+          ? pack.skins?.back ?? pack.skins?.front ?? "front"
+          : pack.skins?.front ?? "front";
+      spine.skeleton.setSkinByName(initialSkin);
       spine.skeleton.setSlotsToSetupPose();
     } catch {
       /* default skin */
@@ -218,6 +243,8 @@ export async function mountSpineInHost(
     const root = new Container();
     root.addChild(spine);
     app.stage.addChild(root);
+    host.classList.add("has-spine");
+    host.closest(".battle-unit")?.classList.add("spine-active");
 
     const record: MountRecord = {
       app,
@@ -268,8 +295,9 @@ export async function mountSpineInHost(
         } catch {
           /* ignore */
         }
-        wrap.remove();
+        record.canvas.parentElement?.remove();
         host.classList.remove("has-spine");
+        host.closest(".battle-unit")?.classList.remove("spine-active");
       },
     };
     record.ctrl = ctrl;
@@ -286,7 +314,14 @@ export async function mountSpineInHost(
     return ctrl;
   } catch (err) {
     console.warn("[spine] mount failed", opts.catalogId, err);
+    try {
+      app?.destroy(true, { children: true, texture: false });
+    } catch {
+      /* ignore cleanup failures */
+    }
+    wrap?.remove();
     host.classList.remove("has-spine");
+    host.closest(".battle-unit")?.classList.remove("spine-active");
     return null;
   }
 }

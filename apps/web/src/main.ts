@@ -241,6 +241,7 @@ import {
   normalizeSummonerGear,
   normalizeSymbolQuality,
   qualityToPlateId,
+  skillIconPath,
   skillTreeBonuses,
   SYMBOL_SETS,
   stagesForMap,
@@ -3734,6 +3735,14 @@ function clearBattleSkipTimer(): void {
   }
 }
 
+function battleSkipAllowedForStage(stage: StageDef | null): boolean {
+  return (
+    stage?.mode === "scenario" ||
+    stage?.mode === "arena" ||
+    stage?.mode === "world_arena"
+  );
+}
+
 function applyBattleSkipReady(): void {
   const btn = app.querySelector<HTMLButtonElement>("#btn-battle-skip");
   if (!btn) return;
@@ -3743,6 +3752,7 @@ function applyBattleSkipReady(): void {
 
 function refreshBattleSkipReady(): void {
   const ready =
+    battleSkipAllowedForStage(currentStage) &&
     battleSkipTimeReady &&
     !!battle &&
     !battle.finishReason &&
@@ -3759,6 +3769,7 @@ function armBattleSkipTimer(): void {
   clearBattleSkipTimer();
   battleSkipTimeReady = false;
   battleSkipReady = false;
+  if (!battleSkipAllowedForStage(currentStage)) return;
   battleSkipTimer = window.setTimeout(() => {
     battleSkipTimer = null;
     if (view !== "battle" || !battle || battle.finishReason) return;
@@ -3782,7 +3793,14 @@ async function playLastPageVanish(skipSeq: number): Promise<void> {
 }
 
 function skipBattleToResult(): void {
-  if (!battle || !currentStage || !battleSkipReady) return;
+  if (
+    !battle ||
+    !currentStage ||
+    !battleSkipAllowedForStage(currentStage) ||
+    !battleSkipReady
+  ) {
+    return;
+  }
   if (view !== "battle" || lastReward) return;
   if (battle.finishReason && battle.finishReason !== "ally_win") return;
   battleSkipSeq += 1;
@@ -6756,11 +6774,10 @@ function renderSkillButtons(active: Unit | null, awaitSkill: boolean): string {
     const selected =
       awaitSkill && !disabled && selectedSkillIndex === i ? " is-selected" : "";
     const state = cd > 0 ? " cooling" : awaitSkill && !disabled ? " ready" : "";
-    const slotIdx = monsterSkillSlotIndex(i, sk);
     const ico =
       monId != null && sk
-        ? monsterSkillArtImg(monId, slotIdx, sk, "skill-btn-ico", 40)
-        : `<img class="skill-btn-ico" src="${monsterSkillArtSrc(null, -1, sk)}" width="40" height="40" alt="" draggable="false" decoding="async" />`;
+        ? monsterSkillArtImg(monId, i, sk, "skill-btn-ico", 40)
+        : skillArtImg(sk?.vfxId, "skill-btn-ico", 40);
     return `<button type="button" class="skill-btn${state}${selected}" data-skill="${i}" ${disabled ? "disabled" : ""}>
       ${ico}
       <span class="skill-btn-label">${label}</span>
@@ -12254,10 +12271,10 @@ function circleInscName(id: CircleInscriptionId): string {
 
 function circleInscArt(id: CircleInscriptionId): { src: string; fallback: string } {
   if (id === "start_mana") {
-    return { src: "/art/ui/skill/mana.webp", fallback: "/art/ui/skill/mana.svg" };
+    return { src: "/art/ui/skill/mana.webp", fallback: "/art/ui/skill/mana.webp" };
   }
   if (id === "amplify_cap") {
-    return { src: "/art/summoner/skill/fire_amp.webp", fallback: "/art/summoner/skill/fire_amp.svg" };
+    return { src: "/art/summoner/skill/fire_amp.webp", fallback: "/art/summoner/skill/fire_amp.webp" };
   }
   return { src: "/art/battle/mark/star.webp", fallback: "/art/battle/mark/star.svg" };
 }
@@ -13283,47 +13300,19 @@ function monsterElementArtSrc(el: string | undefined | null): string | null {
   return `/art/ui/element/${el}.webp`;
 }
 
-function monsterSkillArtFallbacks(
-  _monsterId: string | undefined | null,
-  _skillIndex: number,
-  skill?: {
-    id?: string;
-    vfxId?: string;
-    effects?: { kind: string }[];
-  } | null,
-): string[] {
-  const kind = skill?.effects?.[0]?.kind;
-  const effectArt =
-    kind === "heal"
-      ? "/art/ui/skill/heal.webp"
-      : kind === "shield"
-        ? "/art/ui/skill/shield.webp"
-        : kind === "mana"
-          ? "/art/ui/skill/mana.webp"
-          : "/art/ui/skill/damage.webp";
-  // Monster battle art is never a skill-art fallback. Until a dedicated
-  // painted monster skill asset exists, use the semantic effect icon.
-  return [effectArt];
-}
-
-function monsterSkillArtSrc(
-  monsterId: string | undefined | null,
-  skillIndex: number,
-  skill?: {
-    id?: string;
-    vfxId?: string;
-    effects?: { kind: string }[];
-  } | null,
+function skillArtImg(
+  vfxId: string | undefined | null,
+  className: string,
+  size: number,
 ): string {
-  return (
-    monsterSkillArtFallbacks(monsterId, skillIndex, skill)[0] ??
-    "/art/ui/skill/damage.webp"
-  );
+  const src = skillIconPath(vfxId);
+  if (!src) return "";
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
 }
 
 function monsterSkillArtImg(
-  monsterId: string | undefined | null,
-  skillIndex: number,
+  _monsterId: string | undefined | null,
+  _skillIndex: number,
   skill:
     | { id?: string; vfxId?: string; effects?: { kind: string }[] }
     | null
@@ -13331,20 +13320,13 @@ function monsterSkillArtImg(
   className: string,
   size: number,
 ): string {
-  const fallbacks = monsterSkillArtFallbacks(monsterId, skillIndex, skill);
-  const src = fallbacks[0] ?? "/art/ui/skill/damage.webp";
-  const onerr = imgSrcOnerrorChain(fallbacks);
-  return `<img class="${className} mon-skill-art-img" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${onerr} />`;
+  const src = skillIconPath(skill?.vfxId);
+  if (!src?.startsWith("/art/monster/skill/")) return "";
+  return `<img class="${className} mon-skill-art-img" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
 }
 
 function summonerSkillArtSrc(skillId: string | undefined | null): string {
-  if (!skillId) return "/art/ui/skill/damage.webp";
-  return `/art/summoner/skill/${skillId}.webp`;
-}
-
-function summonerSkillArtFallbackSrc(skillId: string | undefined | null): string {
-  if (!skillId) return "/art/ui/skill/damage.svg";
-  return `/art/summoner/skill/${skillId}.svg`;
+  return skillIconPath(skillId ? `summoner:${skillId}` : null) ?? "";
 }
 
 function summonerSkillArtImg(
@@ -13353,8 +13335,8 @@ function summonerSkillArtImg(
   size: number,
 ): string {
   const src = summonerSkillArtSrc(skillId);
-  const fb = summonerSkillArtFallbackSrc(skillId);
-  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" onerror="this.onerror=null;this.src='${fb}'" />`;
+  if (!src) return "";
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
 }
 
 function monsterSkillFlavorForEffect(
@@ -13680,6 +13662,22 @@ function monsterPortraitFallbacks(
   return out;
 }
 
+function inventoryPortraitSrc(src: string, size: 128 | 256): string {
+  const file = src.split("/").pop() ?? "";
+  return `/art/monster/inventory/${size}/${file}`;
+}
+
+function monsterInventoryPortraitFallbacks(
+  monsterId: string | undefined | null,
+  preferAwakened = false,
+): string[] {
+  const portraits = monsterPortraitFallbacks(monsterId, preferAwakened);
+  return [
+    ...portraits.map((src) => inventoryPortraitSrc(src, 256)),
+    ...portraits,
+  ];
+}
+
 function monsterBattleStillFallbacks(
   monsterId: string | undefined | null,
   facing: "front" | "back" = "front",
@@ -13708,7 +13706,10 @@ function monsterBattleStillFallbacks(
   return out;
 }
 
-function imgSrcOnerrorChain(fallbacks: string[]): string {
+function imgSrcOnerrorChain(
+  fallbacks: string[],
+  clearSrcset = false,
+): string {
   if (fallbacks.length <= 1) return "";
   const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   let body = "this.onerror=null";
@@ -13718,7 +13719,7 @@ function imgSrcOnerrorChain(fallbacks: string[]): string {
       body = `this.onerror=function(){${body}}`;
     }
   }
-  return ` onerror="${body}"`;
+  return ` onerror="${clearSrcset ? "this.srcset='';" : ""}${body}"`;
 }
 
 function monsterArtSrc(
@@ -13819,12 +13820,37 @@ function monsterArtImg(
   size = 96,
   preferAwakened = false,
 ): string {
+  if (/\b(?:mon-slot-img|power-up-preview-img|codex-cell-img)\b/.test(className)) {
+    return monsterInventoryArtImg(
+      monsterId,
+      className,
+      size,
+      preferAwakened,
+    );
+  }
   const fallbacks = monsterPortraitFallbacks(monsterId, preferAwakened);
   if (!fallbacks.length) return "";
   const src = fallbacks[0];
   const awakenCls = preferAwakened ? " is-awakened" : "";
   const decode = Math.max(size * 2, 128);
   return `<img class="${className}${awakenCls}" src="${src}" width="${decode}" height="${decode}" alt="" draggable="false" decoding="async"${imgSrcOnerrorChain(fallbacks)} />`;
+}
+
+function monsterInventoryArtImg(
+  monsterId: string | undefined | null,
+  className: string,
+  size = 96,
+  preferAwakened = false,
+): string {
+  const fallbacks = monsterInventoryPortraitFallbacks(
+    monsterId,
+    preferAwakened,
+  );
+  if (!fallbacks.length) return "";
+  const src = fallbacks[0]!;
+  const src128 = src.replace("/inventory/256/", "/inventory/128/");
+  const awakenCls = preferAwakened ? " is-awakened" : "";
+  return `<img class="${className}${awakenCls}" src="${src}" srcset="${src128} 128w, ${src} 256w" sizes="${Math.max(1, size)}px" width="${size}" height="${size}" alt="" draggable="false" decoding="async" loading="lazy"${imgSrcOnerrorChain(fallbacks, true)} />`;
 }
 
 /** Art used in battle / book hero: Spine still when available, else WebP. */
@@ -17076,7 +17102,7 @@ function codexMonsterDetailHtml(monsterId: string | null): string {
   const role = monsterRoleLabel(def.role, def.baseStats);
   const grade = invGradeFromStars(def.naturalStars);
   const art =
-    monsterArtImg(def.id, "codex-detail-img", 152) ||
+    monsterBattleArtImg(def.id, "codex-detail-img", 256, "front") ||
     `<span class="codex-cell-fallback">${def.element[0]?.toUpperCase() ?? "?"}</span>`;
   const elSrc = monsterElementArtSrc(def.element) ?? "";
   const skills = (def.skills ?? [])
@@ -19332,9 +19358,9 @@ function renderGlory(): string {
         <div class="glory-hero-veil" aria-hidden="true"></div>
       </div>
       <div class="glory-buffs" aria-label="${escapeHtml(t("ui.glory.buffSummary"))}">
-        ${gloryBuffChip(t("ui.statAtk"), "/art/ui/skill/damage.webp", "/art/ui/skill/damage.svg", gloryPctLabel(buff.atkPct))}
-        ${gloryBuffChip(t("ui.statDef"), "/art/ui/skill/shield.webp", "/art/ui/skill/shield.svg", gloryPctLabel(buff.defPct))}
-        ${gloryBuffChip(t("ui.statHp"), "/art/ui/skill/heal.webp", "/art/ui/skill/heal.svg", gloryPctLabel(buff.hpPct))}
+        ${gloryBuffChip(t("ui.statAtk"), "/art/ui/skill/damage.webp", "/art/ui/skill/damage.webp", gloryPctLabel(buff.atkPct))}
+        ${gloryBuffChip(t("ui.statDef"), "/art/ui/skill/shield.webp", "/art/ui/skill/shield.webp", gloryPctLabel(buff.defPct))}
+        ${gloryBuffChip(t("ui.statHp"), "/art/ui/skill/heal.webp", "/art/ui/skill/heal.webp", gloryPctLabel(buff.hpPct))}
         ${gloryBuffChip(t("ui.statSpd"), "/art/ui/element/wind.webp", "/art/ui/element/wind.svg", `+${buff.spdFlat}`)}
         ${gloryBuffChip(t("res.gold"), "/art/ui/res/gold.svg", "/art/ui/res/gold.svg", gloryPctLabel(buff.manaProdPct))}
       </div>
@@ -21323,7 +21349,7 @@ function renderBattle(manaPct: number): string {
     <div class="battle-hud battle-hud--stage">
       ${navBackBtn({ id: "btn-back", label: t('ui.1a7f31cadb') })}
       <div class="battle-hud-actions">
-        <button type="button" class="secondary${battleSkipReady ? " is-ready" : ""}" id="btn-battle-skip"${battleSkipReady ? "" : " disabled"}>${escapeHtml(t("ui.battleSkip"))}</button>
+        ${battleSkipAllowedForStage(currentStage) ? `<button type="button" class="secondary${battleSkipReady ? " is-ready" : ""}" id="btn-battle-skip"${battleSkipReady ? "" : " disabled"}>${escapeHtml(t("ui.battleSkip"))}</button>` : ""}
         <button type="button" class="secondary" id="btn-speed">x${battleSpeed}</button>
         <button type="button" class="secondary battle-auto-settings-trigger${battleAutoSettingsOpen ? " is-open" : ""}" id="btn-auto-settings" aria-expanded="${battleAutoSettingsOpen}" aria-controls="battle-auto-settings" aria-label="${escapeHtml(t("ui.battleSettings"))}">&#9881;</button>
         <button type="button" id="btn-auto-toggle" class="${autoMode ? "auto-on" : ""}">${autoMode ? "AUTO ON" : "AUTO"}</button>
@@ -24087,6 +24113,7 @@ function bind(): void {
     mountUnitAnimHooks(app);
     // Painted battle stills are already transparent — dematte punches dark cloth.
     dematteArtInTree(app, "img.battle-unit-img:not([data-still-front])");
+    dematteArtInTree(app, ".skill-fx img, .skill-bolt-art, .skill-field img");
     void mountBattleSpines(app);
     requestAnimationFrame(() => refreshDmgLayer());
     restoreBattleAutoSettingsIfOpen();

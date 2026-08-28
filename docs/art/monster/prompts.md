@@ -8,6 +8,7 @@
 |-------|------|
 | Portrait | `monster/{artKey}.webp` (768²) |
 | Awaken portrait | `monster/{artKey}_awaken.webp` |
+| Inventory portrait | `monster/inventory/128/{artKey}.webp` / `monster/inventory/256/{artKey}.webp` |
 | Battle front/back | `monster/battle/{artKey}-front.webp` / `-back.webp` (1024²) |
 | Awaken battle | `monster/battle/{artKey}-awaken-front.webp` / `-awaken-back.webp` |
 
@@ -52,7 +53,13 @@ node scripts/install-battle-stills.mjs --families wolf_fighter,holy_judge
 
 - Demattes pre-alpha art (resize only) or chroma/checkerboard AI plates → transparent WebP (1024 battle, 768 portrait)
 - Portrait missing → bust crop from battle front
+- 768² portrait에서 목록용 128²/256² 투명 WebP 파생본을 함께 생성
 - Legacy `--pad` → 768² safe-margin pad (old path; default keeps 1024)
+
+화면별 사용 규칙:
+- 인벤토리·도감 목록과 작은 강화 슬롯: 128/256 파생 portrait + `srcset`
+- 도감·강화 상세: 1024² battle still (`object-fit: contain`)
+- 목록 파생본을 상세 화면에서 확대하지 않음
 
 ## Fallback only (tint from one master — low quality)
 

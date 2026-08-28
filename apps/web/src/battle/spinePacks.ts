@@ -27,6 +27,8 @@ export interface SpinePack {
   /** Pixi Assets aliases / public URLs */
   skeletonUrl: string;
   atlasUrl: string;
+  /** Files referenced by the atlas; all must exist before WebP is hidden. */
+  requiredAssets?: readonly string[];
   /** Map our clip names → Spine animation names in this pack. */
   clips: Partial<Record<SpineClip, string>>;
   /** Display scale inside unit slot. */
@@ -58,10 +60,10 @@ const PILOT_CLIPS: SpinePack["clips"] = {
 export const SPINE_PACKS: Record<string, SpinePack> = {
   fire_fang: {
     id: "fire_fang",
-    // 2-region PMA sheet hides painted stills; keep pack assets for later re-enable.
-    enabled: false,
+    enabled: true,
     skeletonUrl: "/art/spine/fire_fang/fire_fang.json",
     atlasUrl: "/art/spine/fire_fang/fire_fang-pma.atlas",
+    requiredAssets: ["/art/spine/fire_fang/fire_fang-pma.png"],
     clips: { ...PILOT_CLIPS },
     scale: 0.36,
     offsetY: 4,
@@ -118,6 +120,7 @@ export function resolveSpinePackId(
   let aliased: string | null = null;
   if (monsterOrSummonerKey.startsWith("seokrang_")) aliased = "fire_fang";
   else if (monsterOrSummonerKey === "fire_fang") aliased = "fire_fang";
+  else if (monsterOrSummonerKey === "wolf_fighter_fire") aliased = "fire_fang";
   else if (monsterOrSummonerKey.startsWith("wolf_fighter")) aliased = "wolf_fighter";
   else if (monsterOrSummonerKey.startsWith("moss_turtle")) aliased = "moss_turtle";
   if (aliased && isSpinePackMountable(SPINE_PACKS[aliased])) return aliased;

@@ -1,5 +1,7 @@
 /** Battle presentation FX — CSS choreography with Spine mount hooks. */
 
+import { playSpineClip } from "./spineRuntime";
+
 export type BattleFxKind =
   | "cast_place"
   | "stone_drop"
@@ -73,6 +75,13 @@ export function pulseUnitClass(
   );
   if (!el) return;
   const art = el.querySelector<HTMLElement>(".battle-unit-art");
+  if (
+    className === "fx-hit" ||
+    className === "fx-hit-ice" ||
+    className === "fx-hit-dark"
+  ) {
+    playSpineClip(unitId, "hit", { loop: false });
+  }
   el.classList.add(className);
   if (art) art.style.animationDuration = `${Math.max(40, ms)}ms`;
   window.setTimeout(() => {

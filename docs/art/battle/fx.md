@@ -29,6 +29,12 @@ Hits play as **layered sprite animation** (flash → slash/burst → debris), no
 | nova | AoE / ult | Charge, shockwave field, staggered per-target bursts |
 | support | heal / shield / buff / hex | Cast, then bloom / ward / runes / curse |
 
+**Support heal / buff / shield:** peripheral CSS aura rings at the unit's feet — no skill-icon sprites or square sheets.
+
+**Caster vs recipient:** the caster gets charge + release (core glow / upward sparks); recipients get the foot ring + motes. Damage bolts/novas release on the caster when the projectile fires; impact bursts stay on targets only.
+
+**Battle VFX must never use** `/art/monster/skill/`, `/art/summoner/skill/`, or `/art/ui/skill/` paths — those are UI icons, not FX sprites.
+
 ## Process
 
 ```

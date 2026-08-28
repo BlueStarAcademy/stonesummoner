@@ -1,55 +1,91 @@
-/**
- * Fail if ship skill WebP look procedural (too small / procedural-ship lock).
- *
- *   node scripts/check-skill-art.mjs
- *   node scripts/check-skill-art.mjs --strict
- */
+/** Validate that only dedicated, painted skill WebP can ship. */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 import { readLock, shipDir } from "./lib/skill-art-lock.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
-const strict = process.argv.includes("--strict");
-const MIN_PAINTED_BYTES = {
-  // Monster skill art is painted character-specific art when supplied.
-  monster: 20_000,
-  // Effect and summoner icons are compact vector-derived painted WebP.
-  ui: 4_000,
-  summoner: 4_000,
-};
 const kinds = ["monster", "ui", "summoner"];
+const manifest = JSON.parse(
+  fs.readFileSync(
+    path.join(root, "docs/art/skill/skill-art-manifest.json"),
+    "utf8",
+  ),
+);
+const expected = {
+  monster: new Set(
+    manifest.entries
+      .filter((entry) => entry.kind === "monster")
+      .map((entry) => path.basename(entry.iconPath)),
+  ),
+  ui: new Set(["damage.webp", "heal.webp", "mana.webp", "shield.webp"]),
+  summoner: new Set(
+    [
+      ...manifest.entries
+        .filter((entry) => entry.kind === "summoner")
+        .map((entry) => path.basename(entry.iconPath)),
+      "clean.webp",
+      "declare.webp",
+      "dual.webp",
+      "guard.webp",
+      "open.webp",
+    ],
+  ),
+};
 
 const bad = [];
 
 for (const kind of kinds) {
   const ship = shipDir(root, kind);
-  if (!fs.existsSync(ship)) continue;
+  if (!fs.existsSync(ship)) {
+    bad.push({ kind, name: "(directory)", issue: "missing ship directory" });
+    continue;
+  }
   const lock = readLock(root, kind);
-  for (const name of fs.readdirSync(ship)) {
-    if (!name.endsWith(".webp")) continue;
+  const names = fs
+    .readdirSync(ship, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && !entry.name.startsWith("."))
+    .map((entry) => entry.name);
+  if (fs.existsSync(path.join(ship, "_procedural"))) {
+    bad.push({ kind, name: "_procedural", issue: "retired source directory exists" });
+  }
+  for (const name of names) {
+    if (!name.endsWith(".webp")) {
+      bad.push({ kind, name, issue: "non-WebP skill art" });
+      continue;
+    }
+    if (!expected[kind].has(name)) {
+      bad.push({ kind, name, issue: "unexpected fallback asset" });
+      continue;
+    }
     const full = path.join(ship, name);
-    const size = fs.statSync(full).size;
     const source = lock.locked?.[name];
-    if (
-      size < (MIN_PAINTED_BYTES[kind] ?? 4_000) ||
-      source === "procedural-ship" ||
-      (strict && source !== "painted")
-    ) {
-      bad.push({ kind, name, size, source: source ?? "none" });
+    if (source !== "painted") {
+      bad.push({ kind, name, issue: `lock=${source ?? "none"}` });
+      continue;
+    }
+    const meta = await sharp(full).metadata();
+    if (meta.format !== "webp" || meta.width !== 256 || meta.height !== 256) {
+      bad.push({
+        kind,
+        name,
+        issue: `${meta.format ?? "unknown"} ${meta.width ?? "?"}x${meta.height ?? "?"}`,
+      });
+    }
+  }
+  for (const name of expected[kind]) {
+    if (!names.includes(name)) {
+      bad.push({ kind, name, issue: "missing dedicated asset" });
     }
   }
 }
 
-console.log(
-  `skill art check: bad=${bad.length}${strict ? " (strict=painted only)" : ""}`,
-);
+console.log(`skill art check: bad=${bad.length} (dedicated painted WebP only)`);
 if (bad.length) {
   for (const row of bad.slice(0, 30)) {
-    console.log(
-      `  ${row.kind}/${row.name} ${row.size}B lock=${row.source}`,
-    );
+    console.log(`  ${row.kind}/${row.name} ${row.issue}`);
   }
   if (bad.length > 30) console.log(`  ... +${bad.length - 30} more`);
 }

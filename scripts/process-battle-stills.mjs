@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { pngToDematteWebp, imageToDematteWebp, BATTLE_STILL_DEMATTE } from "./lib/dematte-webp.mjs";
+import { imageToDematteWebp, BATTLE_STILL_DEMATTE } from "./lib/dematte-webp.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -42,18 +42,26 @@ const paddedDir = path.join(workRoot, "padded");
 fs.mkdirSync(dematteDir, { recursive: true });
 fs.mkdirSync(paddedDir, { recursive: true });
 
-const inputs = fs
+const sourceNames = fs
   .readdirSync(dir)
   .filter(
     (x) =>
       /\.(png|webp)$/i.test(x) &&
       (x.includes("-front.") || x.includes("-back.")),
   );
+const inputByStem = new Map();
+for (const name of sourceNames) {
+  const stem = name.replace(/\.(?:png|webp)$/i, "");
+  const current = inputByStem.get(stem);
+  if (!current || name.toLowerCase().endsWith(".png")) {
+    inputByStem.set(stem, name);
+  }
+}
+const inputs = [...inputByStem.values()];
 let n = 0;
 for (const f of inputs) {
-  if (!f.toLowerCase().endsWith(".png")) continue;
   const src = path.join(dir, f);
-  const webpName = f.replace(/\.png$/i, ".webp");
+  const webpName = f.replace(/\.(?:png|webp)$/i, ".webp");
   await imageToDematteWebp(src, path.join(dematteDir, webpName), BATTLE_STILL_DEMATTE);
   n++;
   console.log("dematte", webpName);
@@ -70,24 +78,31 @@ const r = spawnSync(
     dematteRel,
     "--staging",
     paddedRel,
+    "--size",
+    "1024",
     "--force",
   ],
   { cwd: root, stdio: "inherit" },
 );
 if ((r.status ?? 1) !== 0) process.exit(r.status ?? 1);
 
+let copied = 0;
 for (const f of fs.readdirSync(paddedDir).filter((x) => x.endsWith(".webp") && !x.startsWith("_"))) {
   const dest = path.join(dir, f);
   const src = path.join(paddedDir, f);
+  const tmp = path.join(dir, `.${f}.${process.pid}.tmp`);
   let ok = false;
   for (let i = 0; i < 10 && !ok; i++) {
     try {
-      await fs.promises.copyFile(src, dest);
+      await fs.promises.copyFile(src, tmp);
+      await fs.promises.rename(tmp, dest);
       ok = true;
+      copied++;
     } catch {
+      await fs.promises.unlink(tmp).catch(() => {});
       await new Promise((res) => setTimeout(res, 200 * (i + 1)));
     }
   }
   if (!ok) console.error("copy fail", f);
 }
-console.log("copied", n, "webps to", rel);
+console.log("copied", copied, "webps to", rel);

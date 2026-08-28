@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "api": "node server.mjs",
+    "prebuild": "node ../../scripts/check-skill-art.mjs && node ../../scripts/check-skill-art-manifest.mjs",
     "build": "npm run check:encoding && vite build",
     "preview": "vite preview",
     "start": "node server.mjs",

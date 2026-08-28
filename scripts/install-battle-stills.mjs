@@ -48,6 +48,7 @@ import {
   rawRgbaToDematteWebp,
   rawRgbaToTransparentWebp,
 } from "./lib/dematte-webp.mjs";
+import { writePortraitDerivatives } from "./lib/portrait-derivatives.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -159,16 +160,20 @@ async function installPortrait(artKey, awaken = false) {
   const suffix = awaken ? "_awaken" : "";
   const src = resolveImageSrc(`${artKey}${suffix}`, "portrait");
   const dest = path.join(portraitOutDir, `${artKey}${suffix}.webp`);
+  let result;
   if (src) {
-    return await installPortraitSource(src, dest);
+    result = await installPortraitSource(src, dest);
+  } else {
+    const battleFront = path.join(
+      dematteDir,
+      `${artKey}${awaken ? "-awaken" : ""}-front.webp`,
+    );
+    if (!fs.existsSync(battleFront)) return "missing";
+    await bustPortraitFromBattleFront(battleFront, dest);
+    result = "cropped";
   }
-  const battleFront = path.join(
-    dematteDir,
-    `${artKey}${awaken ? "-awaken" : ""}-front.webp`,
-  );
-  if (!fs.existsSync(battleFront)) return "missing";
-  await bustPortraitFromBattleFront(battleFront, dest);
-  return "cropped";
+  await writePortraitDerivatives(dest, portraitOutDir, `${artKey}${suffix}`);
+  return result;
 }
 
 fs.mkdirSync(battleOutDir, { recursive: true });
@@ -182,6 +187,7 @@ let awakenBacks = 0;
 let portraitsPainted = 0;
 let portraitsCropped = 0;
 let portraitsMissing = 0;
+let portraitDerivatives = 0;
 
 const stagingDir = path.join(
   root,
@@ -226,11 +232,13 @@ for (const artKey of roster) {
   if (pr === "painted") portraitsPainted += 1;
   else if (pr === "cropped") portraitsCropped += 1;
   else portraitsMissing += 1;
+  if (pr !== "missing") portraitDerivatives += 2;
 
   const pra = await installPortrait(artKey, true);
   if (pra === "painted") portraitsPainted += 1;
   else if (pra === "cropped") portraitsCropped += 1;
   else portraitsMissing += 1;
+  if (pra !== "missing") portraitDerivatives += 2;
 }
 
 let copyFrom = dematteDir;
@@ -265,6 +273,8 @@ for (const [alias, target] of Object.entries(MONSTER_ALIAS)) {
   const dest = path.join(portraitOutDir, `${alias}.webp`);
   if (!fs.existsSync(src)) continue;
   await fs.promises.copyFile(src, dest);
+  await writePortraitDerivatives(dest, portraitOutDir, alias);
+  portraitDerivatives += 2;
 }
 
 console.log(
@@ -274,7 +284,7 @@ console.log(
   `battle fronts=${fronts} backs=${dedicatedBacks} fallbackBacks=${fallbackBacks} awakenFronts=${awakenFronts} awakenBacks=${awakenBacks}`,
 );
 console.log(
-  `portraits painted=${portraitsPainted} cropped=${portraitsCropped} missing=${portraitsMissing}`,
+  `portraits painted=${portraitsPainted} cropped=${portraitsCropped} missing=${portraitsMissing} derivatives=${portraitDerivatives}`,
 );
 console.log(`assets=${assetsRoot} -> battle=${battleOutDir} portraits=${portraitOutDir}`);
 if (fronts === 0) {

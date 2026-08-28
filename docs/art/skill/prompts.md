@@ -1,8 +1,7 @@
 # Skill Icons — Painted Pipeline (scope C)
 
-**Ship target (locked, do not overwrite with procedural):**
+**Ship target (dedicated painted WebP, locked after install):**
 - `apps/web/public/art/monster/skill/{familyId}-{element}-s{1|2|3}.webp`
-- `apps/web/public/art/monster/skill/{familyId}-s{1|2|3}.webp` (family fallback)
 - `apps/web/public/art/ui/skill/{damage|heal|mana|shield}.webp`
 - `apps/web/public/art/summoner/skill/{skillId}.webp`
 
@@ -23,29 +22,9 @@
 
 Lock manifest: `apps/web/public/art/monster/skill/.skill-art-lock.json`
 
-## First-time / migration
-
-```bash
-npm run skill-art:migrate   # move SVG out of ship, lock existing WebP
-```
-
-## Procedural preview only (never touches ship)
-
-```bash
-npm run skill-art:gen-proc
-npm run skill-art:bake-proc
-```
-
-Output: `apps/web/public/art/monster/skill/_procedural/` (gitignored)
-
-If procedural WebP accidentally landed in ship:
-
-```bash
-npm run skill-art:unship-proc
-npm run skill-art:check
-```
-
-`skill-art:publish-proc` is blocked unless `ALLOW_PROCEDURAL_SHIP=1` (dev only).
+No generic family fallback, SVG fallback, procedural generator, or character-crop
+pipeline is retained. Every runtime skill ID must resolve to its dedicated
+painted WebP; `npm run skill-art:manifest:check` rejects missing files.
 
 ## Master prompt
 
@@ -56,4 +35,4 @@ glowing energy, ornate detail, dark charcoal background,
 square icon, no text, no watermark, no UI chrome, no outer square frame
 ```
 
-s1 = basic · s2 = signature · s3 = ultimate. Motifs by role in `gen-monster-skill-icons.mjs` (`ROLE_MOTIFS`).
+s1 = basic · s2 = signature · s3 = ultimate.

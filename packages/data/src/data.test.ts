@@ -5,6 +5,7 @@ import {
   canGrindSymbol,
   symbolCombatMods,
   describeSkillVfx,
+  skillIconPath,
   canImprintSymbol,
   CHAPTER1_STAGES,
   CAIROS_DRAGON_STAGES,
@@ -128,6 +129,16 @@ describe("phase1 data", () => {
     assert.equal(descriptor.assetStem, "magma_knight-fire-s3");
     assert.equal(descriptor.intensity, "ultimate");
     assert.equal(descriptor.motion, sample.vfxFamily);
+    assert.equal(
+      skillIconPath(sample.vfxId),
+      "/art/monster/skill/magma_knight-fire-s3.webp",
+    );
+    assert.equal(
+      skillIconPath("summoner:fire_amp"),
+      "/art/summoner/skill/fire_amp.webp",
+    );
+    assert.equal(skillIconPath("monster:magma_knight:fire:s4"), null);
+    assert.equal(skillIconPath("monster:../damage:fire:s1"), null);
   });
 
   it("family s2/s3 differ by element", () => {

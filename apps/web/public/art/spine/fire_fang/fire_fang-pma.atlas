@@ -1,8 +1,8 @@
 fire_fang-pma.png
-	size: 694, 520
+	size: 611, 520
 	filter: Linear, Linear
 	pma: true
 body_front
-	bounds: 4, 4, 341, 512
+	bounds: 4, 4, 326, 512
 body_back
-	bounds: 349, 4, 341, 512
+	bounds: 334, 4, 273, 512

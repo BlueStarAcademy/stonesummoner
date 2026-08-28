@@ -8375,7 +8375,8 @@ main {
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front {
-  transform: scale(0.96) translateY(34px);
+  --battle-depth-scale: 0.96;
+  --battle-depth-y: 34px;
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front::after {
@@ -8617,6 +8618,12 @@ main {
 }
 
 .battle-lane {
+  --battle-depth-perspective: 560px;
+  --battle-depth-scale: 1;
+  --battle-depth-y: 0px;
+  --battle-depth-z: 0px;
+  --battle-depth-tilt: 0deg;
+  --battle-depth-opacity: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -8625,6 +8632,8 @@ main {
   position: relative;
   z-index: 3;
   pointer-events: none;
+  perspective: var(--battle-depth-perspective);
+  perspective-origin: 50% 100%;
 }
 
 /* Non-interactive portraits must not steal board taps (tilted board overlaps rims). */
@@ -8640,15 +8649,24 @@ main {
 
 /* Far rim — sit on the far floor band of the arena BG */
 .battle-lane.enemy {
+  --battle-depth-scale: 0.94;
+  --battle-depth-y: 26px;
+  --battle-depth-z: -42px;
+  --battle-depth-tilt: -1.5deg;
+  --battle-depth-opacity: 0.94;
   padding-top: calc(68px + env(safe-area-inset-top));
   min-height: clamp(110px, 17dvh, 140px);
   margin-bottom: 0;
 }
 
 .battle-lane.enemy .battle-front {
-  transform: scale(0.96) translateY(26px);
+  transform:
+    perspective(var(--battle-depth-perspective))
+    translate3d(0, var(--battle-depth-y), var(--battle-depth-z))
+    rotateX(var(--battle-depth-tilt))
+    scale(var(--battle-depth-scale));
   transform-origin: center bottom;
-  filter: brightness(0.98);
+  opacity: var(--battle-depth-opacity);
 }
 
 .battle-wave-banner {
@@ -8839,6 +8857,9 @@ main {
 
 /* Near rim — this side of the arena floor */
 .battle-lane.ally {
+  --battle-depth-scale: 1.02;
+  --battle-depth-z: 18px;
+  --battle-depth-tilt: 1deg;
   min-height: clamp(124px, 17dvh, 164px);
   margin-top: 0;
   padding-bottom: 2px;
@@ -8848,7 +8869,11 @@ main {
 }
 
 .battle-lane.ally .battle-front {
-  transform: scale(1.0);
+  transform:
+    perspective(var(--battle-depth-perspective))
+    translate3d(0, var(--battle-depth-y), var(--battle-depth-z))
+    rotateX(var(--battle-depth-tilt))
+    scale(var(--battle-depth-scale));
   transform-origin: center bottom;
   overflow: visible;
   /* Skills sit above the unit head. */
@@ -9236,7 +9261,9 @@ button.battle-unit {
   transform: translateX(-50%);
   border-radius: 50%;
   /* Ground shadow only — element color lives in the painted still, not UI wash */
-  background: radial-gradient(ellipse at center, #00000055 0%, transparent 72%);
+  background:
+    radial-gradient(ellipse at center, #00000070 0%, #00000038 44%, transparent 74%);
+  transform: translateX(-50%) scaleX(var(--battle-ground-scale, 1));
   pointer-events: none;
   z-index: 0;
 }
@@ -9266,6 +9293,27 @@ button.battle-unit {
   );
 }
 
+.battle-unit-art::after {
+  content: "";
+  position: absolute;
+  inset: 2% 6% 4%;
+  z-index: 3;
+  border-radius: 48%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 72% 82% at 50% 48%, transparent 72%, #0003 91%, #0006 100%),
+    linear-gradient(160deg, #ffffff12 0%, transparent 28%, transparent 72%, #00000024 100%);
+  opacity: 0.7;
+}
+
+.battle-lane.enemy .battle-unit {
+  --battle-ground-scale: 0.86;
+}
+
+.battle-lane.ally .battle-unit {
+  --battle-ground-scale: 1.08;
+}
+
 /* Transparent battle stills / Spine — no matte vignette mask */
 .battle-unit-art:has(img[data-still-front]),
 .battle-unit-art:has(img.battle-unit-img),
@@ -9287,6 +9335,21 @@ button.battle-unit {
   transform-origin: center bottom;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: high-quality;
+}
+
+/* Spine owns character motion once ready; keep the painted still as fallback only. */
+.battle-unit-art.has-spine > .battle-unit-img {
+  animation: none !important;
+}
+
+.battle-unit.spine-active.fx-cast-place .battle-unit-art,
+.battle-unit.spine-active.fx-cast-skill .battle-unit-art,
+.battle-unit.spine-active.fx-lunge .battle-unit-art,
+.battle-unit.spine-active.fx-hit .battle-unit-art,
+.battle-unit.spine-active.fx-hit-ice .battle-unit-art,
+.battle-unit.spine-active.fx-hit-dark .battle-unit-art,
+.battle-unit.spine-active.fx-ult .battle-unit-art {
+  animation: none;
 }
 
 .battle-front.enemy .battle-unit:nth-child(1) .battle-unit-img { animation-delay: 0.1s; }
@@ -11508,6 +11571,26 @@ button.battle-unit {
   animation: unit-empower 0.62s ease-out both;
 }
 
+.battle-unit.fx-support-heal .battle-unit-art {
+  animation: unit-support-heal 0.56s ease-out both;
+}
+
+.battle-unit.fx-support-ward .battle-unit-art {
+  animation: unit-support-ward 0.58s ease-out both;
+}
+
+.battle-unit.fx-support-buff .battle-unit-art {
+  animation: unit-support-buff 0.6s ease-out both;
+}
+
+.battle-unit.fx-support-cast .battle-unit-art {
+  animation: unit-support-cast 0.48s ease-out both;
+}
+
+.battle-unit.fx-cast-release .battle-unit-art {
+  animation: unit-cast-release 0.38s ease-out both;
+}
+
 .battle-unit.fx-hit-ice .battle-unit-art {
   animation: unit-hit-ice 0.46s ease-out both;
 }
@@ -11615,6 +11698,192 @@ button.battle-unit {
   top: 46%;
 }
 
+.skill-support-aura {
+  position: absolute;
+  left: 50%;
+  bottom: 2%;
+  width: 158%;
+  height: 138%;
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  z-index: 0;
+  overflow: visible;
+  animation: support-aura-expand var(--skfx-ms, 0.72s) ease-out both;
+}
+
+.skill-support-glow,
+.skill-support-ring {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.skill-support-glow {
+  width: 88%;
+  height: 72%;
+  opacity: 0;
+  animation: skill-support-glow var(--skfx-ms, 0.72s) ease-out both;
+}
+
+.skill-support-ring {
+  width: 96%;
+  height: 80%;
+  border: 2px solid transparent;
+  opacity: 0;
+  animation: skill-support-ring var(--skfx-ms, 0.72s) ease-out both;
+}
+
+.skill-support-glow--heal {
+  box-shadow: 0 0 28px #7dffb166, inset 0 0 22px #9dffc433;
+}
+
+.skill-support-ring--heal {
+  border-color: #9dffc488;
+  box-shadow: 0 0 16px #7dffb155, inset 0 0 12px #7dffb122;
+}
+
+.skill-support-glow--buff {
+  box-shadow: 0 0 28px #f0d87866, inset 0 0 22px #c9a22733;
+}
+
+.skill-support-ring--buff {
+  border-color: #f0d87888;
+  box-shadow: 0 0 16px #c9a22755, inset 0 0 12px #c9a22722;
+}
+
+.skill-support-glow--shield {
+  box-shadow: 0 0 28px #7ecbff66, inset 0 0 22px #5cb8ff33;
+}
+
+.skill-support-ring--shield {
+  border-color: #a8dcff88;
+  box-shadow: 0 0 16px #5cb8ff55, inset 0 0 12px #5cb8ff22;
+}
+
+.skill-support-aura--heal {
+  filter: saturate(1.05);
+}
+
+.skill-support-aura--buff {
+  filter: saturate(1.08);
+}
+
+.skill-support-aura--shield {
+  filter: saturate(1.04);
+}
+
+.skill-support-aura.is-recipient {
+  bottom: 2%;
+  width: 158%;
+  height: 138%;
+  animation: support-aura-expand var(--skfx-ms, 0.72s) ease-out both;
+}
+
+.skill-caster-fx {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  width: 68%;
+  height: 78%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
+  overflow: visible;
+}
+
+.skill-caster-core {
+  position: absolute;
+  left: 50%;
+  top: 54%;
+  width: 42%;
+  height: 42%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  opacity: 0;
+  animation: skill-caster-core var(--skfx-ms, 0.48s) ease-out both;
+}
+
+.skill-caster-core--heal {
+  box-shadow: 0 0 18px #9dffc488, inset 0 0 12px #7dffb144;
+}
+
+.skill-caster-core--buff {
+  box-shadow: 0 0 18px #f0d87888, inset 0 0 12px #c9a22744;
+}
+
+.skill-caster-core--shield {
+  box-shadow: 0 0 18px #a8dcff88, inset 0 0 12px #5cb8ff44;
+}
+
+.skill-caster-spark {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  opacity: 0;
+  animation: skill-caster-spark var(--skfx-ms, 0.48s) ease-out both;
+  animation-delay: calc(var(--skfx-ms, 0.48s) * (0.04 + var(--spark-i, 0) * 0.05));
+}
+
+.skill-caster-spark--heal {
+  background: #c8ffe0;
+  box-shadow: 0 0 6px #7dffb1;
+}
+
+.skill-caster-spark--buff {
+  background: #f0d878;
+  box-shadow: 0 0 6px #c9a227;
+}
+
+.skill-caster-spark--shield {
+  background: #b8e4ff;
+  box-shadow: 0 0 6px #5cb8ff;
+}
+
+.skill-caster-spark {
+  transform: rotate(calc(var(--spark-i, 0) * (360deg / var(--spark-n, 6)))) translateY(-18%);
+}
+
+.skill-caster-release {
+  position: absolute;
+  left: 50%;
+  bottom: 10%;
+  width: 64%;
+  height: 58%;
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  z-index: 2;
+  border-radius: 50%;
+  opacity: 0;
+  animation: skill-caster-release var(--release-ms, 320ms) ease-out both;
+}
+
+.skill-caster-release--fire {
+  box-shadow: 0 0 20px #ff703066, inset 0 0 14px #ff582833;
+}
+
+.skill-caster-release--water {
+  box-shadow: 0 0 20px #40d0ff66, inset 0 0 14px #28c8ff33;
+}
+
+.skill-caster-release--wind {
+  box-shadow: 0 0 20px #60f09866, inset 0 0 14px #48e88833;
+}
+
+.skill-caster-release--light {
+  box-shadow: 0 0 20px #ffe85066, inset 0 0 14px #ffe83833;
+}
+
+.skill-caster-release--dark {
+  box-shadow: 0 0 20px #c098ff66, inset 0 0 14px #9878f833;
+}
+
 .skill-fx.is-cast {
   width: 102%;
   height: 102%;
@@ -11647,30 +11916,23 @@ button.battle-unit {
   object-fit: contain;
   pointer-events: none;
   mix-blend-mode: screen;
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
 }
 
-.skfx-img--signature {
-  z-index: 4;
-  inset: 12%;
-  width: 76%;
-  height: 76%;
-  opacity: 0.94;
-  animation: skfx-signature-play var(--skfx-ms, 0.56s) ease-out both;
-}
-
-.skill-fx--profile-1 {
-  --skfx-signature-start-rotate: 8deg;
-  --skfx-signature-end-rotate: -12deg;
-}
-
-.skill-fx--profile-2 {
-  --skfx-signature-start-rotate: -16deg;
-  --skfx-signature-end-rotate: 18deg;
-}
-
-.skill-fx--profile-3 {
-  --skfx-signature-start-rotate: 4deg;
-  --skfx-signature-end-rotate: 28deg;
+/* Never show UI skill-icon sheets as battle VFX. */
+.skill-fx img[src*="/monster/skill/"],
+.skill-fx img[src*="/summoner/skill/"],
+.skill-fx img[src*="/ui/skill/"],
+.skill-bolt img[src*="/monster/skill/"],
+.skill-bolt img[src*="/summoner/skill/"],
+.skill-bolt img[src*="/ui/skill/"],
+.skill-field img[src*="/monster/skill/"],
+.skill-field img[src*="/summoner/skill/"],
+.skill-field img[src*="/ui/skill/"] {
+  display: none !important;
 }
 
 .skfx-img--flash {
@@ -11756,6 +12018,46 @@ button.battle-unit {
 
 .skfx-img--heal-glow {
   filter: hue-rotate(70deg) brightness(1.25) saturate(0.7);
+}
+
+.skfx-img--aura-glow {
+  z-index: 1;
+  inset: 8%;
+  width: 84%;
+  height: 84%;
+  opacity: 0.55;
+  animation: skfx-aura-glow var(--skfx-ms, 0.72s) ease-out both;
+}
+
+.skfx-img--aura-glow-heal {
+  filter: saturate(1.1) brightness(1.12) hue-rotate(8deg);
+}
+
+.skfx-img--aura-glow-shield {
+  filter: saturate(1.05) brightness(1.1) hue-rotate(-18deg);
+}
+
+.skfx-img--aura-glow-buff {
+  filter: saturate(1.15) brightness(1.14);
+}
+
+.skfx-img--aura-ring {
+  z-index: 2;
+  inset: 0;
+  opacity: 0.82;
+  animation: skfx-aura-ring var(--skfx-ms, 0.72s) ease-out both;
+}
+
+.skfx-img--aura-ring-heal {
+  filter: saturate(1.12) brightness(1.1);
+}
+
+.skfx-img--aura-ring-shield {
+  filter: saturate(1.08) brightness(1.12) hue-rotate(-12deg);
+}
+
+.skfx-img--aura-ring-buff {
+  filter: saturate(1.14) brightness(1.15);
 }
 
 .skfx-img--empower {
@@ -12181,13 +12483,6 @@ button.battle-unit {
   100% { opacity: 0; transform: scale(1.28) rotate(4deg); }
 }
 
-@keyframes skfx-signature-play {
-  0% { opacity: 0; transform: scale(0.52) rotate(var(--skfx-signature-start-rotate, -8deg)); }
-  18% { opacity: 0.98; transform: scale(0.92) rotate(0deg); }
-  52% { opacity: 0.9; transform: scale(1.04) rotate(4deg); }
-  100% { opacity: 0; transform: scale(1.2) rotate(var(--skfx-signature-end-rotate, 10deg)); }
-}
-
 @keyframes skfx-slash-play {
   0% { opacity: 0; transform: rotate(-26deg) scale(0.38) translate(-14%, 10%); }
   10% { opacity: 1; transform: rotate(-8deg) scale(1.02) translate(0, 0); }
@@ -12382,6 +12677,22 @@ button.battle-unit {
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
 }
 
+.skfx-mote--shield {
+  width: 6px;
+  height: 6px;
+  background: #a8dcff;
+  box-shadow: 0 0 6px #5cb8ff;
+  border-radius: 50%;
+}
+
+.skfx-mote.is-perimeter {
+  left: 50%;
+  top: 58%;
+  margin-left: 0;
+  transform-origin: center center;
+  animation-name: skfx-mote-perimeter;
+}
+
 @keyframes skfx-mote-rise {
   0% { opacity: 0; transform: translate(var(--mote-x, 0), 12px) scale(0.35); }
   14% { opacity: 1; }
@@ -12389,9 +12700,84 @@ button.battle-unit {
   100% { opacity: 0; transform: translate(var(--mote-x, 0), -52px) scale(1); }
 }
 
+@keyframes skfx-mote-perimeter {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--mote-angle, 0deg)) translateX(calc(var(--mote-radius, 48%) * 0.72)) translateY(8px) scale(0.35);
+  }
+  16% { opacity: 0.95; }
+  58% {
+    opacity: 0.82;
+    transform: rotate(var(--mote-angle, 0deg)) translateX(var(--mote-radius, 48%)) translateY(-18px) scale(0.92);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--mote-angle, 0deg)) translateX(calc(var(--mote-radius, 48%) * 1.08)) translateY(-36px) scale(1);
+  }
+}
+
+@keyframes support-aura-expand {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.82); }
+  14% { opacity: 0.92; transform: translate(-50%, 0) scale(0.96); }
+  48% { opacity: 0.88; transform: translate(-50%, 0) scale(1.04); }
+  100% { opacity: 0; transform: translate(-50%, 0) scale(1.18); }
+}
+
+@keyframes skill-support-glow {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.75); }
+  18% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.95); }
+  52% { opacity: 0.38; transform: translate(-50%, -50%) scale(1.06); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.16); }
+}
+
+@keyframes skill-support-ring {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.68); }
+  16% { opacity: 0.82; transform: translate(-50%, -50%) scale(0.92); }
+  50% { opacity: 0.65; transform: translate(-50%, -50%) scale(1.08); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.24); }
+}
+
+@keyframes skill-caster-core {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
+  18% { opacity: 0.85; transform: translate(-50%, -58%) scale(0.92); }
+  52% { opacity: 0.55; transform: translate(-50%, -72%) scale(1.02); }
+  100% { opacity: 0; transform: translate(-50%, -88%) scale(1.08); }
+}
+
+@keyframes skill-caster-spark {
+  0% { opacity: 0; transform: rotate(calc(var(--spark-i, 0) * (360deg / var(--spark-n, 6)))) translateY(0) scale(0.4); }
+  16% { opacity: 0.95; }
+  62% { opacity: 0.75; transform: rotate(calc(var(--spark-i, 0) * (360deg / var(--spark-n, 6)))) translateY(-42px) scale(0.9); }
+  100% { opacity: 0; transform: rotate(calc(var(--spark-i, 0) * (360deg / var(--spark-n, 6)))) translateY(-64px) scale(1); }
+}
+
+@keyframes skill-caster-release {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.72); }
+  16% { opacity: 0.88; transform: translate(-50%, -6%) scale(0.96); }
+  48% { opacity: 0.5; transform: translate(-50%, -12%) scale(1.08); }
+  100% { opacity: 0; transform: translate(-50%, -18%) scale(1.16); }
+}
+
+@keyframes skfx-aura-glow {
+  0% { opacity: 0; transform: scale(0.75); }
+  18% { opacity: 0.55; transform: scale(0.95); }
+  52% { opacity: 0.42; transform: scale(1.05); }
+  100% { opacity: 0; transform: scale(1.14); }
+}
+
+@keyframes skfx-aura-ring {
+  0% { opacity: 0; transform: scale(0.7); }
+  16% { opacity: 0.88; transform: scale(0.94); }
+  50% { opacity: 0.72; transform: scale(1.06); }
+  100% { opacity: 0; transform: scale(1.22); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .battle-vfx,
   .skill-fx,
+  .skill-support-aura,
+  .skill-caster-fx,
+  .skill-caster-release,
   .skill-bolt,
   .skill-field,
   .skfx-mote,
@@ -12548,6 +12934,36 @@ button.battle-unit {
   100% { filter: brightness(1); transform: scale(1); }
 }
 
+@keyframes unit-support-heal {
+  0%, 100% { filter: brightness(1); transform: none; }
+  28% { filter: brightness(1.12) saturate(1.08) drop-shadow(0 0 8px #7dffb188); }
+  58% { filter: brightness(1.08) drop-shadow(0 0 6px #9dffc466); }
+}
+
+@keyframes unit-support-ward {
+  0%, 100% { filter: brightness(1); transform: scale(1); }
+  24% { filter: brightness(1.14) drop-shadow(0 0 8px #7ecbff88); }
+  56% { filter: brightness(1.1) drop-shadow(0 0 6px #7ecbff66); }
+}
+
+@keyframes unit-support-buff {
+  0%, 100% { filter: brightness(1); transform: scale(1); }
+  22% { filter: brightness(1.16) saturate(1.1) drop-shadow(0 0 8px #f0d87899); }
+  54% { filter: brightness(1.1) drop-shadow(0 0 6px #c9a22777); }
+}
+
+@keyframes unit-support-cast {
+  0%, 100% { filter: brightness(1); transform: scale(1); }
+  24% { filter: brightness(1.2) saturate(1.08); transform: scale(1.03) translateY(-4%); }
+  58% { filter: brightness(1.1); transform: scale(1.01) translateY(-2%); }
+}
+
+@keyframes unit-cast-release {
+  0%, 100% { filter: brightness(1); transform: scale(1); }
+  20% { filter: brightness(1.28) saturate(1.12); transform: scale(1.04) translateY(-3%); }
+  48% { filter: brightness(1.14); transform: scale(1.02); }
+}
+
 @keyframes unit-hit-ice {
   0% { filter: brightness(1.55) saturate(0.7) drop-shadow(0 0 10px #7ecbffaa); transform: translateY(6%) scale(0.97); }
   28% { filter: brightness(1.2) saturate(0.85); transform: translateY(3%) scale(1.02); }
@@ -12599,6 +13015,11 @@ button.battle-unit {
   .battle-unit.fx-hit-heal .battle-unit-art,
   .battle-unit.fx-hit-ward .battle-unit-art,
   .battle-unit.fx-empower .battle-unit-art,
+  .battle-unit.fx-support-heal .battle-unit-art,
+  .battle-unit.fx-support-ward .battle-unit-art,
+  .battle-unit.fx-support-buff .battle-unit-art,
+  .battle-unit.fx-support-cast .battle-unit-art,
+  .battle-unit.fx-cast-release .battle-unit-art,
   .battle-unit.fx-hit-ice .battle-unit-art,
   .battle-unit.fx-hit-dark .battle-unit-art,
   .battle-unit.fx-ult .battle-unit-art,
@@ -21371,8 +21792,8 @@ img.mon-skill-art-img {
 .power-up-preview-art img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center 16%;
+  object-fit: contain;
+  object-position: center center;
 }
 
 .power-up-preview-meta {
@@ -22794,8 +23215,8 @@ img.el-tint-dark {
 .mon-slot-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center 16%;
+  object-fit: contain;
+  object-position: center center;
   display: block;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: high-quality;
@@ -23095,8 +23516,8 @@ img.el-tint-dark {
 .mon-book-inv.mon-book-inv--rail .mon-slot--portrait .mon-slot-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center 16%;
+  object-fit: contain;
+  object-position: center center;
 }
 
 .mon-book-inv.mon-book-inv--rail .mon-slot-lv-overlay {
@@ -30653,8 +31074,8 @@ button.linkish {
 .codex-detail-art {
   position: relative;
   align-self: flex-start;
-  width: 128px;
-  height: 128px;
+  width: clamp(128px, 34vw, 168px);
+  height: clamp(128px, 34vw, 168px);
   flex: 0 0 auto;
   border-radius: 12px;
   overflow: hidden;

@@ -1176,8 +1176,9 @@ export const PORTRAIT_DEMATTE = {
   lossless: true,
 };
 
-async function writeWebpAtomic(dstWebp, buf) {
+export async function writeWebpAtomic(dstWebp, buf) {
   const dir = path.dirname(dstWebp);
+  await fs.promises.mkdir(dir, { recursive: true });
   const tmp = path.join(dir, `.${path.basename(dstWebp)}.${process.pid}.tmp`);
   await fs.promises.writeFile(tmp, buf);
   try {

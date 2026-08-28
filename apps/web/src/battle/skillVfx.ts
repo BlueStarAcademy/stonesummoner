@@ -4,6 +4,7 @@
  */
 
 import type { CombatElement, CombatSfxKind } from "../audio";
+import { dematteArtImg } from "../ui/dematteArt";
 import {
   clientPointInElement,
   fxDurationMs,
@@ -67,6 +68,9 @@ const ART = {
   bolt: "/art/battle/fx/fx-bolt.webp",
   boltWater: "/art/battle/fx/fx-bolt-water.webp",
   boltDark: "/art/battle/fx/fx-bolt-dark.webp",
+  orbHeal: "/art/battle/fx/fx-orb-heal.svg",
+  orbBuff: "/art/battle/fx/fx-orb-buff.svg",
+  orbShield: "/art/battle/fx/fx-orb-shield.svg",
   shock: "/art/battle/fx/fx-shockwave.webp",
 } as const;
 
@@ -140,9 +144,9 @@ function slashArt(element: CombatElement): string {
 }
 
 function boltArt(kind: SkillBoltKind): string {
-  if (kind === "heal") return ART.heal;
-  if (kind === "buff") return ART.buff;
-  if (kind === "shield") return ART.shield;
+  if (kind === "heal") return ART.orbHeal;
+  if (kind === "buff") return ART.orbBuff;
+  if (kind === "shield") return ART.orbShield;
   if (kind === "slash") return ART.slash2;
   if (kind === "hex") return ART.hex;
   if (kind === "water") return ART.boltWater;
@@ -211,6 +215,25 @@ function uniqueIds(ids: string[]): string[] {
   return out;
 }
 
+function isSupportImpactKind(kind: CombatSfxKind): boolean {
+  return (
+    kind === "heal" ||
+    kind === "shield" ||
+    kind === "buff" ||
+    kind === "amplify"
+  );
+}
+
+function isSupportPreset(preset: SkillVfxPreset): boolean {
+  return preset === "heal" || preset === "shield" || preset === "buff";
+}
+
+function supportPulseClass(kind: CombatSfxKind): string {
+  if (kind === "heal") return "fx-support-heal";
+  if (kind === "shield") return "fx-support-ward";
+  return "fx-support-buff";
+}
+
 export function skillVfxFamily(
   kind: CombatSfxKind,
   element: CombatElement,
@@ -269,13 +292,6 @@ function presetLayers(
   const hit = hitArt(element);
   const slash = slashArt(element);
   const layers: SkfxLayer[] = [];
-  const signature = skillArtSrc(opts?.vfxId);
-  if (signature) {
-    layers.push({
-      src: signature,
-      cls: "skfx-img skfx-img--signature",
-    });
-  }
 
   const impactSeq = () => {
     layers.push({ src: ART.flash, cls: "skfx-img skfx-img--flash" });
@@ -312,14 +328,8 @@ function presetLayers(
     if (preset === "wind-storm") {
       layers.push({ src: ART.slashWind, cls: "skfx-img skfx-img--slash" });
     }
-  } else if (preset === "heal") {
-    layers.push({ src: ART.heal, cls: "skfx-img skfx-img--heal-bloom" });
-    layers.push({ src: ART.heal, cls: "skfx-img skfx-img--heal-motes" });
-  } else if (preset === "shield") {
-    layers.push({ src: ART.shield, cls: "skfx-img skfx-img--ward" });
-  } else if (preset === "buff") {
-    layers.push({ src: ART.buff, cls: "skfx-img skfx-img--empower" });
-    layers.push({ src: ART.cast, cls: "skfx-img skfx-img--empower-ring" });
+  } else if (preset === "heal" || preset === "shield" || preset === "buff") {
+    // Support auras are CSS rings only — no icon-shaped sprite sheets.
   } else if (preset === "hex") {
     layers.push({ src: ART.hex, cls: "skfx-img skfx-img--hex" });
   } else if (preset === "cast") {
@@ -354,6 +364,15 @@ function skillFxLayer(root: ParentNode): HTMLElement | null {
   );
 }
 
+function scheduleFxDematte(img: HTMLImageElement): void {
+  const run = () => {
+    if (!img.src.includes("/art/battle/fx/")) return;
+    dematteArtImg(img);
+  };
+  if (img.complete) run();
+  else img.addEventListener("load", run, { once: true });
+}
+
 function appendFxImg(wrap: HTMLElement, layer: SkfxLayer): void {
   const img = document.createElement("img");
   img.className = layer.cls;
@@ -363,18 +382,111 @@ function appendFxImg(wrap: HTMLElement, layer: SkfxLayer): void {
   img.decoding = "async";
   img.setAttribute("aria-hidden", "true");
   wrap.appendChild(img);
+  scheduleFxDematte(img);
 }
 
-function spawnFxMotes(wrap: HTMLElement, kind: "heal" | "buff", ms: number): void {
-  const n = kind === "heal" ? 10 : 8;
+function spawnSupportAuraRings(wrap: HTMLElement, preset: SkillVfxPreset): void {
+  const glow = document.createElement("span");
+  glow.className = `skill-support-glow skill-support-glow--${preset}`;
+  wrap.appendChild(glow);
+  const ring = document.createElement("span");
+  ring.className = `skill-support-ring skill-support-ring--${preset}`;
+  wrap.appendChild(ring);
+}
+
+function spawnSupportCasterCore(
+  wrap: HTMLElement,
+  preset: SkillVfxPreset,
+  element: CombatElement,
+): void {
+  const core = document.createElement("span");
+  core.className = `skill-caster-core skill-caster-core--${preset} skill-caster-core--${element}`;
+  wrap.appendChild(core);
+  const sparkN = preset === "shield" ? 5 : 6;
+  for (let i = 0; i < sparkN; i++) {
+    const spark = document.createElement("span");
+    spark.className = `skill-caster-spark skill-caster-spark--${preset}`;
+    spark.style.setProperty("--spark-i", String(i));
+    spark.style.setProperty("--spark-n", String(sparkN));
+    wrap.appendChild(spark);
+  }
+}
+
+export function spawnSupportCasterFx(
+  root: ParentNode,
+  unitId: string,
+  preset: SkillVfxPreset,
+  ms: number,
+  opts?: {
+    element?: CombatElement;
+  },
+): void {
+  if (reduceMotion) return;
+  if (!isSupportPreset(preset)) return;
+  const el = queryUnit(root, unitId);
+  if (!el) return;
+  const element = opts?.element ?? "light";
+  const wrap = document.createElement("span");
+  wrap.className = `skill-caster-fx skill-caster-fx--${preset} skill-caster-fx--${element}`;
+  wrap.setAttribute("aria-hidden", "true");
+  wrap.style.setProperty("--skfx-ms", `${Math.max(80, ms)}ms`);
+  spawnSupportCasterCore(wrap, preset, element);
+  el.appendChild(wrap);
+  window.setTimeout(() => wrap.remove(), Math.max(80, Math.round(ms * 1.35)));
+}
+
+function spawnFxMotes(
+  wrap: HTMLElement,
+  kind: "heal" | "buff" | "shield",
+  ms: number,
+  circular = false,
+): void {
+  const n = kind === "heal" ? 10 : kind === "buff" ? 8 : 6;
   const step = Math.max(0.04, (ms / 1000) * 0.07);
   for (let i = 0; i < n; i++) {
     const mote = document.createElement("span");
-    mote.className = `skfx-mote skfx-mote--${kind}`;
-    mote.style.setProperty("--mote-x", `${-46 + i * 10}%`);
+    mote.className = `skfx-mote skfx-mote--${kind}${circular ? " is-perimeter" : ""}`;
+    if (circular) {
+      const angle = (360 / n) * i - 90;
+      mote.style.setProperty("--mote-angle", `${angle}deg`);
+      mote.style.setProperty("--mote-radius", kind === "shield" ? "52%" : "48%");
+    } else {
+      mote.style.setProperty("--mote-x", `${-46 + i * 10}%`);
+    }
     mote.style.setProperty("--mote-delay", `${(i * step).toFixed(2)}s`);
     wrap.appendChild(mote);
   }
+}
+
+export function spawnSupportAuraFx(
+  root: ParentNode,
+  unitId: string,
+  preset: SkillVfxPreset,
+  ms: number,
+  opts?: {
+    element?: CombatElement;
+    vfxId?: string;
+    role?: "recipient";
+  },
+): void {
+  if (reduceMotion) return;
+  if (!isSupportPreset(preset)) return;
+  preloadBattleFx();
+  const el = queryUnit(root, unitId);
+  if (!el) return;
+  const element = opts?.element ?? "light";
+  const wrap = document.createElement("span");
+  wrap.className = `skill-support-aura skill-support-aura--${preset} skill-support-aura--${element} is-recipient`;
+  wrap.setAttribute("aria-hidden", "true");
+  wrap.style.setProperty("--skfx-ms", `${Math.max(80, ms)}ms`);
+  spawnSupportAuraRings(wrap, preset);
+  if (preset === "heal" || preset === "buff") {
+    spawnFxMotes(wrap, preset, ms, true);
+  } else if (preset === "shield") {
+    spawnFxMotes(wrap, "shield", ms, true);
+  }
+  el.appendChild(wrap);
+  window.setTimeout(() => wrap.remove(), Math.max(80, Math.round(ms * 1.5)));
 }
 
 export function spawnSkillFx(
@@ -397,8 +509,6 @@ export function spawnSkillFx(
   const element = opts?.element ?? "light";
   const wrap = document.createElement("span");
   wrap.className = `skill-fx skill-fx--${preset} skill-fx--${element}`;
-  const profile = resolveSkillVfxProfile(opts?.vfxId);
-  wrap.classList.add(`skill-fx--profile-${profile.variant}`);
   if (opts?.vfxId) wrap.dataset.vfxId = opts.vfxId;
   if (preset === "slash" || preset === "wind-cut") wrap.classList.add("is-melee");
   if (opts?.role === "cast") wrap.classList.add("is-cast");
@@ -426,6 +536,33 @@ function unitAnchor(
   const r = art.getBoundingClientRect();
   if (r.width < 1 && r.height < 1) return null;
   return { x: r.left + r.width * 0.5, y: r.top + r.height * 0.42 };
+}
+
+function spawnCasterChannelRelease(
+  root: ParentNode,
+  unitId: string,
+  element: CombatElement,
+  ms: number,
+): void {
+  if (reduceMotion) return;
+  const unit = queryUnit(root, unitId);
+  if (!unit) return;
+  const release = document.createElement("span");
+  release.className = `skill-caster-release skill-caster-release--${element}`;
+  release.setAttribute("aria-hidden", "true");
+  release.style.setProperty("--release-ms", `${Math.max(80, ms)}ms`);
+  unit.appendChild(release);
+  window.setTimeout(() => release.remove(), Math.max(80, ms + 40));
+}
+
+function casterReleasePulse(
+  root: ParentNode,
+  attackerId: string,
+  element: CombatElement,
+  ms: number,
+): void {
+  pulseUnitClass(root, attackerId, "fx-cast-release", ms);
+  spawnCasterChannelRelease(root, attackerId, element, ms);
 }
 
 function spawnCastGatherVfx(
@@ -578,6 +715,7 @@ export function spawnTravelBolt(
   img.decoding = "async";
   img.setAttribute("aria-hidden", "true");
   bolt.appendChild(img);
+  scheduleFxDematte(img);
   layer.appendChild(bolt);
   window.setTimeout(() => bolt.remove(), Math.max(80, ms + delayMs + 80));
 }
@@ -730,6 +868,7 @@ function spawnAoeField(
   img.decoding = "async";
   img.setAttribute("aria-hidden", "true");
   field.appendChild(img);
+  scheduleFxDematte(img);
   const burst = document.createElement("img");
   burst.className = "skill-field-burst";
   burst.src = hitArt(element);
@@ -738,6 +877,7 @@ function spawnAoeField(
   burst.decoding = "async";
   burst.setAttribute("aria-hidden", "true");
   field.appendChild(burst);
+  scheduleFxDematte(burst);
   layer.appendChild(field);
   window.setTimeout(() => field.remove(), Math.max(80, Math.round(ms * 1.25)));
 }
@@ -751,7 +891,6 @@ export type SkillVfxPlayOpts = {
   vfxFamily?: SkillVfxFamily;
   orbBolt?: boolean;
   vfxId?: string;
-  vfxId?: string;
   onImpact?: () => void;
   playCasterClip?: (
     unitId: string,
@@ -759,6 +898,86 @@ export type SkillVfxPlayOpts = {
     opts?: { loop?: boolean },
   ) => void;
 };
+
+async function playSupportSkillVfx(
+  root: ParentNode,
+  attackerId: string,
+  targets: string[],
+  opts: SkillVfxPlayOpts,
+  impact: SkillVfxPreset,
+): Promise<void> {
+  const chargeMs = fxDurationMs(440, opts.speed);
+  const flyMs = fxDurationMs(420, opts.speed);
+  const impactMs = fxDurationMs(620, opts.speed);
+  const pulseClass = supportPulseClass(opts.kind);
+  const glowMs = fxDurationMs(360, opts.speed);
+  const casterReleaseMs = fxDurationMs(320, opts.speed);
+
+  const pulse = (id: string, cls: string, ms: number) =>
+    pulseUnitClass(root, id, cls, ms);
+
+  const supportRecipient = (id: string, delay: number, auraMs: number) => {
+    window.setTimeout(() => {
+      pulse(id, pulseClass, glowMs);
+      spawnSupportAuraFx(root, id, impact, auraMs, {
+        element: opts.element,
+        role: "recipient",
+      });
+      if (opts.orbBolt && id !== attackerId) {
+        spawnTrapRingVfx(root, id, opts.element, auraMs);
+      }
+    }, delay);
+  };
+
+  const supportCasterRelease = (delay: number, ms: number) => {
+    window.setTimeout(() => {
+      pulse(attackerId, "fx-support-cast", ms);
+      spawnSupportCasterFx(root, attackerId, impact, ms, {
+        element: opts.element,
+      });
+    }, delay);
+  };
+
+  pulse(attackerId, "fx-cast-skill", chargeMs);
+  spawnCastGatherVfx(root, attackerId, opts.element, chargeMs);
+  spawnSkillFx(root, attackerId, "cast", chargeMs, {
+    element: opts.element,
+    role: "cast",
+    vfxId: opts.vfxId,
+  });
+  opts.playCasterClip?.(attackerId, "cast");
+  const ids = targets.length ? targets : [attackerId];
+  const recipients = ids.filter((id) => id !== attackerId);
+  const selfTargeted = ids.includes(attackerId);
+  const launchAt = Math.floor(chargeMs * 0.52);
+  const boltKind = supportBoltKind(opts.kind);
+  window.setTimeout(() => {
+    for (const id of recipients) {
+      spawnBoltFlight(root, attackerId, id, boltKind, flyMs, opts.orbBolt, opts.element);
+    }
+  }, launchAt);
+  const impactAt = recipients.length ? launchAt + flyMs : Math.floor(chargeMs * 0.55);
+  window.setTimeout(() => {
+    recipients.forEach((id, i) => supportRecipient(id, i * 80, impactMs));
+    if (selfTargeted) {
+      const selfDelay = recipients.length * 80;
+      if (recipients.length > 0) {
+        supportCasterRelease(0, casterReleaseMs);
+      }
+      supportRecipient(attackerId, selfDelay, impactMs);
+    } else if (recipients.length > 0) {
+      supportCasterRelease(0, casterReleaseMs);
+    } else {
+      supportRecipient(attackerId, 0, impactMs);
+    }
+    opts.onImpact?.();
+  }, impactAt);
+  const tail =
+    impactAt +
+    impactMs +
+    Math.max(0, (recipients.length + (selfTargeted ? 1 : 0) - 1) * 80);
+  await waitFx(tail);
+}
 
 /**
  * Full skill presentation: caster motion, optional projectile, per-target impact.
@@ -791,26 +1010,26 @@ export async function playSkillVfx(
     pulseUnitClass(root, id, cls, ms);
 
   const flinchMs = fxDurationMs(280, opts.speed);
-  const supportSelf =
-    opts.kind === "heal" ||
-    opts.kind === "buff" ||
-    opts.kind === "shield" ||
-    opts.kind === "amplify";
   const strikeTarget = (id: string, delay: number, impactMs: number) => {
     window.setTimeout(() => {
-      if (id !== attackerId || supportSelf) pulse(id, hitClass, flinchMs);
+      pulse(id, hitClass, flinchMs);
       spawnSkillFx(root, id, impact, impactMs, {
         element: opts.element,
         ult: opts.ult,
         crit: opts.crit,
         role: "hit",
-      vfxId: opts.vfxId,
+        vfxId: opts.vfxId,
       });
       if (opts.orbBolt && id !== attackerId) {
         spawnTrapRingVfx(root, id, opts.element, impactMs);
       }
     }, delay);
   };
+
+  if (isSupportImpactKind(opts.kind) && !opts.ult) {
+    await playSupportSkillVfx(root, attackerId, targets, opts, impact);
+    return;
+  }
 
   if (opts.ult) {
     const cutMs = fxDurationMs(720, opts.speed);
@@ -886,6 +1105,12 @@ export async function playSkillVfx(
     opts.playCasterClip?.(attackerId, "cast");
     const launchAt = Math.floor(chargeMs * 0.58);
     window.setTimeout(() => {
+      casterReleasePulse(
+        root,
+        attackerId,
+        opts.element,
+        fxDurationMs(280, opts.speed),
+      );
       for (const id of targets) {
         spawnBoltFlight(root, attackerId, id, opts.element, flyMs, opts.orbBolt);
       }
@@ -919,6 +1144,12 @@ export async function playSkillVfx(
     }, launchAt);
     const impactAt = launchAt + flyMs;
     window.setTimeout(() => {
+      casterReleasePulse(
+        root,
+        attackerId,
+        opts.element,
+        fxDurationMs(300, opts.speed),
+      );
       spawnAoeField(root, targets, opts.element, impactMs, opts.ult);
       targets.forEach((id, i) => strikeTarget(id, i * 90, impactMs));
       opts.onImpact?.();
@@ -943,6 +1174,12 @@ export async function playSkillVfx(
   const launchAt = Math.floor(chargeMs * 0.52);
   const boltKind = supportBoltKind(opts.kind);
   window.setTimeout(() => {
+    casterReleasePulse(
+      root,
+      attackerId,
+      opts.element,
+      fxDurationMs(280, opts.speed),
+    );
     for (const id of remote) {
       spawnBoltFlight(root, attackerId, id, boltKind, flyMs, opts.orbBolt, opts.element);
     }

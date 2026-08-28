@@ -7,6 +7,7 @@
  *   node scripts/pad-battle-stills.mjs --dir apps/web/public/art/summoner/battle --force
  *   node scripts/pad-battle-stills.mjs --qa
  *   node scripts/pad-battle-stills.mjs --dir dematteDir --staging outDir --force
+ *   node scripts/pad-battle-stills.mjs --dir dematteDir --staging outDir --size 1024
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -31,7 +32,10 @@ const staging = argVal("--staging")
   : null;
 const qa = args.includes("--qa");
 const force = args.includes("--force");
-const SIZE = 768;
+const requestedSize = Number.parseInt(argVal("--size") || "768", 10);
+const SIZE = Number.isFinite(requestedSize) && requestedSize > 0
+  ? requestedSize
+  : 768;
 const PAD_X = 0.12;
 const PAD_TOP = 0.12;
 const PAD_BOTTOM = 0.05;

@@ -16,6 +16,7 @@ export type { SkillDef, SkillEffect, StatModAxis, CcKind } from "./skills.js";
 export {
   describeSkillVfx,
   monsterSkillVfxId,
+  skillIconPath,
   summonerSkillVfxId,
 } from "./skillVisuals.js";
 export type {
