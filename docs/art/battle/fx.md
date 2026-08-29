@@ -16,7 +16,8 @@ Hits play as **layered sprite animation** (flash → slash/burst → debris), no
 | `fx-strike-ult.webp` | Ult overlay |
 | `fx-cast.webp` | Caster charge |
 | `fx-heal.webp` / `fx-shield.webp` / `fx-buff.webp` / `fx-hex.webp` | Support |
-| `fx-bolt.webp` / `fx-bolt-water.webp` / `fx-bolt-dark.webp` | Traveling projectile |
+| `fx-bolt.webp` / `fx-bolt-{fire,water,wind,light,dark}.webp` | Traveling projectile (painted WebP only) |
+| `fx-orb-{heal,buff,shield}.webp` | Support traveling orbs (painted WebP only) |
 | `fx-shockwave.webp` | AoE field |
 | `fx-strike.webp` / `fx-hit.webp` | Legacy fallback textures |
 

@@ -142,6 +142,10 @@ export function getBattleStillSrc(
   if (artKey) {
     const awakenMid = preferAwakened ? "-awaken" : "";
     const suffix = facing === "back" ? "-back" : "-front";
+    const familyKey = getMonsterFamilyArtKey(monsterId);
+    if (facing === "back" && familyKey && familyKey !== artKey) {
+      return `/art/monster/battle/${familyKey}${awakenMid}${suffix}.webp`;
+    }
     return `/art/monster/battle/${artKey}${awakenMid}${suffix}.webp`;
   }
   const packId = resolveSpinePackId(monsterId);

@@ -1,0 +1,140 @@
+{
+  "count": 15,
+  "queue": [
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-dark-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; decisive offensive force with a readable point of impact; compact basic skill with a sharp readable gesture; skill concept: 암영타격; meaning: 적 1명에게 어둠의 손아귀로 짓눌러 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-dark-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; decisive offensive force with a readable point of impact; signature scale and a distinctive central silhouette; skill concept: 심연용의숨결; meaning: 어둠의 일격을 내려 적을 짓누릅니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-dark-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; decisive offensive force with a readable point of impact; ultimate scale and layered climax; skill concept: 공허용격낙하; meaning: 공허의 균열을 열어 모든 적을 짓누릅니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-fire-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; decisive offensive force with a readable point of impact; compact basic skill with a sharp readable gesture; skill concept: 화염타격; meaning: 적 1명에게 맹렬한 불꽃을 휘둘러 베어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-fire-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; decisive offensive force with a readable point of impact; signature scale and a distinctive central silhouette; skill concept: 작열용의숨결; meaning: 맹렬한 불꽃을 뿜어 적을 공격합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-fire-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; decisive offensive force with a readable point of impact; ultimate scale and layered climax; skill concept: 폭염용격낙하; meaning: 불기둥을 일으켜 모든 적에게 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-light-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; decisive offensive force with a readable point of impact; compact basic skill with a sharp readable gesture; skill concept: 섬광타격; meaning: 적 1명에게 빛의 창으로 꿰뚫어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-light-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; decisive offensive force with a readable point of impact; signature scale and a distinctive central silhouette; skill concept: 성휘용의숨결; meaning: 섬광을 모아 적을 꿰뚫습니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-light-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; decisive offensive force with a readable point of impact; ultimate scale and layered climax; skill concept: 심판용격낙하; meaning: 성광을 쏟아 모든 적을 꿰뚫습니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-water-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; decisive offensive force with a readable point of impact; compact basic skill with a sharp readable gesture; skill concept: 냉기타격; meaning: 적 1명에게 날카로운 얼음 파편을 쏘아 관통 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-water-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; decisive offensive force with a readable point of impact; signature scale and a distinctive central silhouette; skill concept: 해일용의숨결; meaning: 얼어붙은 파장을 쏘아 적을 관통합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-water-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; decisive offensive force with a readable point of impact; ultimate scale and layered climax; skill concept: 빙결용격낙하; meaning: 얼음 폭풍을 퍼뜨려 모든 적을 관통합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-wind-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; decisive offensive force with a readable point of impact; compact basic skill with a sharp readable gesture; skill concept: 질풍타격; meaning: 적 1명에게 회오리 칼날로 베어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-wind-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; decisive offensive force with a readable point of impact; signature scale and a distinctive central silhouette; skill concept: 돌풍용의숨결; meaning: 질풍을 몰아 적을 베어 냅니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    },
+    {
+      "kind": "monster",
+      "stem": "wyrm_rider-wind-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; decisive offensive force with a readable point of impact; ultimate scale and layered climax; skill concept: 폭풍용격낙하; meaning: 회오리를 몰아 모든 적을 베어 냅니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "wyrm_rider"
+    }
+  ]
+}

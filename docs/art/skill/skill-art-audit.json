@@ -1,0 +1,296 @@
+{
+  "generatedAt": "2026-08-29T10:29:36.333Z",
+  "totals": {
+    "files": 809,
+    "needsRegen": 24
+  },
+  "byKind": {
+    "monster": {
+      "files": 750,
+      "needsRegen": 24,
+      "issueCounts": {
+        "ui-frame": 23,
+        "portrait": 4
+      }
+    },
+    "summoner": {
+      "files": 55,
+      "needsRegen": 0,
+      "issueCounts": {}
+    },
+    "ui": {
+      "files": 4,
+      "needsRegen": 0,
+      "issueCounts": {}
+    }
+  },
+  "needsRegen": [
+    {
+      "kind": "monster",
+      "name": "seal_elder-dark-s1.webp",
+      "bytes": 18040,
+      "edgeRatio": 0.573,
+      "centerRatio": 0.33,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-dark-s2.webp",
+      "bytes": 20104,
+      "edgeRatio": 0.573,
+      "centerRatio": 0.289,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-dark-s3.webp",
+      "bytes": 22952,
+      "edgeRatio": 0.573,
+      "centerRatio": 0.271,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-fire-s1.webp",
+      "bytes": 21324,
+      "edgeRatio": 0.572,
+      "centerRatio": 0.267,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-fire-s2.webp",
+      "bytes": 24628,
+      "edgeRatio": 0.572,
+      "centerRatio": 0.231,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-fire-s3.webp",
+      "bytes": 28326,
+      "edgeRatio": 0.572,
+      "centerRatio": 0.216,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-light-s1.webp",
+      "bytes": 23088,
+      "edgeRatio": 0.575,
+      "centerRatio": 0.399,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-light-s2.webp",
+      "bytes": 26746,
+      "edgeRatio": 0.575,
+      "centerRatio": 0.363,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-light-s3.webp",
+      "bytes": 30832,
+      "edgeRatio": 0.575,
+      "centerRatio": 0.341,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-water-s1.webp",
+      "bytes": 23214,
+      "edgeRatio": 0.574,
+      "centerRatio": 0.314,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-water-s2.webp",
+      "bytes": 26646,
+      "edgeRatio": 0.574,
+      "centerRatio": 0.272,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-water-s3.webp",
+      "bytes": 29852,
+      "edgeRatio": 0.573,
+      "centerRatio": 0.257,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-wind-s1.webp",
+      "bytes": 22522,
+      "edgeRatio": 0.574,
+      "centerRatio": 0.343,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-wind-s2.webp",
+      "bytes": 25152,
+      "edgeRatio": 0.574,
+      "centerRatio": 0.304,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "seal_elder-wind-s3.webp",
+      "bytes": 29030,
+      "edgeRatio": 0.574,
+      "centerRatio": 0.288,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "venom_stinger-fire-s3.webp",
+      "bytes": 21156,
+      "edgeRatio": 0.572,
+      "centerRatio": 0.191,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "venom_stinger-light-s1.webp",
+      "bytes": 20846,
+      "edgeRatio": 0.373,
+      "centerRatio": 0.688,
+      "issues": [
+        "ui-frame",
+        "portrait"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "venom_stinger-light-s2.webp",
+      "bytes": 21362,
+      "edgeRatio": 0.595,
+      "centerRatio": 0.691,
+      "issues": [
+        "ui-frame",
+        "portrait"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "venom_stinger-light-s3.webp",
+      "bytes": 30590,
+      "edgeRatio": 0.344,
+      "centerRatio": 0.759,
+      "issues": [
+        "ui-frame",
+        "portrait"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "venom_stinger-water-s2.webp",
+      "bytes": 23218,
+      "edgeRatio": 0.573,
+      "centerRatio": 0.183,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "venom_stinger-water-s3.webp",
+      "bytes": 26052,
+      "edgeRatio": 0.573,
+      "centerRatio": 0.18,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "venom_stinger-wind-s1.webp",
+      "bytes": 22012,
+      "edgeRatio": 0.478,
+      "centerRatio": 0.355,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "venom_stinger-wind-s2.webp",
+      "bytes": 27730,
+      "edgeRatio": 0.322,
+      "centerRatio": 0.622,
+      "issues": [
+        "portrait"
+      ],
+      "needsRegen": true
+    },
+    {
+      "kind": "monster",
+      "name": "venom_stinger-wind-s3.webp",
+      "bytes": 21202,
+      "edgeRatio": 0.574,
+      "centerRatio": 0.222,
+      "issues": [
+        "ui-frame"
+      ],
+      "needsRegen": true
+    }
+  ]
+}

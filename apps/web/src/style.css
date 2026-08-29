@@ -8371,12 +8371,12 @@ main {
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy {
-  padding-top: calc(96px + env(safe-area-inset-top));
+  padding-top: calc(96px + env(safe-area-inset-top) + var(--battle-midfield-drop, 0px));
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front {
   --battle-depth-scale: 0.96;
-  --battle-depth-y: 34px;
+  --battle-depth-y: calc(34px + var(--battle-midfield-drop, 0px) * 0.65);
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front::after {
@@ -8487,6 +8487,7 @@ main {
 
 /* === battle stage units (standing sprites) === */
 .battle-layout--stage {
+  --battle-midfield-drop: 14px;
   gap: 6px;
   padding: 4px 4px 4px;
   min-height: 0;
@@ -8498,6 +8499,7 @@ main {
   flex: 1 1 auto;
   /* Board is the table BETWEEN the two rims */
   z-index: 1;
+  margin-top: var(--battle-midfield-drop);
 }
 
 /* While stones can be placed, keep the tilted grid above rim portraits. */
@@ -8650,11 +8652,11 @@ main {
 /* Far rim — sit on the far floor band of the arena BG */
 .battle-lane.enemy {
   --battle-depth-scale: 0.94;
-  --battle-depth-y: 26px;
+  --battle-depth-y: calc(26px + var(--battle-midfield-drop, 0px) * 0.65);
   --battle-depth-z: -42px;
   --battle-depth-tilt: -1.5deg;
   --battle-depth-opacity: 0.94;
-  padding-top: calc(68px + env(safe-area-inset-top));
+  padding-top: calc(68px + env(safe-area-inset-top) + var(--battle-midfield-drop, 0px));
   min-height: clamp(110px, 17dvh, 140px);
   margin-bottom: 0;
 }
@@ -9663,10 +9665,13 @@ button.battle-unit {
   border-color: #c9a227aa;
 }
 
+/* Fixed + body-ported so combat-mode transform / overflow cannot clip. */
 .battle-auto-settings {
   position: fixed;
-  z-index: var(--z-modal, 80);
-  width: min(250px, calc(100% - 16px));
+  top: 0;
+  left: 0;
+  z-index: var(--z-modal-nested);
+  width: min(250px, calc(100vw - 16px));
   pointer-events: auto;
 }
 
@@ -11818,6 +11823,26 @@ button.battle-unit {
   box-shadow: 0 0 18px #a8dcff88, inset 0 0 12px #5cb8ff44;
 }
 
+.skill-caster-core--cast.skill-caster-core--fire {
+  box-shadow: 0 0 18px #ff703088, inset 0 0 12px #ff582844;
+}
+
+.skill-caster-core--cast.skill-caster-core--water {
+  box-shadow: 0 0 18px #40d0ff88, inset 0 0 12px #28c8ff44;
+}
+
+.skill-caster-core--cast.skill-caster-core--wind {
+  box-shadow: 0 0 18px #60f09888, inset 0 0 12px #48e88844;
+}
+
+.skill-caster-core--cast.skill-caster-core--light {
+  box-shadow: 0 0 18px #ffe85088, inset 0 0 12px #ffe83844;
+}
+
+.skill-caster-core--cast.skill-caster-core--dark {
+  box-shadow: 0 0 18px #c098ff88, inset 0 0 12px #9878f844;
+}
+
 .skill-caster-spark {
   position: absolute;
   left: 50%;
@@ -11844,6 +11869,31 @@ button.battle-unit {
 .skill-caster-spark--shield {
   background: #b8e4ff;
   box-shadow: 0 0 6px #5cb8ff;
+}
+
+.skill-caster-spark--cast.skill-caster-spark--fire {
+  background: #ffb080;
+  box-shadow: 0 0 6px #ff5828;
+}
+
+.skill-caster-spark--cast.skill-caster-spark--water {
+  background: #9ce8ff;
+  box-shadow: 0 0 6px #28c8ff;
+}
+
+.skill-caster-spark--cast.skill-caster-spark--wind {
+  background: #9cf0b8;
+  box-shadow: 0 0 6px #48e888;
+}
+
+.skill-caster-spark--cast.skill-caster-spark--light {
+  background: #fff0a8;
+  box-shadow: 0 0 6px #ffe838;
+}
+
+.skill-caster-spark--cast.skill-caster-spark--dark {
+  background: #d8b8ff;
+  box-shadow: 0 0 6px #9878f8;
 }
 
 .skill-caster-spark {

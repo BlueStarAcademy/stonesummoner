@@ -1,0 +1,134 @@
+{
+  "count": 14,
+  "queue": [
+    {
+      "kind": "monster",
+      "stem": "angel_healer-dark-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; protective or restorative magic with elegant concentric motifs; signature scale and a distinctive central silhouette; skill concept: 심연천사의날개; meaning: 어둠의 잔향을 흘려 체력이 낮은 아군을 회복합니다.; combat effects: heal; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-dark-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; protective or restorative magic with elegant concentric motifs; ultimate scale and layered climax; skill concept: 공허성광치유; meaning: 모든 아군의 체력을 회복하고 어둠의 실드를 부여합니다.; combat effects: heal, shield; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-fire-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; protective or restorative magic with elegant concentric motifs; compact basic skill with a sharp readable gesture; skill concept: 화염탄; meaning: 적 1명에게 불의 마력 탄환을 발사합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-fire-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; protective or restorative magic with elegant concentric motifs; signature scale and a distinctive central silhouette; skill concept: 작열천사의날개; meaning: 불의 기운을 모아 체력이 낮은 아군을 치유합니다.; combat effects: heal; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-fire-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; protective or restorative magic with elegant concentric motifs; ultimate scale and layered climax; skill concept: 폭염성광치유; meaning: 모든 아군의 체력을 회복하고 불의 실드를 부여합니다.; combat effects: heal, shield; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-light-s1",
+      "issues": [
+        "ui-frame",
+        "portrait"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; protective or restorative magic with elegant concentric motifs; compact basic skill with a sharp readable gesture; skill concept: 섬광탄; meaning: 적 1명에게 빛의 마력 탄환을 발사합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-light-s2",
+      "issues": [
+        "ui-frame",
+        "portrait"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; protective or restorative magic with elegant concentric motifs; signature scale and a distinctive central silhouette; skill concept: 성휘천사의날개; meaning: 빛의 광휘를 내려 체력이 낮은 아군을 치유합니다.; combat effects: heal; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-light-s3",
+      "issues": [
+        "ui-frame",
+        "portrait"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; protective or restorative magic with elegant concentric motifs; ultimate scale and layered climax; skill concept: 심판성광치유; meaning: 모든 아군의 체력을 회복하고 빛의 실드와 정화를 부여합니다.; combat effects: heal, shield, cleanse; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-water-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; protective or restorative magic with elegant concentric motifs; compact basic skill with a sharp readable gesture; skill concept: 냉기탄; meaning: 적 1명에게 얼음의 마력 탄환을 발사합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-water-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; protective or restorative magic with elegant concentric motifs; signature scale and a distinctive central silhouette; skill concept: 해일천사의날개; meaning: 얼음의 물결을 흘려 체력이 낮은 아군을 회복합니다.; combat effects: heal; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-water-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; protective or restorative magic with elegant concentric motifs; ultimate scale and layered climax; skill concept: 빙결성광치유; meaning: 모든 아군의 체력을 회복하고 얼음의 실드를 부여합니다.; combat effects: heal, shield; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-wind-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; protective or restorative magic with elegant concentric motifs; compact basic skill with a sharp readable gesture; skill concept: 질풍탄; meaning: 적 1명에게 바람의 마력 탄환을 발사합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-wind-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; protective or restorative magic with elegant concentric motifs; signature scale and a distinctive central silhouette; skill concept: 돌풍천사의날개; meaning: 바람의 기류를 불어 체력이 낮은 아군을 돕습니다.; combat effects: heal; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    },
+    {
+      "kind": "monster",
+      "stem": "angel_healer-wind-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; protective or restorative magic with elegant concentric motifs; ultimate scale and layered climax; skill concept: 폭풍성광치유; meaning: 모든 아군의 체력을 회복하고 바람의 실드를 부여합니다.; combat effects: heal, shield; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "angel_healer"
+    }
+  ]
+}

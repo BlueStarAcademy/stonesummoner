@@ -1,0 +1,140 @@
+{
+  "count": 15,
+  "queue": [
+    {
+      "kind": "monster",
+      "stem": "capture_lord-dark-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; a clearly readable binding orb, ring, chain, or containment field; compact basic skill with a sharp readable gesture; skill concept: 암영포획; meaning: 적 1명에게 어둠의 오브를 발사해 가두어 공격합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-dark-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; a clearly readable binding orb, ring, chain, or containment field; signature scale and a distinctive central silhouette; skill concept: 심연지배의눈; meaning: 어둠의 속박을 던져 적을 가두어 공격합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-dark-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; a clearly readable binding orb, ring, chain, or containment field; ultimate scale and layered climax; skill concept: 공허절대속박; meaning: 어둠의 속박을 걸어 적을 가두고 속도를 떨어뜨립니다.; combat effects: damage, debuff, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-fire-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; a clearly readable binding orb, ring, chain, or containment field; compact basic skill with a sharp readable gesture; skill concept: 화염포획; meaning: 적 1명에게 불의 오브를 발사해 가두어 공격합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-fire-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; a clearly readable binding orb, ring, chain, or containment field; signature scale and a distinctive central silhouette; skill concept: 작열지배의눈; meaning: 불의 오브를 던져 적을 가두어 공격합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-fire-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; a clearly readable binding orb, ring, chain, or containment field; ultimate scale and layered climax; skill concept: 폭염절대속박; meaning: 불의 속박을 걸어 적을 가두고 속도를 떨어뜨립니다.; combat effects: damage, debuff, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-light-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; a clearly readable binding orb, ring, chain, or containment field; compact basic skill with a sharp readable gesture; skill concept: 섬광포획; meaning: 적 1명에게 빛의 오브를 발사해 가두어 공격합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-light-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; a clearly readable binding orb, ring, chain, or containment field; signature scale and a distinctive central silhouette; skill concept: 성휘지배의눈; meaning: 빛의 구체를 던져 적을 가두어 공격합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-light-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; a clearly readable binding orb, ring, chain, or containment field; ultimate scale and layered climax; skill concept: 심판절대속박; meaning: 빛의 속박을 걸어 적을 가두고 속도를 떨어뜨립니다.; combat effects: damage, debuff, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-water-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; a clearly readable binding orb, ring, chain, or containment field; compact basic skill with a sharp readable gesture; skill concept: 냉기포획; meaning: 적 1명에게 얼음의 오브를 발사해 가두어 공격합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-water-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; a clearly readable binding orb, ring, chain, or containment field; signature scale and a distinctive central silhouette; skill concept: 해일지배의눈; meaning: 얼음의 결정을 던져 적을 가두어 공격합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-water-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; a clearly readable binding orb, ring, chain, or containment field; ultimate scale and layered climax; skill concept: 빙결절대속박; meaning: 얼음의 속박을 걸어 적을 가두고 속도를 떨어뜨립니다.; combat effects: damage, debuff, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-wind-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; a clearly readable binding orb, ring, chain, or containment field; compact basic skill with a sharp readable gesture; skill concept: 질풍포획; meaning: 적 1명에게 바람의 오브를 발사해 가두어 공격합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-wind-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; a clearly readable binding orb, ring, chain, or containment field; signature scale and a distinctive central silhouette; skill concept: 돌풍지배의눈; meaning: 바람의 고리를 던져 적을 가두어 공격합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    },
+    {
+      "kind": "monster",
+      "stem": "capture_lord-wind-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; a clearly readable binding orb, ring, chain, or containment field; ultimate scale and layered climax; skill concept: 폭풍절대속박; meaning: 바람의 속박을 걸어 적을 가두고 속도를 떨어뜨립니다.; combat effects: damage, debuff, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "capture_lord"
+    }
+  ]
+}

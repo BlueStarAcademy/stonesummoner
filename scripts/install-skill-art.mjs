@@ -39,7 +39,7 @@ const fileStem = argVal("--file");
 
 const assetsRoot =
   process.env.CURSOR_ASSETS ||
-  path.join(process.env.USERPROFILE || "", ".cursor/projects/c-project-StoneSummoner/assets");
+  path.join(process.env.USERPROFILE || "", ".cursor/projects/c-Project-StoneSummoners/assets");
 
 const SOURCE_DIRS = [
   path.join(root, "apps/web/public/art/_staging", kind, "skill"),

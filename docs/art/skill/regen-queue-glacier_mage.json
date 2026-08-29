@@ -1,0 +1,140 @@
+{
+  "count": 15,
+  "queue": [
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-dark-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 암영저주; meaning: 적 1명에게 어둠의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-dark-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 심연빙하구; meaning: 어둠의 균열을 열어 적의 방어를 무너뜨립니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-dark-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 공허빙하붕괴; meaning: 어둠의 파열을 퍼뜨리고 기절을 시도합니다.; combat effects: damage, debuff, cc; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-fire-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 화염저주; meaning: 적 1명에게 불의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-fire-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 작열빙하구; meaning: 불의 저주를 걸어 적을 약화시킵니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-fire-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 폭염빙하붕괴; meaning: 불의 파열을 퍼뜨려 모든 적을 약화시킵니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-light-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 섬광저주; meaning: 적 1명에게 빛의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-light-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 성휘빙하구; meaning: 빛의 심판을 내려 적의 명중을 떨어뜨립니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-light-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 심판빙하붕괴; meaning: 빛의 파열을 퍼뜨려 모든 적을 약화시킵니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-water-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 냉기저주; meaning: 적 1명에게 얼음의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-water-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 해일빙하구; meaning: 얼음의 한기를 퍼뜨려 적을 둔화합니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-water-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 빙결빙하붕괴; meaning: 얼음의 파열을 퍼뜨리고 빙결을 시도합니다.; combat effects: damage, debuff, cc; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-wind-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 질풍저주; meaning: 적 1명에게 바람의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-wind-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 돌풍빙하구; meaning: 바람의 난기류를 퍼뜨려 적을 흔듭니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    },
+    {
+      "kind": "monster",
+      "stem": "glacier_mage-wind-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 폭풍빙하붕괴; meaning: 바람의 파열을 퍼뜨려 모든 적을 약화시킵니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "glacier_mage"
+    }
+  ]
+}

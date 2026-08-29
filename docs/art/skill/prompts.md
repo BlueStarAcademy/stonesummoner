@@ -9,6 +9,23 @@
 - Element colors are **baked in paint** — one file per family × element
 - Client loads **WebP only** (no SVG / procedural fallback to ship)
 
+## Audit + batch regen
+
+```bash
+npm run skill-art:audit          # writes docs/art/skill/skill-art-audit.json
+npm run skill-art:regen-queue    # writes docs/art/skill/regen-queue.json
+node scripts/export-skill-art-regen-queue.mjs --family stone_golem
+```
+
+Painted PNG masters → Cursor assets root (`~/.cursor/projects/c-Project-StoneSummoners/assets/{stem}.png`) → install:
+
+```bash
+node scripts/install-cursor-skill-batch.mjs --kind monster stone_golem-fire-s1
+npm run battle-fx:check
+```
+
+Bad icons usually have **UI frames** or **character busts** instead of effect-only emblems. Keep the 29 monster icons that pass audit; regen the rest from manifest prompts.
+
 ## Install painted HQ (the only way to update ship icons)
 
 1. Drop PNG masters into staging:

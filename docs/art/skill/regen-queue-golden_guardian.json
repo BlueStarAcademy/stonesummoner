@@ -1,0 +1,15 @@
+{
+  "count": 1,
+  "queue": [
+    {
+      "kind": "monster",
+      "stem": "golden_guardian-light-s1",
+      "issues": [
+        "ui-frame",
+        "portrait"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; heavy defensive mass, ward plates, and grounded force; compact basic skill with a sharp readable gesture; skill concept: 섬광강타; meaning: 적 1명에게 빛의 방패와 함께 강타를 내립니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "golden_guardian"
+    }
+  ]
+}

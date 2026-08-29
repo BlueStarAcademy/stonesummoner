@@ -1,0 +1,86 @@
+{
+  "count": 9,
+  "queue": [
+    {
+      "kind": "monster",
+      "stem": "dew_slime-dark-s1",
+      "issues": [
+        "small-file"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; protective or restorative magic with elegant concentric motifs; compact basic skill with a sharp readable gesture; skill concept: 암영탄; meaning: 적 1명에게 어둠의 마력 탄환을 발사합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "dew_slime"
+    },
+    {
+      "kind": "monster",
+      "stem": "dew_slime-fire-s1",
+      "issues": [
+        "small-file"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; protective or restorative magic with elegant concentric motifs; compact basic skill with a sharp readable gesture; skill concept: 화염탄; meaning: 적 1명에게 불의 마력 탄환을 발사합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "dew_slime"
+    },
+    {
+      "kind": "monster",
+      "stem": "dew_slime-light-s1",
+      "issues": [
+        "small-file"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; protective or restorative magic with elegant concentric motifs; compact basic skill with a sharp readable gesture; skill concept: 섬광탄; meaning: 적 1명에게 빛의 마력 탄환을 발사합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "dew_slime"
+    },
+    {
+      "kind": "monster",
+      "stem": "dew_slime-light-s3",
+      "issues": [
+        "portrait"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; protective or restorative magic with elegant concentric motifs; ultimate scale and layered climax; skill concept: 심판생명이슬; meaning: 모든 아군의 체력을 회복하고 빛의 실드와 정화를 부여합니다.; combat effects: heal, shield, cleanse; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "dew_slime"
+    },
+    {
+      "kind": "monster",
+      "stem": "dew_slime-water-s1",
+      "issues": [
+        "small-file"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; protective or restorative magic with elegant concentric motifs; compact basic skill with a sharp readable gesture; skill concept: 냉기탄; meaning: 적 1명에게 얼음의 마력 탄환을 발사합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "dew_slime"
+    },
+    {
+      "kind": "monster",
+      "stem": "dew_slime-water-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; protective or restorative magic with elegant concentric motifs; signature scale and a distinctive central silhouette; skill concept: 해일이슬방울; meaning: 얼음의 물결을 흘려 체력이 낮은 아군을 회복합니다.; combat effects: heal; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "dew_slime"
+    },
+    {
+      "kind": "monster",
+      "stem": "dew_slime-water-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; protective or restorative magic with elegant concentric motifs; ultimate scale and layered climax; skill concept: 빙결생명이슬; meaning: 모든 아군의 체력을 회복하고 얼음의 실드를 부여합니다.; combat effects: heal, shield; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "dew_slime"
+    },
+    {
+      "kind": "monster",
+      "stem": "dew_slime-wind-s1",
+      "issues": [
+        "small-file"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; protective or restorative magic with elegant concentric motifs; compact basic skill with a sharp readable gesture; skill concept: 질풍탄; meaning: 적 1명에게 바람의 마력 탄환을 발사합니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "dew_slime"
+    },
+    {
+      "kind": "monster",
+      "stem": "dew_slime-wind-s3",
+      "issues": [
+        "portrait"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; protective or restorative magic with elegant concentric motifs; ultimate scale and layered climax; skill concept: 폭풍생명이슬; meaning: 모든 아군의 체력을 회복하고 바람의 실드를 부여합니다.; combat effects: heal, shield; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "dew_slime"
+    }
+  ]
+}

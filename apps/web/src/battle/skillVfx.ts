@@ -66,11 +66,14 @@ const ART = {
   hex: "/art/battle/fx/fx-hex.webp",
   cast: "/art/battle/fx/fx-cast.webp",
   bolt: "/art/battle/fx/fx-bolt.webp",
+  boltFire: "/art/battle/fx/fx-bolt-fire.webp",
+  boltWind: "/art/battle/fx/fx-bolt-wind.webp",
+  boltLight: "/art/battle/fx/fx-bolt-light.webp",
   boltWater: "/art/battle/fx/fx-bolt-water.webp",
   boltDark: "/art/battle/fx/fx-bolt-dark.webp",
-  orbHeal: "/art/battle/fx/fx-orb-heal.svg",
-  orbBuff: "/art/battle/fx/fx-orb-buff.svg",
-  orbShield: "/art/battle/fx/fx-orb-shield.svg",
+  orbHeal: "/art/battle/fx/fx-orb-heal.webp",
+  orbBuff: "/art/battle/fx/fx-orb-buff.webp",
+  orbShield: "/art/battle/fx/fx-orb-shield.webp",
   shock: "/art/battle/fx/fx-shockwave.webp",
 } as const;
 
@@ -149,6 +152,9 @@ function boltArt(kind: SkillBoltKind): string {
   if (kind === "shield") return ART.orbShield;
   if (kind === "slash") return ART.slash2;
   if (kind === "hex") return ART.hex;
+  if (kind === "fire") return ART.boltFire;
+  if (kind === "wind") return ART.boltWind;
+  if (kind === "light") return ART.boltLight;
   if (kind === "water") return ART.boltWater;
   if (kind === "dark") return ART.boltDark;
   return ART.bolt;
@@ -335,6 +341,9 @@ function presetLayers(
   } else if (preset === "cast") {
     layers.push({ src: ART.cast, cls: "skfx-img skfx-img--cast" });
     layers.push({ src: ART.cast, cls: "skfx-img skfx-img--cast skfx-img--cast-b" });
+  } else if (opts?.role === "cast") {
+    layers.push({ src: ART.cast, cls: "skfx-img skfx-img--cast" });
+    layers.push({ src: ART.cast, cls: "skfx-img skfx-img--cast skfx-img--cast-b" });
   } else {
     impactSeq();
   }
@@ -405,11 +414,48 @@ function spawnSupportCasterCore(
   const sparkN = preset === "shield" ? 5 : 6;
   for (let i = 0; i < sparkN; i++) {
     const spark = document.createElement("span");
-    spark.className = `skill-caster-spark skill-caster-spark--${preset}`;
+    spark.className = `skill-caster-spark skill-caster-spark--${preset} skill-caster-spark--${element}`;
     spark.style.setProperty("--spark-i", String(i));
     spark.style.setProperty("--spark-n", String(sparkN));
     wrap.appendChild(spark);
   }
+}
+
+/** Offensive cast channel on the caster — distinct from hit burst / flinch. */
+function spawnOffensiveCasterFx(
+  root: ParentNode,
+  unitId: string,
+  element: CombatElement,
+  ms: number,
+): void {
+  if (reduceMotion) return;
+  const el = queryUnit(root, unitId);
+  if (!el) return;
+  const wrap = document.createElement("span");
+  wrap.className = `skill-caster-fx skill-caster-fx--cast skill-caster-fx--${element}`;
+  wrap.setAttribute("aria-hidden", "true");
+  wrap.style.setProperty("--skfx-ms", `${Math.max(80, ms)}ms`);
+  spawnSupportCasterCore(wrap, "cast", element);
+  el.appendChild(wrap);
+  window.setTimeout(() => wrap.remove(), Math.max(80, Math.round(ms * 1.35)));
+}
+
+function spawnCasterBodyFx(
+  root: ParentNode,
+  unitId: string,
+  element: CombatElement,
+  ms: number,
+  opts?: { vfxId?: string; pulseMs?: number },
+): void {
+  const pulseMs = opts?.pulseMs ?? ms;
+  pulseUnitClass(root, unitId, "fx-cast-skill", pulseMs);
+  spawnCastGatherVfx(root, unitId, element, ms);
+  spawnOffensiveCasterFx(root, unitId, element, ms);
+  spawnSkillFx(root, unitId, "cast", ms, {
+    element,
+    role: "cast",
+    vfxId: opts?.vfxId,
+  });
 }
 
 export function spawnSupportCasterFx(
@@ -940,10 +986,8 @@ async function playSupportSkillVfx(
 
   pulse(attackerId, "fx-cast-skill", chargeMs);
   spawnCastGatherVfx(root, attackerId, opts.element, chargeMs);
-  spawnSkillFx(root, attackerId, "cast", chargeMs, {
+  spawnSupportCasterFx(root, attackerId, impact, chargeMs, {
     element: opts.element,
-    role: "cast",
-    vfxId: opts.vfxId,
   });
   opts.playCasterClip?.(attackerId, "cast");
   const ids = targets.length ? targets : [attackerId];
@@ -960,15 +1004,14 @@ async function playSupportSkillVfx(
   window.setTimeout(() => {
     recipients.forEach((id, i) => supportRecipient(id, i * 80, impactMs));
     if (selfTargeted) {
-      const selfDelay = recipients.length * 80;
-      if (recipients.length > 0) {
-        supportCasterRelease(0, casterReleaseMs);
-      }
+      supportCasterRelease(0, casterReleaseMs);
+      const selfDelay =
+        recipients.length > 0
+          ? recipients.length * 80
+          : Math.floor(casterReleaseMs * 0.35);
       supportRecipient(attackerId, selfDelay, impactMs);
     } else if (recipients.length > 0) {
       supportCasterRelease(0, casterReleaseMs);
-    } else {
-      supportRecipient(attackerId, 0, impactMs);
     }
     opts.onImpact?.();
   }, impactAt);
@@ -1011,6 +1054,7 @@ export async function playSkillVfx(
 
   const flinchMs = fxDurationMs(280, opts.speed);
   const strikeTarget = (id: string, delay: number, impactMs: number) => {
+    if (id === attackerId) return;
     window.setTimeout(() => {
       pulse(id, hitClass, flinchMs);
       spawnSkillFx(root, id, impact, impactMs, {
@@ -1020,7 +1064,7 @@ export async function playSkillVfx(
         role: "hit",
         vfxId: opts.vfxId,
       });
-      if (opts.orbBolt && id !== attackerId) {
+      if (opts.orbBolt) {
         spawnTrapRingVfx(root, id, opts.element, impactMs);
       }
     }, delay);
@@ -1037,11 +1081,9 @@ export async function playSkillVfx(
     const impactMs = fxDurationMs(720, opts.speed);
     playUltCutin(root, cutMs);
     pulse(attackerId, "fx-ult", cutMs);
-    spawnCastGatherVfx(root, attackerId, opts.element, cutMs);
-    spawnSkillFx(root, attackerId, "cast", cutMs, {
-      element: opts.element,
-      role: "cast",
+    spawnCasterBodyFx(root, attackerId, opts.element, cutMs, {
       vfxId: opts.vfxId,
+      pulseMs: cutMs,
     });
     opts.playCasterClip?.(attackerId, "ult");
     const launchAt = Math.floor(cutMs * 0.5);
@@ -1064,14 +1106,14 @@ export async function playSkillVfx(
   if (family === "melee") {
     const lungeMs = fxDurationMs(480, opts.speed);
     const impactMs = fxDurationMs(560, opts.speed);
-    const swing: SkillVfxPreset = opts.element === "wind" ? "wind-cut" : "slash";
     pulse(attackerId, "fx-lunge", lungeMs);
-    spawnCastGatherVfx(root, attackerId, opts.element, Math.floor(lungeMs * 0.7));
-    spawnSkillFx(root, attackerId, "cast", Math.floor(lungeMs * 0.7), {
-      element: opts.element,
-      role: "cast",
-      vfxId: opts.vfxId,
-    });
+    spawnCasterBodyFx(
+      root,
+      attackerId,
+      opts.element,
+      Math.floor(lungeMs * 0.7),
+      { vfxId: opts.vfxId, pulseMs: lungeMs },
+    );
     opts.playCasterClip?.(attackerId, "run", { loop: false });
     const hitAt = Math.floor(lungeMs * 0.42);
     window.setTimeout(() => {
@@ -1079,11 +1121,6 @@ export async function playSkillVfx(
         spawnMeleeDashVfx(root, attackerId, id, opts.element, fxDurationMs(320, opts.speed));
       }
       opts.playCasterClip?.(attackerId, "attack");
-      spawnSkillFx(root, attackerId, swing, fxDurationMs(360, opts.speed), {
-        element: opts.element,
-        role: "cast",
-        vfxId: opts.vfxId,
-      });
       targets.forEach((id, i) => strikeTarget(id, i * 60, impactMs));
       opts.onImpact?.();
     }, hitAt);
@@ -1095,11 +1132,7 @@ export async function playSkillVfx(
     const chargeMs = fxDurationMs(420, opts.speed);
     const flyMs = fxDurationMs(460, opts.speed);
     const impactMs = fxDurationMs(560, opts.speed);
-    pulse(attackerId, "fx-cast-skill", chargeMs);
-    spawnCastGatherVfx(root, attackerId, opts.element, chargeMs);
-    spawnSkillFx(root, attackerId, "cast", chargeMs, {
-      element: opts.element,
-      role: "cast",
+    spawnCasterBodyFx(root, attackerId, opts.element, chargeMs, {
       vfxId: opts.vfxId,
     });
     opts.playCasterClip?.(attackerId, "cast");
@@ -1128,11 +1161,7 @@ export async function playSkillVfx(
     const chargeMs = fxDurationMs(520, opts.speed);
     const flyMs = fxDurationMs(400, opts.speed);
     const impactMs = fxDurationMs(640, opts.speed);
-    pulse(attackerId, "fx-cast-skill", chargeMs);
-    spawnCastGatherVfx(root, attackerId, opts.element, chargeMs);
-    spawnSkillFx(root, attackerId, "cast", chargeMs, {
-      element: opts.element,
-      role: "cast",
+    spawnCasterBodyFx(root, attackerId, opts.element, chargeMs, {
       vfxId: opts.vfxId,
     });
     opts.playCasterClip?.(attackerId, "cast");
@@ -1161,11 +1190,7 @@ export async function playSkillVfx(
   const chargeMs = fxDurationMs(440, opts.speed);
   const flyMs = fxDurationMs(420, opts.speed);
   const impactMs = fxDurationMs(620, opts.speed);
-  pulse(attackerId, "fx-cast-skill", chargeMs);
-  spawnCastGatherVfx(root, attackerId, opts.element, chargeMs);
-  spawnSkillFx(root, attackerId, "cast", chargeMs, {
-    element: opts.element,
-    role: "cast",
+  spawnCasterBodyFx(root, attackerId, opts.element, chargeMs, {
     vfxId: opts.vfxId,
   });
   opts.playCasterClip?.(attackerId, "cast");

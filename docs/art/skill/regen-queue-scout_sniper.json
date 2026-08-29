@@ -1,0 +1,140 @@
+{
+  "count": 15,
+  "queue": [
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-dark-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 암영저주; meaning: 적 1명에게 어둠의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-dark-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 심연저격사격; meaning: 어둠의 균열을 열어 적의 방어를 무너뜨립니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-dark-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 공허관통탄; meaning: 어둠의 파열을 퍼뜨리고 기절을 시도합니다.; combat effects: damage, debuff, cc; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-fire-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 화염저주; meaning: 적 1명에게 불의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-fire-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 작열저격사격; meaning: 불의 저주를 걸어 적을 약화시킵니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-fire-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 폭염관통탄; meaning: 불의 파열을 퍼뜨려 모든 적을 약화시킵니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-light-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 섬광저주; meaning: 적 1명에게 빛의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-light-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 성휘저격사격; meaning: 빛의 심판을 내려 적의 명중을 떨어뜨립니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-light-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 심판관통탄; meaning: 빛의 파열을 퍼뜨려 모든 적을 약화시킵니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-water-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 냉기저주; meaning: 적 1명에게 얼음의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-water-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 해일저격사격; meaning: 얼음의 한기를 퍼뜨려 적을 둔화합니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-water-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 빙결관통탄; meaning: 얼음의 파열을 퍼뜨리고 빙결을 시도합니다.; combat effects: damage, debuff, cc; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-wind-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; ominous binding marks, fracture lines, and lingering curse residue; compact basic skill with a sharp readable gesture; skill concept: 질풍저주; meaning: 적 1명에게 바람의 저주를 걸어 피해를 입힙니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-wind-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; ominous binding marks, fracture lines, and lingering curse residue; signature scale and a distinctive central silhouette; skill concept: 돌풍저격사격; meaning: 바람의 난기류를 퍼뜨려 적을 흔듭니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    },
+    {
+      "kind": "monster",
+      "stem": "scout_sniper-wind-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; ominous binding marks, fracture lines, and lingering curse residue; ultimate scale and layered climax; skill concept: 폭풍관통탄; meaning: 바람의 파열을 퍼뜨려 모든 적을 약화시킵니다.; combat effects: damage, debuff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "scout_sniper"
+    }
+  ]
+}

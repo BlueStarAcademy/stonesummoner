@@ -6847,8 +6847,7 @@ function renderUnit(
   const facing: "front" | "back" = u.team === "ally" ? "back" : "front";
   const art =
     u.kind === "monster"
-      ? battleUnitMonsterArtImg(u, "battle-unit-img", artSize, facing) ||
-        monsterArtImg(u.monsterId, "battle-unit-img", artSize)
+      ? battleUnitMonsterArtImg(u, "battle-unit-img", artSize, facing)
       : summonerBattleArtImg(u.element, "battle-unit-img", artSize, facing);
   const showName = isActive || isTargeted;
   const spineId =
@@ -8487,6 +8486,18 @@ function applyEvolveOpen(): void {
   }
 }
 
+function findBattleAutoSettingsLayer(): HTMLElement | null {
+  return (
+    document.getElementById("battle-auto-settings") ??
+    app.querySelector<HTMLElement>("#battle-auto-settings")
+  );
+}
+
+function removeBattleAutoSettingsLayer(): void {
+  findBattleAutoSettingsLayer()?.remove();
+  rememberOverlayClose("battle-auto-settings");
+}
+
 /** Toggle battle AUTO sheet without remounting combat. */
 function positionBattleAutoSettings(
   layer: HTMLElement,
@@ -8494,29 +8505,36 @@ function positionBattleAutoSettings(
 ): void {
   if (!btn) return;
   const r = btn.getBoundingClientRect();
+  const pad = 8;
   const gap = 8;
-  const width = Math.min(250, Math.max(160, window.innerWidth - 16));
-  const right = Math.max(8, window.innerWidth - r.right);
-  const bottom = Math.max(8, window.innerHeight - r.top + gap);
+  const width = Math.min(250, Math.max(160, window.innerWidth - pad * 2));
+  const height = Math.max(layer.offsetHeight, 120);
+  let left = r.right - width;
+  left = Math.min(
+    Math.max(pad, left),
+    Math.max(pad, window.innerWidth - width - pad),
+  );
+  let top = r.top - height - gap;
+  if (top < pad) top = Math.min(window.innerHeight - height - pad, r.bottom + gap);
   layer.style.position = "fixed";
   layer.style.inset = "auto";
-  layer.style.right = `${Math.round(right)}px`;
-  layer.style.bottom = `${Math.round(bottom)}px`;
-  layer.style.left = "auto";
-  layer.style.top = "auto";
+  layer.style.left = `${Math.round(left)}px`;
+  layer.style.top = `${Math.round(top)}px`;
+  layer.style.right = "auto";
+  layer.style.bottom = "auto";
   layer.style.width = `${Math.round(width)}px`;
-  layer.style.zIndex = String(Math.max(overlayStackZ, 80));
+  layer.style.zIndex = String(Math.max(overlayStackZ, 10500));
 }
 
 function ensureBattleAutoSettings(): HTMLElement | null {
-  let layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  let layer = findBattleAutoSettingsLayer();
   if (layer && !layer.querySelector("[data-battle-settings-tab]")) {
     layer.remove();
     layer = null;
   }
   if (layer) return layer;
-  app.insertAdjacentHTML("beforeend", renderBattleAutoSettings());
-  layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  document.body.insertAdjacentHTML("beforeend", renderBattleAutoSettings());
+  layer = findBattleAutoSettingsLayer();
   bindBattleAutoSettingsLayer(layer);
   return layer;
 }
@@ -8529,15 +8547,16 @@ function applyBattleAutoSettingsOpen(): void {
   }
   const layer = battleAutoSettingsOpen
     ? ensureBattleAutoSettings()
-    : app.querySelector<HTMLElement>("#battle-auto-settings");
+    : findBattleAutoSettingsLayer();
   if (!layer) return;
   const opening = battleAutoSettingsOpen && (layer.hidden || !layer.classList.contains("is-open"));
   layer.classList.toggle("is-open", battleAutoSettingsOpen);
   layer.hidden = !battleAutoSettingsOpen;
   layer.setAttribute("aria-hidden", battleAutoSettingsOpen ? "false" : "true");
   if (battleAutoSettingsOpen) {
-    app.appendChild(layer);
+    document.body.appendChild(layer);
     positionBattleAutoSettings(layer, btn);
+    requestAnimationFrame(() => positionBattleAutoSettings(layer, btn));
     applyBattleSettingsUi();
     if (opening) replayModalPop(layer);
     rememberOverlayOpen("battle-auto-settings");
@@ -8549,7 +8568,7 @@ function applyBattleAutoSettingsOpen(): void {
 /** Re-anchor an already-open sheet after a combat HUD patch; do not remount. */
 function restoreBattleAutoSettingsIfOpen(): void {
   if (!battleAutoSettingsOpen) return;
-  const layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  const layer = findBattleAutoSettingsLayer();
   const btn = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
   if (layer && layer.isConnected && !layer.hidden) {
     if (btn) {
@@ -8580,7 +8599,7 @@ function applyBattleSettingsUi(): void {
     btn.classList.toggle("is-on", on);
     btn.setAttribute("aria-checked", on ? "true" : "false");
   });
-  const layer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  const layer = findBattleAutoSettingsLayer();
   if (!layer) return;
   layer.querySelectorAll<HTMLButtonElement>("[data-battle-settings-tab]").forEach((btn) => {
     const tab = btn.dataset.battleSettingsTab;
@@ -8639,15 +8658,23 @@ function bindBattleAutoSettingsLayer(layer: HTMLElement | null): void {
   });
 }
 
-function bindBattleAutoSettings(): void {
-  const trigger = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
-  trigger?.addEventListener("click", () => {
+let battleAutoSettingsDelegateBound = false;
+function ensureBattleAutoSettingsDelegate(): void {
+  if (battleAutoSettingsDelegateBound) return;
+  battleAutoSettingsDelegateBound = true;
+  app.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (!(t instanceof Element)) return;
+    if (view !== "battle" || !battle) return;
+    if (!t.closest("#btn-auto-settings")) return;
     battleAutoSettingsOpen = !battleAutoSettingsOpen;
     applyBattleAutoSettingsOpen();
   });
-  bindBattleAutoSettingsLayer(
-    app.querySelector<HTMLElement>("#battle-auto-settings"),
-  );
+}
+
+function bindBattleAutoSettings(): void {
+  ensureBattleAutoSettingsDelegate();
+  bindBattleAutoSettingsLayer(findBattleAutoSettingsLayer());
 }
 
 const PROFILE_DEFAULT_ART = "/art/auth/logo-mark-192.png";
@@ -13678,32 +13705,60 @@ function monsterInventoryPortraitFallbacks(
   ];
 }
 
+function dedupeArtPaths(paths: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of paths) {
+    if (seen.has(p)) continue;
+    seen.add(p);
+    out.push(p);
+  }
+  return out;
+}
+
 function monsterBattleStillFallbacks(
   monsterId: string | undefined | null,
   facing: "front" | "back" = "front",
   preferAwakened = false,
+  includePortraitFallback = true,
 ): string[] {
   const artKey = getMonsterArtKey(monsterId);
   const familyKey = getMonsterFamilyArtKey(monsterId);
   if (!artKey) return [];
   const awakenMid = preferAwakened ? "-awaken" : "";
   const suffix = facing === "back" ? "-back" : "-front";
-  const out: string[] = [
-    `/art/monster/battle/${artKey}${awakenMid}${suffix}.webp`,
-  ];
-  if (preferAwakened) {
-    out.push(`/art/monster/battle/${artKey}${suffix}.webp`);
-  }
-  const def = monsterId ? getMonster(monsterId) : null;
-  if (familyKey && familyKey !== artKey && !def?.element) {
+  const out: string[] = [];
+
+  const pushFamily = () => {
+    if (!familyKey || familyKey === artKey) return;
     out.push(`/art/monster/battle/${familyKey}${awakenMid}${suffix}.webp`);
     if (preferAwakened) {
       out.push(`/art/monster/battle/${familyKey}${suffix}.webp`);
     }
+  };
+
+  const pushArtKey = () => {
+    out.push(`/art/monster/battle/${artKey}${awakenMid}${suffix}.webp`);
+    if (preferAwakened) {
+      out.push(`/art/monster/battle/${artKey}${suffix}.webp`);
+    }
+  };
+
+  // Per-element backs are often baked from front when no painted rear export
+  // exists; the family master `-back` still is the reliable rear view.
+  if (facing === "back") {
+    pushFamily();
+    pushArtKey();
+  } else {
+    pushArtKey();
+    pushFamily();
   }
-  const portrait = monsterPortraitFallbacks(monsterId, preferAwakened);
-  for (const p of portrait) out.push(p);
-  return out;
+
+  if (includePortraitFallback) {
+    const portrait = monsterPortraitFallbacks(monsterId, preferAwakened);
+    for (const p of portrait) out.push(p);
+  }
+  return dedupeArtPaths(out);
 }
 
 function imgSrcOnerrorChain(
@@ -13750,6 +13805,7 @@ function ownedMonsterBattleArtImg(
   size = 120,
   facing: "front" | "back" = "front",
   forceAwakened = false,
+  includePortraitFallback = true,
 ): string {
   const preferAwakened =
     forceAwakened || ownedMonsterAwakened(owned);
@@ -13759,6 +13815,7 @@ function ownedMonsterBattleArtImg(
     size,
     facing,
     preferAwakened,
+    includePortraitFallback,
   );
 }
 
@@ -13772,14 +13829,22 @@ function battleUnitMonsterArtImg(
   const owned =
     u.team === "ally" ? save.roster.find((m) => m.uid === u.id) : undefined;
   if (owned) {
-    return (
-      ownedMonsterBattleArtImg(owned, className, size, facing) ||
-      ownedMonsterArtImg(owned, className, size)
+    return ownedMonsterBattleArtImg(
+      owned,
+      className,
+      size,
+      facing,
+      false,
+      false,
     );
   }
-  return (
-    monsterBattleArtImg(u.monsterId, className, size, facing) ||
-    monsterArtImg(u.monsterId, className, size)
+  return monsterBattleArtImg(
+    u.monsterId,
+    className,
+    size,
+    facing,
+    false,
+    false,
   );
 }
 
@@ -13870,11 +13935,13 @@ function monsterBattleArtImg(
   size = 120,
   facing: "front" | "back" = "front",
   preferAwakened = false,
+  includePortraitFallback = true,
 ): string {
   const fallbacks = monsterBattleStillFallbacks(
     monsterId,
     facing,
     preferAwakened,
+    includePortraitFallback,
   );
   if (!fallbacks.length) return "";
   const src = fallbacks[0];
@@ -21472,8 +21539,7 @@ function leaveBattleOrResultScreen(): void {
   viewHistoryLock = true;
   autoMode = false;
   battleAutoSettingsOpen = false;
-  rememberOverlayClose("battle-auto-settings");
-  softRemoveOverlay("battle-auto-settings");
+  removeBattleAutoSettingsLayer();
   clearAutoTimer();
   clearBattleSkipTimer();
   battleSkipTimeReady = false;
