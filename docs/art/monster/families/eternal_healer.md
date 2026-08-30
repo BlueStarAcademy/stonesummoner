@@ -2,23 +2,38 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: eternal_healer_{element}
+- Divine female healer support, natural 5★
+- Long voluminous flowing white hair, serene youthful face, glowing element eyes
+- White gown with fitted ornate gold filigree bodice and high slit
+- Gold-trim thigh and shin armor with pointed white-gold heels
+- Large flowing white-gold ribbon panels swirling around body
+- Massive radiant golden halo with concentric rings and sharp star spikes
+- Left hand tall ornate golden staff with circular frame housing diamond crystal core
+- Right hand open palm extended in heal gesture
+- Graceful grounded support stance
+- **Keep across elements**: healer proportions, hair, gown filigree, halo spike layout,
+  staff diamond frame, ribbon flow, stance
+- **Change per element**: eye glow, halo hue, staff crystal, ribbon accent glow only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`eternal_healer_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Halo evolves taller with more star spikes; staff crystal becomes twin-diamond cage
+- Ribbons longer with rune embroidery; bodice filigree brighter
 - Portrait: eternal_healer_{element}_awaken.webp
 - Battle: eternal_healer_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG divine female healer support,
+long white hair serene face element eyes, white gown gold filigree bodice thigh armor,
+flowing white-gold ribbons, massive star-spike golden halo,
+ornate staff with diamond crystal frame, open palm heal gesture,
+graceful grounded stance, high-end hand-painted dark fantasy,
+eye-level front three-quarter, grounded feet, clean white plate,
+element accents in eyes halo staff crystal ribbons only, no global recolor, no text
+```

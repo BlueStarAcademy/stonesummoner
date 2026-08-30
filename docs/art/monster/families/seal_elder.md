@@ -2,23 +2,35 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: seal_elder_{element}
+- Anthropomorphic seal stonesage, natural 3★
+- Grey-black spotted seal head white muzzle, long braided white whiskers
+- Glowing element eyes, golden mystical sigil on forehead
+- Heavy layered dark robes with intricate gold embroidery and medallions
+- Large golden shoulder plates; tattered robe hem; flipper hands and feet
+- Right palm extended forward; left hand tall ornate golden astrolabe staff
+- Wise grounded caster stance
+- **Keep across elements**: seal proportions, whisker braids, robe layout,
+  medallion placement, staff astrolabe shape, caster pose
+- **Change per element**: eye glow, sigil color, staff ring glow only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`seal_elder_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Sigil evolves ornate rune circle; staff astrolabe gains twin rings
+- Heavier shoulder plates; medallions become twin-core gems
 - Portrait: seal_elder_{element}_awaken.webp
 - Battle: seal_elder_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG anthropomorphic seal stonesage,
+braided whiskers forehead sigil, ornate gold-embroidered dark robes medallions,
+extended palm and golden astrolabe staff, wise grounded caster stance,
+high-end hand-painted dark fantasy, eye-level front three-quarter,
+clean white plate, element accents in eyes sigil staff glow only,
+no global recolor, no text, no cropped staff or flippers
+```

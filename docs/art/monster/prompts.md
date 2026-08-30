@@ -71,20 +71,28 @@ Use only when painted per-element WebPs are not ready. Prefer painted install.
 
 ## Prompts
 
+대규모 2.5D 전투 스틸 교체 작업은
+[`battle-25d-production.md`](./battle-25d-production.md)의 카메라, 페어 제작,
+준비도 감사와 검수 게이트를 우선 적용한다.
+
 ### Battle (per element)
 
 ```
-Premium Com2uS Summoners War style battle character full body,
-ultra detailed hand-painted 2D dark fantasy, intricate fabrics metals and armor,
+Premium stylized 2.5D mobile RPG battle character full body,
+high-end hand-painted dark fantasy over dimensional 3D-like forms,
+eye-level orthographic-like three-quarter camera, coherent anatomy and perspective,
+cinematic soft key and rim light, ambient occlusion, physically believable layered materials,
 {element} palette baked into paint (see element-palette.md), not filter recolor,
 clear solid silhouette with no holes, grounded stance,
 feet fully visible with empty margin (~12% sides/top),
 transparent PNG alpha background OR solid magenta #FF00FF plate for AI (no black, no checkerboard grid),
 square composition,
-no text, no watermark, no UI, no cropped limbs
+no raw 3D viewport, no plastic toy render, no flat paper cutout,
+no text, no watermark, no UI, no cropped limbs or equipment
 ```
 
-Export **WebP** 1024×1024 (or larger; install resizes to 1024 contain).
+Generate at **1536×1536 or larger** and deliver PNG/WebP. Install resizes to
+transparent **WebP 1024×1024** with contain fitting.
 
 ### Portrait (optional, per element)
 

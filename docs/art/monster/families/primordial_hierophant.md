@@ -2,23 +2,38 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: primordial_hierophant_{element}
+- Ancient stone priest stonesage, natural 5★
+- Carved grey stone face with glowing element eyes, long stone beard
+- Large ornate stone headdress with flared wing-sides and central vertical spire gem
+- Layered weathered stone robes overgrown with green moss and delicate vines
+- Prominent circular celestial sun-star symbol glowing on chest
+- Vertical rune carvings down robe front
+- Tall staff with large faceted crystal head in golden branch cage wrapped in leaves
+- Other hand extended in casting gesture
+- Wise grounded stonesage stance
+- **Keep across elements**: stone priest proportions, headdress shape, moss vine growth,
+  chest celestial symbol, staff cage crystal, rune layout, stance
+- **Change per element**: eye glow, spire gem, chest symbol, staff crystal, rune glow only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`primordial_hierophant_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Headdress spire evolves taller twin-ring crown; chest symbol becomes ornate solar mandala
+- Staff crystal larger with rune cage; more floating stone tablets arc behind
 - Portrait: primordial_hierophant_{element}_awaken.webp
 - Battle: primordial_hierophant_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG ancient stone priest stonesage,
+carved stone face element eyes stone beard, ornate headdress spire gem,
+moss vine stone robes celestial chest symbol rune carvings,
+staff with faceted crystal in golden branch cage, extended casting hand,
+wise grounded stance, high-end hand-painted dark fantasy,
+eye-level front three-quarter, grounded feet, clean white plate,
+element accents in eyes gem chest symbol staff crystal runes only, no global recolor, no text
+```

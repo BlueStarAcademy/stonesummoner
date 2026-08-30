@@ -2,23 +2,35 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: steel_armor_{element}
+- Spiky death knight tank, natural 3★
+- Burnished silver-chrome and dark charcoal plate with jagged spikes
+- Full helm three crown spikes glowing element visor eyes skull motif
+- Skull chest emblem; glowing element panels under silver plating
+- Massive spiked kite shield skull over spiked sunburst pattern
+- Heavy spiked mace morning-star in other hand
+- Tattered dark cape between legs; wide grounded tank stance
+- **Keep across elements**: knight proportions, spike layout, skull motifs,
+  shield shape, mace type, tank stance
+- **Change per element**: visor glow, panel hue, shield center glow only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`steel_armor_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Taller helm crown spikes, heavier layered pauldrons
+- Shield skull evolves twin-ring emblem; panel glow brighter
 - Portrait: steel_armor_{element}_awaken.webp
 - Battle: steel_armor_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG spiky death knight tank,
+chrome-dark plate skull motifs glowing element panels, spiked kite shield and mace,
+tattered cape, wide grounded tank stance, high-end hand-painted dark fantasy,
+eye-level front three-quarter, clean white plate,
+element accents in visor panels shield glow only,
+no global recolor, no text, no cropped shield mace or feet
+```

@@ -2,23 +2,34 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: gale_rider_{element}
+- Young spear cavalry warrior attacker, natural 3★
+- Lean athletic build, sharp features, wind-blown silvery-green hair
+- White plate armor green accents gold filigree feather pauldrons
+- Large translucent element-colored flowing cape scarf with gold embroidery
+- Ornate double-ended spear with element energy wisps along shaft
+- Dynamic diagonal spear stance
+- **Keep across elements**: youth proportions, armor layout, cape scarf shape,
+  double spear silhouette, stance
+- **Change per element**: eye glow, cape hue, spear energy wisps only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`gale_rider_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Taller feather pauldrons, longer cape mantle, twin-prong spear heads
+- Cape gains rune embroidery; energy trails denser
 - Portrait: gale_rider_{element}_awaken.webp
 - Battle: gale_rider_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG young spear warrior attacker,
+white-green plate gold filigree feather pauldrons, flowing element cape scarf,
+ornate double-ended spear with energy wisps, dynamic diagonal stance,
+high-end hand-painted dark fantasy, eye-level front three-quarter,
+grounded feet, clean white plate, element accents in eyes cape spear wisps only,
+no global recolor, no text, no cropped spear or feet
+```

@@ -2,23 +2,34 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: angel_healer_{element}
+- Female angel healer support, natural 4★
+- Long flowing blonde hair, glowing element eyes, golden spiked halo
+- Elaborate white-gold gown with ornate filigree armor pieces on bodice shoulders
+- Large layered cream-gold feather wings spread wide
+- Tall ornate golden staff with circular sun ornament glowing at top
+- Graceful support stance one hand extended
+- **Keep across elements**: angel proportions, halo shape, wing layout,
+  gown silhouette, staff sun head, graceful stance
+- **Change per element**: eye glow, halo hue, staff sun glow, wing accent tips only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`angel_healer_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Halo evolves taller multi-spike crown; wings broader with rune trim
+- Staff sun grows twin-ring radiance; gown mantle longer
 - Portrait: angel_healer_{element}_awaken.webp
 - Battle: angel_healer_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG female angel healer support,
+golden spiked halo long hair, white-gold gown ornate filigree,
+large feather wings, tall golden staff with glowing sun ornament,
+graceful support stance, high-end hand-painted dark fantasy,
+eye-level front three-quarter, clean white plate,
+element accents in eyes halo staff glow only, no global recolor, no text
+```

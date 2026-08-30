@@ -2,23 +2,34 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: doom_oracle_{element}
+- Hooded apocalypse warlock debuffer, natural 5★
+- Pale grey face shadowed by hood, intense glowing element eyes
+- Layered black-burgundy ornate robes with gold trim and large element gem pauldrons
+- Spiky high collar and ornate shoulder plates with crystal accents
+- Long crimson tabard with gold embroidery down center
+- Raised hand manifesting floating element tablets with arcane symbols in energy shroud
+- Tall staff with large circular element orb in spiky gold frame, hanging crystal pendants
+- Dark element smoke wisps around body
+- **Keep across elements**: warlock proportions, hood, robe armor layout, tablet staff props, stance
+- **Change per element**: eye glow, gem color, tablet energy, orb hue, smoke only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`doom_oracle_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Hood evolves horned oracle crown; tablets become twin-ring prophecy sigils
+- Staff orb larger with triple pendant cage; smoke aura denser with glyph wisps
 - Portrait: doom_oracle_{element}_awaken.webp
 - Battle: doom_oracle_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG hooded apocalypse warlock debuffer,
+pale face hood glowing element eyes, black-burgundy robes gold trim gem pauldrons,
+raised hand floating element tablets with arcane symbols, staff with circular orb frame,
+dark smoke wisps, high-end hand-painted dark fantasy, eye-level front three-quarter,
+grounded feet, clean white plate, element accents in eyes gems tablets orb smoke only, no global recolor
+```

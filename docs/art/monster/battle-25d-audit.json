@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-30T10:16:04.144Z",
+  "expectedBattleStills": 1000,
+  "summary": {
+    "missing": 0,
+    "invalid": 0,
+    "exactFrontCopyBacks": 0,
+    "passed": true
+  },
+  "missing": [],
+  "invalid": [],
+  "duplicateBacks": []
+}

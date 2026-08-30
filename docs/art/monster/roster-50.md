@@ -1,7 +1,7 @@
 # Phase 2 소환수 로스터 50종
 
-태생 1~5성 · 특징명(사람 이름 금지) · 종족당 초상 1장 + 속성별 틴트.
-id = `{familyId}_{element}` · artKey = familyId (English snake).
+태생 1~5성 · 특징명(사람 이름 금지) · 속성별 painted 변형.
+id = artKey = `{familyId}_{element}` (English snake).
 
 | ★ | familyId | nameKo | role | stonePassive |
 |---|----------|--------|------|--------------|

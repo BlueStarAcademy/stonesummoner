@@ -2,23 +2,35 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: abyss_pirate_{element}
+- Undead pirate captain attacker, natural 3★
+- Gaunt weathered face, glowing element eyes, messy hair and trimmed beard
+- Large ornate black bicorne hat with gold filigree and element energy plume
+- Heavy dark captain coat gold embroidery tasseled epaulettes turquoise sash
+- Skull belt buckle; tattered frayed coat hems blending into ghost flames
+- Large curved cutlass wreathed in spectral element flames
+- Heroic wide stance with sword angled down
+- **Keep across elements**: pirate proportions, hat shape, coat layout,
+  cutlass type, buckle, stance
+- **Change per element**: eye glow, ghost flame hue, hat plume color only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`abyss_pirate_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Hat gains taller plume crown; coat epaulettes heavier with rune trim
+- Cutlass blade larger with etched rune band; ghost aura denser
 - Portrait: abyss_pirate_{element}_awaken.webp
 - Battle: abyss_pirate_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG undead pirate captain attacker,
+bicorne hat gold trim, captain coat epaulettes skull buckle,
+spectral element flame cutlass, tattered coat ghost aura, heroic stance,
+high-end hand-painted dark fantasy, eye-level front three-quarter,
+grounded boots, clean white plate, element accents in eyes ghost flames hat plume only,
+no global recolor, no text, no cropped sword or feet
+```

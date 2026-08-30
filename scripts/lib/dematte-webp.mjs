@@ -983,9 +983,7 @@ export async function imageToChromaBattleWebp(srcImage, dstWebp, opts = {}) {
 export async function imageToInstalledBattleWebp(srcImage, dstWebp, opts = {}) {
   const transparentOpts = opts.transparent ?? TRANSPARENT_BATTLE_INSTALL;
   const paintedOpts = opts.painted ?? PAINTED_BATTLE_DEMATTE;
-  const chromaPlate =
-    (await detectChromaPlate(srcImage)) || (await detectInteriorChromaPlate(srcImage));
-  if (chromaPlate) {
+  if (await detectChromaPlate(srcImage)) {
     await imageToChromaBattleWebp(srcImage, dstWebp, transparentOpts);
     return "chroma";
   }
@@ -1011,10 +1009,21 @@ export async function imageToInstalledBattleWebp(srcImage, dstWebp, opts = {}) {
       plateCheckerboard: true,
       checkerLumMin: 115,
     });
-    await finishDematteRgba(rgba, info.width, info.height, transparentOpts);
+    await finishDematteRgba(rgba, info.width, info.height, {
+      ...transparentOpts,
+      // Checkerboard plates contain large connected transparent regions.
+      // Generic hole filling mistakes those regions for silhouette holes.
+      fillHoles: false,
+      sealInterior: false,
+    });
+    featherAlphaEdges(rgba, info.width, info.height, 2);
     zeroClearRgb(rgba);
     await rawRgbaToWebp(rgba, info.width, info.height, dstWebp, transparentOpts);
     return "checkerboard";
+  }
+  if (await detectInteriorChromaPlate(srcImage)) {
+    await imageToChromaBattleWebp(srcImage, dstWebp, transparentOpts);
+    return "chroma";
   }
   await imageToDematteWebp(srcImage, dstWebp, paintedOpts);
   return "dematte";

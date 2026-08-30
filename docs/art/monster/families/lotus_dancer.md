@@ -2,23 +2,35 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: lotus_dancer_{element}
+- Elegant lotus dancer support, natural 3★
+- Slender East-Asian inspired warrior-dancer, glowing element eyes
+- Dark hair elaborate updo with golden ornaments and lotus flowers
+- Black bodice with lotus-shaped armor plates pink and gold trim
+- High-slit skirt with voluminous flowing pink silk panels
+- Dual large ornate fans golden frame with element glow and petal edges
+- Dynamic graceful stepping dance stance
+- **Keep across elements**: dancer proportions, hair updo, lotus armor layout,
+  silk panel shape, dual fan silhouette, dance pose
+- **Change per element**: eye glow, fan center glow, lotus petal accent hue only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`lotus_dancer_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Hair crown of blooming lotus wreath; fans evolve larger twin-petal frames
+- Silk panels longer with rune embroidery; glow intensifies
 - Portrait: lotus_dancer_{element}_awaken.webp
 - Battle: lotus_dancer_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG elegant lotus dancer support,
+elaborate updo lotus ornaments, black-pink lotus armor flowing silk panels,
+dual ornate petal fans with element glow, dynamic dance stance,
+high-end hand-painted dark fantasy, eye-level front three-quarter,
+grounded feet, clean white plate, element accents in eyes fan glow lotus petals only,
+no global recolor, no text, no cropped fans or feet
+```

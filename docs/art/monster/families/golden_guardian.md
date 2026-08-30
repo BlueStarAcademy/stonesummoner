@@ -2,23 +2,35 @@
 
 ## Identity
 
-- Family silhouette and role from roster-50.md
-- artKey per element: golden_guardian_{element}
+- Holy golden knight tank, natural 4★
+- Full white-cream plate armor with brilliant gold filigree and glowing trim
+- Full helm with glowing T-shaped element visor; wing-like golden pauldron crests
+- Central glowing diamond chest gem; white tabard gold embroidery
+- Massive four-flanged golden mace with strong glow bloom
+- Large kite shield with embossed sunburst center glowing intensely
+- Dark tattered cape behind; wide grounded tank stance
+- **Keep across elements**: paladin proportions, wing pauldrons, helm crest,
+  mace shield types, tabard, tank stance
+- **Change per element**: visor glow, gem hue, mace shield bloom only
 
-## Element variants
+## artKey
 
-- **fire**: baked palette per element-palette.md — distinct from other elements
-- **water**: baked palette per element-palette.md — distinct from other elements
-- **wind**: baked palette per element-palette.md — distinct from other elements
-- **light**: baked palette per element-palette.md — distinct from other elements
-- **dark**: baked palette per element-palette.md — distinct from other elements
+`golden_guardian_{element}` — fire / water / wind / light / dark
 
 ## Awaken delta
 
-- Brighter element aura, evolved armor trim, optional crown or wings
+- Taller wing pauldrons; shield sunburst evolves twin-ring emblem
+- Heavier tabard mantle; mace head larger with rune band
 - Portrait: golden_guardian_{element}_awaken.webp
 - Battle: golden_guardian_{element}-awaken-front.webp / -awaken-back.webp
 
-## Prompts
+## Battle prompt block
 
-Use master blocks in ../prompts.md + element palette + this identity.
+```text
+Premium stylized 2.5D mobile RPG holy golden knight tank,
+white-gold plate wing pauldrons glowing visor diamond chest gem,
+massive glowing mace and sunburst kite shield, white tabard, tattered cape,
+wide grounded tank stance, high-end hand-painted dark fantasy,
+eye-level front three-quarter, clean white plate,
+element accents in visor gem mace shield glow only, no global recolor, no text
+```
