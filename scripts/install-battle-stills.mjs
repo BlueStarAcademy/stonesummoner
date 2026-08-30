@@ -262,17 +262,28 @@ if (usePad) {
   copyFrom = paddedDir;
 }
 
+/** Windows can throw UNKNOWN on copyFile when dest is open elsewhere. */
+async function safeCopyFile(src, dest) {
+  try {
+    await fs.promises.copyFile(src, dest);
+  } catch (err) {
+    if (err?.code !== "UNKNOWN" && err?.code !== "EBUSY") throw err;
+    const data = await fs.promises.readFile(src);
+    await fs.promises.writeFile(dest, data);
+  }
+}
+
 for (const f of fs
   .readdirSync(copyFrom)
   .filter((x) => x.endsWith(".webp") && !x.startsWith("_"))) {
-  await fs.promises.copyFile(path.join(copyFrom, f), path.join(battleOutDir, f));
+  await safeCopyFile(path.join(copyFrom, f), path.join(battleOutDir, f));
 }
 
 for (const [alias, target] of Object.entries(MONSTER_ALIAS)) {
   const src = path.join(portraitOutDir, `${target}.webp`);
   const dest = path.join(portraitOutDir, `${alias}.webp`);
   if (!fs.existsSync(src)) continue;
-  await fs.promises.copyFile(src, dest);
+  await safeCopyFile(src, dest);
   await writePortraitDerivatives(dest, portraitOutDir, alias);
   portraitDerivatives += 2;
 }
