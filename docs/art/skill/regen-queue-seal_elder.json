@@ -1,0 +1,140 @@
+{
+  "count": 15,
+  "queue": [
+    {
+      "kind": "monster",
+      "stem": "seal_elder-dark-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; ancient rune geometry, stone seals, and ritual inscription energy; compact basic skill with a sharp readable gesture; skill concept: 암영각인; meaning: 적 1명에게 어둠의 진문 각인을 새깁니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-dark-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; ancient rune geometry, stone seals, and ritual inscription energy; signature scale and a distinctive central silhouette; skill concept: 심연진문각인; meaning: 어둠의 각인을 박아 적을 타격하고 마나를 흡수합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-dark-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; dark element palette: indigo black, violet, void magenta, gravitational shadow; ancient rune geometry, stone seals, and ritual inscription energy; ultimate scale and layered climax; skill concept: 공허석문개방; meaning: 어둠의 진문을 펼쳐 모든 적을 타격하고 아군의 명중을 높입니다.; combat effects: damage, mana, buff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-fire-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; ancient rune geometry, stone seals, and ritual inscription energy; compact basic skill with a sharp readable gesture; skill concept: 화염각인; meaning: 적 1명에게 불의 진문 각인을 새깁니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-fire-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; ancient rune geometry, stone seals, and ritual inscription energy; signature scale and a distinctive central silhouette; skill concept: 작열진문각인; meaning: 불의 진문을 새겨 적을 타격하고 마나를 흡수합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-fire-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; fire element palette: ember red, molten orange, incandescent gold, heat haze; ancient rune geometry, stone seals, and ritual inscription energy; ultimate scale and layered climax; skill concept: 폭염석문개방; meaning: 불의 진문을 펼쳐 모든 적을 타격하고 아군의 명중을 높입니다.; combat effects: damage, mana, buff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-light-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; ancient rune geometry, stone seals, and ritual inscription energy; compact basic skill with a sharp readable gesture; skill concept: 섬광각인; meaning: 적 1명에게 빛의 진문 각인을 새깁니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-light-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; ancient rune geometry, stone seals, and ritual inscription energy; signature scale and a distinctive central silhouette; skill concept: 성휘진문각인; meaning: 빛의 문장을 새겨 적을 타격하고 마나를 흡수합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-light-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; light element palette: ivory white, sacred gold, prism flare, clean radiant bloom; ancient rune geometry, stone seals, and ritual inscription energy; ultimate scale and layered climax; skill concept: 심판석문개방; meaning: 빛의 진문을 펼쳐 모든 적을 타격하고 아군의 명중을 높입니다.; combat effects: damage, mana, buff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-water-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; ancient rune geometry, stone seals, and ritual inscription energy; compact basic skill with a sharp readable gesture; skill concept: 냉기각인; meaning: 적 1명에게 얼음의 진문 각인을 새깁니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-water-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; ancient rune geometry, stone seals, and ritual inscription energy; signature scale and a distinctive central silhouette; skill concept: 해일진문각인; meaning: 얼음의 문양을 그려 적을 타격하고 마나를 흡수합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-water-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; water element palette: deep cobalt, glacial cyan, pearlescent ice, liquid refraction; ancient rune geometry, stone seals, and ritual inscription energy; ultimate scale and layered climax; skill concept: 빙결석문개방; meaning: 얼음의 진문을 펼쳐 모든 적을 타격하고 아군의 명중을 높입니다.; combat effects: damage, mana, buff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-wind-s1",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; ancient rune geometry, stone seals, and ritual inscription energy; compact basic skill with a sharp readable gesture; skill concept: 질풍각인; meaning: 적 1명에게 바람의 진문 각인을 새깁니다.; combat effects: damage; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-wind-s2",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; ancient rune geometry, stone seals, and ritual inscription energy; signature scale and a distinctive central silhouette; skill concept: 돌풍진문각인; meaning: 바람의 각인을 새겨 적을 타격하고 마나를 흡수합니다.; combat effects: damage, mana; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    },
+    {
+      "kind": "monster",
+      "stem": "seal_elder-wind-s3",
+      "issues": [
+        "ui-frame"
+      ],
+      "prompt": "Premium hand-painted 2D fantasy mobile RPG skill art; wind element palette: jade green, pale silver, feather-light trails, razor air ribbons; ancient rune geometry, stone seals, and ritual inscription energy; ultimate scale and layered climax; skill concept: 폭풍석문개방; meaning: 바람의 진문을 펼쳐 모든 적을 타격하고 아군의 명중을 높입니다.; combat effects: damage, mana, buff; centered magical combat effect, transparent dematted edge, dark charcoal negative space; high contrast focal silhouette, ornate particles, no character portrait, no monster face, no body, no text, no watermark, no UI chrome, no outer square frame, no rarity border",
+      "familyId": "seal_elder"
+    }
+  ]
+}
