@@ -22,6 +22,11 @@ export const BATTLE_BG_IDS = [
   "cairos-giant",
   "cairos-dragon",
   "cairos-necro",
+  "awaken-fire",
+  "awaken-water",
+  "awaken-wind",
+  "awaken-light",
+  "awaken-dark",
   "arena",
   "depth",
   "equip",
@@ -34,7 +39,7 @@ const FALLBACK: BattleBgId = "map-01";
 
 export function battleBgIdForStage(
   stage:
-    | Pick<StageDef, "mode" | "map" | "cairosDungeon">
+    | Pick<StageDef, "mode" | "map" | "cairosDungeon" | "bossArtId">
     | null
     | undefined,
 ): BattleBgId {
@@ -44,6 +49,9 @@ export function battleBgIdForStage(
   if (dungeon === "giant") return "cairos-giant";
   if (dungeon === "dragon") return "cairos-dragon";
   if (dungeon === "necro") return "cairos-necro";
+  if (stage.bossArtId?.startsWith("awaken-")) {
+    return stage.bossArtId as BattleBgId;
+  }
 
   const mode = stage.mode;
   if (mode === "arena" || mode === "world_arena") return "arena";
@@ -68,7 +76,10 @@ export function battleBgSrcset(id: BattleBgId = FALLBACK): string {
 
 /** HTML fragment for battle/result sky layer. */
 export function battleSkyHtml(
-  stage?: Pick<StageDef, "mode" | "map" | "cairosDungeon"> | null,
+  stage?: Pick<
+    StageDef,
+    "mode" | "map" | "cairosDungeon" | "bossArtId"
+  > | null,
 ): string {
   const id = battleBgIdForStage(stage);
   return `<div class="battle-sky" data-bg="${id}" aria-hidden="true">

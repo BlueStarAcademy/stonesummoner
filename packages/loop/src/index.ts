@@ -43,6 +43,8 @@ export {
   ARENA_ATTACKS_DAILY,
   DEFAULT_ARENA_RATING,
   ARENA_ELO_K,
+  ARENA_NPC_GLORY_MUL,
+  ARENA_NPC_RATING_GAIN,
   ARENA_TIER_RATINGS,
   arenaOpponentRating,
   applyArenaElo,
@@ -86,6 +88,7 @@ export {
   resolveBattleAuto,
   runAwakenSummoner,
   runAwakenMonster,
+  runConvertEssence,
   runUnlockSkillNode,
   runEnhanceMagicSkill,
   runAffixGearSet,
@@ -188,6 +191,7 @@ export {
   runSummon,
   runUpgradeBuilding,
   setActiveSummoner,
+  withDefaultSummonerMagicLoadout,
   syncSummonerMirrors,
   getActiveSummoner,
   getActiveGear,
@@ -246,6 +250,21 @@ export {
   totalScrollCount,
   type CatalogShopSku,
 } from "./loop.js";
+
+export {
+  ESSENCE_CONVERSIONS,
+  canPayEssenceCost,
+  emptyEssenceAmounts,
+  essenceAmountsFor,
+  monsterAwakenEssenceCost,
+  normalizeAwakenMats,
+  summonerAwakenEssenceCost,
+  totalEssences,
+} from "./essences.js";
+export type {
+  EssenceConversionDef,
+  EssenceConversionKind,
+} from "./essences.js";
 export { migrateSave, pickPreferredSave } from "./migrateSave.js";
 export {
   evolveFodderCount,
@@ -267,6 +286,34 @@ export {
   runClaimMainQuest,
 } from "./mainQuest.js";
 export type { MainQuestDef, MainQuestId, MissionReward } from "./mainQuest.js";
+export {
+  ATTENDANCE_CYCLE_DAYS,
+  ATTENDANCE_MILESTONE_DAYS,
+  ATTENDANCE_REWARDS,
+  attendanceDayIndex,
+  attendanceRewardForDay,
+  attendanceStreak,
+  canClaimAttendance,
+  runClaimAttendance,
+} from "./attendance.js";
+export type { AttendanceReward } from "./attendance.js";
+export {
+  ARENA_DAILY_OPPONENT_COUNT,
+  ARENA_NPC_OPPONENT_PREFIX,
+  getArenaOpponent,
+  isArenaNpcOpponentId,
+  listArenaNpcOpponents,
+  listDailyArenaOpponents,
+} from "./arenaOpponents.js";
+export type {
+  ArenaOpponent,
+  ArenaOpponentKind,
+} from "./arenaOpponents.js";
+export {
+  WORLD_ARENA_DAILY_OPPONENT_COUNT,
+  getWorldArenaOpponent,
+  listDailyWorldArenaOpponents,
+} from "./worldArenaOpponents.js";
 export type {
   DailyActivity,
   DailyActivityKey,

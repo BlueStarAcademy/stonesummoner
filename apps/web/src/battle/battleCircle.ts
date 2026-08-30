@@ -18,7 +18,7 @@ const STONE_ELEMENTS = new Set<string>([
 
 export function battleCircleIdForStage(
   stage:
-    | Pick<StageDef, "mode" | "map" | "cairosDungeon">
+    | Pick<StageDef, "mode" | "map" | "cairosDungeon" | "bossArtId">
     | null
     | undefined,
 ): BattleBgId {

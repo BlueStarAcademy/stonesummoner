@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createStarterGear, createSymbol, getMonster, getStage, CHAPTER1_STAGES, GEAR_BAG_BASE_SLOTS, GEAR_BAG_EXPAND_STEP, GEAR_BAG_MAX_SLOTS } from "stonesummoner-data";
+import { createEmptyGear, createStarterGear, createSymbol, getMonster, getStage, CHAPTER1_STAGES, EQUIP_STAGES, GEAR_BAG_BASE_SLOTS, GEAR_BAG_EXPAND_STEP, GEAR_BAG_MAX_SLOTS, getGearAffix, normalizeGearPiece } from "stonesummoner-data";
 import {
   createNewSave,
   createStageBattle,
@@ -50,6 +50,9 @@ import {
   withActiveGear,
   runAwakenSummoner,
   runAwakenMonster,
+  runConvertEssence,
+  monsterAwakenEssenceCost,
+  summonerAwakenEssenceCost,
   setActiveSummoner,
   chooseStarterSummoner,
   unlockAdditionalSummoner,
@@ -115,6 +118,7 @@ import {
   applyRewards,
   applyArenaElo,
   arenaOpponentRating,
+  ARENA_NPC_RATING_GAIN,
   DEFAULT_ARENA_RATING,
   estimateSortiePower,
   rollStageCrystalDrop,
@@ -123,7 +127,15 @@ import {
   monsterMaxLevel,
   addOwnedMonsterExp,
   monsterPowerUpExp,
+  withDefaultSummonerMagicLoadout,
 } from "./loop.js";
+import {
+  getArenaOpponent,
+  isArenaNpcOpponentId,
+  listArenaNpcOpponents,
+  listDailyArenaOpponents,
+} from "./arenaOpponents.js";
+import { defaultSummonerMagicLoadout } from "stonesummoner-data";
 import {
   claimableMainQuestCount,
   isMainQuestComplete,
@@ -294,6 +306,71 @@ describe("game loop", () => {
     const defeat = applyRewards(createNewSave(0), stage, false);
     assert.ok(defeat.save.arenaRating < DEFAULT_ARENA_RATING);
     assert.match(defeat.reward.expNote, /ELO/);
+  });
+
+  it("trickles a flat score for NPC practice matches and never docks it", () => {
+    const stage = getStage("arena_rookie")!;
+    const base = createNewSave(0);
+
+    const win = applyRewards(base, stage, true, () => 0.99, "normal", {
+      arenaNpc: true,
+    });
+    assert.equal(win.save.arenaRating, DEFAULT_ARENA_RATING + ARENA_NPC_RATING_GAIN);
+
+    const rivalWin = applyRewards(base, stage, true, () => 0.99);
+    assert.ok(
+      (rivalWin.save.arenaRating ?? 0) > (win.save.arenaRating ?? 0),
+      "rival ladder must out-earn the practice tier",
+    );
+    assert.ok(
+      (win.reward.glory ?? 0) < (rivalWin.reward.glory ?? 0),
+      "practice glory is reduced",
+    );
+
+    const loss = applyRewards(base, stage, false, () => 0.99, "normal", {
+      arenaNpc: true,
+    });
+    assert.equal(loss.save.arenaRating ?? DEFAULT_ARENA_RATING, DEFAULT_ARENA_RATING);
+  });
+
+  it("fixes the NPC practice ladder to the four arena tiers", () => {
+    const npcs = listArenaNpcOpponents();
+    assert.equal(npcs.length, 4);
+    assert.deepEqual(
+      npcs.map((o) => o.stageId),
+      ["arena_rookie", "arena_veteran", "arena_challenger", "arena_legend"],
+    );
+    for (const npc of npcs) {
+      assert.equal(npc.kind, "npc");
+      assert.equal(isArenaNpcOpponentId(npc.id), true);
+      assert.equal(npc.rating, arenaOpponentRating(npc.stageId));
+      assert.ok(npc.enemyMonsterIds.length > 0);
+      assert.equal(getArenaOpponent(npc.id)?.nickname, npc.nickname);
+    }
+    // The rotating ladder stays separate and is never flagged as practice.
+    assert.ok(listDailyArenaOpponents().every((o) => o.kind === "rival"));
+  });
+
+  it("pays PVP in glory only — no symbol, gear, or scroll drops", () => {
+    const base = createNewSave(0);
+    for (const stageId of [
+      "arena_rookie",
+      "arena_veteran",
+      "arena_challenger",
+      "arena_legend",
+      "warena_qual",
+      "warena_final",
+    ]) {
+      const stage = getStage(stageId)!;
+      assert.equal(stage.dropChance, 0, stageId);
+      // A roll of 0 would hit every drop gate that is still open.
+      const { save: next, reward } = applyRewards(base, stage, true, () => 0);
+      assert.equal(reward.symbol, undefined, stageId);
+      assert.equal(reward.gear, undefined, stageId);
+      assert.equal(next.scrolls, base.scrolls, stageId);
+      assert.equal(next.scrollsPremium ?? 0, base.scrollsPremium ?? 0, stageId);
+      assert.ok((reward.glory ?? 0) > 0, stageId);
+    }
   });
 
   it("estimates sortie combat power for arena prep", () => {
@@ -721,11 +798,18 @@ describe("game loop", () => {
       awaken: 0,
       awakenExp: 100,
     };
+    const essenceCost = monsterAwakenEssenceCost(def.naturalStars);
     save = {
       ...save,
       roster: [mon, ...save.roster.slice(1)],
       island: { ...save.island, mana: 50000, crystal: 50 },
-      awakenMats: { [el]: 20 },
+      awakenMats: {
+        [el]: {
+          low: essenceCost.low + 5,
+          mid: essenceCost.mid,
+          high: essenceCost.high,
+        },
+      },
     };
     const lowXp = runAwakenMonster(
       { ...save, roster: [{ ...mon, awakenExp: 10 }, ...save.roster.slice(1)] },
@@ -736,7 +820,7 @@ describe("game loop", () => {
     const ok = runAwakenMonster(save, mon.uid);
     assert.match(ok.message, /각성/);
     assert.equal(ok.save.roster[0]!.awaken, 1);
-    assert.equal(ok.save.awakenMats[el], 5);
+    assert.deepEqual(ok.save.awakenMats[el], { low: 5, mid: 0, high: 0 });
 
     const maxed = runAwakenMonster(ok.save, mon.uid);
     assert.match(maxed.message, /이미 각성/);
@@ -1162,6 +1246,116 @@ describe("game loop", () => {
     );
   });
 
+  it("spawns Giant trash first and scales the final boss wave", () => {
+    const save = createNewSave(0);
+    const stage = getStage("giant_b1")!;
+    const firstWave = createStageBattle(stage, save);
+    assert.equal(
+      firstWave.units.some(
+        (unit) =>
+          unit.kind === "monster" && unit.monsterId === stage.bossMonsterId,
+      ),
+      false,
+    );
+
+    const finalEnemies = stage.enemyWaves!.at(-1)!;
+    const finalStage = { ...stage, waves: 1, enemyWaves: [finalEnemies] };
+    const baseline = createStageBattle(
+      {
+        ...finalStage,
+        bossMonsterId: undefined,
+        bossHpMultiplier: undefined,
+      },
+      save,
+    );
+    const bossBattle = createStageBattle(finalStage, save);
+    const baselineBoss = baseline.units.find(
+      (unit) => unit.monsterId === stage.bossMonsterId,
+    )!;
+    const boss = bossBattle.units.find(
+      (unit) => unit.monsterId === stage.bossMonsterId,
+    )!;
+    assert.equal(boss.name, stage.bossNameKo);
+    assert.equal(
+      boss.stats.hp,
+      Math.round(baselineBoss.stats.hp * (stage.bossHpMultiplier ?? 1)),
+    );
+  });
+
+  it("spawns awakening trash first and grants floor-scaled essences and XP", () => {
+    const stage = getStage("weekday_awaken_fire_b10")!;
+    let save = createNewSave(0);
+    const base = save.roster[0]!;
+    const def = getMonster("wolf_fighter_fire")!;
+    const partyMonster = {
+      ...base,
+      monsterId: "wolf_fighter_fire",
+      evolve: Math.max(0, 6 - def.naturalStars),
+      awakenExp: 0,
+    };
+    save = {
+      ...save,
+      roster: [partyMonster, ...save.roster.slice(1)],
+      party: [partyMonster.uid],
+    };
+    const firstWave = createStageBattle(stage, save);
+    assert.equal(
+      firstWave.units.some(
+        (unit) => unit.monsterId === stage.bossMonsterId,
+      ),
+      false,
+    );
+    const rewarded = applyRewards(save, stage, true, () => 0);
+    assert.deepEqual(rewarded.reward.awakenEssenceGain, {
+      element: "fire",
+      amounts: { low: 0, mid: 4, high: 1 },
+    });
+    assert.equal(rewarded.reward.awakenExpGain, 35);
+    assert.equal(rewarded.save.roster[0]!.awakenExp, 35);
+    assert.equal(rewarded.reward.symbol, undefined);
+    assert.equal(rewarded.reward.gear, undefined);
+  });
+
+  it("converts graded essences with irreversible loss and validates costs", () => {
+    const base = createNewSave(0);
+    const save = {
+      ...base,
+      island: { ...base.island, mana: 6_000 },
+      awakenMats: {
+        fire: { low: 10, mid: 0, high: 0 },
+      },
+    };
+    const up = runConvertEssence(save, "fire", "low_to_mid");
+    assert.deepEqual(up.save.awakenMats.fire, { low: 0, mid: 1, high: 0 });
+    assert.equal(up.save.island.mana, 5_000);
+    const down = runConvertEssence(up.save, "fire", "mid_to_low");
+    assert.deepEqual(down.save.awakenMats.fire, {
+      low: 8,
+      mid: 0,
+      high: 0,
+    });
+    const insufficient = runConvertEssence(
+      down.save,
+      "fire",
+      "mid_to_high",
+    );
+    assert.equal(insufficient.save, down.save);
+    assert.match(insufficient.message, /부족/);
+  });
+
+  it("reports a guaranteed Giant symbol blocked by a full bag", () => {
+    const base = createNewSave(0);
+    const symbols = Array.from({ length: symbolBagCapacity(base) }, (_, index) => ({
+      ...createSymbol("hwalro", 1, `full_${index}`),
+      id: `full_${index}`,
+    }));
+    const full = { ...base, symbols };
+    const result = applyRewards(full, getStage("giant_b1")!, true, () => 0.99);
+    assert.equal(result.reward.symbol, undefined);
+    assert.equal(result.reward.symbolBagFull, true);
+    assert.equal(result.save.symbols.length, symbols.length);
+  });
+
   it("keeps local mission progress over a stale cloud save", () => {
     const now = Date.now();
     const day = new Date(now).toISOString().slice(0, 10);
@@ -1582,6 +1776,11 @@ describe("game loop", () => {
     assert.equal(awakenManaCost(0), 500);
     assert.equal(awakenCrystalCost(0), 3);
     assert.equal(summonerAwakenMatCost(0), 8);
+    assert.deepEqual(summonerAwakenEssenceCost(0), {
+      low: 8,
+      mid: 0,
+      high: 0,
+    });
     assert.equal(awakenMinLevel(0), 5);
     assert.equal(awakenLeaderAtkPct(2), 0.024);
 
@@ -1600,7 +1799,7 @@ describe("game loop", () => {
         ...save.summoners,
         light: { ...save.summoners.light, level: 5 },
       },
-      awakenMats: { light: summonerAwakenMatCost(0) },
+      awakenMats: { light: summonerAwakenEssenceCost(0) },
     };
     const ok = runAwakenSummoner(save);
     assert.match(ok.message, /진화 \+1/);
@@ -1608,7 +1807,11 @@ describe("game loop", () => {
     assert.equal(ok.save.summoners.light.awaken, 1);
     assert.equal(ok.save.island.mana, 2000 - 500);
     assert.equal(ok.save.island.crystal, 20 - 3);
-    assert.equal(ok.save.awakenMats.light, 0);
+    assert.deepEqual(ok.save.awakenMats.light, {
+      low: 0,
+      mid: 0,
+      high: 0,
+    });
     save = ok.save;
 
     const battle = createStageBattle(getStage("garen_1_1")!, {
@@ -1825,6 +2028,212 @@ describe("game loop", () => {
     assert.match(ok.message, /장착/);
     assert.equal(ok.save.gear.weapon?.id, "bag_fire_wpn");
     assert.equal(ok.save.gear.weapon?.element, "fire");
+  });
+
+  /**
+   * Affixes always derive from `rollSeed`, so tests search for a seed that
+   * rolls the wanted ability instead of hand-writing it onto a piece.
+   */
+  const seekAffixPiece = (
+    slot: "weapon" | "necklace" | "ring" | "shoes",
+    wanted: string,
+  ) => {
+    const setId =
+      slot === "necklace" ? "sense" : slot === "shoes" ? "mana" : "assault";
+    for (let i = 1; i < 4000; i++) {
+      const piece = normalizeGearPiece({
+        id: `affix_seek_${slot}_${wanted}`,
+        slot,
+        nameKo: "t",
+        enhance: 0,
+        setId,
+        stars: 5,
+        element: slot === "weapon" ? "light" : undefined,
+        materialId: slot === "weapon" ? undefined : "cloth",
+        rollSeed: i * 17,
+      });
+      const roll = piece.affixes.find((a) => a.id === wanted);
+      if (roll) return { piece, value: roll.value };
+    }
+    throw new Error(`no seed rolled ${wanted} on ${slot}`);
+  };
+
+  it("multiplies battle gold with goldSurge and never stacks it twice", () => {
+    const stage = getStage("garen_1_1")!;
+    const base = createNewSave(0);
+    const plain = applyRewards(base, stage, true, () => 0.99);
+    assert.ok(plain.reward.mana > 0);
+
+    const surge = getGearAffix("goldSurge")!;
+    const necklace = seekAffixPiece("necklace", "goldSurge");
+    assert.ok(necklace.value >= surge.value[0]);
+    assert.ok(necklace.value <= surge.value[1]);
+
+    const geared = withActiveGear(base, {
+      ...createEmptyGear(),
+      necklace: necklace.piece,
+    });
+    const boosted = applyRewards(geared, stage, true, () => 0.99);
+    assert.equal(
+      boosted.reward.mana,
+      Math.round(plain.reward.mana * (1 + necklace.value)),
+    );
+
+    // A second goldSurge does not stack — only the best roll fires.
+    const weapon = seekAffixPiece("weapon", "goldSurge");
+    const twin = withActiveGear(base, {
+      ...createEmptyGear(),
+      necklace: necklace.piece,
+      weapon: weapon.piece,
+    });
+    const twinRun = applyRewards(twin, stage, true, () => 0.99);
+    const best = Math.max(necklace.value, weapon.value);
+    assert.equal(
+      twinRun.reward.mana,
+      Math.round(plain.reward.mana * (1 + best)),
+    );
+    assert.ok(
+      twinRun.reward.mana < Math.round(plain.reward.mana * (1 + necklace.value + weapon.value)),
+      "two copies of goldSurge must not add up",
+    );
+  });
+
+  it("raises EXP and gear drop rate from gear affixes", () => {
+    const stage = getStage("garen_1_1")!;
+    const base = createNewSave(0);
+    const equip = (slot: "ring" | "necklace", wanted: string) => {
+      const found = seekAffixPiece(slot, wanted);
+      return {
+        save: withActiveGear(base, { ...createEmptyGear(), [slot]: found.piece }),
+        value: found.value,
+      };
+    };
+
+    const plainExp = applyRewards(base, stage, true, () => 0.99).reward.summonerExp;
+    const scholar = equip("ring", "scholar");
+    const scholarExp = applyRewards(scholar.save, stage, true, () => 0.99).reward
+      .summonerExp;
+    assert.ok(
+      (scholarExp ?? 0) > (plainExp ?? 0),
+      `${scholarExp} should beat ${plainExp}`,
+    );
+
+    // vaultGreed pushes the vault gear chance past a roll that would otherwise miss.
+    const vault = EQUIP_STAGES[0]!;
+    const greed = equip("ring", "vaultGreed");
+    const baseChance = vault.gearDropChance!;
+    const between = baseChance + (1 - baseChance) / 2;
+    const rngAt = (value: number) => () => value;
+    assert.ok(between > baseChance && between < 1);
+    assert.ok(
+      baseChance * (1 + greed.value) > between,
+      "vaultGreed must lift the chance above the test roll",
+    );
+    assert.equal(applyRewards(base, vault, true, rngAt(between)).reward.gear, undefined);
+    assert.ok(
+      applyRewards(greed.save, vault, true, rngAt(between)).reward.gear,
+      "vaultGreed should convert the near miss",
+    );
+  });
+
+  it("guarantees affixed ★4+ gear on the deepest vault floor", () => {
+    const top = EQUIP_STAGES[4]!;
+    assert.equal(top.id, "equip_vault_5");
+    let save = createNewSave(0);
+    save = { ...save, island: { ...save.island, energy: 200 } };
+    for (let seed = 0; seed < 24; seed++) {
+      const rng = () => ((seed * 37 + 11) % 100) / 100;
+      const { reward } = applyRewards(save, top, true, rng);
+      if (!reward.gear) continue;
+      assert.ok(reward.gear.stars >= 4, `got ★${reward.gear.stars}`);
+      assert.ok(
+        (reward.gear.affixes ?? []).length >= 1,
+        "★4+ vault drops carry a special ability",
+      );
+    }
+  });
+
+  it("keeps a full gear bag from auto-selling the best piece", () => {
+    let save = createNewSave(0);
+    const cheap = Array.from({ length: gearBagCapacity(save) }, (_, i) =>
+      normalizeGearPiece({
+        id: `cheap_${i}`,
+        slot: "shoes",
+        nameKo: "t",
+        enhance: 0,
+        setId: "mana",
+        stars: 1,
+        materialId: "cloth",
+        rollSeed: 1000 + i,
+      }),
+    );
+    const treasure = normalizeGearPiece({
+      id: "treasure",
+      slot: "necklace",
+      nameKo: "t",
+      enhance: 12,
+      setId: "sense",
+      stars: 5,
+      materialId: "cloth",
+      rollSeed: 424242,
+    });
+    save = { ...save, gearBag: [treasure, ...cheap.slice(1)] };
+    const { save: next } = applyRewards(
+      save,
+      EQUIP_STAGES[0]!,
+      true,
+      () => 0.01,
+    );
+    assert.ok(
+      next.gearBag?.some((p) => p.id === "treasure"),
+      "the ★5 piece must survive a bag overflow",
+    );
+  });
+
+  it("applies combat affixes to summoner mana and ally attack", () => {
+    const stage = getStage("garen_1_1")!;
+    const base = createNewSave(0);
+    const plain = createStageBattle(stage, base, { rng: () => 0.5 });
+
+    const spring = seekAffixPiece("shoes", "manaSpring");
+    const springBattle = createStageBattle(
+      stage,
+      withActiveGear(base, { ...createEmptyGear(), shoes: spring.piece }),
+      { rng: () => 0.5 },
+    );
+    assert.ok(
+      springBattle.allySummoner.manaRegenPerTick >
+        plain.allySummoner.manaRegenPerTick,
+      "manaSpring raises mana regen",
+    );
+
+    const roar = seekAffixPiece("ring", "leaderRoar");
+    const roarBattle = createStageBattle(
+      stage,
+      withActiveGear(base, { ...createEmptyGear(), ring: roar.piece }),
+      { rng: () => 0.5 },
+    );
+    const allyAtk = (b: typeof plain) =>
+      b.units
+        .filter((u) => u.team === "ally" && u.kind === "monster")
+        .reduce((n, u) => n + u.stats.atk, 0);
+    assert.ok(
+      allyAtk(roarBattle) > allyAtk(plain),
+      "leaderRoar raises ally ATK",
+    );
+
+    const bulwark = seekAffixPiece("necklace", "bulwark");
+    const bulwarkBattle = createStageBattle(
+      stage,
+      withActiveGear(base, { ...createEmptyGear(), necklace: bulwark.piece }),
+      { rng: () => 0.5 },
+    );
+    const summonerHp = (b: typeof plain) =>
+      b.units.find((u) => u.team === "ally" && u.kind === "summoner")!.stats.hp;
+    assert.ok(
+      summonerHp(bulwarkBattle) > summonerHp(plain),
+      "bulwark raises summoner HP",
+    );
   });
 
   it("keeps separate gear sets per summoner element", () => {
@@ -2134,7 +2543,7 @@ describe("game loop", () => {
     assert.equal(round!.summoners.fire.level, 12);
     assert.equal(round!.roster[0]?.awaken, 1);
     assert.equal(round!.skillMats, 9);
-    assert.equal(round!.awakenMats.fire, 4);
+    assert.deepEqual(round!.awakenMats.fire, { low: 4, mid: 0, high: 0 });
     assert.equal(round!.grindstones, base.grindstones);
     assert.deepEqual(round!.claimedMailIds, []);
     assert.deepEqual(round!.claimedMissionKeys, []);
@@ -2226,6 +2635,16 @@ describe("game loop", () => {
     assert.equal(kept!.starterSummonerPicked, false);
   });
 
+  it("defaults empty summoner magic slots to basic skills A and B", () => {
+    const save = createNewSave(0);
+    assert.deepEqual(
+      save.summonerMagicLoadouts.light,
+      defaultSummonerMagicLoadout("light"),
+    );
+    const filled = withDefaultSummonerMagicLoadout("light", [null, null]);
+    assert.deepEqual(filled, defaultSummonerMagicLoadout("light"));
+  });
+
   it("saves summoner magic loadout with a party preset", () => {
     const base = createNewSave(0);
     const uid = base.roster[0]?.uid;
@@ -2302,5 +2721,131 @@ describe("tab shops", () => {
     const third = runBuyCashPack(second.save, "pack_crystal_250");
     const blocked = runBuyCashPack(third.save, "pack_crystal_250");
     assert.match(blocked.message, /한도/);
+  });
+});
+
+describe("attendance", () => {
+  it("claims first-day reward and advances calendar", async () => {
+    const { runClaimAttendance, canClaimAttendance, attendanceDayIndex } =
+      await import("./attendance.js");
+    const save = createNewSave(Date.parse("2026-08-30T12:00:00Z"));
+    assert.equal(attendanceDayIndex(save), 1);
+    assert.equal(canClaimAttendance(save, Date.parse("2026-08-30T12:00:00Z")), true);
+    const first = runClaimAttendance(save, Date.parse("2026-08-30T12:00:00Z"));
+    assert.match(first.message, /출석 1일차/);
+    assert.equal(first.save.attendanceStreak, 1);
+    assert.equal(first.save.attendanceDayIndex, 2);
+    assert.equal(first.save.attendanceLastClaimDay, "2026-08-30");
+    assert.equal(first.save.island.mana, save.island.mana + 500);
+    const dup = runClaimAttendance(first.save, Date.parse("2026-08-30T18:00:00Z"));
+    assert.match(dup.message, /이미 출석/);
+    assert.equal(canClaimAttendance(first.save, Date.parse("2026-08-30T18:00:00Z")), false);
+  });
+
+  it("resets streak on gap but keeps calendar progress", async () => {
+    const { runClaimAttendance } = await import("./attendance.js");
+    let save = createNewSave(Date.parse("2026-08-28T12:00:00Z"));
+    save = runClaimAttendance(save, Date.parse("2026-08-28T12:00:00Z")).save;
+    save = runClaimAttendance(save, Date.parse("2026-08-29T12:00:00Z")).save;
+    assert.equal(save.attendanceStreak, 2);
+    assert.equal(save.attendanceDayIndex, 3);
+    const afterGap = runClaimAttendance(save, Date.parse("2026-08-31T12:00:00Z"));
+    assert.equal(afterGap.save.attendanceStreak, 1);
+    assert.equal(afterGap.save.attendanceDayIndex, 4);
+    assert.match(afterGap.message, /출석 3일차/);
+  });
+
+  it("wraps calendar from day 30 to day 1", async () => {
+    const { runClaimAttendance } = await import("./attendance.js");
+    let save = createNewSave(0);
+    const beforePremium = save.scrollsPremium ?? 0;
+    save = { ...save, attendanceDayIndex: 30 };
+    const claim = runClaimAttendance(save, Date.parse("2026-08-30T12:00:00Z"));
+    assert.match(claim.message, /출석 30일차/);
+    assert.equal(claim.save.attendanceDayIndex, 1);
+    assert.equal(claim.save.scrollsPremium, beforePremium + 1);
+  });
+});
+
+describe("arena opponents", () => {
+  it("lists 10 deterministic opponents per day", async () => {
+    const { listDailyArenaOpponents, ARENA_DAILY_OPPONENT_COUNT } =
+      await import("./arenaOpponents.js");
+    const now = Date.parse("2026-08-30T12:00:00Z");
+    const a = listDailyArenaOpponents(now);
+    const b = listDailyArenaOpponents(now);
+    assert.equal(a.length, ARENA_DAILY_OPPONENT_COUNT);
+    assert.deepEqual(a, b);
+    assert.ok(a.every((o) => o.nickname.length >= 2));
+    assert.ok(a.every((o) => o.enemyMonsterIds.length >= 1));
+    assert.ok(a.every((o) => o.gloryReward > 0));
+    const tiers = a.map((o) => o.stageId);
+    assert.equal(tiers.filter((id) => id === "arena_rookie").length, 3);
+    assert.equal(tiers.filter((id) => id === "arena_veteran").length, 3);
+    assert.equal(tiers.filter((id) => id === "arena_challenger").length, 2);
+    assert.equal(tiers.filter((id) => id === "arena_legend").length, 2);
+  });
+
+  it("changes opponents when the day changes", async () => {
+    const { listDailyArenaOpponents } = await import("./arenaOpponents.js");
+    const day1 = listDailyArenaOpponents(Date.parse("2026-08-30T12:00:00Z"));
+    const day2 = listDailyArenaOpponents(Date.parse("2026-08-31T12:00:00Z"));
+    assert.notDeepEqual(
+      day1.map((o) => o.nickname),
+      day2.map((o) => o.nickname),
+    );
+  });
+
+  it("finds opponent by id", async () => {
+    const { listDailyArenaOpponents, getArenaOpponent } =
+      await import("./arenaOpponents.js");
+    const now = Date.parse("2026-08-30T12:00:00Z");
+    const list = listDailyArenaOpponents(now);
+    const found = getArenaOpponent(list[0]!.id, now);
+    assert.deepEqual(found, list[0]);
+  });
+});
+
+describe("world arena opponents", () => {
+  it("lists 10 deterministic opponents per day", async () => {
+    const {
+      listDailyWorldArenaOpponents,
+      WORLD_ARENA_DAILY_OPPONENT_COUNT,
+    } = await import("./worldArenaOpponents.js");
+    const now = Date.parse("2026-08-30T12:00:00Z");
+    const a = listDailyWorldArenaOpponents(now);
+    const b = listDailyWorldArenaOpponents(now);
+    assert.equal(a.length, WORLD_ARENA_DAILY_OPPONENT_COUNT);
+    assert.deepEqual(a, b);
+    assert.ok(a.every((o) => o.nickname.length >= 2));
+    assert.ok(a.every((o) => o.enemyMonsterIds.length >= 1));
+    assert.ok(a.every((o) => o.gloryReward > 0));
+    const tiers = a.map((o) => o.stageId);
+    assert.equal(tiers.filter((id) => id === "warena_qual").length, 5);
+    assert.equal(tiers.filter((id) => id === "warena_final").length, 5);
+  });
+
+  it("changes opponents when the day changes", async () => {
+    const { listDailyWorldArenaOpponents } =
+      await import("./worldArenaOpponents.js");
+    const day1 = listDailyWorldArenaOpponents(
+      Date.parse("2026-08-30T12:00:00Z"),
+    );
+    const day2 = listDailyWorldArenaOpponents(
+      Date.parse("2026-08-31T12:00:00Z"),
+    );
+    assert.notDeepEqual(
+      day1.map((o) => o.nickname),
+      day2.map((o) => o.nickname),
+    );
+  });
+
+  it("finds opponent by id", async () => {
+    const { listDailyWorldArenaOpponents, getWorldArenaOpponent } =
+      await import("./worldArenaOpponents.js");
+    const now = Date.parse("2026-08-30T12:00:00Z");
+    const list = listDailyWorldArenaOpponents(now);
+    const found = getWorldArenaOpponent(list[0]!.id, now);
+    assert.deepEqual(found, list[0]);
   });
 });

@@ -40,13 +40,23 @@ hand-painted 2D fantasy mobile RPG, ultra detailed, no characters, no UI, no tex
 | map-11 | Starlight jungle — vine-wrapped stone, bioluminescent violet |
 | map-12 | Obsidian underground — volcanic glass, magenta cracks |
 | map-13 | End temple — white marble, apocalyptic gold/crimson runes |
-| cairos-giant | Giant cavern — huge carved ring, amber crystal pillars |
+| cairos-giant | Giant cavern — black-basalt ring, gold-bronze seals, four amber crystal pillars |
 | cairos-dragon | Dragon lair — lava channels, scale-metal trim |
 | cairos-necro | Necropolis — bone-inlay rings, sickly green ghostlight |
 | arena | PvP coliseum — sand-scored stone, competitive crimson/gold |
 | depth | Deep dungeon — dripping dungeon stone, cold cyan |
 | equip | Vault forge — anvil-forged metal rings, forge orange |
 | weekday | Training yard — clean practice circle, soft training-blue |
+
+### Cairos Giant production prompt
+
+```
+Exact top-down circular ritual floor, huge carved black-basalt outer ring,
+weathered gold-bronze seal bands, four restrained amber crystal pillars,
+glowing amber rune seams, dark recessed inner field with only a subtle 7 by 7
+node rhythm, outer area fading to pure charcoal-black matte, no perspective
+tilt, no characters, no UI frame, no loose stones, no text, no watermark.
+```
 
 ## Pipeline
 
@@ -67,3 +77,13 @@ node scripts/gen-battle-circle-stones.mjs --circles
 Fallback in client: `map-01` (same as battle BG).
 
 Board stones: [stone-prompts.md](./stone-prompts.md). Effect relics: [mark-prompts.md](./mark-prompts.md).
+
+## Elemental awakening circles
+
+Create exact top-down concentric painted circles for `awaken-fire`,
+`awaken-water`, `awaken-wind`, `awaken-light`, and `awaken-dark`. Keep the
+entire radial silhouette inside the square with a wide flat dark matte margin.
+Use forge runes, glacial leviathan glyphs, cloud-scroll cyclone runes, solar
+rays, and void glyphs respectively. No perspective, text, UI frame, loose
+stones, or cropped edges. The manifest installer demattes and writes 1024²
+WebP output.

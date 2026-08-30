@@ -17,6 +17,27 @@ export type OnboardStep =
   | "equip"
   | "done";
 
+/** Active guide steps (excludes `done`) for stepper UI. */
+export const ONBOARD_GUIDE_STEPS: readonly Exclude<OnboardStep, "done">[] = [
+  "gateway",
+  "stages",
+  "battle",
+  "summon",
+  "enhance",
+  "party",
+  "equip",
+] as const;
+
+export function onboardStepIndex(step: OnboardStep): number {
+  if (step === "done") return ONBOARD_GUIDE_STEPS.length;
+  const idx = ONBOARD_GUIDE_STEPS.indexOf(step as (typeof ONBOARD_GUIDE_STEPS)[number]);
+  return idx < 0 ? 1 : idx + 1;
+}
+
+export function onboardStepTotal(): number {
+  return ONBOARD_GUIDE_STEPS.length;
+}
+
 export const ONBOARD_FIRST_STAGE_ID = "garen_1_1";
 export const ONBOARD_STORAGE_PREFIX = "stonesummoner.onboard.v1";
 

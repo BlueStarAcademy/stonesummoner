@@ -1,6 +1,13 @@
 import type { SymbolSetId } from "./symbols.js";
 import type { SymbolQuality, SymbolStars } from "./symbolTables.js";
 import type { CombatBoardSize } from "./scenarioTypes.js";
+import type { Element } from "./monsters/types.js";
+import {
+  awakenEssenceDropsForFloor,
+  awakenExpForFloor,
+  type EssenceDropEntry,
+} from "./essences.js";
+import type { GearStars } from "./gear.js";
 
 export type ContentMode =
   | "scenario"
@@ -29,11 +36,25 @@ export interface StageDef {
   gloryReward?: number;
   jinmunReward?: number;
   gearDropChance?: number;
+  /** Gear drop ★ weights — separate from the symbol `starWeights`. */
+  gearStarWeights?: { value: GearStars; w: number }[];
+  /** Floor the ★ of a gear drop (deep vault floors). */
+  gearMinStars?: GearStars;
   /** Cairos: weighted set pool (uniform pick among these). */
   dropSetPool?: SymbolSetId[];
   starWeights?: { value: SymbolStars; w: number }[];
   qualityWeights?: { value: SymbolQuality; w: number }[];
   cairosDungeon?: CairosDungeon;
+  /** Optional per-wave enemy rosters. The first entry is wave 1. */
+  enemyWaves?: string[][];
+  /** Boss metadata. The matching monster is promoted only while present. */
+  bossMonsterId?: string;
+  bossNameKo?: string;
+  bossArtId?: string;
+  bossHpMultiplier?: number;
+  awakenElement?: Element;
+  awakenEssenceDrops?: readonly EssenceDropEntry[];
+  awakenExpReward?: number;
 }
 
 export const MAIN_QUEST_AREA_COUNT = 13;
@@ -388,6 +409,15 @@ function buildCairosDungeon(
   return Array.from({ length: 10 }, (_, i) => {
     const floor = i + 1;
     const w = cairosWeights(floor);
+    const waves = floor >= 8 ? 3 : 2;
+    const encounterIds = mqEnemies(map % 10, floor);
+    const giantBoss = dungeon === "giant";
+    const bossMonsterId = giantBoss ? "stone_golem_dark" : undefined;
+    const enemyWaves = giantBoss
+      ? Array.from({ length: waves }, (_, waveIndex) =>
+          waveIndex === waves - 1 ? [bossMonsterId!] : [...encounterIds],
+        )
+      : undefined;
     return {
       id: `${dungeon}_b${floor}`,
       nameKo: `${nameKo} B${floor}`,
@@ -395,15 +425,20 @@ function buildCairosDungeon(
       stage: floor,
       boardSize: 7 as CombatBoardSize,
       energyCost: 5 + Math.floor(floor / 2),
-      enemyMonsterIds: mqEnemies(map % 10, floor),
+      enemyMonsterIds: giantBoss ? [bossMonsterId!] : encounterIds,
       dropSetId: primaryDrop,
       dropSetPool: pool,
       starWeights: w.starWeights,
       qualityWeights: w.qualityWeights,
-      waves: floor >= 8 ? 3 : 2,
+      waves,
       mode: "depth" as const,
-      dropChance: 0.9 + floor * 0.007,
+      dropChance: giantBoss ? 1 : 0.9 + floor * 0.007,
       cairosDungeon: dungeon,
+      enemyWaves,
+      bossMonsterId,
+      bossNameKo: giantBoss ? "봉인된 황금암 거신" : undefined,
+      bossArtId: giantBoss ? "cairos-giant" : undefined,
+      bossHpMultiplier: giantBoss ? 2 + floor * 0.25 : undefined,
     };
   });
 }
@@ -443,6 +478,11 @@ export function cairosStagesFor(dungeon: CairosDungeon): StageDef[] {
   return CAIROS_NECRO_STAGES;
 }
 
+/**
+ * PVP pays in glory / season standing only — no symbol or gear drops. `dropSetId`
+ * stays for the battle theme, but `dropChance: 0` keeps the loot roll empty so the
+ * sortie UI never advertises a set the fight cannot hand out.
+ */
 export const ARENA_STAGES: StageDef[] = [
   {
     id: "arena_rookie",
@@ -455,7 +495,7 @@ export const ARENA_STAGES: StageDef[] = [
     dropSetId: "hwalro",
     waves: 1,
     mode: "arena",
-    dropChance: 0.15,
+    dropChance: 0,
     gloryReward: 25,
   },
   {
@@ -474,7 +514,7 @@ export const ARENA_STAGES: StageDef[] = [
     dropSetId: "mussang",
     waves: 1,
     mode: "arena",
-    dropChance: 0.2,
+    dropChance: 0,
     gloryReward: 45,
   },
   {
@@ -493,7 +533,7 @@ export const ARENA_STAGES: StageDef[] = [
     dropSetId: "chimtu",
     waves: 1,
     mode: "arena",
-    dropChance: 0.22,
+    dropChance: 0,
     gloryReward: 60,
   },
   {
@@ -512,38 +552,59 @@ export const ARENA_STAGES: StageDef[] = [
     dropSetId: "yongmaeng",
     waves: 1,
     mode: "arena",
-    dropChance: 0.25,
+    dropChance: 0,
     gloryReward: 80,
   },
 ];
 
 const ELEMENT_AWAKEN_DUNGEONS: {
-  element: "fire" | "water" | "wind" | "light" | "dark";
+  element: Element;
   nameKo: string;
   enemyMonsterIds: string[];
   dropSetId: SymbolSetId;
+  bossMonsterId: string;
+  bossNameKo: string;
 }[] = [
-  { element: "fire", nameKo: "화염 정수 던전", enemyMonsterIds: ["wolf_fighter_fire", "flame_warrior_fire"], dropSetId: "jipjung" },
-  { element: "water", nameKo: "심해 정수 던전", enemyMonsterIds: ["dew_healer_water", "glacier_mage_water"], dropSetId: "hwalro" },
-  { element: "wind", nameKo: "폭풍 정수 던전", enemyMonsterIds: ["lotus_dancer_wind", "scout_sniper_wind"], dropSetId: "haengma" },
-  { element: "light", nameKo: "광휘 정수 던전", enemyMonsterIds: ["seal_elder_light", "storm_spearmaster_light"], dropSetId: "yongmaeng" },
-  { element: "dark", nameKo: "심연 정수 던전", enemyMonsterIds: ["capture_hound_dark", "abyss_priest_dark"], dropSetId: "mussang" },
+  { element: "fire", nameKo: "화염 정수 던전", enemyMonsterIds: ["wolf_fighter_fire", "cinder_imp_fire"], dropSetId: "jipjung", bossMonsterId: "flame_warrior_fire", bossNameKo: "화염의 용광로 거신" },
+  { element: "water", nameKo: "심해 정수 던전", enemyMonsterIds: ["dew_healer_water", "steel_armor_water"], dropSetId: "hwalro", bossMonsterId: "glacier_mage_water", bossNameKo: "심해의 빙해 거신" },
+  { element: "wind", nameKo: "폭풍 정수 던전", enemyMonsterIds: ["lotus_dancer_wind", "scout_sniper_wind"], dropSetId: "haengma", bossMonsterId: "storm_spearmaster_wind", bossNameKo: "폭풍의 천공 거신" },
+  { element: "light", nameKo: "광휘 정수 던전", enemyMonsterIds: ["seal_elder_light", "magic_archer_light"], dropSetId: "yongmaeng", bossMonsterId: "storm_spearmaster_light", bossNameKo: "광휘의 태양 거신" },
+  { element: "dark", nameKo: "심연 정수 던전", enemyMonsterIds: ["capture_hound_dark", "doom_oracle_dark"], dropSetId: "mussang", bossMonsterId: "abyss_priest_dark", bossNameKo: "심연의 공허 거신" },
 ];
 
 export const WEEKDAY_STAGES: StageDef[] = [
-  ...ELEMENT_AWAKEN_DUNGEONS.map((dungeon, i) => ({
-    id: `weekday_awaken_${dungeon.element}`,
-    nameKo: dungeon.nameKo,
-    map: 70,
-    stage: i + 1,
-    boardSize: 7 as CombatBoardSize,
-    energyCost: 5,
-    enemyMonsterIds: dungeon.enemyMonsterIds,
-    dropSetId: dungeon.dropSetId,
-    waves: 2,
-    mode: "weekday" as const,
-    dropChance: 0.35,
-  })),
+  ...ELEMENT_AWAKEN_DUNGEONS.flatMap((dungeon) =>
+    Array.from({ length: 10 }, (_, index): StageDef => {
+      const floor = index + 1;
+      const waves = floor >= 8 ? 3 : 2;
+      return {
+        id: `weekday_awaken_${dungeon.element}_b${floor}`,
+        nameKo: `${dungeon.nameKo} B${floor}`,
+        map: 70,
+        stage: floor,
+        boardSize: 7,
+        energyCost: 4 + Math.floor(floor / 2),
+        enemyMonsterIds: [dungeon.bossMonsterId],
+        enemyWaves: Array.from({ length: waves }, (_, waveIndex) =>
+          waveIndex === waves - 1
+            ? [dungeon.bossMonsterId]
+            : [...dungeon.enemyMonsterIds],
+        ),
+        dropSetId: dungeon.dropSetId,
+        waves,
+        mode: "weekday",
+        dropChance: 0,
+        gearDropChance: 0,
+        bossMonsterId: dungeon.bossMonsterId,
+        bossNameKo: dungeon.bossNameKo,
+        bossArtId: `awaken-${dungeon.element}`,
+        bossHpMultiplier: 1.75 + floor * 0.2,
+        awakenElement: dungeon.element,
+        awakenEssenceDrops: awakenEssenceDropsForFloor(floor),
+        awakenExpReward: awakenExpForFloor(floor),
+      };
+    }),
+  ),
   {
     id: "weekday_skill",
     nameKo: "요일 · 스킬재료",
@@ -559,13 +620,26 @@ export const WEEKDAY_STAGES: StageDef[] = [
   },
 ];
 
-/** JS getDay(): 0=Sun … 6=Sat. Evolve Mon/Wed/Fri(+Sun); skill Tue/Thu/Sat(+Sun). */
+/** JS getDay(): 0=Sun … 6=Sat. Dark→Fire→Water→Wind→Light; weekends open all. */
 export function isWeekdayStageOpenToday(
   stageId: string,
   now = Date.now(),
 ): boolean {
   const d = new Date(now).getDay();
-  if (stageId.startsWith("weekday_awaken_")) return true;
+  const awaken = stageId.match(
+    /^weekday_awaken_(fire|water|wind|light|dark)(?:_b\d+)?$/,
+  )?.[1] as Element | undefined;
+  if (awaken) {
+    if (d === 0 || d === 6) return true;
+    const elementByDay: Partial<Record<number, Element>> = {
+      1: "dark",
+      2: "fire",
+      3: "water",
+      4: "wind",
+      5: "light",
+    };
+    return elementByDay[d] === awaken;
+  }
   if (stageId === "weekday_skill") {
     return d === 0 || d === 2 || d === 4 || d === 6;
   }
@@ -653,7 +727,7 @@ export const WORLD_ARENA_STAGES: StageDef[] = [
     dropSetId: "mussang",
     waves: 1,
     mode: "world_arena",
-    dropChance: 0.25,
+    dropChance: 0,
     gloryReward: 80,
   },
   {
@@ -672,7 +746,7 @@ export const WORLD_ARENA_STAGES: StageDef[] = [
     dropSetId: "chimtu",
     waves: 1,
     mode: "world_arena",
-    dropChance: 0.3,
+    dropChance: 0,
     gloryReward: 120,
   },
 ];
@@ -700,10 +774,16 @@ export const GUILD_RAID_STAGES: StageDef[] = [
   },
 ];
 
+const EQUIP_VAULT_BOSS_ID = "stone_golem_dark";
+
+/**
+ * 황금 금고 — the summoner gear dungeon. Deeper floors shift the ★ table up,
+ * which is what unlocks substat count and ★4+ special abilities on drops.
+ */
 export const EQUIP_STAGES: StageDef[] = [
   {
     id: "equip_vault_1",
-    nameKo: "장비 금고 입문",
+    nameKo: "황금 금고 1층 · 입문",
     map: 90,
     stage: 1,
     boardSize: 7,
@@ -713,11 +793,16 @@ export const EQUIP_STAGES: StageDef[] = [
     waves: 2,
     mode: "equip",
     dropChance: 0.22,
-    gearDropChance: 0.8,
+    gearDropChance: 0.85,
+    gearStarWeights: [
+      { value: 1, w: 46 },
+      { value: 2, w: 34 },
+      { value: 3, w: 20 },
+    ],
   },
   {
     id: "equip_vault_boss",
-    nameKo: "장비 금고 심층",
+    nameKo: "황금 금고 2층 · 심층",
     map: 90,
     stage: 2,
     boardSize: 7,
@@ -733,6 +818,92 @@ export const EQUIP_STAGES: StageDef[] = [
     mode: "equip",
     dropChance: 0.3,
     gearDropChance: 1,
+    gearStarWeights: [
+      { value: 1, w: 20 },
+      { value: 2, w: 36 },
+      { value: 3, w: 30 },
+      { value: 4, w: 11 },
+      { value: 5, w: 3 },
+    ],
+  },
+  {
+    id: "equip_vault_3",
+    nameKo: "황금 금고 3층 · 봉인 서고",
+    map: 90,
+    stage: 3,
+    boardSize: 7,
+    energyCost: 10,
+    enemyMonsterIds: [
+      "seal_elder_light",
+      "glacier_mage_water",
+      "abyss_priest_dark",
+      "flame_warrior_fire",
+    ],
+    dropSetId: "jipjung",
+    waves: 3,
+    mode: "equip",
+    dropChance: 0.36,
+    gearDropChance: 1,
+    gearStarWeights: [
+      { value: 2, w: 30 },
+      { value: 3, w: 38 },
+      { value: 4, w: 22 },
+      { value: 5, w: 10 },
+    ],
+  },
+  {
+    id: "equip_vault_4",
+    nameKo: "황금 금고 4층 · 보물 회랑",
+    map: 90,
+    stage: 4,
+    boardSize: 7,
+    energyCost: 12,
+    enemyMonsterIds: [
+      "dragon_knight_fire",
+      "abyss_priest_dark",
+      "glacier_mage_water",
+      "storm_spearmaster_light",
+    ],
+    dropSetId: "gunhim",
+    waves: 4,
+    mode: "equip",
+    dropChance: 0.42,
+    gearDropChance: 1,
+    gearMinStars: 2,
+    gearStarWeights: [
+      { value: 2, w: 18 },
+      { value: 3, w: 34 },
+      { value: 4, w: 32 },
+      { value: 5, w: 16 },
+    ],
+  },
+  {
+    id: "equip_vault_5",
+    nameKo: "황금 금고 5층 · 금고의 주인",
+    map: 90,
+    stage: 5,
+    boardSize: 7,
+    energyCost: 14,
+    enemyMonsterIds: [EQUIP_VAULT_BOSS_ID],
+    enemyWaves: [
+      ["dragon_knight_fire", "abyss_priest_dark"],
+      ["glacier_mage_water", "storm_spearmaster_light"],
+      ["dragon_knight_fire", "flame_warrior_fire", "abyss_priest_dark"],
+      [EQUIP_VAULT_BOSS_ID],
+    ],
+    dropSetId: "hwangyeok",
+    waves: 4,
+    mode: "equip",
+    dropChance: 0.5,
+    gearDropChance: 1,
+    gearMinStars: 4,
+    gearStarWeights: [
+      { value: 4, w: 62 },
+      { value: 5, w: 38 },
+    ],
+    bossMonsterId: EQUIP_VAULT_BOSS_ID,
+    bossNameKo: "황금 금고의 주인",
+    bossHpMultiplier: 3.2,
   },
 ];
 
@@ -748,7 +919,11 @@ export const ALL_STAGES: StageDef[] = [
 ];
 
 export function getStage(id: string): StageDef | undefined {
-  return ALL_STAGES.find((s) => s.id === id);
+  const legacyAwaken = id.match(
+    /^weekday_awaken_(fire|water|wind|light|dark)$/,
+  );
+  const normalized = legacyAwaken ? `${id}_b1` : id;
+  return ALL_STAGES.find((s) => s.id === normalized);
 }
 
 export function stagesByMode(mode: ContentMode): StageDef[] {

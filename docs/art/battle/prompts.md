@@ -38,7 +38,7 @@ ultra detailed painted environment
 | map-11 | Starlight jungle clearing |
 | map-12 | Obsidian underground hall |
 | map-13 | End-temple ritual floor |
-| cairos-giant | Giant cavern boss arena |
+| cairos-giant | Black-basalt giant shrine, amber crystals and broken seal chains |
 | cairos-dragon | Dragon lair lava stone |
 | cairos-necro | Necropolis crypt floor |
 | arena | PvP coliseum sand |
@@ -48,8 +48,36 @@ ultra detailed painted environment
 
 Fallback: `map-01`.
 
+## Cairos Giant production prompt
+
+```
+Premium hand-painted vertical dark-fantasy mobile RPG battle arena,
+portrait 9:16, immense ancient giant cavern shrine built from black basalt
+and weathered gold-bronze, amber crystal pillars, glowing rune fissures,
+colossal broken chains and giant-sized carved statues, broad near floor in
+the lower 45 percent and a clearly readable connected far arena floor in the
+upper third, no characters, no monster, no floating islands, no cliff under
+feet, no UI, no board grid, no text, no watermark.
+```
+
 ## Related battle board art
 
 - Magic circles under the go board: [circle-prompts.md](./circle-prompts.md)
 - Element magic stones: [stone-prompts.md](./stone-prompts.md)
 - Board effect relics: [mark-prompts.md](./mark-prompts.md)
+
+## Elemental awakening arenas
+
+IDs: `awaken-fire`, `awaken-water`, `awaken-wind`, `awaken-light`,
+`awaken-dark`.
+
+Use a vertical 9:16 arena with a broad unobstructed circular combat floor in
+the lower half and a deep guardian dais in the upper center. Paint each
+element into the architecture: volcanic forge, glacial abyss temple,
+celestial storm sanctuary, solar cathedral, and void citadel respectively.
+Exclude characters, UI, text, borders, and disconnected floating floors.
+Install at 1080×1920 plus 720×1280 with:
+
+```bash
+node scripts/install-stage-boss-art.mjs <sourceDir>
+```

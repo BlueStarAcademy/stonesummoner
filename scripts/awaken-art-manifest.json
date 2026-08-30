@@ -1,0 +1,10 @@
+{
+  "bosses": [
+    { "id": "awaken-fire", "element": "fire" },
+    { "id": "awaken-water", "element": "water" },
+    { "id": "awaken-wind", "element": "wind" },
+    { "id": "awaken-light", "element": "light" },
+    { "id": "awaken-dark", "element": "dark" }
+  ],
+  "essenceGrades": ["low", "mid", "high"]
+}

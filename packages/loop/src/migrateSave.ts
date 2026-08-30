@@ -11,6 +11,7 @@ import { energyMaxForLevel, tickProduction } from "stonesummoner-home";
 import {
   createNewSave,
   createEmptySummonerMagicLoadouts,
+  withDefaultSummonerMagicLoadout,
   createSummonerRoster,
   DEFAULT_ARENA_RATING,
   MAX_SUMMONER_AWAKEN,
@@ -25,6 +26,22 @@ import {
   type SummonerElement,
 } from "./loop.js";
 import { normalizeDailyActivity } from "./dailyMissions.js";
+import { normalizeAwakenMats } from "./essences.js";
+
+function normalizeClearedStageIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return [
+    ...new Set(
+      raw
+        .filter((id): id is string => typeof id === "string")
+        .map((id) =>
+          /^weekday_awaken_(fire|water|wind|light|dark)$/.test(id)
+            ? `${id}_b1`
+            : id,
+        ),
+    ),
+  ];
+}
 
 function normalizeOnboardRite(raw: unknown): OnboardRiteSave | null {
   if (!raw || typeof raw !== "object") return null;
@@ -115,7 +132,7 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     ...base,
     island,
     symbols: p.symbols?.length ? p.symbols : base.symbols,
-    clearedStages: p.clearedStages ?? [],
+    clearedStages: normalizeClearedStageIds(p.clearedStages),
     clearedHardStages: Array.isArray(p.clearedHardStages)
       ? p.clearedHardStages.filter((id): id is string => typeof id === "string")
       : [],
@@ -225,14 +242,18 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     summonerMagicLoadouts: (() => {
       const baseLoadouts = createEmptySummonerMagicLoadouts();
       const rawLoadouts = p.summonerMagicLoadouts;
-      if (!rawLoadouts || typeof rawLoadouts !== "object") return baseLoadouts;
-      for (const el of ["fire", "water", "wind", "light", "dark"] as const) {
-        const raw = (rawLoadouts as Record<string, unknown>)[el];
-        if (!Array.isArray(raw)) continue;
-        baseLoadouts[el] = [
-          typeof raw[0] === "string" ? raw[0] : null,
-          typeof raw[1] === "string" ? raw[1] : null,
-        ];
+      if (rawLoadouts && typeof rawLoadouts === "object") {
+        for (const el of ["fire", "water", "wind", "light", "dark"] as const) {
+          const raw = (rawLoadouts as Record<string, unknown>)[el];
+          if (!Array.isArray(raw)) continue;
+          baseLoadouts[el] = [
+            typeof raw[0] === "string" ? raw[0] : null,
+            typeof raw[1] === "string" ? raw[1] : null,
+          ];
+        }
+      }
+      for (const el of SUMMONER_ELEMENTS) {
+        baseLoadouts[el] = withDefaultSummonerMagicLoadout(el, baseLoadouts[el]);
       }
       return baseLoadouts;
     })(),
@@ -252,8 +273,7 @@ export function migrateSave(raw: unknown): PlayerSave | null {
         Math.max(SYMBOL_BAG_BASE_SLOTS, Math.floor(rawSlots)),
       );
     })(),
-    awakenMats:
-      p.awakenMats && typeof p.awakenMats === "object" ? p.awakenMats : {},
+    awakenMats: normalizeAwakenMats(p.awakenMats),
     skillMats: typeof p.skillMats === "number" ? Math.max(0, p.skillMats) : 0,
     arenaDefense:
       p.arenaDefense &&
@@ -368,6 +388,23 @@ export function migrateSave(raw: unknown): PlayerSave | null {
         ? Math.max(0, Math.floor(p.nicknameChangeCount))
         : 0,
     onboardRite: normalizeOnboardRite(p.onboardRite),
+    attendanceDayIndex:
+      typeof p.attendanceDayIndex === "number"
+        ? Math.max(1, Math.min(30, Math.floor(p.attendanceDayIndex)))
+        : 1,
+    attendanceStreak:
+      typeof p.attendanceStreak === "number"
+        ? Math.max(0, Math.floor(p.attendanceStreak))
+        : 0,
+    attendanceLastClaimDay:
+      typeof p.attendanceLastClaimDay === "string"
+        ? p.attendanceLastClaimDay
+        : null,
+    seenFeatureUnlockIds: Array.isArray(p.seenFeatureUnlockIds)
+      ? p.seenFeatureUnlockIds.filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [],
     activeSummoner,
     summoners,
     unlockedSummoners: Array.isArray(p.unlockedSummoners)

@@ -3851,6 +3851,58 @@
     "ko": "장비 가방이 가득 찼습니다",
     "en": "Gear bag is full"
   },
+  "ui.symbolBagFull": {
+    "ko": "상징 가방이 가득 찼습니다",
+    "en": "Symbol bag is full"
+  },
+  "ui.essenceGrade.low": {
+    "ko": "하급 정수",
+    "en": "Low Essence"
+  },
+  "ui.essenceGrade.mid": {
+    "ko": "중급 정수",
+    "en": "Mid Essence"
+  },
+  "ui.essenceGrade.high": {
+    "ko": "상급 정수",
+    "en": "High Essence"
+  },
+  "ui.essenceOwned": {
+    "ko": "정수 보유량",
+    "en": "Essences"
+  },
+  "ui.essenceConvert": {
+    "ko": "정수 변환",
+    "en": "Convert Essence"
+  },
+  "ui.awakenExp": {
+    "ko": "각성 경험치",
+    "en": "Awakening EXP"
+  },
+  "ui.awakenOpenToday": {
+    "ko": "오늘 개방",
+    "en": "Open today"
+  },
+  "ui.awakenOpenDay.dark": {
+    "ko": "월요일",
+    "en": "Monday"
+  },
+  "ui.awakenOpenDay.fire": {
+    "ko": "화요일",
+    "en": "Tuesday"
+  },
+  "ui.awakenOpenDay.water": {
+    "ko": "수요일",
+    "en": "Wednesday"
+  },
+  "ui.awakenOpenDay.wind": {
+    "ko": "목요일",
+    "en": "Thursday"
+  },
+  "ui.awakenOpenDay.light": {
+    "ko": "금요일",
+    "en": "Friday"
+  },
   "ui.gearSlotWeapon": {
     "ko": "무기",
     "en": "Weapon"
@@ -4130,6 +4182,34 @@
   "ui.arena.defenseEmpty": {
     "ko": "미설정",
     "en": "Not set"
+  },
+  "ui.arena.opponents": {
+    "ko": "라이벌",
+    "en": "Rivals"
+  },
+  "ui.arena.npcTiers": {
+    "ko": "훈련 상대",
+    "en": "Training"
+  },
+  "ui.arena.npcBadge": {
+    "ko": "NPC",
+    "en": "NPC"
+  },
+  "ui.arena.myDefense": {
+    "ko": "방어덱",
+    "en": "Defense"
+  },
+  "ui.arena.editDefense": {
+    "ko": "편집",
+    "en": "Edit"
+  },
+  "ui.arena.selectOpponent": {
+    "ko": "상대 선택",
+    "en": "Select opponent"
+  },
+  "ui.arena.level": {
+    "ko": "Lv.{{level}}",
+    "en": "Lv.{{level}}"
   },
   "ui.shop.dailyOffers": {
     "ko": "오늘의 특가",
@@ -4842,5 +4922,221 @@
   "ui.dungeon.back": {
     "ko": "목록",
     "en": "List"
+  },
+  "ui.attendance.title": {
+    "ko": "출석부",
+    "en": "Attendance"
+  },
+  "ui.attendance.streak": {
+    "ko": "연속 출석",
+    "en": "Streak"
+  },
+  "ui.attendance.claim": {
+    "ko": "수령",
+    "en": "Claim"
+  },
+  "ui.attendance.claimed": {
+    "ko": "수령 완료",
+    "en": "Claimed"
+  },
+  "ui.attendance.close": {
+    "ko": "닫기",
+    "en": "Close"
+  },
+  "ui.attendance.rewardTitle": {
+    "ko": "출석 보상",
+    "en": "Attendance reward"
+  },
+  "ui.attendance.day": {
+    "ko": "{{day}}일",
+    "en": "Day {{day}}"
+  },
+  "ui.attendance.badge": {
+    "ko": "출석 보상",
+    "en": "Attendance"
+  },
+  "side.attendance": {
+    "ko": "출석",
+    "en": "Attend"
+  },
+  "ui.guide.stepOf": {
+    "ko": "{{current}} / {{total}}",
+    "en": "{{current}} / {{total}}"
+  },
+  "ui.guide.title": {
+    "ko": "가이드",
+    "en": "Guide"
+  },
+  "ui.guide.collapsedStep": {
+    "ko": "({{current}}/{{total}})",
+    "en": "({{current}}/{{total}})"
+  },
+  "ui.guide.collapse": {
+    "ko": "접기",
+    "en": "Collapse"
+  },
+  "ui.guide.expand": {
+    "ko": "펼치기",
+    "en": "Expand"
+  },
+  "ui.guide.cta": {
+    "ko": "이동",
+    "en": "Go"
+  },
+  "ui.featureUnlock.confirm": {
+    "ko": "확인",
+    "en": "OK"
+  },
+  "ui.featureUnlock.congratsTitle": {
+    "ko": "축하합니다",
+    "en": "Congratulations"
+  },
+  "ui.featureUnlock.body": {
+    "ko": "{name}을(를) 사용할 수 있습니다.",
+    "en": "You can now use {name}."
+  },
+  "ui.featureUnlock.guide.enhance": {
+    "ko": "소환수 강화",
+    "en": "Monster enhancement"
+  },
+  "ui.featureUnlock.buildingTitle": {
+    "ko": "건물 해금",
+    "en": "Building unlocked"
+  },
+  "ui.featureUnlock.hubTitle": {
+    "ko": "기능 해금",
+    "en": "Feature unlocked"
+  },
+  "ui.featureUnlock.summonerTitle": {
+    "ko": "소환사 해금",
+    "en": "Summoner unlocked"
+  },
+  "ui.featureUnlock.hub.stages": {
+    "ko": "전투",
+    "en": "Battle"
+  },
+  "ui.featureUnlock.hub.shop": {
+    "ko": "상점",
+    "en": "Shop"
+  },
+  "ui.featureUnlock.hub.mailbox": {
+    "ko": "우편함",
+    "en": "Mailbox"
+  },
+  "ui.featureUnlock.hub.missions": {
+    "ko": "미션",
+    "en": "Missions"
+  },
+  "ui.gearSubStatLabel": {
+    "ko": "부옵션",
+    "en": "Substats"
+  },
+  "ui.gearAffixLabel": {
+    "ko": "특수 능력",
+    "en": "Special abilities"
+  },
+  "ui.gearRollTitle": {
+    "ko": "수치 편차",
+    "en": "Stat roll"
+  },
+  "ui.gearAffix.goldSurge": {
+    "ko": "황금 격류",
+    "en": "Gold Surge"
+  },
+  "ui.gearAffix.goldTouch": {
+    "ko": "황금 손길",
+    "en": "Gold Touch"
+  },
+  "ui.gearAffix.crystalEye": {
+    "ko": "결정안",
+    "en": "Crystal Eye"
+  },
+  "ui.gearAffix.symbolLure": {
+    "ko": "진문 유인",
+    "en": "Symbol Lure"
+  },
+  "ui.gearAffix.vaultGreed": {
+    "ko": "금고의 탐욕",
+    "en": "Vault Greed"
+  },
+  "ui.gearAffix.scholar": {
+    "ko": "현자의 기록",
+    "en": "Scholar's Record"
+  },
+  "ui.gearAffix.scrollHoard": {
+    "ko": "소환서 수집",
+    "en": "Scroll Hoard"
+  },
+  "ui.gearAffix.battleOpening": {
+    "ko": "선공 개진",
+    "en": "Opening Gambit"
+  },
+  "ui.gearAffix.manaSpring": {
+    "ko": "진액 샘",
+    "en": "Mana Spring"
+  },
+  "ui.gearAffix.leaderRoar": {
+    "ko": "지휘의 포효",
+    "en": "Commander's Roar"
+  },
+  "ui.gearAffix.bulwark": {
+    "ko": "불굴의 방벽",
+    "en": "Unyielding Bulwark"
+  },
+  "ui.gearAffix.keenSense": {
+    "ko": "예리한 감응",
+    "en": "Keen Sense"
+  },
+  "ui.gearAffix.giantSlayer": {
+    "ko": "거수 사냥",
+    "en": "Giant Slayer"
+  },
+  "ui.gearAffixEffect.battleGold": {
+    "ko": "전투 골드 +{n}%",
+    "en": "Battle gold +{n}%"
+  },
+  "ui.gearAffixEffect.exp": {
+    "ko": "획득 EXP +{n}%",
+    "en": "EXP gain +{n}%"
+  },
+  "ui.gearAffixEffect.symbolChance": {
+    "ko": "진문 드롭 +{n}%",
+    "en": "Symbol drop +{n}%"
+  },
+  "ui.gearAffixEffect.gearChance": {
+    "ko": "장비 드롭 +{n}%",
+    "en": "Gear drop +{n}%"
+  },
+  "ui.gearAffixEffect.scrollChance": {
+    "ko": "소환서 드롭 +{n}%",
+    "en": "Scroll drop +{n}%"
+  },
+  "ui.gearAffixEffect.crystalChance": {
+    "ko": "크리스탈 드롭 +{n}%",
+    "en": "Crystal drop +{n}%"
+  },
+  "ui.gearAffixEffect.startMana": {
+    "ko": "시작 마나 +{n}%",
+    "en": "Starting mana +{n}%"
+  },
+  "ui.gearAffixEffect.manaRegen": {
+    "ko": "마나 회복 +{n}%",
+    "en": "Mana regen +{n}%"
+  },
+  "ui.gearAffixEffect.boardSense": {
+    "ko": "보드 감응 +{n}%",
+    "en": "Board sense +{n}%"
+  },
+  "ui.gearAffixEffect.allyAtk": {
+    "ko": "아군 공격력 +{n}%",
+    "en": "Ally ATK +{n}%"
+  },
+  "ui.gearAffixEffect.summonerHp": {
+    "ko": "소환사 HP +{n}%",
+    "en": "Summoner HP +{n}%"
+  },
+  "ui.gearAffixEffect.bossAtk": {
+    "ko": "보스전 공격력 +{n}%",
+    "en": "Boss ATK +{n}%"
   }
 }

@@ -18,6 +18,7 @@ import {
   createStarterHwalro,
   describeGear,
   describeSymbol,
+  gearAffixTotals,
   gearEnhanceCrystalCost,
   gearEnhanceManaCost,
   gearLeaderAtkPct,
@@ -61,6 +62,7 @@ import {
   summarizeSymbolSets,
   ALL_STAGES,
   emptyMagicProgress,
+  defaultSummonerMagicLoadout,
   getSummonerKit,
   getSummonerLeader,
   magicEnhanceCrystalCost,
@@ -73,7 +75,6 @@ import {
   unlockedMagicSkills,
   magicTier2Unlocked,
   isWeekdayStageOpenToday,
-  WEEKDAY_EVOLVE_MAT_DROP,
   WEEKDAY_SKILL_MAT_DROP,
   scenarioSymbolDropTable,
   scenarioEnemyHpMul,
@@ -83,9 +84,13 @@ import {
   pickArenaRival,
   getArenaRivalDeck,
   type Element,
+  type GearAffixTotals,
   type GearPiece,
   type GearSetId,
   type GearSlot,
+  type ElementEssenceInventory,
+  type EssenceAmounts,
+  type EssenceGrade,
   type GloryBuildingId,
   type CircleInscriptionId,
   type SkillTreeNodeId,
@@ -168,6 +173,20 @@ import {
   monsterPowerUpExp,
   ownedMonstersSameFamily,
 } from "./roster.js";
+import {
+  ESSENCE_CONVERSIONS,
+  canPayEssenceCost,
+  emptyEssenceAmounts,
+  essenceAmountsFor,
+  monsterAwakenEssenceCost,
+  normalizeAwakenMats,
+  summonerAwakenEssenceCost,
+  type EssenceConversionKind,
+} from "./essences.js";
+export {
+  monsterAwakenEssenceCost,
+  summonerAwakenEssenceCost,
+} from "./essences.js";
 import {
   expForStage,
   isDifficultyOpen,
@@ -273,8 +292,8 @@ export {
 } from "./progress.js";
 export type { ScenarioDifficulty } from "./progress.js";
 
-/** Shared weekly entry budget across equip vault stages. */
-export const EQUIP_VAULT_WEEKLY_LIMIT = 5;
+/** Shared weekly entry budget across the five equip vault floors. */
+export const EQUIP_VAULT_WEEKLY_LIMIT = 15;
 
 /** ISO week key (UTC), e.g. 2026-W30. */
 export function isoWeekKey(now = Date.now()): string {
@@ -327,7 +346,17 @@ export const ARENA_TIER_RATINGS: Record<string, number> = {
   arena_veteran: 1150,
   arena_challenger: 1300,
   arena_legend: 1450,
+  warena_qual: 1500,
+  warena_final: 1650,
 };
+
+/**
+ * Practice matches against the fixed NPC tiers pay a flat trickle instead of an ELO
+ * swing, cost no rating on defeat, and hand out reduced glory — safe but slow, so the
+ * rotating rival list stays the efficient ladder.
+ */
+export const ARENA_NPC_RATING_GAIN = 3;
+export const ARENA_NPC_GLORY_MUL = 0.5;
 
 export function arenaOpponentRating(stageId: string): number {
   return ARENA_TIER_RATINGS[stageId] ?? DEFAULT_ARENA_RATING;
@@ -717,10 +746,34 @@ function normalizeMagicLoadout(raw: unknown): SummonerMagicLoadout {
   ];
 }
 
+/** Fill empty magic slots with the summoner basic skills A + B. */
+export function withDefaultSummonerMagicLoadout(
+  element: SummonerElement,
+  loadout: SummonerMagicLoadout | undefined,
+): SummonerMagicLoadout {
+  const normalized = normalizeMagicLoadout(loadout);
+  const [defA, defB] = defaultSummonerMagicLoadout(element);
+  return [normalized[0] ?? defA, normalized[1] ?? defB];
+}
+
+function ensureSummonerMagicLoadouts(
+  loadouts: Record<SummonerElement, SummonerMagicLoadout>,
+): Record<SummonerElement, SummonerMagicLoadout> {
+  const out = { ...loadouts };
+  for (const el of SUMMONER_ELEMENTS) {
+    out[el] = withDefaultSummonerMagicLoadout(el, out[el]);
+  }
+  return out;
+}
+
 export function emptyPartyPreset(
   summoner: SummonerElement = "light",
 ): PartyPreset {
-  return { summoner, party: [], magic: [null, null] };
+  return {
+    summoner,
+    party: [],
+    magic: withDefaultSummonerMagicLoadout(summoner, [null, null]),
+  };
 }
 
 function isSummonerElement(v: unknown): v is SummonerElement {
@@ -750,6 +803,10 @@ export function normalizePartyPresets(
               party: [...(save.party ?? [])]
                 .filter((uid) => rosterIds.has(uid))
                 .slice(0, 4),
+              magic: withDefaultSummonerMagicLoadout(
+                active,
+                save.summonerMagicLoadouts?.[active],
+              ),
             }
           : emptyPartyPreset(active),
       );
@@ -767,10 +824,11 @@ export function normalizePartyPresets(
       if (party.length >= 4) break;
     }
     const magicRaw = (src as { magic?: unknown }).magic;
-    const magic = Array.isArray(magicRaw)
-      ? normalizeMagicLoadout(magicRaw)
-      : undefined;
-    out.push(magic ? { summoner: el, party, magic } : { summoner: el, party });
+    const magic = withDefaultSummonerMagicLoadout(
+      el,
+      Array.isArray(magicRaw) ? normalizeMagicLoadout(magicRaw) : undefined,
+    );
+    out.push({ summoner: el, party, magic });
   }
   return out;
 }
@@ -810,8 +868,9 @@ export function runSavePartyPreset(
     party.push(uid);
     if (party.length >= 4) break;
   }
-  const magic = normalizeMagicLoadout(
-    opts?.magic ?? save.summonerMagicLoadouts?.[summoner],
+  const magic = withDefaultSummonerMagicLoadout(
+    summoner,
+    normalizeMagicLoadout(opts?.magic ?? save.summonerMagicLoadouts?.[summoner]),
   );
   const presets = normalizePartyPresets(save, save.partyPresets);
   presets[i] = { summoner, party, magic };
@@ -841,7 +900,15 @@ export function runLoadPartyPreset(
     ...(save.summonerMagicLoadouts ?? {}),
   };
   if (preset.magic) {
-    loadouts[preset.summoner] = normalizeMagicLoadout(preset.magic);
+    loadouts[preset.summoner] = withDefaultSummonerMagicLoadout(
+      preset.summoner,
+      normalizeMagicLoadout(preset.magic),
+    );
+  } else {
+    loadouts[preset.summoner] = withDefaultSummonerMagicLoadout(
+      preset.summoner,
+      loadouts[preset.summoner],
+    );
   }
   const next = syncSummonerMirrors({
     ...save,
@@ -1019,10 +1086,7 @@ export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
   };
   for (const el of SUMMONER_ELEMENTS) {
     const loadout = summonerMagicLoadouts[el];
-    summonerMagicLoadouts[el] = [
-      typeof loadout?.[0] === "string" ? loadout[0] : null,
-      typeof loadout?.[1] === "string" ? loadout[1] : null,
-    ];
+    summonerMagicLoadouts[el] = withDefaultSummonerMagicLoadout(el, loadout);
   }
   const gearBag = (save.gearBag ?? []).map((g) =>
     normalizeGearPiece(g, g.slot),
@@ -1177,7 +1241,19 @@ export function setActiveSummoner(
 ): PlayerSave {
   if (!SUMMONER_ELEMENTS.includes(element)) return save;
   if (!isSummonerUnlocked(save, element)) return save;
-  return syncSummonerMirrors({ ...save, activeSummoner: element });
+  const loadouts = {
+    ...createEmptySummonerMagicLoadouts(),
+    ...(save.summonerMagicLoadouts ?? {}),
+  };
+  loadouts[element] = withDefaultSummonerMagicLoadout(
+    element,
+    loadouts[element],
+  );
+  return syncSummonerMirrors({
+    ...save,
+    activeSummoner: element,
+    summonerMagicLoadouts: loadouts,
+  });
 }
 
 export function addActiveSummonerExp(
@@ -1322,8 +1398,8 @@ export interface PlayerSave {
   equipVaultWeekEntries: number;
   /** Symbol inventory capacity (base 100 … max 1000, +10 per expand). */
   symbolBagSlots: number;
-  /** Weekday evolve/awaken materials by element. */
-  awakenMats: Partial<Record<Element, number>>;
+  /** Weekday awaken essences by element and quality. */
+  awakenMats: ElementEssenceInventory;
   /** Weekday skill-up materials (shared pool). */
   skillMats: number;
   /** Phase 3b: arena defense lineup (local offline). */
@@ -1387,6 +1463,14 @@ export interface PlayerSave {
    * cloud sync carries it so Capacitor / multi-device stays aligned.
    */
   onboardRite: OnboardRiteSave | null;
+  /** Next attendance calendar day to claim (1–30). */
+  attendanceDayIndex: number;
+  /** Consecutive daily attendance claim streak. */
+  attendanceStreak: number;
+  /** YYYY-MM-DD of last attendance claim. */
+  attendanceLastClaimDay: string | null;
+  /** Feature-unlock modal ids already shown (building/hub/summoner). */
+  seenFeatureUnlockIds: string[];
 }
 
 export interface ExpTrackGain {
@@ -1414,6 +1498,10 @@ export interface BattleReward {
   raidDamage?: number;
   expNote: string;
   symbol?: SymbolInstance;
+  /** A symbol roll succeeded, but the inventory had no free slot. */
+  symbolBagFull?: boolean;
+  awakenEssenceGain?: { element: Element; amounts: EssenceAmounts };
+  awakenExpGain?: number;
   /** Equip dungeon wearable drop (stored in gearBag). */
   gear?: GearPiece;
   victory: boolean;
@@ -1503,14 +1591,16 @@ function buildSummonerState(
   const g = normalizeSummonerGear(gear, summonerElement);
   const pieces = gearPieces(g);
   const sets = gearSetBonuses(g);
+  const affix = gearAffixTotals(g);
   const tree = skillTreeBonuses(skillTree);
   const a = Math.max(0, awaken);
   const regen =
-    0.85 +
-    pieces.reduce((n, p) => n + (p.manaRegenBonus ?? 0), 0) +
-    sets.manaRegenBonus +
-    tree.manaRegenBonus +
-    a * 0.06;
+    (0.85 +
+      pieces.reduce((n, p) => n + (p.manaRegenBonus ?? 0), 0) +
+      sets.manaRegenBonus +
+      tree.manaRegenBonus +
+      a * 0.06) *
+    affix.manaRegenMul;
   const manaMax =
     100 +
     pieces.reduce((n, p) => n + (p.manaMaxBonus ?? 0), 0) +
@@ -1519,17 +1609,19 @@ function buildSummonerState(
     a * 8;
   const boardSense = weakBoard
     ? 0.02
-    : 0.05 +
-      pieces.reduce((n, p) => n + (p.boardSenseBonus ?? 0), 0) +
-      sets.boardSenseBonus +
-      tree.boardSenseBonus +
-      a * 0.015;
+    : (0.05 +
+        pieces.reduce((n, p) => n + (p.boardSenseBonus ?? 0), 0) +
+        sets.boardSenseBonus +
+        tree.boardSenseBonus +
+        a * 0.015) *
+      affix.boardSenseMul;
   const startPct =
     0.2 +
     pieces.reduce((n, p) => n + (p.startManaPct ?? 0), 0) +
     sets.startManaPct +
     tree.startManaPct +
-    a * 0.01;
+    a * 0.01 +
+    affix.startManaPctAdd;
   const skillPowerBonus =
     pieces.reduce((n, p) => n + (p.skillPowerBonus ?? 0), 0) +
     sets.skillPowerBonus +
@@ -1696,6 +1788,31 @@ function scaleScenarioEnemyHp(unit: Unit, stage: StageDef): Unit {
   return unit;
 }
 
+function stageEnemyUnit(
+  id: string,
+  stage: StageDef,
+  wave: number,
+  index: number,
+  level: number,
+): Unit {
+  const unit = scaleScenarioEnemyHp(
+    unitFromMonsterId(id, "enemy", `e-w${wave}-${index}`, level),
+    stage,
+  );
+  const isBoss =
+    wave === Math.max(1, stage.waves) &&
+    !!stage.bossMonsterId &&
+    unit.monsterId === stage.bossMonsterId;
+  if (!isBoss) return unit;
+  const hpMul = Math.max(1, stage.bossHpMultiplier ?? 1);
+  const hp = Math.max(1, Math.round(unit.stats.hp * hpMul));
+  unit.name = stage.bossNameKo ?? unit.name;
+  unit.stats = { ...unit.stats, hp };
+  unit.hp = hp;
+  unit.originalMaxHp = hp;
+  return unit;
+}
+
 export function createNewSave(now = Date.now()): PlayerSave {
   const { roster, party, scrolls, scrollsPremium, scrollsMystic } =
     createStarterRoster();
@@ -1716,7 +1833,11 @@ export function createNewSave(now = Date.now()): PlayerSave {
     roster,
     party,
     partyPresets: [
-      { summoner: "light" as SummonerElement, party: [...party] },
+      {
+        summoner: "light" as SummonerElement,
+        party: [...party],
+        magic: withDefaultSummonerMagicLoadout("light", [null, null]),
+      },
       emptyPartyPreset("light"),
       emptyPartyPreset("light"),
       emptyPartyPreset("light"),
@@ -1736,7 +1857,9 @@ export function createNewSave(now = Date.now()): PlayerSave {
     starterSummonerPicked: false,
     skillTree: [],
     summonerMagic: createEmptySummonerMagic(),
-    summonerMagicLoadouts: createEmptySummonerMagicLoadouts(),
+    summonerMagicLoadouts: ensureSummonerMagicLoadouts(
+      createEmptySummonerMagicLoadouts(),
+    ),
     gloryPoints: 0,
     friendshipPoints: 0,
     jinmunStones: 0,
@@ -1786,6 +1909,10 @@ export function createNewSave(now = Date.now()): PlayerSave {
     profileNickname: null,
     nicknameChangeCount: 0,
     onboardRite: null,
+    attendanceDayIndex: 1,
+    attendanceStreak: 0,
+    attendanceLastClaimDay: null,
+    seenFeatureUnlockIds: [],
   };
 }
 
@@ -3611,9 +3738,9 @@ export function runAwakenMonster(
   }
   const manaCost = monsterAwakenManaCost(def.naturalStars);
   const crystalCost = monsterAwakenCrystalCost(cur);
-  const matCost = monsterAwakenMatCost(cur);
-  const mats = save.awakenMats ?? {};
-  const haveMat = mats[def.element] ?? 0;
+  const matCost = monsterAwakenEssenceCost(def.naturalStars);
+  const mats = normalizeAwakenMats(save.awakenMats);
+  const haveMat = essenceAmountsFor(mats, def.element);
   if (save.island.mana < manaCost) {
     return {
       save,
@@ -3626,10 +3753,13 @@ export function runAwakenMonster(
       message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${save.island.crystal})`,
     };
   }
-  if (haveMat < matCost) {
+  if (!canPayEssenceCost(haveMat, matCost)) {
+    const missing = (["low", "mid", "high"] as const).find(
+      (quality) => haveMat[quality] < matCost[quality],
+    )!;
     return {
       save,
-      message: `진화재료(${def.element}) 부족 (필요 ${matCost}, 보유 ${haveMat})`,
+      message: `진화재료(${def.element}/${missing}) 부족 (필요 ${matCost[missing]}, 보유 ${haveMat[missing]})`,
     };
   }
   const nextAwaken = cur + 1;
@@ -3645,11 +3775,51 @@ export function runAwakenMonster(
   };
   const awakenMats = {
     ...mats,
-    [def.element]: haveMat - matCost,
+    [def.element]: {
+      low: haveMat.low - matCost.low,
+      mid: haveMat.mid - matCost.mid,
+      high: haveMat.high - matCost.high,
+    },
   };
   return {
     save: { ...save, island, roster, awakenMats },
-    message: `각성: ${describeOwned({ ...owned, awaken: nextAwaken })} (−골드 ${manaCost} · −크리스탈 ${crystalCost} · −재료 ${matCost})`,
+    message: `각성: ${describeOwned({ ...owned, awaken: nextAwaken })} (−골드 ${manaCost} · −크리스탈 ${crystalCost})`,
+  };
+}
+
+export function runConvertEssence(
+  save: PlayerSave,
+  element: Element,
+  kind: EssenceConversionKind,
+): LoopStepResult {
+  const def = ESSENCE_CONVERSIONS[kind];
+  if (!def) return { save, message: `알 수 없는 정수 변환: ${kind}` };
+  const awakenMats = normalizeAwakenMats(save.awakenMats);
+  const have = essenceAmountsFor(awakenMats, element);
+  if (have[def.from] < def.fromAmount) {
+    return {
+      save,
+      message: `정수 부족 (${def.from} ${have[def.from]}/${def.fromAmount})`,
+    };
+  }
+  if (save.island.mana < def.manaCost) {
+    return {
+      save,
+      message: `골드 부족 (필요 ${def.manaCost}, 보유 ${Math.floor(save.island.mana)})`,
+    };
+  }
+  const next = {
+    ...have,
+    [def.from]: have[def.from] - def.fromAmount,
+    [def.to]: have[def.to] + def.toAmount,
+  };
+  return {
+    save: {
+      ...save,
+      island: { ...save.island, mana: save.island.mana - def.manaCost },
+      awakenMats: { ...awakenMats, [element]: next },
+    },
+    message: `정수 변환 ${def.from} ${def.fromAmount} → ${def.to} ${def.toAmount}`,
   };
 }
 
@@ -3919,9 +4089,9 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
   }
   const manaCost = awakenManaCost(cur);
   const crystalCost = awakenCrystalCost(cur);
-  const matCost = summonerAwakenMatCost(cur);
-  const mats = synced.awakenMats ?? {};
-  const haveMat = mats[el] ?? 0;
+  const matCost = summonerAwakenEssenceCost(cur);
+  const mats = normalizeAwakenMats(synced.awakenMats);
+  const haveMat = essenceAmountsFor(mats, el);
   if (synced.island.mana < manaCost) {
     return {
       save: synced,
@@ -3934,10 +4104,13 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
       message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${synced.island.crystal})`,
     };
   }
-  if (haveMat < matCost) {
+  if (!canPayEssenceCost(haveMat, matCost)) {
+    const missing = (["low", "mid", "high"] as const).find(
+      (quality) => haveMat[quality] < matCost[quality],
+    )!;
     return {
       save: synced,
-      message: `${SUMMONER_ELEMENT_LABEL[el]} 정수 부족 (필요 ${matCost}, 보유 ${haveMat})`,
+      message: `${SUMMONER_ELEMENT_LABEL[el]} 정수(${missing}) 부족 (필요 ${matCost[missing]}, 보유 ${haveMat[missing]})`,
     };
   }
   const next = cur + 1;
@@ -3947,7 +4120,11 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
   };
   const awakenMats = {
     ...mats,
-    [el]: haveMat - matCost,
+    [el]: {
+      low: haveMat.low - matCost.low,
+      mid: haveMat.mid - matCost.mid,
+      high: haveMat.high - matCost.high,
+    },
   };
   return {
     save: syncSummonerMirrors({
@@ -3960,7 +4137,7 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
         crystal: synced.island.crystal - crystalCost,
       },
     }),
-    message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 진화 +${next} (−골드 ${manaCost} · −크리스탈 ${crystalCost} · −정수 ${matCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
+    message: `${SUMMONER_ELEMENT_LABEL[el]} 소환사 진화 +${next} (−골드 ${manaCost} · −크리스탈 ${crystalCost}) · 리더 공+${(awakenLeaderAtkPct(next) * 100).toFixed(1)}%`,
   };
 }
 
@@ -4505,7 +4682,10 @@ export function createStageBattle(
     gearSetBonuses(gear).summonerDefBonus;
   const leader = getSummonerLeader(activeEl);
   const awakenAtk = awakenLeaderAtkPct(awaken);
-  const gearAtk = gearLeaderAtkPct(gear) + tree.leaderAtkBonus;
+  const gearAffix = gearAffixTotals(gear);
+  const affixAtk =
+    gearAffix.allyAtkAdd + (stage.bossMonsterId ? gearAffix.bossAtkAdd : 0);
+  const gearAtk = gearLeaderAtkPct(gear) + tree.leaderAtkBonus + affixAtk;
   for (const u of allyMonsters) {
     let atkMul = 1 + awakenAtk + gearAtk + (leader.atkPct ?? 0);
     if (leader.elementAtkPct && u.element === activeEl) {
@@ -4534,12 +4714,14 @@ export function createStageBattle(
     kind: "summoner",
     element: activeEl,
     stats: {
-      hp:
-        5000 +
-        lvl * 200 +
-        (gear.shoes?.manaMaxBonus ?? 0) * 2 +
-        robeHp +
-        awaken * 300,
+      hp: Math.round(
+        (5000 +
+          lvl * 200 +
+          (gear.shoes?.manaMaxBonus ?? 0) * 2 +
+          robeHp +
+          awaken * 300) *
+          gearAffix.summonerHpMul,
+      ),
       atk: 155 + lvl * 5,
       def:
         210 +
@@ -4559,10 +4741,11 @@ export function createStageBattle(
       .filter(Boolean)
       .map((id) => resolveMonsterId(id)),
   );
-  let enemyIds =
-    opts?.enemyMonsterIds && opts.enemyMonsterIds.length > 0
-      ? opts.enemyMonsterIds
-      : stage.enemyMonsterIds;
+  const hasEnemyOverride =
+    !!opts?.enemyMonsterIds && opts.enemyMonsterIds.length > 0;
+  let enemyIds = hasEnemyOverride
+    ? opts!.enemyMonsterIds!
+    : stage.enemyWaves?.[0] ?? stage.enemyMonsterIds;
   if (stage.mode === "world_arena" && banSet.size > 0) {
     const filtered = enemyIds.filter(
       (id) => !banSet.has(id) && !banSet.has(resolveMonsterId(id)),
@@ -4575,11 +4758,13 @@ export function createStageBattle(
   const enemyLevel = () =>
     1 + Math.floor(stage.stage / 2) + Math.floor(stage.map / 3) + diffBonus;
 
+  const enemyIdsForWave = (wave: number): string[] =>
+    hasEnemyOverride
+      ? enemyIds
+      : stage.enemyWaves?.[wave - 1] ?? stage.enemyMonsterIds;
+
   const enemyMonsters = enemyIds.map((id, i) =>
-    scaleScenarioEnemyHp(
-      unitFromMonsterId(id, "enemy", `e-w1-${i}`, enemyLevel()),
-      stage,
-    ),
+    stageEnemyUnit(id, stage, 1, i, enemyLevel()),
   );
 
   const enemyUnits: Unit[] = [
@@ -4611,7 +4796,10 @@ export function createStageBattle(
   const modules = modulesForStage(stage);
   const enemyProfile = enemySummonerProfile(stage);
   const unlockedAllyMagic = unlockedMagicSkills(activeEl, magicProg);
-  const loadout = save.summonerMagicLoadouts?.[activeEl] ?? [null, null];
+  const loadout = withDefaultSummonerMagicLoadout(
+    activeEl,
+    save.summonerMagicLoadouts?.[activeEl],
+  );
   const equippedIds = loadout.filter(
     (id): id is string => typeof id === "string" && id.length > 0,
   );
@@ -4674,15 +4862,13 @@ export function createStageBattle(
     modules,
     rng: opts?.rng,
     spawnWave: (wave) =>
-      enemyIds.map((id, i) =>
-        scaleScenarioEnemyHp(
-          unitFromMonsterId(
-            id,
-            "enemy",
-            `e-w${wave}-${i}`,
-            enemyLevel() + (wave - 1),
-          ),
+      enemyIdsForWave(wave).map((id, i) =>
+        stageEnemyUnit(
+          id,
           stage,
+          wave,
+          i,
+          enemyLevel() + (wave - 1),
         ),
       ),
   });
@@ -4739,8 +4925,9 @@ export function stageCrystalDropChance(stage: StageDef): number {
 export function rollStageCrystalDrop(
   stage: StageDef,
   rng: () => number,
+  chanceMul = 1,
 ): number {
-  const chance = stageCrystalDropChance(stage);
+  const chance = Math.min(1, stageCrystalDropChance(stage) * chanceMul);
   if (chance <= 0 || rng() >= chance) return 0;
   const lateScenario =
     stage.mode === "scenario" && (stage.map >= 8 || stage.stage >= 7);
@@ -4768,6 +4955,8 @@ export function resolveBattleAuto(
 
 export type ApplyRewardsOpts = {
   damageDealt?: number;
+  /** Arena practice match against a fixed NPC tier rather than a rotating rival. */
+  arenaNpc?: boolean;
 };
 
 function raidChipFromCombat(damageDealt: number, raidBossHp: number): number {
@@ -4871,8 +5060,19 @@ export function applyRewards(
       return applyGuildRaidDefeatRewards(save, stage, opts?.damageDealt ?? 0);
     }
     if (stage.mode === "arena") {
-      const oppRating = arenaOpponentRating(stage.id);
       const before = save.arenaRating ?? DEFAULT_ARENA_RATING;
+      if (opts?.arenaNpc) {
+        return {
+          save,
+          reward: {
+            mana: 0,
+            expNote: `패배 · ELO ${before} (+0)`,
+            victory: false,
+            expTracks: [],
+          },
+        };
+      }
+      const oppRating = arenaOpponentRating(stage.id);
       const elo = applyArenaElo(before, oppRating, false);
       return {
         save: { ...save, arenaRating: elo.rating },
@@ -4907,16 +5107,25 @@ export function applyRewards(
             : stage.mode === "equip"
               ? 1.15
               : 1;
-  const manaGain = Math.round((180 + stage.stage * 60) * modeMul);
-  let gloryGain = stage.gloryReward ?? 0;
+  const affix = gearAffixTotals(getActiveGear(save));
+  const manaGain = Math.round((180 + stage.stage * 60) * modeMul * affix.battleGoldMul);
+  const arenaNpcMatch = stage.mode === "arena" && !!opts?.arenaNpc;
+  const stageGlory = stage.gloryReward ?? 0;
+  let gloryGain =
+    arenaNpcMatch && stageGlory > 0
+      ? Math.max(1, Math.round(stageGlory * ARENA_NPC_GLORY_MUL))
+      : stageGlory;
   let jinmunGain = stage.jinmunReward ?? 0;
   const scenarioTable =
     stage.mode === "scenario"
       ? scenarioSymbolDropTable(difficulty, stage.stage)
       : null;
-  const dropChance =
-    stage.dropChance ?? scenarioTable?.dropChance ?? 0.65;
-  const expGain = expForStage(stage, difficulty);
+  const dropChance = Math.min(
+    1,
+    (stage.dropChance ?? scenarioTable?.dropChance ?? 0.65) *
+      affix.symbolChanceMul,
+  );
+  const expGain = Math.round(expForStage(stage, difficulty) * affix.expMul);
   const monsterExpGain = Math.max(1, Math.round(expGain * 0.75));
 
   let working = syncSummonerMirrors({
@@ -5022,9 +5231,10 @@ export function applyRewards(
 
   const symbols = [...save.symbols];
   let symbol: SymbolInstance | undefined;
+  let symbolBagFull = false;
   if (rng() < dropChance) {
     if (symbols.length >= symbolBagCapacity(save)) {
-      symbol = undefined;
+      symbolBagFull = true;
     } else {
       const preferredSlot =
         stage.mode === "scenario" && stage.stage >= 1 && stage.stage <= 6
@@ -5056,30 +5266,46 @@ export function applyRewards(
           stage.mode === "trial"
         ? 0.18
         : 0;
-  const gearChance = stage.gearDropChance ?? defaultGearChance;
+  const gearChance = Math.min(
+    1,
+    (stage.gearDropChance ?? defaultGearChance) * affix.gearChanceMul,
+  );
   if (gearChance > 0 && rng() < gearChance) {
     gearDrop = rollGearDrop(
       rng,
       stage.mode === "equip" ? `equip_${stage.id}` : `gear_${stage.id}`,
       {
         preferredElement: working.activeSummoner,
-        ...(scenarioGearStars
-          ? {
-              starWeights: scenarioGearStars,
-              qualityWeights: scenarioTable!.qualityWeights,
-            }
-          : {}),
+        ...(stage.gearStarWeights
+          ? { starWeights: stage.gearStarWeights }
+          : scenarioGearStars
+            ? {
+                starWeights: scenarioGearStars,
+                qualityWeights: scenarioTable!.qualityWeights,
+              }
+            : {}),
+        ...(stage.gearMinStars ? { minStars: stage.gearMinStars } : {}),
       },
     );
-    if (
-      stage.mode === "equip" &&
-      stage.stage >= 2 &&
-      gearDrop.enhance < MAX_GEAR_ENHANCE
-    ) {
+    // Deeper vault floors hand out pre-enhanced gear.
+    const vaultBumps =
+      stage.mode === "equip" ? Math.max(0, Math.floor(stage.stage) - 1) : 0;
+    for (let i = 0; i < vaultBumps; i++) {
+      if (gearDrop.enhance >= MAX_GEAR_ENHANCE) break;
       gearDrop = bumpGearEnhance(gearDrop);
     }
     if (gearBag.length >= gearBagCapacity(working)) {
-      const sold = gearBag.shift()!;
+      // Auto-sell the cheapest piece, not the oldest — never eat an affixed ★5.
+      let worstIndex = 0;
+      let worstValue = Number.POSITIVE_INFINITY;
+      gearBag.forEach((piece, index) => {
+        const value = gearSellMana(piece);
+        if (value < worstValue) {
+          worstValue = value;
+          worstIndex = index;
+        }
+      });
+      const sold = gearBag.splice(worstIndex, 1)[0]!;
       const gain = gearSellMana(sold);
       const crystalGain = gearSellCrystal(sold);
       island = {
@@ -5098,17 +5324,26 @@ export function applyRewards(
   let scrolls = save.scrolls;
   let scrollsPremium = save.scrollsPremium ?? 0;
   const dropRoll = rng();
-  const mysticalChance =
-    stage.mode === "weekday" ? 0.08 : stage.mode === "scenario" ? 0.07 : 0.05;
-  const unknownChance =
-    stage.mode === "weekday" ? 0.55 : stage.mode === "scenario" ? 0.45 : 0.4;
+  // PVP pays in glory and season standing only — no scroll, symbol, or gear loot.
+  const pvpNoLoot = stage.mode === "arena" || stage.mode === "world_arena";
+  const mysticalChance = pvpNoLoot
+    ? 0
+    : (stage.mode === "weekday" ? 0.08 : stage.mode === "scenario" ? 0.07 : 0.05) *
+      affix.scrollChanceMul;
+  const unknownChance = pvpNoLoot
+    ? 0
+    : Math.min(
+        1,
+        (stage.mode === "weekday" ? 0.55 : stage.mode === "scenario" ? 0.45 : 0.4) *
+          affix.scrollChanceMul,
+      );
   if (dropRoll < mysticalChance) {
     scrollsPremium += 1;
   } else if (dropRoll < unknownChance) {
     scrolls += 1;
   }
 
-  const crystalGain = rollStageCrystalDrop(stage, rng);
+  const crystalGain = rollStageCrystalDrop(stage, rng, affix.crystalChanceMul);
   if (crystalGain > 0) {
     island = {
       ...island,
@@ -5190,30 +5425,60 @@ export function applyRewards(
   if (contributionGain > 0) extras.push(`기여도 +${contributionGain}`);
   if (stage.mode === "world_arena") extras.push(`시즌승 ${arenaSeasonWins}`);
   if (stage.mode === "arena") {
-    const oppRating = arenaOpponentRating(stage.id);
     const before = working.arenaRating ?? DEFAULT_ARENA_RATING;
-    const elo = applyArenaElo(before, oppRating, true);
-    working = { ...working, arenaRating: elo.rating };
-    extras.push(`ELO ${elo.rating} (+${elo.delta})`);
+    if (arenaNpcMatch) {
+      const after = before + ARENA_NPC_RATING_GAIN;
+      working = { ...working, arenaRating: after };
+      extras.push(`ELO ${after} (+${ARENA_NPC_RATING_GAIN})`);
+    } else {
+      const oppRating = arenaOpponentRating(stage.id);
+      const elo = applyArenaElo(before, oppRating, true);
+      working = { ...working, arenaRating: elo.rating };
+      extras.push(`ELO ${elo.rating} (+${elo.delta})`);
+    }
   }
   if (gearDrop) extras.push(`장비 ${describeGear(gearDrop)} → 가방`);
   if (scrollsPremium > (save.scrollsPremium ?? 0))
     extras.push(`${SCROLL_KIND_LABEL.premium} +1`);
   else if (scrolls > save.scrolls) extras.push(`${SCROLL_KIND_LABEL.normal} +1`);
 
-  let awakenMats = { ...(working.awakenMats ?? {}) };
+  let awakenMats = normalizeAwakenMats(working.awakenMats);
   let skillMats = working.skillMats ?? 0;
-  const awakenDungeonElement = stage.id.match(/^weekday_awaken_(fire|water|wind|light|dark)$/)?.[1] as
-    | Element
+  let awakenEssenceGain:
+    | { element: Element; amounts: EssenceAmounts }
     | undefined;
+  let awakenExpGain = 0;
+  const awakenDungeonElement =
+    stage.awakenElement ??
+    (stage.id.match(
+      /^weekday_awaken_(fire|water|wind|light|dark)(?:_b\d+)?$/,
+    )?.[1] as Element | undefined);
   if (awakenDungeonElement) {
     const el = awakenDungeonElement;
+    const gained = emptyEssenceAmounts();
+    for (const entry of stage.awakenEssenceDrops ?? []) {
+      if (rng() >= entry.chance) continue;
+      const span = Math.max(0, entry.max - entry.min);
+      gained[entry.grade] +=
+        entry.min + Math.floor(rng() * (span + 1));
+    }
+    const beforeEssences = essenceAmountsFor(awakenMats, el);
     awakenMats = {
       ...awakenMats,
-      [el]: (awakenMats[el] ?? 0) + WEEKDAY_EVOLVE_MAT_DROP,
+      [el]: {
+        low: beforeEssences.low + gained.low,
+        mid: beforeEssences.mid + gained.mid,
+        high: beforeEssences.high + gained.high,
+      },
     };
-    extras.push(`${SUMMONER_ELEMENT_LABEL[el]} 정수 +${WEEKDAY_EVOLVE_MAT_DROP}`);
-    let awakenXpNote = 0;
+    awakenEssenceGain = { element: el, amounts: gained };
+    for (const grade of ["low", "mid", "high"] as const) {
+      if (gained[grade] > 0) {
+        extras.push(
+          `${SUMMONER_ELEMENT_LABEL[el]} 정수(${grade}) +${gained[grade]}`,
+        );
+      }
+    }
     working = {
       ...working,
       roster: working.roster.map((m) => {
@@ -5225,14 +5490,14 @@ export function applyRewards(
         const before = m.awakenExp ?? 0;
         const next = Math.min(
           MONSTER_AWAKEN_EXP_GOAL,
-          before + WEEKDAY_AWAKEN_EXP_DROP,
+          before + (stage.awakenExpReward ?? WEEKDAY_AWAKEN_EXP_DROP),
         );
-        awakenXpNote += next - before;
+        awakenExpGain += next - before;
         return { ...m, awakenExp: next };
       }),
     };
-    if (awakenXpNote > 0) {
-      extras.push(`각성 경험치 +${awakenXpNote}`);
+    if (awakenExpGain > 0) {
+      extras.push(`각성 경험치 +${awakenExpGain}`);
     }
   } else if (stage.id === "weekday_skill") {
     skillMats += WEEKDAY_SKILL_MAT_DROP;
@@ -5291,6 +5556,9 @@ export function applyRewards(
       raidDamage: raidDamageOut || undefined,
       expNote: `${stage.nameKo} 클리어 · ${extras.join(" · ")}${bagSoldNote}${levelNote}`,
       symbol,
+      symbolBagFull: symbolBagFull || undefined,
+      awakenEssenceGain,
+      awakenExpGain: awakenExpGain || undefined,
       gear: gearDrop,
       victory: true,
       summonerExp: expGain,
@@ -5315,6 +5583,8 @@ export function runSortie(
     rivalId?: string;
     now?: number;
     difficulty?: ScenarioDifficulty;
+    /** Arena practice run against a fixed NPC tier. */
+    arenaNpc?: boolean;
   },
 ): LoopStepResult {
   const stage = getStage(stageId);
@@ -5463,7 +5733,7 @@ export function runSortie(
     victory,
     opts?.rng,
     difficulty,
-    { damageDealt: battle.allyDamageDealt },
+    { damageDealt: battle.allyDamageDealt, arenaNpc: opts?.arenaNpc },
   );
   return {
     save: next,

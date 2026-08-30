@@ -11,6 +11,7 @@
 | Inventory portrait | `monster/inventory/128/{artKey}.webp` / `monster/inventory/256/{artKey}.webp` |
 | Battle front/back | `monster/battle/{artKey}-front.webp` / `-back.webp` (1024²) |
 | Awaken battle | `monster/battle/{artKey}-awaken-front.webp` / `-awaken-back.webp` |
+| Stage boss front/back | `battle/boss/{bossArtId}-front.webp` / `-back.webp` (1024²) |
 
 Element palette: `element-palette.md`. Per-family notes: `families/{familyId}.md`.
 
@@ -23,6 +24,20 @@ Ship **WebP** (alpha, quality ~90–95). Smaller than PNG in the APK/AAB. PNG is
 **AI generation:** use uniform **magenta `#FF00FF`** plate only (install chroma-keys to alpha). Do **not** use black plate or fake gray checkerboard transparency.
 
 Paint **all five elements** per family (fire / water / wind / light / dark) — element colors baked into the art, not a global filter.
+
+### Stage boss pair
+
+Boss-only enemies use `StageDef.bossArtId` and do not enter the summon roster.
+Generate the front first, then use it as the reference for the rear view. Keep
+the same proportions, materials, silhouette, and ground line in both images.
+The full head, hands, and feet must remain inside a 1:1 frame with generous
+padding on a perfectly flat `#FF00FF` plate.
+
+The Cairos Giant pair is installed with:
+
+```bash
+node scripts/install-cairos-giant-art.mjs <sourceDir>
+```
 
 ## Asset layout (Cursor assets folder)
 
@@ -105,6 +120,20 @@ dark charcoal background, square 768×768, no text
 ### Awaken
 
 Same as base + family sheet delta (brighter aura, evolved armor).
+
+### Elemental awakening guardians
+
+Generate isolated full-body front and rear combat stills for the five guardian
+IDs: fire forge titan, water glacial abyss titan, wind celestial storm titan,
+light solar titan, and dark void titan. Keep both views consistent, centered,
+fully visible head-to-feet, and readable at mobile battle scale. Use a flat
+near-black or charcoal matte with no ground, cast shadow, text, UI, border, or
+frame-touching effects. The manifest installer demattes each source to
+transparent 1024² WebP under `/art/battle/boss/`.
+
+The matching essence set uses one shard for low grade, a three-crystal cluster
+for mid grade, and an ornate large core for high grade. Generate all 15 icons
+with generous margins and install to `/art/ui/res/essence/` at 256².
 
 ## QA
 

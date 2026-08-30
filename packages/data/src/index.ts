@@ -42,6 +42,7 @@ export {
   tryUnlockMagicBranch,
   unlockedMagicSkills,
   magicTier2Unlocked,
+  defaultSummonerMagicLoadout,
 } from "./summoners.js";
 export type {
   MagicBranch,
@@ -157,8 +158,25 @@ export {
   normalizeSummonerGear,
   rollGearDrop,
   summarizeGearSets,
+  GEAR_AFFIXES,
+  GEAR_STAT_KEYS,
+  emptyGearAffixTotals,
+  gearActiveAffixes,
+  gearAffixTotals,
+  gearRollPct,
+  getGearAffix,
+  isGearAffixId,
+  normalizeGearRollSeed,
+  rollGearAffixes,
+  rollGearSubStats,
 } from "./gear.js";
 export type {
+  GearAffixDef,
+  GearAffixEffect,
+  GearAffixId,
+  GearAffixKind,
+  GearAffixRoll,
+  GearAffixTotals,
   GearCodexEntry,
   GearMaterialDef,
   GearMaterialId,
@@ -170,9 +188,22 @@ export type {
   GearSetProgress,
   GearSlot,
   GearStars,
+  GearStatKey,
+  GearSubStat,
   RollGearDropOpts,
   SummonerGear,
 } from "./gear.js";
+export {
+  ESSENCE_GRADES,
+  awakenEssenceDropsForFloor,
+  awakenExpForFloor,
+} from "./essences.js";
+export type {
+  EssenceAmounts,
+  EssenceDropEntry,
+  EssenceGrade,
+  ElementEssenceInventory,
+} from "./essences.js";
 export {
   ALL_STAGES,
   ARENA_STAGES,
@@ -252,6 +283,8 @@ export type {
 } from "./fusion.js";
 export {
   ARENA_RIVAL_DECKS,
+  ARENA_RIVAL_NICKNAMES,
+  WORLD_ARENA_RIVAL_DECKS,
   getArenaRivalDeck,
   pickArenaRival,
 } from "./arenaRivals.js";

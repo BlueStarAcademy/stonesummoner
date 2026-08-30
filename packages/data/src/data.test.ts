@@ -22,6 +22,13 @@ import {
   createStarterGear,
   createStarterHwalro,
   createSymbol,
+  emptyGearAffixTotals,
+  EQUIP_STAGES,
+  gearActiveAffixes,
+  gearAffixTotals,
+  GEAR_AFFIXES,
+  GEAR_STAT_KEYS,
+  getGearAffix,
   gearArtFilename,
   gearArtStem,
   getGearMaterial,
@@ -56,6 +63,8 @@ import {
   summarizeGearSets,
   SYMBOL_SETS,
   summarizeSymbolSets,
+  WEEKDAY_STAGES,
+  isWeekdayStageOpenToday,
 } from "./index.js";
 
 describe("phase1 data", () => {
@@ -240,6 +249,63 @@ describe("phase1 data", () => {
     assert.ok(getStage("giant_b10")?.starWeights?.length);
   });
 
+  it("builds five B1-B10 awakening boss dungeons with weekday rotation", () => {
+    const awakening = WEEKDAY_STAGES.filter((stage) => stage.awakenElement);
+    assert.equal(awakening.length, 50);
+    for (const element of ["fire", "water", "wind", "light", "dark"]) {
+      const floors = awakening.filter(
+        (stage) => stage.awakenElement === element,
+      );
+      assert.equal(floors.length, 10);
+      assert.deepEqual(
+        floors.map((stage) => stage.stage),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      );
+      for (const stage of floors) {
+        assert.equal(stage.enemyWaves?.length, stage.stage >= 8 ? 3 : 2);
+        assert.equal(stage.enemyWaves?.at(-1)?.[0], stage.bossMonsterId);
+        assert.equal(stage.bossArtId, `awaken-${element}`);
+        assert.ok(stage.awakenEssenceDrops?.length);
+        assert.ok((stage.awakenExpReward ?? 0) >= 10);
+        assert.equal(stage.dropChance, 0);
+        assert.equal(stage.gearDropChance, 0);
+      }
+    }
+    assert.equal(
+      getStage("weekday_awaken_fire")?.id,
+      "weekday_awaken_fire_b1",
+    );
+
+    const monday = new Date(2026, 7, 31, 12).getTime();
+    const tuesday = new Date(2026, 8, 1, 12).getTime();
+    const saturday = new Date(2026, 8, 5, 12).getTime();
+    assert.equal(isWeekdayStageOpenToday("weekday_awaken_dark_b10", monday), true);
+    assert.equal(isWeekdayStageOpenToday("weekday_awaken_fire_b1", monday), false);
+    assert.equal(isWeekdayStageOpenToday("weekday_awaken_fire_b1", tuesday), true);
+    for (const element of ["fire", "water", "wind", "light", "dark"]) {
+      assert.equal(
+        isWeekdayStageOpenToday(`weekday_awaken_${element}_b1`, saturday),
+        true,
+      );
+    }
+  });
+
+  it("builds every Giant floor as a guaranteed final-wave boss encounter", () => {
+    for (const stage of CAIROS_GIANT_STAGES) {
+      assert.equal(stage.dropChance, 1);
+      assert.equal(stage.enemyWaves?.length, stage.waves);
+      assert.equal(stage.enemyWaves?.at(-1)?.[0], stage.bossMonsterId);
+      assert.equal(stage.bossMonsterId, "stone_golem_dark");
+      assert.equal(stage.bossArtId, "cairos-giant");
+      assert.ok((stage.bossHpMultiplier ?? 0) > 2);
+      assert.ok(
+        stage.qualityWeights?.every(
+          ({ value }) => value === "rare" || value === "epic" || value === "legend",
+        ),
+      );
+    }
+  });
+
   it("rolls equip dungeon gear drops", () => {
     const g = rollGearDrop(() => 0.2, "test");
     assert.ok(g.slot);
@@ -247,6 +313,215 @@ describe("phase1 data", () => {
     assert.ok(g.stars >= 1 && g.stars <= 5);
     assert.ok(g.quality);
     assert.ok(g.nameKo.length > 0);
+  });
+
+  it("keeps the gear affix table consistent", () => {
+    const ids = new Set<string>();
+    for (const def of GEAR_AFFIXES) {
+      assert.equal(ids.has(def.id), false, `duplicate affix ${def.id}`);
+      ids.add(def.id);
+      assert.ok(def.weight > 0, `${def.id} needs a positive weight`);
+      assert.ok(def.minStars === 4 || def.minStars === 5);
+      assert.ok(def.value[0] > 0 && def.value[1] >= def.value[0]);
+      assert.ok(def.kind === "econ" || def.kind === "combat");
+      assert.equal(getGearAffix(def.id)?.id, def.id);
+      if (def.slots) assert.ok(def.slots.length > 0);
+    }
+    // Every ★4 slot must have at least one eligible affix.
+    for (const slot of ["weapon", "top", "bottom", "shoes", "ring", "necklace"] as const) {
+      const pool = GEAR_AFFIXES.filter(
+        (def) => def.minStars === 4 && (!def.slots || def.slots.includes(slot)),
+      );
+      assert.ok(pool.length >= 2, `${slot} affix pool too small`);
+    }
+    // "Battle gold doubled" must be reachable at the top roll.
+    const surge = getGearAffix("goldSurge")!;
+    assert.equal(surge.minStars, 5);
+    assert.equal(surge.value[1], 1);
+  });
+
+  it("rolls stat variance, substats and affixes from the piece seed", () => {
+    const piece = normalizeGearPiece({
+      id: "t_roll",
+      slot: "necklace",
+      nameKo: "t",
+      enhance: 0,
+      setId: "sense",
+      stars: 5,
+      materialId: "cloth",
+      rollSeed: 123456,
+    });
+    assert.equal(piece.rollSeed, 123456);
+    assert.ok(piece.rollPct >= 0.85 && piece.rollPct <= 1.22);
+    assert.ok(piece.subStats.length >= 2, "★5 rolls 2+ substats");
+    assert.equal(piece.affixes.length, 2, "★5 rolls 2 affixes");
+    assert.notEqual(piece.affixes[0]!.id, piece.affixes[1]!.id);
+    for (const sub of piece.subStats) {
+      assert.ok(GEAR_STAT_KEYS.includes(sub.stat));
+      assert.ok(sub.value > 0);
+    }
+    // Same seed reproduces the identical piece after a save round trip.
+    const again = normalizeGearPiece({ ...piece });
+    assert.deepEqual(again.subStats, piece.subStats);
+    assert.deepEqual(again.affixes, piece.affixes);
+    assert.equal(again.rollPct, piece.rollPct);
+    assert.equal(again.boardSenseBonus, piece.boardSenseBonus);
+    // A different seed gives different rolls.
+    const other = normalizeGearPiece({ ...piece, rollSeed: 999983 });
+    assert.notDeepEqual(other.affixes, piece.affixes);
+  });
+
+  it("keeps substats off the axes a slot already carries", () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const shoes = normalizeGearPiece({
+        id: `t_sub_${seed}`,
+        slot: "shoes",
+        nameKo: "t",
+        enhance: 0,
+        setId: "mana",
+        stars: 5,
+        materialId: "leather",
+        rollSeed: seed * 7919,
+      });
+      for (const sub of shoes.subStats) {
+        assert.ok(
+          sub.stat === "skillPowerBonus" ||
+            sub.stat === "summonerHpBonus" ||
+            sub.stat === "summonerDefBonus" ||
+            sub.stat === "leaderAtkBonus",
+          `shoes should not roll ${sub.stat} as a substat`,
+        );
+      }
+    }
+  });
+
+  it("grants affixes only from ★4 and keeps legacy pieces stable", () => {
+    const stars = [1, 2, 3, 4, 5] as const;
+    const counts = stars.map((s) => {
+      const piece = normalizeGearPiece({
+        id: `t_affix_s${s}`,
+        slot: "ring",
+        nameKo: "t",
+        enhance: 0,
+        setId: "assault",
+        stars: s,
+        materialId: "plate",
+      });
+      return piece.affixes.length;
+    });
+    assert.deepEqual(counts, [0, 0, 0, 1, 2]);
+    // Legacy save with no rollSeed derives a stable seed from the id.
+    const legacyA = normalizeGearPiece({
+      id: "legacy_ring",
+      slot: "ring",
+      nameKo: "t",
+      enhance: 3,
+      setId: "assault",
+      stars: 5,
+      materialId: "plate",
+    });
+    const legacyB = normalizeGearPiece({
+      id: "legacy_ring",
+      slot: "ring",
+      nameKo: "t",
+      enhance: 3,
+      setId: "assault",
+      stars: 5,
+      materialId: "plate",
+    });
+    assert.equal(legacyA.rollSeed, legacyB.rollSeed);
+    assert.deepEqual(legacyA.affixes, legacyB.affixes);
+    assert.equal(legacyA.enhance, 3);
+  });
+
+  it("aggregates affixes once per id at the best roll", () => {
+    assert.deepEqual(gearAffixTotals(createEmptyGear()), emptyGearAffixTotals());
+
+    const seedPiece = (slot: "weapon" | "necklace", seed: number) =>
+      normalizeGearPiece({
+        id: `t_gold_${slot}_${seed}`,
+        slot,
+        nameKo: "t",
+        enhance: 0,
+        setId: "sense",
+        stars: 5,
+        element: slot === "weapon" ? "light" : undefined,
+        materialId: slot === "weapon" ? undefined : "cloth",
+        rollSeed: seed,
+      });
+    const findGoldSurge = (slot: "weapon" | "necklace") => {
+      for (let seed = 1; seed < 5000; seed++) {
+        const piece = seedPiece(slot, seed * 31);
+        if (piece.affixes.some((a) => a.id === "goldSurge")) return piece;
+      }
+      return null;
+    };
+    const weapon = findGoldSurge("weapon");
+    const necklace = findGoldSurge("necklace");
+    assert.ok(weapon, "goldSurge should be rollable on a ★5 weapon");
+    assert.ok(necklace, "goldSurge should be rollable on a ★5 necklace");
+
+    const gear = { ...createEmptyGear(), weapon, necklace };
+    const active = gearActiveAffixes(gear);
+    const ids = active.map((a) => a.id);
+    assert.equal(new Set(ids).size, ids.length, "each affix id fires once");
+
+    const best = Math.max(
+      weapon.affixes.find((a) => a.id === "goldSurge")!.value,
+      necklace.affixes.find((a) => a.id === "goldSurge")!.value,
+    );
+    assert.equal(
+      active.find((a) => a.id === "goldSurge")!.value,
+      best,
+      "keeps the highest roll",
+    );
+    assert.equal(gearAffixTotals(gear).battleGoldMul, 1 + best);
+  });
+
+  it("doubles battle gold at a max goldSurge roll", () => {
+    const surge = getGearAffix("goldSurge")!;
+    const gear = {
+      ...createEmptyGear(),
+      necklace: {
+        ...normalizeGearPiece({
+          id: "t_surge",
+          slot: "necklace",
+          nameKo: "t",
+          enhance: 0,
+          setId: "sense",
+          stars: 5,
+          materialId: "cloth",
+        }),
+        affixes: [{ id: "goldSurge" as const, value: surge.value[1] }],
+      },
+    };
+    assert.equal(gearAffixTotals(gear).battleGoldMul, 2);
+  });
+
+  it("stacks vault floors toward higher gear grades", () => {
+    assert.equal(EQUIP_STAGES.length, 5);
+    EQUIP_STAGES.forEach((stage, i) => {
+      assert.equal(stage.mode, "equip");
+      assert.equal(stage.stage, i + 1);
+      assert.ok(stage.gearStarWeights && stage.gearStarWeights.length > 0);
+      if (i > 0) {
+        assert.ok(
+          stage.energyCost > EQUIP_STAGES[i - 1]!.energyCost,
+          "deeper floors cost more energy",
+        );
+      }
+    });
+    const top = EQUIP_STAGES[4]!;
+    assert.equal(top.gearMinStars, 4);
+    assert.ok(top.bossMonsterId);
+    assert.ok((top.bossHpMultiplier ?? 0) > 1);
+    // A pessimistic rng still yields an affixed ★4 on the top floor.
+    const drop = rollGearDrop(() => 0.001, "vault5", {
+      starWeights: top.gearStarWeights,
+      minStars: top.gearMinStars,
+    });
+    assert.ok(drop.stars >= 4);
+    assert.ok(drop.affixes.length >= 1);
   });
 
   it("aggregates shallow skill tree bonuses", () => {

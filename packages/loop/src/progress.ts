@@ -8,6 +8,7 @@ import {
   MAIN_QUEST_AREA_COUNT,
   MAIN_QUEST_STAGES,
   TRIAL_STAGES,
+  WEEKDAY_STAGES,
   WORLD_ARENA_STAGES,
   getStage,
   isWeekdayStageOpenToday,
@@ -66,6 +67,15 @@ function cairosChainFor(stageId: string): StageDef[] | null {
   return null;
 }
 
+function awakenChainFor(stageId: string): StageDef[] | null {
+  const match = stageId.match(
+    /^weekday_awaken_(fire|water|wind|light|dark)_b\d+$/,
+  );
+  if (!match) return null;
+  const prefix = `weekday_awaken_${match[1]}_`;
+  return WEEKDAY_STAGES.filter((stage) => stage.id.startsWith(prefix));
+}
+
 /** Linear floor/stage list used by the result-screen "next" button. */
 export function stageProgressionChain(stage: StageDef): StageDef[] | null {
   switch (stage.mode) {
@@ -77,6 +87,8 @@ export function stageProgressionChain(stage: StageDef): StageDef[] | null {
       return TRIAL_STAGES;
     case "equip":
       return EQUIP_STAGES;
+    case "weekday":
+      return awakenChainFor(stage.id);
     case "world_arena":
       return WORLD_ARENA_STAGES;
     case "arena":
@@ -177,10 +189,15 @@ export function isStageUnlockedForDifficulty(
         save.clearedStages.includes("garen_1_3")
       );
     case "weekday":
-      return (
-        save.clearedStages.includes("garen_1_3") &&
-        isWeekdayStageOpenToday(stageId)
-      );
+      if (
+        !save.clearedStages.includes("garen_1_3") ||
+        !isWeekdayStageOpenToday(stage.id)
+      ) {
+        return false;
+      }
+      return awakenChainFor(stage.id)
+        ? chainUnlocked(save, awakenChainFor(stage.id)!, stage.id)
+        : true;
     case "trial":
       if (!save.clearedStages.includes("garen_1_5")) return false;
       return chainUnlocked(save, TRIAL_STAGES, stageId);

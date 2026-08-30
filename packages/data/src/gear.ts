@@ -51,6 +51,83 @@ export interface GearSetBonus {
   leaderAtkBonus: number;
 }
 
+/** Stat axes a gear piece can carry. */
+export type GearStatKey = keyof GearSetBonus;
+
+/** Random secondary line rolled from `rollSeed`. */
+export interface GearSubStat {
+  stat: GearStatKey;
+  value: number;
+}
+
+export type GearAffixKind = "econ" | "combat";
+
+/** Where an affix lands once aggregated. */
+export type GearAffixEffect =
+  | "battleGold"
+  | "exp"
+  | "symbolChance"
+  | "gearChance"
+  | "scrollChance"
+  | "crystalChance"
+  | "startMana"
+  | "manaRegen"
+  | "boardSense"
+  | "allyAtk"
+  | "summonerHp"
+  | "bossAtk";
+
+export type GearAffixId =
+  | "goldSurge"
+  | "goldTouch"
+  | "crystalEye"
+  | "symbolLure"
+  | "vaultGreed"
+  | "scholar"
+  | "scrollHoard"
+  | "battleOpening"
+  | "manaSpring"
+  | "leaderRoar"
+  | "bulwark"
+  | "keenSense"
+  | "giantSlayer";
+
+export interface GearAffixDef {
+  id: GearAffixId;
+  nameKo: string;
+  kind: GearAffixKind;
+  effect: GearAffixEffect;
+  /** Lowest ★ this affix can roll on. */
+  minStars: 4 | 5;
+  /** Restrict to these slots when set. */
+  slots?: GearSlot[];
+  /** Roll range as an additive fraction. */
+  value: [number, number];
+  weight: number;
+}
+
+/** A rolled special ability on a piece. */
+export interface GearAffixRoll {
+  id: GearAffixId;
+  value: number;
+}
+
+/** Aggregated affix effects for a full loadout. */
+export interface GearAffixTotals {
+  battleGoldMul: number;
+  expMul: number;
+  symbolChanceMul: number;
+  gearChanceMul: number;
+  scrollChanceMul: number;
+  crystalChanceMul: number;
+  startManaPctAdd: number;
+  manaRegenMul: number;
+  boardSenseMul: number;
+  allyAtkAdd: number;
+  summonerHpMul: number;
+  bossAtkAdd: number;
+}
+
 export interface GearSetProgress {
   setId: GearSetId;
   nameKo: string;
@@ -88,6 +165,14 @@ export interface GearPiece {
   summonerDefBonus: number;
   /** Ally monster ATK multiplier bonus (leader-type) */
   leaderAtkBonus: number;
+  /** Per-instance randomness seed — the only random source for the fields below. */
+  rollSeed: number;
+  /** Main stat variance multiplier derived from `rollSeed`. */
+  rollPct: number;
+  /** Random secondary lines derived from `rollSeed`. */
+  subStats: GearSubStat[];
+  /** Special abilities derived from `rollSeed` (★4+ only). */
+  affixes: GearAffixRoll[];
 }
 
 export interface SummonerGear {
@@ -191,6 +276,296 @@ export const GEAR_MATERIALS: GearMaterialDef[] = [
     },
   },
 ];
+
+/**
+ * Special abilities. ★4 rolls one, ★5 rolls two distinct ids.
+ * `value` is always an additive fraction, so a 1.0 roll on `goldSurge`
+ * means double battle gold.
+ */
+export const GEAR_AFFIXES: GearAffixDef[] = [
+  {
+    id: "goldSurge",
+    nameKo: "황금 격류",
+    kind: "econ",
+    effect: "battleGold",
+    minStars: 5,
+    slots: ["weapon", "necklace"],
+    value: [0.6, 1],
+    weight: 6,
+  },
+  {
+    id: "goldTouch",
+    nameKo: "황금 손길",
+    kind: "econ",
+    effect: "battleGold",
+    minStars: 4,
+    value: [0.2, 0.35],
+    weight: 12,
+  },
+  {
+    id: "crystalEye",
+    nameKo: "결정안",
+    kind: "econ",
+    effect: "crystalChance",
+    minStars: 4,
+    value: [0.5, 1],
+    weight: 9,
+  },
+  {
+    id: "symbolLure",
+    nameKo: "진문 유인",
+    kind: "econ",
+    effect: "symbolChance",
+    minStars: 4,
+    value: [0.2, 0.4],
+    weight: 10,
+  },
+  {
+    id: "vaultGreed",
+    nameKo: "금고의 탐욕",
+    kind: "econ",
+    effect: "gearChance",
+    minStars: 4,
+    value: [0.25, 0.5],
+    weight: 9,
+  },
+  {
+    id: "scholar",
+    nameKo: "현자의 기록",
+    kind: "econ",
+    effect: "exp",
+    minStars: 4,
+    value: [0.15, 0.3],
+    weight: 11,
+  },
+  {
+    id: "scrollHoard",
+    nameKo: "소환서 수집",
+    kind: "econ",
+    effect: "scrollChance",
+    minStars: 4,
+    value: [0.3, 0.6],
+    weight: 10,
+  },
+  {
+    id: "battleOpening",
+    nameKo: "선공 개진",
+    kind: "combat",
+    effect: "startMana",
+    minStars: 4,
+    value: [0.1, 0.2],
+    weight: 11,
+  },
+  {
+    id: "manaSpring",
+    nameKo: "진액 샘",
+    kind: "combat",
+    effect: "manaRegen",
+    minStars: 4,
+    value: [0.08, 0.15],
+    weight: 11,
+  },
+  {
+    id: "leaderRoar",
+    nameKo: "지휘의 포효",
+    kind: "combat",
+    effect: "allyAtk",
+    minStars: 4,
+    value: [0.05, 0.1],
+    weight: 10,
+  },
+  {
+    id: "bulwark",
+    nameKo: "불굴의 방벽",
+    kind: "combat",
+    effect: "summonerHp",
+    minStars: 4,
+    value: [0.08, 0.15],
+    weight: 11,
+  },
+  {
+    id: "keenSense",
+    nameKo: "예리한 감응",
+    kind: "combat",
+    effect: "boardSense",
+    minStars: 4,
+    value: [0.1, 0.2],
+    weight: 10,
+  },
+  {
+    id: "giantSlayer",
+    nameKo: "거수 사냥",
+    kind: "combat",
+    effect: "bossAtk",
+    minStars: 4,
+    value: [0.1, 0.18],
+    weight: 8,
+  },
+];
+
+export function getGearAffix(id: GearAffixId): GearAffixDef | undefined {
+  return GEAR_AFFIXES.find((a) => a.id === id);
+}
+
+export function isGearAffixId(raw: unknown): raw is GearAffixId {
+  return typeof raw === "string" && GEAR_AFFIXES.some((a) => a.id === raw);
+}
+
+export const GEAR_STAT_KEYS: readonly GearStatKey[] = [
+  "manaRegenBonus",
+  "manaMaxBonus",
+  "boardSenseBonus",
+  "startManaPct",
+  "skillPowerBonus",
+  "summonerHpBonus",
+  "summonerDefBonus",
+  "leaderAtkBonus",
+] as const;
+
+/** Stats stored as whole numbers; the rest keep 4 decimals. */
+const GEAR_INT_STATS: readonly GearStatKey[] = [
+  "manaMaxBonus",
+  "summonerHpBonus",
+  "summonerDefBonus",
+] as const;
+
+/** Typical ★1 main-stat magnitude per axis — substat rolls scale off this. */
+const GEAR_STAT_SCALE: Record<GearStatKey, number> = {
+  manaRegenBonus: 0.12,
+  manaMaxBonus: 10,
+  boardSenseBonus: 0.08,
+  startManaPct: 0.05,
+  skillPowerBonus: 0.06,
+  summonerHpBonus: 40,
+  summonerDefBonus: 4,
+  leaderAtkBonus: 0.01,
+};
+
+/** Main stat variance band — wider at higher ★. */
+const GEAR_ROLL_RANGE: Record<GearStars, [number, number]> = {
+  1: [0.9, 1.1],
+  2: [0.9, 1.1],
+  3: [0.88, 1.14],
+  4: [0.86, 1.18],
+  5: [0.85, 1.22],
+};
+
+function hashStringToSeed(raw: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < raw.length; i++) {
+    h ^= raw.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/** Independent xorshift32 stream per salt so adding a roll never shifts others. */
+function seededStream(seed: number, salt: string): () => number {
+  let s = (seed ^ hashStringToSeed(salt)) >>> 0;
+  if (s === 0) s = 0x9e3779b9;
+  return () => {
+    s ^= (s << 13) >>> 0;
+    s >>>= 0;
+    s ^= s >>> 17;
+    s ^= (s << 5) >>> 0;
+    s >>>= 0;
+    return s / 4294967296;
+  };
+}
+
+export function normalizeGearRollSeed(raw: unknown, fallbackId: string): number {
+  const n = Number(raw);
+  if (Number.isFinite(n) && n !== 0) return Math.abs(Math.floor(n)) >>> 0;
+  return hashStringToSeed(fallbackId || "gear");
+}
+
+function roundStat(key: GearStatKey, value: number): number {
+  return GEAR_INT_STATS.includes(key)
+    ? Math.round(value)
+    : Number(value.toFixed(4));
+}
+
+/** Main stat variance factor for a piece. */
+export function gearRollPct(stars: GearStars, rollSeed: number): number {
+  const [lo, hi] = GEAR_ROLL_RANGE[normalizeGearStars(stars)];
+  const rng = seededStream(rollSeed, "main");
+  return Number((lo + rng() * (hi - lo)).toFixed(3));
+}
+
+function subStatCount(stars: GearStars, rng: () => number): number {
+  switch (normalizeGearStars(stars)) {
+    case 1:
+      return 0;
+    case 2:
+    case 3:
+      return 1;
+    case 4:
+      return 2;
+    default:
+      return rng() < 0.25 ? 3 : 2;
+  }
+}
+
+/** Random secondary lines, drawn only from axes the slot does not already carry. */
+export function rollGearSubStats(
+  slot: GearSlot,
+  stars: GearStars,
+  rollSeed: number,
+): GearSubStat[] {
+  const rng = seededStream(rollSeed, "sub");
+  const count = subStatCount(stars, rng);
+  if (count <= 0) return [];
+  const base = baseBonusesForSlot(slot, stars);
+  const pool = GEAR_STAT_KEYS.filter((key) => !base[key]);
+  const out: GearSubStat[] = [];
+  const available = [...pool];
+  const mul = gearStarMul(stars);
+  for (let i = 0; i < count && available.length > 0; i++) {
+    const idx = Math.floor(rng() * available.length) % available.length;
+    const key = available.splice(idx, 1)[0]!;
+    const raw = GEAR_STAT_SCALE[key] * (0.25 + rng() * 0.3) * mul;
+    const value = roundStat(key, raw);
+    if (value <= 0) continue;
+    out.push({ stat: key, value });
+  }
+  return out;
+}
+
+/** Special abilities: none below ★4, one at ★4, two distinct at ★5. */
+export function rollGearAffixes(
+  slot: GearSlot,
+  stars: GearStars,
+  rollSeed: number,
+): GearAffixRoll[] {
+  const s = normalizeGearStars(stars);
+  if (s < 4) return [];
+  const count = s === 5 ? 2 : 1;
+  const rng = seededStream(rollSeed, "affix");
+  const pool = GEAR_AFFIXES.filter(
+    (def) => s >= def.minStars && (!def.slots || def.slots.includes(slot)),
+  );
+  const out: GearAffixRoll[] = [];
+  const available = [...pool];
+  for (let i = 0; i < count && available.length > 0; i++) {
+    const total = available.reduce((n, def) => n + def.weight, 0);
+    let roll = rng() * total;
+    let picked = available[available.length - 1]!;
+    for (const def of available) {
+      roll -= def.weight;
+      if (roll <= 0) {
+        picked = def;
+        break;
+      }
+    }
+    available.splice(available.indexOf(picked), 1);
+    const [lo, hi] = picked.value;
+    out.push({
+      id: picked.id,
+      value: Number((lo + rng() * (hi - lo)).toFixed(3)),
+    });
+  }
+  return out;
+}
 
 const MATERIAL_WEIGHTS: { value: GearMaterialId; w: number }[] = GEAR_MATERIALS.map(
   (m) => ({ value: m.id, w: 1 }),
@@ -518,49 +893,93 @@ function baseBonusesForSlot(
   }
 }
 
+type GearBonusFields = Pick<
+  GearPiece,
+  | "manaRegenBonus"
+  | "manaMaxBonus"
+  | "boardSenseBonus"
+  | "startManaPct"
+  | "skillPowerBonus"
+  | "summonerHpBonus"
+  | "summonerDefBonus"
+  | "leaderAtkBonus"
+>;
+
+function applyRollVariance<T extends GearBonusFields>(bonuses: T, rollPct: number): T {
+  const out = { ...bonuses };
+  for (const key of GEAR_STAT_KEYS) {
+    const v = out[key];
+    if (!v) continue;
+    (out as Record<string, number>)[key] = roundStat(key, v * rollPct);
+  }
+  return out;
+}
+
+function addSubStats<T extends GearBonusFields>(
+  bonuses: T,
+  subStats: GearSubStat[],
+): T {
+  if (!subStats.length) return bonuses;
+  const out = { ...bonuses };
+  for (const sub of subStats) {
+    const cur = out[sub.stat] ?? 0;
+    (out as Record<string, number>)[sub.stat] = roundStat(
+      sub.stat,
+      cur + sub.value,
+    );
+  }
+  return out;
+}
+
 function basePiece(
   partial: Omit<
     GearPiece,
-    | "manaRegenBonus"
-    | "manaMaxBonus"
-    | "boardSenseBonus"
-    | "startManaPct"
-    | "skillPowerBonus"
-    | "summonerHpBonus"
-    | "summonerDefBonus"
-    | "leaderAtkBonus"
+    | keyof GearBonusFields
     | "stars"
     | "quality"
+    | "rollSeed"
+    | "rollPct"
+    | "subStats"
+    | "affixes"
   > &
     Partial<
-      Pick<
-        GearPiece,
-        | "manaRegenBonus"
-        | "manaMaxBonus"
-        | "boardSenseBonus"
-        | "startManaPct"
-        | "skillPowerBonus"
-        | "summonerHpBonus"
-        | "summonerDefBonus"
-        | "leaderAtkBonus"
-        | "stars"
-        | "quality"
-        | "element"
-      >
+      GearBonusFields &
+        Pick<
+          GearPiece,
+          | "stars"
+          | "quality"
+          | "element"
+          | "rollSeed"
+          | "rollPct"
+          | "subStats"
+          | "affixes"
+        >
     >,
+  opts?: { variance?: boolean },
 ): GearPiece {
   const stars = normalizeGearStars(partial.stars ?? 1);
   const quality = gearStarsToQuality(stars);
   const materialId =
     partial.slot === "weapon" ? undefined : normalizeGearMaterial(partial.materialId);
+  const variance = opts?.variance ?? true;
+  const rollSeed = normalizeGearRollSeed(partial.rollSeed, partial.id);
+  const rollPct = variance ? gearRollPct(stars, rollSeed) : 1;
+  const subStats = variance ? rollGearSubStats(partial.slot, stars, rollSeed) : [];
+  const affixes = variance ? rollGearAffixes(partial.slot, stars, rollSeed) : [];
   let scaled = baseBonusesForSlot(partial.slot, stars);
   if (materialId) scaled = applyMaterialBonuses(scaled, materialId);
+  scaled = applyRollVariance(scaled, rollPct);
+  scaled = addSubStats(scaled, subStats);
   return {
     ...scaled,
     ...partial,
     stars,
     quality,
     materialId,
+    rollSeed,
+    rollPct,
+    subStats,
+    affixes,
   };
 }
 
@@ -587,6 +1006,11 @@ export function isDefaultStarterGear(piece: GearPiece | null | undefined): boole
     id === "ring_bond" ||
     id === "necklace_sense"
   );
+}
+
+/** Catalog piece — canonical values, no roll variance. */
+function fixedPiece(partial: Parameters<typeof basePiece>[0]): GearPiece {
+  return basePiece(partial, { variance: false });
 }
 
 export function createStarterGear(element: Element = "light"): SummonerGear {
@@ -678,8 +1102,9 @@ export function normalizeGearPiece(
     0,
     Math.min(MAX_GEAR_ENHANCE, Math.floor(Number(piece.enhance) || 0)),
   );
+  const id = piece.id ?? `gear_${slot}_migrated`;
   let normalized = basePiece({
-    id: piece.id ?? `gear_${slot}_migrated`,
+    id,
     slot,
     nameKo:
       piece.nameKo ??
@@ -692,6 +1117,7 @@ export function normalizeGearPiece(
     quality,
     element,
     materialId,
+    rollSeed: normalizeGearRollSeed(piece.rollSeed, id),
   });
   for (let i = 0; i < enhance; i++) {
     normalized = bumpGearEnhance(normalized);
@@ -788,6 +1214,98 @@ export function gearSetBonuses(gear: SummonerGear): GearSetBonus {
     mergeBonus(out, def.bonus2);
     if (prog.active4) mergeBonus(out, def.bonus4);
     if (prog.active6) mergeBonus(out, def.bonus6);
+  }
+  return out;
+}
+
+export function emptyGearAffixTotals(): GearAffixTotals {
+  return {
+    battleGoldMul: 1,
+    expMul: 1,
+    symbolChanceMul: 1,
+    gearChanceMul: 1,
+    scrollChanceMul: 1,
+    crystalChanceMul: 1,
+    startManaPctAdd: 0,
+    manaRegenMul: 1,
+    boardSenseMul: 1,
+    allyAtkAdd: 0,
+    summonerHpMul: 1,
+    bossAtkAdd: 0,
+  };
+}
+
+/**
+ * Special abilities on equipped pieces; the same id fires once at its best roll.
+ * Reads the pieces as stored (saves are normalized on load), so this stays cheap
+ * enough to call per battle and per reward payout.
+ */
+export function gearActiveAffixes(gear: SummonerGear): GearAffixRoll[] {
+  const best = new Map<GearAffixId, number>();
+  const slots = [
+    gear.weapon,
+    gear.top,
+    gear.bottom,
+    gear.shoes,
+    gear.ring,
+    gear.necklace,
+  ];
+  for (const piece of slots) {
+    if (!piece) continue;
+    for (const roll of piece.affixes ?? []) {
+      if (!isGearAffixId(roll?.id)) continue;
+      const value = Number(roll.value);
+      if (!Number.isFinite(value) || value <= 0) continue;
+      if (value > (best.get(roll.id) ?? 0)) best.set(roll.id, value);
+    }
+  }
+  return [...best.entries()].map(([id, value]) => ({ id, value }));
+}
+
+/** Aggregate active special abilities into one effect bundle. */
+export function gearAffixTotals(gear: SummonerGear): GearAffixTotals {
+  const out = emptyGearAffixTotals();
+  for (const roll of gearActiveAffixes(gear)) {
+    const def = getGearAffix(roll.id);
+    if (!def) continue;
+    switch (def.effect) {
+      case "battleGold":
+        out.battleGoldMul += roll.value;
+        break;
+      case "exp":
+        out.expMul += roll.value;
+        break;
+      case "symbolChance":
+        out.symbolChanceMul += roll.value;
+        break;
+      case "gearChance":
+        out.gearChanceMul += roll.value;
+        break;
+      case "scrollChance":
+        out.scrollChanceMul += roll.value;
+        break;
+      case "crystalChance":
+        out.crystalChanceMul += roll.value;
+        break;
+      case "startMana":
+        out.startManaPctAdd += roll.value;
+        break;
+      case "manaRegen":
+        out.manaRegenMul += roll.value;
+        break;
+      case "boardSense":
+        out.boardSenseMul += roll.value;
+        break;
+      case "allyAtk":
+        out.allyAtkAdd += roll.value;
+        break;
+      case "summonerHp":
+        out.summonerHpMul += roll.value;
+        break;
+      case "bossAtk":
+        out.bossAtkAdd += roll.value;
+        break;
+    }
   }
   return out;
 }
@@ -915,7 +1433,8 @@ export function gearSellMana(piece: GearPiece): number {
   const late = piece.enhance >= 9 ? (piece.enhance - 8) * 50 : 0;
   const leader = Math.round((piece.leaderAtkBonus ?? 0) * 500);
   const grade = piece.stars * 8 + (piece.quality === "legend" ? 40 : 0);
-  return base + late + leader + grade;
+  const affix = (piece.affixes ?? []).length * 120;
+  return base + late + leader + grade + affix;
 }
 
 /** Partial crystal refund for +12+ enhance investment (~50%). */
@@ -956,7 +1475,7 @@ export function buildGearCodexPiece(params: {
   const materialId =
     slot === "weapon" ? undefined : normalizeGearMaterial(params.materialId);
   const nameKo = gearNameKoForSlot(slot, stars, element);
-  return basePiece({
+  return fixedPiece({
     id: `codex_${gearCodexKey({ slot, stars, element, materialId })}`,
     slot,
     nameKo,
@@ -1046,6 +1565,8 @@ export type RollGearDropOpts = {
   preferredElement?: Element;
   starWeights?: { value: GearStars; w: number }[];
   qualityWeights?: { value: GearQuality; w: number }[];
+  /** Floor the rolled ★ — deep vault floors guarantee a grade. */
+  minStars?: GearStars;
 };
 
 /** Roll a wearable piece (random slot/set/stars/quality; weapons get element). */
@@ -1063,7 +1584,10 @@ export function rollGearDrop(
     GEAR_SLOTS[Math.floor(rng() * GEAR_SLOTS.length) % GEAR_SLOTS.length]!;
   const setId =
     GEAR_SETS[Math.floor(rng() * GEAR_SETS.length) % GEAR_SETS.length]!.id;
-  const stars = pickWeighted(opts.starWeights ?? STAR_WEIGHTS, rng);
+  const rolledStars = pickWeighted(opts.starWeights ?? STAR_WEIGHTS, rng);
+  const stars = normalizeGearStars(
+    Math.max(rolledStars, opts.minStars ? normalizeGearStars(opts.minStars) : 1),
+  );
   const quality = gearStarsToQuality(stars);
   const materialId =
     slot === "weapon" ? undefined : pickWeighted(MATERIAL_WEIGHTS, rng);
@@ -1074,6 +1598,8 @@ export function rollGearDrop(
         : ELEMENTS[Math.floor(rng() * ELEMENTS.length) % ELEMENTS.length]!
       : undefined;
   const nameKo = gearNameKoForSlot(slot, stars, element);
+  // The seed falls out of the id hash — the id already carries a random draw,
+  // so this does not consume another one from `rng`.
   let piece = basePiece({
     id: `${idPrefix}_${slot}_${Math.floor(rng() * 1e6)}`,
     slot,

@@ -726,6 +726,12 @@ export function unlockedMagicSkills(
   return out;
 }
 
+/** Default battle loadout: always-unlocked basic magic skills A + B. */
+export function defaultSummonerMagicLoadout(element: Element): [string, string] {
+  const kit = SUMMONER_KITS[element];
+  return [kit.skills.A.id, kit.skills.B.id];
+}
+
 export function tryUnlockMagicBranch(
   element: Element,
   progress: SummonerMagicProgress,
