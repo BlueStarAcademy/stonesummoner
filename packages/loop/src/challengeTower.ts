@@ -4,6 +4,11 @@ import {
 } from "stonesummoner-data";
 import type { PlayerSave } from "./loop.js";
 
+export {
+  CHALLENGE_TOWER_FLOORS,
+  challengeTowerStageFloor,
+} from "stonesummoner-data";
+
 /** Calendar month key (UTC), e.g. 2026-08. */
 export function monthKey(now = Date.now()): string {
   const d = new Date(now);
@@ -63,5 +68,3 @@ export function isChallengeTowerStageCleared(
   if (floor == null) return false;
   return challengeTowerFloor(synced) >= floor;
 }
-
-export { CHALLENGE_TOWER_FLOORS, challengeTowerStageFloor };
