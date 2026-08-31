@@ -64,4 +64,4 @@ export function isChallengeTowerStageCleared(
   return challengeTowerFloor(synced) >= floor;
 }
 
-export { CHALLENGE_TOWER_FLOORS } from "stonesummoner-data";
+export { CHALLENGE_TOWER_FLOORS, challengeTowerStageFloor };
