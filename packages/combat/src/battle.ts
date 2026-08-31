@@ -2157,50 +2157,6 @@ export class Battle {
     );
   }
 
-  private applyBoardAuraToTeam(
-    team: TeamId,
-    opts: {
-      atk?: number;
-      def?: number;
-      spd?: number;
-      critRate?: number;
-      turns: number;
-    },
-  ): void {
-    for (const u of this.units) {
-      if (!u.alive || u.team !== team || u.kind !== "monster") continue;
-      if (opts.atk) this.applyStatBuff(u, "atk", opts.atk, opts.turns);
-      if (opts.def) this.applyStatBuff(u, "def", opts.def, opts.turns);
-      if (opts.spd) this.applyStatBuff(u, "spd", opts.spd, opts.turns);
-      if (opts.critRate) this.applyStatBuff(u, "critRate", opts.critRate, opts.turns);
-    }
-  }
-
-  private applyShapeBoardAura(team: TeamId, shapeId: string): void {
-    switch (shapeId) {
-      case "corner":
-        this.applyBoardAuraToTeam(team, { atk: 0.08, turns: 3 });
-        break;
-      case "star":
-        this.applyBoardAuraToTeam(team, { spd: 0.1, turns: 3 });
-        break;
-      case "star_control":
-        this.applyBoardAuraToTeam(team, { atk: 0.14, def: 0.1, turns: 3 });
-        break;
-      case "tiger":
-        this.applyBoardAuraToTeam(team, { def: 0.14, turns: 3 });
-        break;
-      case "kosumi":
-        this.applyBoardAuraToTeam(team, { spd: 0.08, critRate: 0.12, turns: 3 });
-        break;
-      case "axis":
-        this.applyBoardAuraToTeam(team, { atk: 0.12, turns: 3 });
-        break;
-      default:
-        break;
-    }
-  }
-
   private applyStatBuff(
     unit: Unit,
     axis: string,
