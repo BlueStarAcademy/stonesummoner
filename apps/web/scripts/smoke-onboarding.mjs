@@ -93,10 +93,15 @@ const cloud = toOnboardRiteSave({
   summoned: true,
   enhanced: true,
   hasBattleDrop: true,
+  circleTutorialSeen: true,
 });
 const restored = fromOnboardRiteSave(cloud);
 assert(restored?.step === "party", "cloud rite roundtrip keeps step");
 assert(restored?.summoned === true, "cloud rite roundtrip keeps flags");
+assert(
+  restored?.circleTutorialSeen === true,
+  "cloud rite roundtrip keeps circleTutorialSeen",
+);
 assert(fromOnboardRiteSave(null) === null, "null cloud rite is null");
 
 assert(!isSideRegionGuideOpen("gateway", "cadence"), "cadence locked at gateway");

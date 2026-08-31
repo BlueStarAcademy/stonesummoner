@@ -2601,6 +2601,7 @@ describe("game loop", () => {
       equipped: false,
       hasBattleDrop: true,
       welcomeSeen: true,
+      circleTutorialSeen: false,
     };
     const round = migrateSave(
       JSON.parse(JSON.stringify({ ...base, onboardRite: rite })),

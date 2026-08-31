@@ -11354,10 +11354,64 @@ body > .battle-settings-layer.settings-layer {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   max-width: 100%;
   pointer-events: none;
+}
+
+.stone-pick-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: min(92%, 360px);
+  pointer-events: auto;
+  z-index: 3;
+}
+
+.stone-pick-title {
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #c9a227aa;
+  background:
+    linear-gradient(180deg, #2a2148f2 0%, #14102af8 100%);
+  box-shadow:
+    inset 0 1px 0 #ffffff22,
+    0 6px 16px #000a;
+  color: #f3e6b8;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-shadow: 0 1px 2px #000c;
+}
+
+.stone-pick-help-btn {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #c9a227cc;
+  background:
+    radial-gradient(circle at 40% 32%, #4a3a78 0%, #1a1430 72%);
+  box-shadow:
+    inset 0 1px 0 #ffffff33,
+    0 4px 12px #000a;
+  color: #f0d878;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stone-pick-help-btn:active {
+  transform: scale(0.96);
 }
 
 .stone-pick-hit {
@@ -11380,6 +11434,34 @@ body > .battle-settings-layer.settings-layer {
   pointer-events: auto;
 }
 
+/* Outer plate rim — reads as a physical board, not floating art. */
+.stone-pick-plate-rim {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 92%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    conic-gradient(from 210deg, #3a2a14 0%, #8a6a28 18%, #c9a227 32%, #6a4e1c 48%, #d4b45a 62%, #4a3418 78%, #a88838 90%, #3a2a14 100%);
+  box-shadow:
+    0 14px 36px #000d,
+    inset 0 0 0 2px #f0d87855,
+    inset 0 0 18px #000a;
+}
+
+.stone-pick-plate-rim::after {
+  content: "";
+  position: absolute;
+  inset: 5%;
+  border-radius: 50%;
+  background: #0a0818;
+  box-shadow: inset 0 0 0 1px #c9a22744;
+}
+
 /* Solid rear disc so empty intersections read clearly over the arena BG. */
 .stone-pick-circle::before {
   content: "";
@@ -11391,13 +11473,14 @@ body > .battle-settings-layer.settings-layer {
   transform: translate(-50%, -50%);
   border-radius: 50%;
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
   background:
-    radial-gradient(circle at 50% 38%, #3a2f62f5 0%, #1c1630fa 54%, #0a0818fc 100%);
-  border: 1px solid #8870ff88;
+    radial-gradient(circle at 50% 38%, #4a3a78f8 0%, #221a40fa 48%, #0c0a18fc 100%);
+  border: 2px solid #c9a22799;
   box-shadow:
     inset 0 2px 28px #000f,
-    inset 0 0 0 1px #c9a22766,
+    inset 0 0 0 2px #8870ff66,
+    0 0 0 1px #f0d87833,
     0 12px 32px #000c;
 }
 
@@ -11408,15 +11491,15 @@ body > .battle-settings-layer.settings-layer {
   height: 100%;
   object-fit: contain;
   pointer-events: none;
-  z-index: 1;
-  opacity: 0.92;
+  z-index: 2;
+  opacity: 0.96;
   -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0 46%, #000c 60%, transparent 72%);
   mask-image: radial-gradient(circle at 50% 50%, #000 0 46%, #000c 60%, transparent 72%);
 }
 
 .board.stone-pick-board {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   width: 78%;
   max-width: 78%;
   margin: 0 auto;
@@ -11463,32 +11546,34 @@ body > .battle-settings-layer.settings-layer {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 62%;
-  height: 62%;
+  width: 58%;
+  height: 58%;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(circle at 50% 36%, #e8e0ff55 0%, #2a2048dd 56%, #100c20f0 100%);
+    radial-gradient(circle at 50% 36%, #e8e0ff66 0%, #2a2048ee 56%, #100c20f5 100%);
   box-shadow:
-    inset 0 1px 3px #ffffff22,
-    inset 0 0 0 1px #c9b8f088,
-    0 0 8px #6a58c844;
-  opacity: 0.92;
+    inset 0 1px 3px #ffffff33,
+    inset 0 0 0 1.5px #c9b8f0aa,
+    0 0 8px #6a58c855;
+  opacity: 0.95;
 }
 
 .board.stone-pick-board button.cell.legal:not(:disabled)::before,
 .board.stone-pick-board button.cell.is-placeable::before {
-  width: 74%;
-  height: 74%;
-  opacity: 0.94;
+  width: 78%;
+  height: 78%;
+  opacity: 1;
   background:
-    radial-gradient(circle at 50% 36%, #efe6ff77 0%, #4a3480bb 46%, #140e28e0 100%);
+    radial-gradient(circle at 50% 36%, #fff6c8aa 0%, #6a5088cc 42%, #1a1428f0 100%);
   box-shadow:
-    inset 0 1px 3px #fff5,
-    inset 0 0 0 1px #e0d4ff99,
-    0 0 12px #8a78ff66;
+    inset 0 1px 3px #fff7,
+    inset 0 0 0 2px #f0d878cc,
+    0 0 0 2px #f0d87844,
+    0 0 18px #f0d87888;
+  animation: stone-pick-legal-pulse 1.6s ease-in-out infinite;
 }
 
 .board.stone-pick-board button.cell.legal:not(:disabled),
@@ -11500,11 +11585,12 @@ body > .battle-settings-layer.settings-layer {
 .board.stone-pick-board button.cell.is-placeable:hover::before,
 .board.stone-pick-board button.cell.is-placeable:focus-visible::before {
   background:
-    radial-gradient(circle at 50% 36%, #fff6c899 0%, #6a5070bb 48%, #1a1428e0 100%);
+    radial-gradient(circle at 50% 36%, #fff8d8cc 0%, #7a6090cc 48%, #1a1428f0 100%);
   box-shadow:
-    inset 0 1px 3px #fff7,
-    inset 0 0 0 1px #f0d878aa,
-    0 0 16px #f0d87866;
+    inset 0 1px 3px #fff8,
+    inset 0 0 0 2px #ffe89acc,
+    0 0 0 3px #f0d87866,
+    0 0 22px #f0d878aa;
 }
 
 .board.stone-pick-board button.cell.is-placeable:hover,
@@ -11527,6 +11613,33 @@ body > .battle-settings-layer.settings-layer {
 
 .board.stone-pick-board button.cell.victory {
   background: transparent;
+}
+
+@keyframes stone-pick-legal-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.08);
+    filter: brightness(1.18);
+  }
+}
+
+.stone-pick-help-sheet {
+  max-width: min(420px, calc(100vw - 24px));
+}
+
+.stone-pick-help-sheet .stone-pick-help-ok {
+  width: 100%;
+  margin-top: 14px;
+}
+
+/* Soften midfield ritual floor while the real plate is up. */
+.battle-layout--stage.is-stone-pick .board-wrap--stage {
+  opacity: 0.38;
+  transition: opacity 0.18s ease;
 }
 
 /* HUD stays reachable above the pick layer (speed / AUTO / back). */
@@ -33487,6 +33600,8 @@ button.linkish {
   .fx-onboard-place,
   .fx-onboard-unit,
   .fx-onboard-skill,
+  .board.stone-pick-board button.cell.is-placeable::before,
+  .board.stone-pick-board button.cell.legal:not(:disabled)::before,
   .summon-screen.is-onboard-rite .summon-cast.is-ready,
   .party-screen.is-onboard-rite #btn-party-save-deck,
   .enhance-screen.is-onboard-rite [data-enh]:not(:disabled) {

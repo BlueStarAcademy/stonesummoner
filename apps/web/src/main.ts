@@ -1767,6 +1767,10 @@ let stoneResultFx: StoneReport | null = null;
 let stoneResultSheetReport: StoneReport | null = null;
 let stoneResultSheetOpen = false;
 let stoneResultSheetResolve: (() => void) | null = null;
+/** Stone-pick help / first-time tutorial sheet. */
+let stonePickHelpOpen = false;
+/** Avoid re-pulsing placeable cells every soft refresh while pick stays open. */
+let stonePickPlaceCued = false;
 /** Manual skill pick under the active unit (SW: select then tap enemy). */
 let selectedSkillIndex: number | null = null;
 type BattleSummonerSkillId = "open" | "declare" | "dual" | "clean" | "guard";
@@ -4409,6 +4413,8 @@ function skipBattleToResult(): void {
   stoneResultSheetReport = null;
   stoneResultSheetOpen = false;
   stoneResultSheetResolve = null;
+  stonePickHelpOpen = false;
+  stonePickPlaceCued = false;
   if (!battle.finishReason) {
     resolveBattleAuto(battle, 600);
     if (!battle.finishReason) {
@@ -4508,6 +4514,8 @@ function startBattle(stage: StageDef): void {
   stoneResultSheetReport = null;
   stoneResultSheetOpen = false;
   stoneResultSheetResolve = null;
+  stonePickHelpOpen = false;
+  stonePickPlaceCued = false;
   battleFxBusy = false;
   battleSkipSeq += 1;
   armBattleSkipTimer();
@@ -6764,6 +6772,136 @@ function closeStoneResultSheet(): void {
   resolve?.();
 }
 
+function stonePickHelpLines(): string[] {
+  return t("ui.stonePick.help")
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function renderStonePickHelpLayer(): string {
+  const open = stonePickHelpOpen;
+  const lines = stonePickHelpLines();
+  const body =
+    lines.length > 0
+      ? `<ul class="building-info-list stone-pick-help-list">${lines
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .join("")}</ul>`
+      : "";
+  return `<div class="settings-layer stone-pick-help-layer" id="stone-pick-help-layer"${open ? "" : " hidden"} aria-hidden="${open ? "false" : "true"}">
+    <button type="button" class="settings-backdrop" id="btn-stone-pick-help-backdrop" aria-label="${escapeHtml(t("ui.stonePick.helpConfirm"))}"></button>
+    <div class="settings-sheet stone-pick-help-sheet" role="dialog" aria-modal="true" aria-labelledby="stone-pick-help-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.stonePick.helpConfirm"), "btn-stone-pick-help-close")}
+      <h2 class="settings-title" id="stone-pick-help-title">${escapeHtml(t("ui.stonePick.helpTitle"))}</h2>
+      <div class="building-info-body stone-pick-help-body">${body}</div>
+      <button type="button" class="primary stone-pick-help-ok" id="btn-stone-pick-help-ok">${escapeHtml(t("ui.stonePick.helpConfirm"))}</button>
+    </div>
+  </div>`;
+}
+
+function findStonePickHelpLayer(): HTMLElement | null {
+  return app.querySelector<HTMLElement>("#stone-pick-help-layer");
+}
+
+function bindStonePickHelp(layer: HTMLElement | null = findStonePickHelpLayer()): void {
+  if (!layer || layer.dataset.bound === "1") return;
+  layer.dataset.bound = "1";
+  const close = () => closeStonePickHelpSoft();
+  layer.querySelector("#btn-stone-pick-help-ok")?.addEventListener("click", close);
+  layer
+    .querySelector("#btn-stone-pick-help-backdrop")
+    ?.addEventListener("click", close);
+  layer.querySelector("#btn-stone-pick-help-close")?.addEventListener("click", close);
+}
+
+function ensureStonePickHelpLayer(): HTMLElement | null {
+  let layer = findStonePickHelpLayer();
+  if (layer) return layer;
+  app.insertAdjacentHTML("beforeend", renderStonePickHelpLayer());
+  layer = findStonePickHelpLayer();
+  bindStonePickHelp(layer);
+  return layer;
+}
+
+function applyStonePickHelpOpen(): void {
+  const layer = stonePickHelpOpen
+    ? ensureStonePickHelpLayer()
+    : findStonePickHelpLayer();
+  if (!layer) return;
+  const open = stonePickHelpOpen;
+  layer.hidden = !open;
+  layer.setAttribute("aria-hidden", open ? "false" : "true");
+  if (!open) {
+    rememberOverlayClose("stone-pick-help-layer");
+    return;
+  }
+  promoteOverlayToAppRoot(layer);
+  replayModalPop(layer);
+  rememberOverlayOpen("stone-pick-help-layer");
+}
+
+function openStonePickHelpSoft(): void {
+  stonePickHelpOpen = true;
+  applyStonePickHelpOpen();
+}
+
+function closeStonePickHelpSoft(): void {
+  if (!stonePickHelpOpen) return;
+  stonePickHelpOpen = false;
+  applyStonePickHelpOpen();
+  if (!onboard.circleTutorialSeen) {
+    patchOnboard({ circleTutorialSeen: true });
+  }
+  cueStonePickPlaceFlash();
+}
+
+/** Pulse placeable cells so the next tap target is obvious. */
+function cueStonePickPlaceFlash(): void {
+  if (!pickOverlayOpen()) return;
+  const placeMs = fxDurationMs(1400, battleSpeed);
+  app
+    .querySelectorAll<HTMLElement>("#stone-pick-layer .cell.is-placeable")
+    .forEach((el, i) => {
+      window.setTimeout(() => {
+        el.classList.add("fx-onboard-place");
+        window.setTimeout(() => el.classList.remove("fx-onboard-place"), placeMs);
+      }, i * 35);
+    });
+  stonePickPlaceCued = true;
+}
+
+/** First open of the pick plate: auto tutorial once; later only help button. */
+function maybeAutoOpenStonePickHelp(): void {
+  if (!pickOverlayOpen()) {
+    stonePickPlaceCued = false;
+    if (stonePickHelpOpen) {
+      stonePickHelpOpen = false;
+      applyStonePickHelpOpen();
+    }
+    return;
+  }
+  if (!onboard.circleTutorialSeen) {
+    if (!stonePickHelpOpen) openStonePickHelpSoft();
+    return;
+  }
+  if (!stonePickPlaceCued) cueStonePickPlaceFlash();
+}
+
+function bindStonePickChrome(): void {
+  const helpBtn = app.querySelector<HTMLButtonElement>("#btn-stone-pick-help");
+  if (helpBtn && helpBtn.dataset.bound !== "1") {
+    helpBtn.dataset.bound = "1";
+    helpBtn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      openStonePickHelpSoft();
+    });
+  }
+  bindStonePickHelp();
+  maybeAutoOpenStonePickHelp();
+}
+
 function findStoneResultSheetLayer(): HTMLElement | null {
   return app.querySelector<HTMLElement>("#stone-result-sheet-layer");
 }
@@ -8374,8 +8512,13 @@ function renderStonePickLayer(): string {
   const circleSrc = battleCircleSrc(circleId);
   return `<div class="stone-pick-layer" id="stone-pick-layer"${open ? "" : ' hidden aria-hidden="true"'} data-circle="${circleId}">
     <div class="stone-pick-card">
-      <div class="stone-pick-hit" aria-label="${escapeHtml(t("ui.onboard.battleTipStone"))}">
+      <div class="stone-pick-head">
+        <h2 class="stone-pick-title" id="stone-pick-title">${escapeHtml(t("ui.stonePick.title"))}</h2>
+        <button type="button" class="stone-pick-help-btn" id="btn-stone-pick-help" aria-label="${escapeHtml(t("ui.stonePick.helpBtn"))}">?</button>
+      </div>
+      <div class="stone-pick-hit" role="group" aria-labelledby="stone-pick-title" aria-label="${escapeHtml(t("ui.onboard.battleTipStone"))}">
         <div class="stone-pick-circle">
+          <div class="stone-pick-plate-rim" aria-hidden="true"></div>
           <img class="stone-pick-circle-art" src="${circleSrc}" width="512" height="512" alt="" draggable="false" decoding="async" aria-hidden="true" />
           <div class="board magic-circle stone-pick-board size-${size}" data-size="${size}" data-circle="${circleId}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${open ? renderBoardCells(true) : ""}</div>
         </div>
@@ -9407,7 +9550,7 @@ function applyResMoreOpen(): void {
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .feature-unlock-sheet, .attendance-sheet, .summoner-info-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .stone-result-sheet, .growth-result-sheet, .growth-rite-play, .glory-up-play",
+    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .feature-unlock-sheet, .attendance-sheet, .summoner-info-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .stone-result-sheet, .stone-pick-help-sheet, .growth-result-sheet, .growth-rite-play, .glory-up-play",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -9515,6 +9658,7 @@ const APP_ROOT_OVERLAY_IDS = [
   "mon-rite-layer",
   "sys-confirm-layer",
   "stone-result-sheet-layer",
+  "stone-pick-help-layer",
   GROWTH_REVEAL_LAYER_ID,
   WISH_REVEAL_LAYER_ID,
 ] as const;
@@ -23385,6 +23529,9 @@ function leaveBattleOrResultScreen(): void {
   stoneResultSheetReport = null;
   stoneResultSheetResolve?.();
   stoneResultSheetResolve = null;
+  stonePickHelpOpen = false;
+  stonePickPlaceCued = false;
+  findStonePickHelpLayer()?.remove();
   clearAutoTimer();
   clearBattleSkipTimer();
   battleSkipTimeReady = false;
@@ -23459,6 +23606,7 @@ function bindBattleInteractive(): void {
   }
 
   bindStonePickTaps();
+  bindStonePickChrome();
   syncActiveUnitSkillPosition();
 
   app.querySelectorAll<HTMLButtonElement>(".suggest-chip").forEach((btn) => {
@@ -24383,6 +24531,8 @@ function isOverlayIdOpen(id: string): boolean {
       return battleAutoSettingsOpen;
     case "stone-result-sheet-layer":
       return stoneResultSheetOpen;
+    case "stone-pick-help-layer":
+      return stonePickHelpOpen;
     case "stages-region":
       return view === "stages" && !!stagesRegion && !stageEntryId;
     case "stage-prep":
@@ -24497,6 +24647,11 @@ function closeOverlayById(id: string): boolean {
   if (id === "stone-result-sheet-layer") {
     if (!stoneResultSheetOpen) return false;
     closeStoneResultSheet();
+    return true;
+  }
+  if (id === "stone-pick-help-layer") {
+    if (!stonePickHelpOpen) return false;
+    closeStonePickHelpSoft();
     return true;
   }
   if (id === "stage-prep") {
@@ -25855,6 +26010,7 @@ function bind(): void {
   }
 
   bindStonePickTaps();
+  bindStonePickChrome();
 
   app.querySelectorAll<HTMLButtonElement>(".suggest-chip").forEach((btn) => {
     btn.addEventListener("click", () => {

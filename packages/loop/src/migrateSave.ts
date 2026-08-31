@@ -57,6 +57,7 @@ function normalizeOnboardRite(raw: unknown): OnboardRiteSave | null {
     equipped: Boolean(o.equipped),
     hasBattleDrop: Boolean(o.hasBattleDrop),
     welcomeSeen: Boolean(o.welcomeSeen),
+    circleTutorialSeen: Boolean(o.circleTutorialSeen),
   };
 }
 
