@@ -150,6 +150,10 @@ export function migrateSave(raw: unknown): PlayerSave | null {
       typeof p.scrollsMystic === "number"
         ? Math.max(0, Math.floor(p.scrollsMystic))
         : base.scrollsMystic,
+    scrollsLegend:
+      typeof p.scrollsLegend === "number"
+        ? Math.max(0, Math.floor(p.scrollsLegend))
+        : 0,
     gear: stripUnenhancedStarterGear(
       normalizeSummonerGear(
         summoners[activeSummoner]?.gear ?? p.gear ?? base.gear,
@@ -390,7 +394,7 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     onboardRite: normalizeOnboardRite(p.onboardRite),
     attendanceDayIndex:
       typeof p.attendanceDayIndex === "number"
-        ? Math.max(1, Math.min(30, Math.floor(p.attendanceDayIndex)))
+        ? Math.max(1, Math.min(14, Math.floor(p.attendanceDayIndex)))
         : 1,
     attendanceStreak:
       typeof p.attendanceStreak === "number"
@@ -400,6 +404,14 @@ export function migrateSave(raw: unknown): PlayerSave | null {
       typeof p.attendanceLastClaimDay === "string"
         ? p.attendanceLastClaimDay
         : null,
+    challengeTowerMonthKey:
+      typeof p.challengeTowerMonthKey === "string"
+        ? p.challengeTowerMonthKey
+        : null,
+    challengeTowerFloor:
+      typeof p.challengeTowerFloor === "number"
+        ? Math.max(0, Math.min(100, Math.floor(p.challengeTowerFloor)))
+        : 0,
     seenFeatureUnlockIds: Array.isArray(p.seenFeatureUnlockIds)
       ? p.seenFeatureUnlockIds.filter(
           (id): id is string => typeof id === "string",

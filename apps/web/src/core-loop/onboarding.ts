@@ -38,6 +38,64 @@ export function onboardStepTotal(): number {
   return ONBOARD_GUIDE_STEPS.length;
 }
 
+/** Side expedition pins on the stages atlas (not main-quest maps). */
+export type SideContentRegionId =
+  | "depth"
+  | "arena"
+  | "cadence"
+  | "equip"
+  | "warena"
+  | "guild"
+  | "challenge_tower";
+
+export const SIDE_CONTENT_REGION_IDS: readonly SideContentRegionId[] = [
+  "challenge_tower",
+  "cadence",
+  "depth",
+  "warena",
+  "equip",
+  "arena",
+  "guild",
+] as const;
+
+/** Guide step when a side region pin may unlock (save progress rules still apply). */
+const SIDE_REGION_GUIDE_UNLOCK: Record<SideContentRegionId, OnboardStep> = {
+  challenge_tower: "enhance",
+  cadence: "summon",
+  depth: "enhance",
+  arena: "party",
+  equip: "party",
+  warena: "equip",
+  guild: "done",
+};
+
+function stepOrdinal(step: OnboardStep): number {
+  if (step === "done") return ONBOARD_GUIDE_STEPS.length + 1;
+  const idx = ONBOARD_GUIDE_STEPS.indexOf(
+    step as (typeof ONBOARD_GUIDE_STEPS)[number],
+  );
+  return idx < 0 ? 0 : idx + 1;
+}
+
+export function isSideContentRegionId(id: string): id is SideContentRegionId {
+  return (SIDE_CONTENT_REGION_IDS as readonly string[]).includes(id);
+}
+
+/** False while the first-rite guide has not reached this side region yet. */
+export function isSideRegionGuideOpen(step: OnboardStep, regionId: string): boolean {
+  if (!isSideContentRegionId(regionId)) return true;
+  const need = SIDE_REGION_GUIDE_UNLOCK[regionId];
+  return stepOrdinal(step) >= stepOrdinal(need);
+}
+
+export function sideRegionsUnlockedAtGuideStep(
+  step: OnboardStep,
+): SideContentRegionId[] {
+  return SIDE_CONTENT_REGION_IDS.filter((id) =>
+    isSideRegionGuideOpen(step, id),
+  );
+}
+
 export const ONBOARD_FIRST_STAGE_ID = "garen_1_1";
 export const ONBOARD_STORAGE_PREFIX = "stonesummoner.onboard.v1";
 

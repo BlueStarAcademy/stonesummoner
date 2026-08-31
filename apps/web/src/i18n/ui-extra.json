@@ -279,6 +279,106 @@
     "ko": "마력폭탄",
     "en": "Mana bomb"
   },
+  "ui.boardMark.star": {
+    "ko": "화점",
+    "en": "Star point"
+  },
+  "ui.boardMark.crit_charm": {
+    "ko": "치명부적",
+    "en": "Crit charm"
+  },
+  "ui.boardMark.shield_core": {
+    "ko": "실드핵",
+    "en": "Shield core"
+  },
+  "ui.boardMark.capture_magnet": {
+    "ko": "사석자석",
+    "en": "Capture magnet"
+  },
+  "ui.boardMark.stride_sand": {
+    "ko": "행마모래",
+    "en": "Stride sand"
+  },
+  "ui.boardMark.seal_nail": {
+    "ko": "봉인못",
+    "en": "Seal nail"
+  },
+  "ui.boardMark.element_ward": {
+    "ko": "속성의뢰",
+    "en": "Element ward"
+  },
+  "ui.boardMark.bait_stone": {
+    "ko": "미끼돌",
+    "en": "Bait stone"
+  },
+  "ui.boardMark.transform_dust": {
+    "ko": "변환가루",
+    "en": "Transform dust"
+  },
+  "ui.stoneResult.title": {
+    "ko": "착수 결과",
+    "en": "Stone result"
+  },
+  "ui.stoneResult.confirm": {
+    "ko": "확인",
+    "en": "OK"
+  },
+  "ui.boardToken.crit_charm": {
+    "ko": "치명부적",
+    "en": "Crit charm"
+  },
+  "ui.boardToken.shield_core": {
+    "ko": "실드핵",
+    "en": "Shield core"
+  },
+  "ui.boardToken.capture_magnet": {
+    "ko": "사석자석",
+    "en": "Capture magnet"
+  },
+  "ui.boardToken.stride_sand": {
+    "ko": "행마모래",
+    "en": "Stride sand"
+  },
+  "ui.boardToken.seal_nail": {
+    "ko": "봉인못",
+    "en": "Seal nail"
+  },
+  "ui.boardToken.element_ward": {
+    "ko": "속성의뢰",
+    "en": "Element ward"
+  },
+  "ui.boardToken.bait_stone": {
+    "ko": "미끼돌",
+    "en": "Bait stone"
+  },
+  "ui.boardToken.transform_dust": {
+    "ko": "변환가루",
+    "en": "Transform dust"
+  },
+  "ui.boardToken.heal_orb": {
+    "ko": "회복구",
+    "en": "Heal orb"
+  },
+  "ui.boardToken.hp_bomb": {
+    "ko": "마력폭탄",
+    "en": "Mana bomb"
+  },
+  "ui.stoneHeal": {
+    "ko": "HP +{n}",
+    "en": "HP +{n}"
+  },
+  "ui.stoneShield": {
+    "ko": "실드 +{n}",
+    "en": "Shield +{n}"
+  },
+  "ui.stoneSeal": {
+    "ko": "금수 {n}",
+    "en": "Seal {n}"
+  },
+  "ui.stoneDmg": {
+    "ko": "피해 {n}",
+    "en": "DMG {n}"
+  },
   "ui.b72f5a4752": {
     "ko": "이전 스테이지를 먼저 클리어하세요.",
     "en": "Clear the previous stage first."
@@ -594,6 +694,30 @@
   "stages.guildRaidBlurb": {
     "ko": "길드 기여 · 거대 진문",
     "en": "Guild contribution · giant circle"
+  },
+  "stages.challengeTower": {
+    "ko": "도전의 탑",
+    "en": "Challenge Tower"
+  },
+  "stages.challengeTowerBlurb": {
+    "ko": "매월 100층 도전",
+    "en": "100 floors · monthly reset"
+  },
+  "stages.challengeTowerProgress": {
+    "ko": "이번 달 진행",
+    "en": "This month"
+  },
+  "res.scrollLegend": {
+    "ko": "전설 소환서",
+    "en": "Legend scroll"
+  },
+  "res.scrollLegendShort": {
+    "ko": "전",
+    "en": "L"
+  },
+  "ui.stageDropScrollLegend": {
+    "ko": "전설 소환서",
+    "en": "Legend scroll"
   },
   "ui.f4d93d3cf8": {
     "ko": "스톤패시브",
@@ -4051,6 +4175,10 @@
     "ko": "출정",
     "en": "Battle"
   },
+  "ui.islandAction.challenge_tower": {
+    "ko": "도전",
+    "en": "Challenge"
+  },
   "ui.islandAction.mana_pond": {
     "ko": "수집",
     "en": "Collect"
@@ -4118,6 +4246,10 @@
   "ui.bldgInfo.gateway": {
     "ko": "시나리오와 각종 전투에 출정합니다|지역을 선택해 스테이지에 도전하세요|승리 시 경험치·드롭·보상을 얻습니다",
     "en": "Enter scenarios and battles|Pick a region and challenge stages|Wins grant EXP, drops, and rewards"
+  },
+  "ui.bldgInfo.challenge_tower": {
+    "ko": "매월 1일에 초기화되는 100층 시련입니다|한 층씩 클리어하며 올라가세요|100층 클리어 시 전설 소환서를 받습니다",
+    "en": "A 100-floor trial that resets on the 1st of each month|Clear floors one by one to climb|Floor 100 grants a Legend scroll"
   },
   "ui.bldgInfo.mana_pond": {
     "ko": "시간이 지나면 골드를 생산·저장합니다|연못을 터치해 쌓인 골드를 수거하세요|업그레이드로 생산량과 저장 한도를 늘릴 수 있습니다",
@@ -4920,8 +5052,12 @@
     "en": "Floors"
   },
   "ui.dungeon.back": {
-    "ko": "목록",
-    "en": "List"
+    "ko": "목록으로",
+    "en": "Back to list"
+  },
+  "ui.cairosDropStarRange": {
+    "ko": "{{min}}★ ~ {{max}}★",
+    "en": "{{min}}★ – {{max}}★"
   },
   "ui.attendance.title": {
     "ko": "출석부",
@@ -4948,8 +5084,20 @@
     "en": "Attendance reward"
   },
   "ui.attendance.day": {
-    "ko": "{{day}}일",
+    "ko": "{{day}}일차",
     "en": "Day {{day}}"
+  },
+  "ui.attendance.week1": {
+    "ko": "1주차",
+    "en": "Week 1"
+  },
+  "ui.attendance.week2": {
+    "ko": "2주차",
+    "en": "Week 2"
+  },
+  "ui.attendance.todayReward": {
+    "ko": "오늘의 보상",
+    "en": "Today's reward"
   },
   "ui.attendance.badge": {
     "ko": "출석 보상",

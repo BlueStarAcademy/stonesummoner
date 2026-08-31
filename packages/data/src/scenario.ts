@@ -15,6 +15,7 @@ export type ContentMode =
   | "arena"
   | "weekday"
   | "trial"
+  | "challenge_tower"
   | "world_arena"
   | "guild_raid"
   | "equip";
@@ -206,11 +207,19 @@ export const MAIN_QUEST_PIN_LAYOUT: {
 }));
 
 export const SIDE_CONTENT_PIN_LAYOUT: {
-  id: "depth" | "arena" | "cadence" | "equip" | "warena" | "guild";
+  id:
+    | "depth"
+    | "arena"
+    | "cadence"
+    | "equip"
+    | "warena"
+    | "guild"
+    | "challenge_tower";
   x: number;
   y: number;
   landmarkKo: string;
 }[] = [
+  { id: "challenge_tower", x: 18, y: 28, landmarkKo: "도전의 탑" },
   { id: "cadence", x: 12, y: 50, landmarkKo: "룬스톤 시련림" },
   { id: "depth", x: 85, y: 39, landmarkKo: "카이로스 심층" },
   { id: "warena", x: 87, y: 57, landmarkKo: "의식 투기 칼데라" },
@@ -648,6 +657,82 @@ export function isWeekdayStageOpenToday(
 
 export const WEEKDAY_EVOLVE_MAT_DROP = 5;
 export const WEEKDAY_SKILL_MAT_DROP = 5;
+export const CHALLENGE_TOWER_FLOORS = 100;
+
+const TOA_BOSS_IDS = [
+  "stone_golem_dark",
+  "flame_warrior_fire",
+  "glacier_mage_water",
+  "storm_spearmaster_light",
+  "abyss_priest_dark",
+  "dragon_knight_fire",
+  "doom_oracle_dark",
+  "eternal_healer_water",
+  "sky_warden_wind",
+  "seal_elder_light",
+] as const;
+
+function toaEnemies(floor: number): string[] {
+  const poolCap = Math.min(
+    MQ_ENEMY_POOL.length - 1,
+    2 + Math.floor(floor / 4),
+  );
+  const pool = MQ_ENEMY_POOL.slice(0, poolCap + 1);
+  const count = Math.min(4, 1 + Math.floor(floor / 20));
+  const start = (floor * 5) % pool.length;
+  return Array.from({ length: count }, (_, i) => pool[(start + i) % pool.length]!);
+}
+
+export function challengeTowerStageFloor(stageId: string): number | null {
+  const match = stageId.match(/^toa_f(\d+)$/);
+  if (!match) return null;
+  return parseInt(match[1]!, 10);
+}
+
+/** SW-style Trial of Ascension — 100 floors, monthly reset, legend scroll at 100F. */
+export const CHALLENGE_TOWER_STAGES: StageDef[] = Array.from(
+  { length: CHALLENGE_TOWER_FLOORS },
+  (_, i) => {
+    const floor = i + 1;
+    const isBoss = floor % 10 === 0;
+    const waves = floor >= 70 ? 3 : floor >= 30 ? 2 : 1;
+    const encounterIds = toaEnemies(floor);
+    const bossMonsterId = isBoss
+      ? floor === 100
+        ? "doom_oracle_dark"
+        : TOA_BOSS_IDS[Math.floor(floor / 10) - 1]!
+      : undefined;
+    const enemyWaves =
+      isBoss && bossMonsterId
+        ? Array.from({ length: waves }, (_, waveIndex) =>
+            waveIndex === waves - 1 ? [bossMonsterId] : [...encounterIds],
+          )
+        : undefined;
+    return {
+      id: `toa_f${floor}`,
+      nameKo: `도전의 탑 ${floor}층`,
+      map: 95,
+      stage: floor,
+      boardSize: 7 as CombatBoardSize,
+      energyCost: Math.min(12, 4 + Math.floor(floor / 10)),
+      enemyMonsterIds: isBoss && bossMonsterId ? [bossMonsterId] : encounterIds,
+      enemyWaves,
+      dropSetId: "yongmaeng",
+      waves,
+      mode: "challenge_tower" as const,
+      dropChance: 0,
+      gearDropChance: 0,
+      bossMonsterId,
+      bossNameKo: isBoss
+        ? floor === 100
+          ? "탑의 수호자"
+          : `시련 수호자 · ${floor}층`
+        : undefined,
+      bossHpMultiplier: isBoss ? 1.6 + floor * 0.04 : undefined,
+    };
+  },
+);
+
 export const TRIAL_STAGES: StageDef[] = [
   {
     id: "trial_b1",
@@ -913,6 +998,7 @@ export const ALL_STAGES: StageDef[] = [
   ...ARENA_STAGES,
   ...WEEKDAY_STAGES,
   ...TRIAL_STAGES,
+  ...CHALLENGE_TOWER_STAGES,
   ...WORLD_ARENA_STAGES,
   ...GUILD_RAID_STAGES,
   ...EQUIP_STAGES,

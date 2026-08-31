@@ -143,24 +143,27 @@ export const SCROLL_PREMIUM_BUY_CRYSTAL_COST = 75;
 /** Crystal to buy one sacred/abyss summon scroll. */
 export const SCROLL_MYSTIC_BUY_CRYSTAL_COST = 100;
 
-export type ScrollKind = "normal" | "premium" | "mystic";
+export type ScrollKind = "normal" | "premium" | "mystic" | "legend";
 
 export const SCROLL_KINDS: readonly ScrollKind[] = [
   "normal",
   "premium",
   "mystic",
+  "legend",
 ] as const;
 
 export const SCROLL_KIND_LABEL: Record<ScrollKind, string> = {
   normal: "일반 소환서",
   premium: "고급 소환서",
   mystic: "신성/심연 소환서",
+  legend: "전설 소환서",
 };
 
 export const SCROLL_KIND_BLURB: Record<ScrollKind, string> = {
   normal: "불·물·바람 1~3성",
   premium: "불·물·바람 2~4성",
   mystic: "신성·심연 전용",
+  legend: "4~5성",
 };
 
 /** Mana to raise level → level+1 */
@@ -381,6 +384,10 @@ const MYSTIC_POOL = MONSTERS.filter(
   (m) =>
     inScrollPool(m) && (m.element === "light" || m.element === "dark"),
 );
+/** 전설: 4~5성 (모든 속성) */
+const LEGEND_POOL = MONSTERS.filter(
+  (m) => inScrollPool(m) && m.naturalStars >= 4 && m.naturalStars <= 5,
+);
 
 let uidSeq = 0;
 export function nextUid(prefix = "m"): string {
@@ -429,6 +436,7 @@ export function pickSummonMonster(
   kind: ScrollKind = "normal",
 ): MonsterDef {
   if (kind === "mystic") return pickFrom(MYSTIC_POOL, rng);
+  if (kind === "legend") return pickFrom(LEGEND_POOL, rng);
   if (kind === "premium") {
     const useFour = rng() < 0.45 && PREMIUM_4_POOL.length > 0;
     return pickFrom(useFour ? PREMIUM_4_POOL : PREMIUM_LOW_POOL, rng);

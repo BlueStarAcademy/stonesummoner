@@ -2736,7 +2736,7 @@ describe("attendance", () => {
     assert.equal(first.save.attendanceStreak, 1);
     assert.equal(first.save.attendanceDayIndex, 2);
     assert.equal(first.save.attendanceLastClaimDay, "2026-08-30");
-    assert.equal(first.save.island.mana, save.island.mana + 500);
+    assert.equal(first.save.island.mana, save.island.mana + 600);
     const dup = runClaimAttendance(first.save, Date.parse("2026-08-30T18:00:00Z"));
     assert.match(dup.message, /이미 출석/);
     assert.equal(canClaimAttendance(first.save, Date.parse("2026-08-30T18:00:00Z")), false);
@@ -2755,15 +2755,15 @@ describe("attendance", () => {
     assert.match(afterGap.message, /출석 3일차/);
   });
 
-  it("wraps calendar from day 30 to day 1", async () => {
+  it("wraps calendar from day 14 to day 1", async () => {
     const { runClaimAttendance } = await import("./attendance.js");
     let save = createNewSave(0);
     const beforePremium = save.scrollsPremium ?? 0;
-    save = { ...save, attendanceDayIndex: 30 };
+    save = { ...save, attendanceDayIndex: 14 };
     const claim = runClaimAttendance(save, Date.parse("2026-08-30T12:00:00Z"));
-    assert.match(claim.message, /출석 30일차/);
+    assert.match(claim.message, /출석 14일차/);
     assert.equal(claim.save.attendanceDayIndex, 1);
-    assert.equal(claim.save.scrollsPremium, beforePremium + 1);
+    assert.equal(claim.save.scrollsPremium, beforePremium + 2);
   });
 });
 
@@ -2847,5 +2847,58 @@ describe("world arena opponents", () => {
     const list = listDailyWorldArenaOpponents(now);
     const found = getWorldArenaOpponent(list[0]!.id, now);
     assert.deepEqual(found, list[0]);
+  });
+});
+
+describe("challenge tower", () => {
+  it("unlocks after chapter 2 boss and advances one floor at a time", async () => {
+    const { isStageUnlocked, isStageClearedOnDifficulty } =
+      await import("./progress.js");
+    const { createNewSave } = await import("./loop.js");
+    let save = createNewSave();
+    assert.equal(isStageUnlocked(save, "toa_f1"), false);
+    save = {
+      ...save,
+      clearedStages: [...save.clearedStages, "tower_2_7"],
+    };
+    assert.equal(isStageUnlocked(save, "toa_f1"), true);
+    assert.equal(isStageUnlocked(save, "toa_f2"), false);
+    save = { ...save, challengeTowerFloor: 1 };
+    assert.equal(isStageUnlocked(save, "toa_f2"), true);
+    assert.equal(isStageClearedOnDifficulty(save, "toa_f1", "normal"), true);
+    assert.equal(isStageClearedOnDifficulty(save, "toa_f2", "normal"), false);
+  });
+
+  it("resets progress on a new calendar month", async () => {
+    const { syncChallengeTowerMonth, challengeTowerFloor } =
+      await import("./challengeTower.js");
+    const { createNewSave } = await import("./loop.js");
+    const aug = Date.parse("2026-08-15T12:00:00Z");
+    const sep = Date.parse("2026-09-02T12:00:00Z");
+    let save = {
+      ...createNewSave(aug),
+      challengeTowerMonthKey: "2026-08",
+      challengeTowerFloor: 42,
+    };
+    save = syncChallengeTowerMonth(save, sep);
+    assert.equal(save.challengeTowerMonthKey, "2026-09");
+    assert.equal(challengeTowerFloor(save), 0);
+  });
+
+  it("grants a legend scroll on first 100F clear", async () => {
+    const { applyRewards } = await import("./loop.js");
+    const { getStage } = await import("stonesummoner-data");
+    const { createNewSave } = await import("./loop.js");
+    const stage = getStage("toa_f100")!;
+    const save = {
+      ...createNewSave(),
+      clearedStages: ["tower_2_7"],
+      challengeTowerMonthKey: "2026-08",
+      challengeTowerFloor: 99,
+    };
+    const { save: next } = applyRewards(save, stage, true, () => 0.99);
+    assert.equal(next.challengeTowerFloor, 100);
+    assert.equal(next.scrollsLegend, 1);
+    assert.equal(next.clearedStages.includes("toa_f100"), false);
   });
 });

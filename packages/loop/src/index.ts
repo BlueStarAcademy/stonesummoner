@@ -267,6 +267,16 @@ export type {
 } from "./essences.js";
 export { migrateSave, pickPreferredSave } from "./migrateSave.js";
 export {
+  monthKey,
+  syncChallengeTowerMonth,
+  challengeTowerFloor,
+  isChallengeTowerContentUnlocked,
+  isChallengeTowerStageUnlocked,
+  isChallengeTowerStageCleared,
+  challengeTowerStageFloor,
+} from "./challengeTower.js";
+export { CHALLENGE_TOWER_FLOORS } from "stonesummoner-data";
+export {
   evolveFodderCount,
   evolveManaCostForGrade,
   maxEvolveSteps,
@@ -288,6 +298,7 @@ export {
 export type { MainQuestDef, MainQuestId, MissionReward } from "./mainQuest.js";
 export {
   ATTENDANCE_CYCLE_DAYS,
+  ATTENDANCE_DAYS_PER_ROW,
   ATTENDANCE_MILESTONE_DAYS,
   ATTENDANCE_REWARDS,
   attendanceDayIndex,

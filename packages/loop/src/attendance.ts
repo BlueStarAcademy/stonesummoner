@@ -8,46 +8,31 @@ import {
 
 export type AttendanceReward = MissionReward;
 
-export const ATTENDANCE_CYCLE_DAYS = 30;
+export const ATTENDANCE_CYCLE_DAYS = 14;
+export const ATTENDANCE_DAYS_PER_ROW = 7;
 
-/** Milestone days (weekly / finale) for UI emphasis. */
-export const ATTENDANCE_MILESTONE_DAYS = new Set([7, 14, 15, 21, 28, 30]);
+/** Milestone days for UI emphasis (weekly finale + cycle finale). */
+export const ATTENDANCE_MILESTONE_DAYS = new Set([7, 14]);
 
 /**
- * 30-day login calendar — modest daily gold (~daily-mission scale) with weekly spikes.
- * `mana` is displayed as gold in the client.
+ * 14-day login calendar — one reward per day, varied composition.
+ * Day 7: premium scroll ×1 · Day 14: premium scroll ×2.
  */
 export const ATTENDANCE_REWARDS: readonly AttendanceReward[] = [
-  { mana: 500, energy: 5 },
-  { mana: 550, energy: 5 },
-  { mana: 600, energy: 8 },
-  { mana: 650, energy: 8 },
-  { mana: 700, energy: 10 },
-  { mana: 750, energy: 10 },
-  { mana: 900, energy: 15, crystal: 10, grindstones: 1 },
-  { mana: 600, energy: 8 },
-  { mana: 650, energy: 8 },
-  { mana: 700, energy: 10, jinmun: 1 },
-  { mana: 750, energy: 10 },
-  { mana: 800, energy: 12 },
-  { mana: 850, energy: 12 },
-  { mana: 1_100, energy: 20, crystal: 15, grindstones: 1 },
-  { mana: 800, scrollsPremium: 1 },
-  { mana: 850, energy: 12 },
-  { mana: 900, energy: 12 },
-  { mana: 950, energy: 15 },
-  { mana: 1_000, energy: 15, jinmun: 2 },
-  { mana: 1_050, energy: 15 },
-  { mana: 1_300, energy: 25, crystal: 20, grindstones: 1 },
-  { mana: 950, energy: 15 },
-  { mana: 1_000, energy: 15 },
-  { mana: 1_050, energy: 18 },
-  { mana: 1_100, energy: 18 },
-  { mana: 1_150, energy: 18, jinmun: 2 },
-  { mana: 1_200, energy: 20 },
-  { mana: 1_500, energy: 30, crystal: 25, grindstones: 1 },
-  { mana: 1_100, energy: 20 },
-  { mana: 2_000, energy: 40, scrollsPremium: 1, crystal: 30 },
+  { mana: 600 },
+  { energy: 10 },
+  { crystal: 8 },
+  { mana: 850 },
+  { energy: 15 },
+  { jinmun: 1 },
+  { scrollsPremium: 1 },
+  { mana: 1_000 },
+  { grindstones: 1 },
+  { crystal: 12 },
+  { mana: 1_200 },
+  { energy: 25 },
+  { jinmun: 2 },
+  { scrollsPremium: 2 },
 ] as const;
 
 function clampDayIndex(n: number): number {

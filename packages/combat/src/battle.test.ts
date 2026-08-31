@@ -507,12 +507,18 @@ describe("Battle flow", () => {
     const mon = b.getUnit("a-m1")!;
     assert.ok((mon.critCharm ?? 0) >= 55);
     assert.match(b.log.join("\n"), /치명부적/);
+    const critChips = b.lastStoneReport?.chips ?? [];
+    assert.ok(critChips.some((c) => c.kind === "token" && c.id === "crit_charm"));
+    assert.ok(critChips.some((c) => c.kind === "crit"));
 
     b.phase = "await_stone";
     b.activeUnitId = "a-m1";
     assert.equal(b.playStone({ x: 0, y: 0 }), true);
     assert.ok((mon.shieldHp ?? 0) > 0);
     assert.match(b.log.join("\n"), /실드핵/);
+    const shieldChips = b.lastStoneReport?.chips ?? [];
+    assert.ok(shieldChips.some((c) => c.kind === "token" && c.id === "shield_core"));
+    assert.ok(shieldChips.some((c) => c.kind === "shield"));
   });
 
   it("heal orb restores ally hp", () => {
@@ -531,6 +537,10 @@ describe("Battle flow", () => {
     assert.equal(b.playStone({ x: 2, y: 2 }), true);
     assert.ok(mon.hp > 100);
     assert.match(b.log.join("\n"), /회복구/);
+    const chips = b.lastStoneReport?.chips ?? [];
+    assert.ok(chips.some((c) => c.kind === "token" && c.id === "heal_orb"));
+    assert.ok(chips.some((c) => c.kind === "heal" && (c.n ?? 0) > 0));
+    assert.equal(b.lastStoneReport?.showResultSheet, true);
   });
 
   it("hp bomb damages enemy monsters", () => {
@@ -549,6 +559,10 @@ describe("Battle flow", () => {
     assert.equal(b.playStone({ x: 1, y: 1 }), true);
     assert.ok(foe.hp < before);
     assert.match(b.log.join("\n"), /마력폭탄/);
+    const chips = b.lastStoneReport?.chips ?? [];
+    assert.ok(chips.some((c) => c.kind === "token" && c.id === "hp_bomb"));
+    assert.ok(chips.some((c) => c.kind === "dmg" && (c.n ?? 0) > 0));
+    assert.equal(b.lastStoneReport?.showResultSheet, true);
   });
 
   it("capture magnet charges mana", () => {

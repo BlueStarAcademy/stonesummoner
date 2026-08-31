@@ -4,6 +4,7 @@ import {
   CAIROS_DRAGON_STAGES,
   CAIROS_GIANT_STAGES,
   CAIROS_NECRO_STAGES,
+  CHALLENGE_TOWER_STAGES,
   EQUIP_STAGES,
   MAIN_QUEST_AREA_COUNT,
   MAIN_QUEST_STAGES,
@@ -15,6 +16,11 @@ import {
   stagesForMap,
   type StageDef,
 } from "stonesummoner-data";
+import {
+  isChallengeTowerContentUnlocked,
+  isChallengeTowerStageCleared,
+  isChallengeTowerStageUnlocked,
+} from "./challengeTower.js";
 import type { PlayerSave } from "./loop.js";
 
 export type ScenarioDifficulty = "normal" | "hard" | "hell";
@@ -85,6 +91,8 @@ export function stageProgressionChain(stage: StageDef): StageDef[] | null {
       return cairosChainFor(stage.id);
     case "trial":
       return TRIAL_STAGES;
+    case "challenge_tower":
+      return CHALLENGE_TOWER_STAGES;
     case "equip":
       return EQUIP_STAGES;
     case "weekday":
@@ -120,6 +128,10 @@ export function isStageClearedOnDifficulty(
   stageId: string,
   difficulty: ScenarioDifficulty,
 ): boolean {
+  const stage = getStage(stageId);
+  if (stage?.mode === "challenge_tower") {
+    return isChallengeTowerStageCleared(save, stageId);
+  }
   return clearedForDifficulty(save, difficulty).includes(stageId);
 }
 
@@ -201,6 +213,8 @@ export function isStageUnlockedForDifficulty(
     case "trial":
       if (!save.clearedStages.includes("garen_1_5")) return false;
       return chainUnlocked(save, TRIAL_STAGES, stageId);
+    case "challenge_tower":
+      return isChallengeTowerStageUnlocked(save, stageId);
     case "equip":
       if (!save.clearedStages.includes("garen_1_4")) return false;
       return chainUnlocked(save, EQUIP_STAGES, stageId);
@@ -224,6 +238,12 @@ export function stageUnlockLabel(
   if (stage.mode === "weekday" && !isWeekdayStageOpenToday(stage.id)) {
     return "오늘은 닫힘";
   }
+  if (stage.mode === "challenge_tower") {
+    if (isChallengeTowerStageCleared(save, stage.id)) return "클리어";
+    if (!isChallengeTowerContentUnlocked(save)) return "잠김";
+    if (isChallengeTowerStageUnlocked(save, stage.id)) return "해금";
+    return "잠김";
+  }
   if (isStageUnlockedForDifficulty(save, stage.id, difficulty)) return "해금";
   return "잠김";
 }
@@ -241,6 +261,7 @@ export function expForStage(
   if (stage.mode === "depth") return base + 30;
   if (stage.mode === "arena") return Math.floor(base * 0.5);
   if (stage.mode === "trial") return base + 20;
+  if (stage.mode === "challenge_tower") return base + 25 + stage.stage * 2;
   if (stage.mode === "equip") return base + 35;
   if (stage.mode === "world_arena") return base + 40;
   if (stage.mode === "guild_raid") return base + 80;

@@ -39,7 +39,6 @@ import { clampAmplify, computeDamage } from "./damage.js";
 import {
   itemDef,
   shouldSpawnItem,
-  tokenBoardResource,
   weightedItemId,
   type BoardItemId,
   type BoardToken,
@@ -171,11 +170,19 @@ export type StoneReportChipKind =
   | "capture"
   | "gold"
   | "crystal"
-  | "victory";
+  | "victory"
+  | "token"
+  | "shape"
+  | "heal"
+  | "shield"
+  | "seal"
+  | "dmg";
 
 export interface StoneReportChip {
   kind: StoneReportChipKind;
   n?: number;
+  /** BoardItemId or ShapeBonusId */
+  id?: string;
 }
 
 export interface StoneReport {
@@ -185,6 +192,8 @@ export interface StoneReport {
   event: "safe_place" | "capture" | "special";
   capturedCount: number;
   chips: StoneReportChip[];
+  /** UI: show full result sheet instead of brief inline chips only. */
+  showResultSheet?: boolean;
 }
 
 export class Battle {
@@ -651,29 +660,33 @@ export class Battle {
     );
   }
 
-  private applyTokenPickup(unit: Unit, token: BoardToken): void {
+  private applyTokenPickup(unit: Unit, token: BoardToken): StoneReportChip[] {
     this.tokens = this.tokens.filter(
       (t) => !(t.x === token.x && t.y === token.y),
     );
     const name = itemDef(token.id).nameKo;
+    const chips: StoneReportChip[] = [{ kind: "token", id: token.id }];
     if (token.id === "crit_charm") {
       const bonus = unit.stonePassive === "crit_charm_plus" ? 75 * 2 : 75;
       unit.critCharm = (unit.critCharm ?? 0) + bonus;
+      chips.push({ kind: "crit", n: bonus });
       this.log.push(
         `${unit.name} 획득 ${name} (치명↑${unit.stonePassive === "crit_charm_plus" ? "×2" : ""})`,
       );
-      return;
+      return chips;
     }
     if (token.id === "shield_core") {
       const shield = Math.round(unit.stats.hp * 0.28);
       unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+      chips.push({ kind: "shield", n: shield });
       this.log.push(`${unit.name} 획득 ${name} (실드 +${shield})`);
       if (unit.stonePassive === "shield_core_heal") {
         const heal = Math.round(unit.stats.hp * 0.12);
         unit.hp = Math.min(unit.stats.hp, unit.hp + heal);
+        chips.push({ kind: "heal", n: heal });
         this.log.push(`스톤패시브: ${unit.name} 회복 +${heal}`);
       }
-      return;
+      return chips;
     }
     if (token.id === "stride_sand") {
       let boosted = 0;
@@ -683,17 +696,19 @@ export class Battle {
         boosted++;
       }
       unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) + 3;
+      chips.push({ kind: "spd", n: boosted });
       this.log.push(
         `${unit.name} 획득 ${name} (아군 ATB↑×${boosted} · 공속 2행동)`,
       );
-      return;
+      return chips;
     }
     if (token.id === "seal_nail") {
       const sealed = this.applySealNail({ x: token.x, y: token.y });
+      chips.push({ kind: "seal", n: sealed });
       this.log.push(
         `${unit.name} 획득 ${name} (금수 ${sealed}점 · 3수)`,
       );
-      return;
+      return chips;
     }
     if (token.id === "element_ward") {
       const sm = this.summonerOf(unit.team);
@@ -704,10 +719,11 @@ export class Battle {
         this.phaseAmplifyCap(),
         this.powerGapCap,
       );
+      chips.push({ kind: "atk", n: 8 });
       this.log.push(
         `${unit.name} 획득 ${name} (${unit.element} · 동속성 3수 Amp)`,
       );
-      return;
+      return chips;
     }
     if (token.id === "bait_stone") {
       const shield = Math.round(unit.stats.hp * 0.15);
@@ -718,10 +734,11 @@ export class Battle {
         this.powerGapCap,
       );
       const lure = this.placeBaitLure({ x: token.x, y: token.y }, unit.team);
+      chips.push({ kind: "shield", n: shield });
       this.log.push(
         `${unit.name} 획득 ${name} (실드 +${shield}${lure ? ` · 미끼 (${lure.x},${lure.y})` : ""})`,
       );
-      return;
+      return chips;
     }
     if (token.id === "transform_dust") {
       const flipped = this.applyTransformDust({ x: token.x, y: token.y });
@@ -730,22 +747,25 @@ export class Battle {
         this.phaseAmplifyCap(),
         this.powerGapCap,
       );
+      chips.push({ kind: "dmg", n: flipped });
       this.log.push(
         `${unit.name} 획득 ${name} (인접 변환 ${flipped})`,
       );
-      return;
+      return chips;
     }
     if (token.id === "heal_orb") {
       const healed = this.applyPercentHpToTeam(unit.team, 0.28, "heal");
+      chips.push({ kind: "heal", n: healed });
       this.log.push(`${unit.name} 획득 ${name} (아군 회복 ${healed})`);
-      return;
+      return chips;
     }
     if (token.id === "hp_bomb") {
       const foe = unit.team === "ally" ? "enemy" : "ally";
       const dmg = this.applyPercentHpToTeam(foe, 0.24, "hurt");
       if (unit.team === "ally" && dmg > 0) this.allyDamageDealt += dmg;
+      chips.push({ kind: "dmg", n: dmg });
       this.log.push(`${unit.name} 획득 ${name} (적 피해 ${dmg})`);
-      return;
+      return chips;
     }
     // capture_magnet
     const manaMul =
@@ -759,10 +779,13 @@ export class Battle {
     );
     this.skillAmplifyBonus += gains.skillAmplifyBonus;
     const sm = this.summonerOf(unit.team);
+    const mana = Math.round(gains.mana);
     sm.mana = Math.min(sm.manaMax, sm.mana + gains.mana);
+    chips.push({ kind: "mana", n: mana });
     this.log.push(
-      `${unit.name} 획득 ${name} (마나 +${Math.round(gains.mana)})`,
+      `${unit.name} 획득 ${name} (마나 +${mana})`,
     );
+    return chips;
   }
 
   /** Seal up to 2 adjacent empty points for ~3 stone plays. */
@@ -1036,6 +1059,7 @@ export class Battle {
       ampDelta += 0.12;
       manaGain += 30;
       claimedVictory = true;
+      chips.push({ kind: "victory", n: 30 });
       this.log.push(`필승점 해금 — 마나봉인 해제`);
     }
 
@@ -1126,8 +1150,11 @@ export class Battle {
         if (sh.shieldPct) {
           const shield = Math.round(unit.stats.hp * sh.shieldPct);
           unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+          chips.push({ kind: "shape", id: sh.id });
+          chips.push({ kind: "shield", n: shield });
           this.log.push(`형상 ${sh.labelKo}: 실드 +${shield}`);
         } else {
+          chips.push({ kind: "shape", id: sh.id });
           this.log.push(`형상 ${sh.labelKo}`);
         }
         this.applyShapeBoardAura(unit.team, sh.id);
@@ -1170,11 +1197,7 @@ export class Battle {
 
     const picked = this.tokenAt(point.x, point.y);
     if (picked) {
-      this.applyTokenPickup(unit, picked);
-      chips.push({
-        kind: tokenBoardResource(picked.id),
-        n: tokenPickupHighlight(picked.id, unit),
-      });
+      chips.push(...this.applyTokenPickup(unit, picked));
     }
 
     if (
@@ -1226,6 +1249,13 @@ export class Battle {
         : claimedVictory || picked
           ? "special"
           : "safe_place";
+    const showResultSheet =
+      !!picked ||
+      claimedVictory ||
+      kind === "capture_large" ||
+      (this.modules.moduleD &&
+        result.capturedCount >= CAPTURE_SHOP_THRESHOLD &&
+        unit.team === "ally");
     this.lastStoneReport = {
       team: unit.team,
       x: point.x,
@@ -1233,6 +1263,7 @@ export class Battle {
       event,
       capturedCount: result.capturedCount,
       chips,
+      showResultSheet,
     };
     if (!prog.shouldReset) {
       if (unit.team === "enemy") {
@@ -2685,21 +2716,6 @@ export class Battle {
       skillIndex: pickAutoSkillIndex(unit, this.units),
     });
   }
-}
-
-function tokenPickupHighlight(id: BoardItemId, unit: Unit): number {
-  if (id === "crit_charm") {
-    return unit.stonePassive === "crit_charm_plus" ? 150 : 75;
-  }
-  if (id === "shield_core") return Math.round(unit.stats.hp * 0.28);
-  if (id === "capture_magnet") return 35;
-  if (id === "stride_sand") return 50;
-  if (id === "element_ward") return 3;
-  if (id === "bait_stone") return Math.round(unit.stats.hp * 0.15);
-  if (id === "seal_nail") return 3;
-  if (id === "heal_orb") return Math.round(unit.stats.hp * 0.28);
-  if (id === "hp_bomb") return Math.round(unit.stats.hp * 0.24);
-  return 1;
 }
 
 export function makeUnit(

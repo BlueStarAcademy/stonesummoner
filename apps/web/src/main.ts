@@ -129,8 +129,10 @@ import {
   skipOnboardForProgressedSave,
   toOnboardRiteSave,
   writeOnboardSnapshot,
+  isSideRegionGuideOpen,
   type OnboardSnapshot,
   type OnboardStep,
+  type SideContentRegionId,
 } from "./core-loop/onboarding";
 import {
   attendanceRewardChips,
@@ -178,7 +180,6 @@ import {
   type StoneSuggestion,
   type Unit,
   detectShapeBonuses,
-  type ShapeBonusId,
 } from "stonesummoner-combat";
 import {
   ARENA_STAGES,
@@ -201,6 +202,7 @@ import {
   SIDE_CONTENT_PIN_LAYOUT,
   STAGES_PER_AREA,
   TRIAL_STAGES,
+  CHALLENGE_TOWER_STAGES,
   WEEKDAY_STAGES,
   WORLD_ARENA_STAGES,
   gloryBuffFromLevels,
@@ -518,6 +520,10 @@ import {
   EQUIP_VAULT_WEEKLY_LIMIT,
   equipVaultRemaining,
   syncEquipVaultWeek,
+  CHALLENGE_TOWER_FLOORS,
+  syncChallengeTowerMonth,
+  challengeTowerFloor,
+  isChallengeTowerContentUnlocked,
   type BattleReward,
   type EssenceConversionKind,
   type ExpTrackGain,
@@ -910,6 +916,7 @@ let onboardIslandFocusStep: OnboardSnapshot["step"] | null = null;
 let onboardStagesFocusStep: OnboardSnapshot["step"] | null = null;
 /** Normal / premium scroll deltas granted with the last battle reward. */
 let lastScrollPremiumGain = 0;
+let lastScrollLegendGain = 0;
 let lastScrollGain = 0;
 /** Most recently summoned monster uids (summon reveal card / multi). */
 let lastSummonUids: string[] = [];
@@ -1756,6 +1763,10 @@ let waveBannerText: string | null = null;
 let stoneSummonFx: { element: string; x: number; y: number } | null = null;
 /** Result chips shown after a stone lands (soft overlay, no full render). */
 let stoneResultFx: StoneReport | null = null;
+/** Full result sheet for token / victory / large capture. */
+let stoneResultSheetReport: StoneReport | null = null;
+let stoneResultSheetOpen = false;
+let stoneResultSheetResolve: (() => void) | null = null;
 /** Manual skill pick under the active unit (SW: select then tap enemy). */
 let selectedSkillIndex: number | null = null;
 type BattleSummonerSkillId = "open" | "declare" | "dual" | "clean" | "guard";
@@ -1781,9 +1792,6 @@ let lastSeenBoardClearSeq = 0;
 let boardRekindleFx = false;
 /** Tokens already shown on the active board; newly spawned tokens receive an entrance FX. */
 let seenBoardTokenKeys = new Set<string>();
-/** Recent Module B shape ids for amplify / board flash. */
-let shapeFlashIds: ShapeBonusId[] = [];
-let shapeFlashUntil = 0;
 
 /** Extra currencies drawer under app-bar resources. */
 let resMoreOpen = false;
@@ -1884,7 +1892,8 @@ type StagesRegionId =
   | "cadence"
   | "equip"
   | "warena"
-  | "guild";
+  | "guild"
+  | "challenge_tower";
 let stagesRegion: StagesRegionId | null = null;
 /**
  * Scenario difficulty track. Only the main-quest maps expose Normal/Hard/Hell —
@@ -1928,6 +1937,7 @@ let unbindCoreStageRegion: (() => void) | null = null;
 let unbindCoreStagePrep: (() => void) | null = null;
 /** Open region drop-info modal (SW-style). */
 let stagesDropInfoOpen = false;
+let cairosDropCosmeticSeed = 0;
 /** Active tab inside drop-info modal: scrolls | summoner gear. */
 let stagesDropTab: "scroll" | "gear" = "scroll";
 /** Expand symbol piece list under the set row. */
@@ -2004,6 +2014,7 @@ const ISLAND_LAYOUT_DEFAULT: Record<string, { x: number; y: number }> = {
   summon_hearth: { x: 46.7, y: 38.8 },
   power_circle: { x: 41.9, y: 31.2 },
   gateway: { x: 55.5, y: 33.1 },
+  challenge_tower: { x: 62.4, y: 38.9 },
   shop: { x: 30.8, y: 37.6 },
   // SW growth island
   mana_pond: { x: 19, y: 62.2 },
@@ -2158,6 +2169,7 @@ function islandSpotTitle(id: string, fallback = ""): string {
     power_circle: t("ui.hubCombine"),
     fusion: t("ui.hubFusion"),
     fusion_star: t("ui.hubFusion"),
+    challenge_tower: t("stages.challengeTower"),
   };
   if (titles[id]) return titles[id];
   const remap: Record<string, string> = {
@@ -2174,6 +2186,7 @@ const ISLAND_BLDG_INFO_KEYS: Record<string, string> = {
   summon_hearth: "ui.bldgInfo.summon_hearth",
   power_circle: "ui.bldgInfo.power_circle",
   gateway: "ui.bldgInfo.gateway",
+  challenge_tower: "ui.bldgInfo.challenge_tower",
   mana_pond: "ui.bldgInfo.mana_pond",
   shop: "ui.bldgInfo.shop",
   party: "ui.bldgInfo.party",
@@ -2189,6 +2202,7 @@ const ISLAND_SPOT_ACTION_KEYS: Record<string, string> = {
   summon_hearth: "ui.islandAction.summon_hearth",
   power_circle: "ui.islandAction.power_circle",
   gateway: "ui.islandAction.gateway",
+  challenge_tower: "ui.islandAction.challenge_tower",
   mana_pond: "ui.islandAction.mana_pond",
   shop: "ui.islandAction.shop",
   party: "ui.islandAction.party",
@@ -2972,6 +2986,7 @@ function leaveResultView(nextView: typeof view = "stages"): void {
   lastReward = null;
   lastScrollGain = 0;
   lastScrollPremiumGain = 0;
+  lastScrollLegendGain = 0;
   currentStage = null;
   view = nextView;
   render();
@@ -3043,6 +3058,12 @@ function enterIslandBuilding(id: string): void {
   if (id === "gateway") {
     patchOnboard({ openedStages: true });
     view = "stages";
+    renderPreservingIsland();
+  } else if (id === "challenge_tower") {
+    patchOnboard({ openedStages: true });
+    view = "stages";
+    stagesRegion = "challenge_tower";
+    stageEntryId = null;
     renderPreservingIsland();
   } else if (prodKind) {
     collectIslandProduction(prodKind, prodOrigin ?? new DOMRect());
@@ -3387,9 +3408,10 @@ function renderAttendanceLayer(): string {
           </div>
         </div>
       </header>
-      <div class="attendance-grid" id="attendance-grid">${grid}</div>
+      ${grid}
       <footer class="attendance-sheet-foot">
         <div class="attendance-today-panel">
+          <span class="attendance-today-label">${escapeHtml(t("ui.attendance.todayReward"))}</span>
           <div class="attendance-today-reward">${todayChips}</div>
         </div>
         <button type="button" class="auth-btn-primary full attendance-claim-btn" id="btn-attendance-claim"${claimDisabled}>${escapeHtml(claimLabel)}</button>
@@ -3416,8 +3438,8 @@ function refreshAttendanceSheet(): void {
   }
   const meta = attendanceSheetMeta(save);
   const h = attendanceChipHelpers();
-  const grid = layer.querySelector("#attendance-grid");
-  if (grid) grid.innerHTML = renderAttendanceGrid(save, h);
+  const grid = layer.querySelector("#attendance-board");
+  if (grid) grid.outerHTML = renderAttendanceGrid(save, h);
   const streak = layer.querySelector(".attendance-streak-chip strong");
   if (streak) streak.textContent = String(meta.streak);
   const reward = layer.querySelector(".attendance-today-reward");
@@ -3558,6 +3580,30 @@ function hubUnlockIcon(hub: string): string {
   return map[hub] ?? "/art/auth/logo-mark-192.png";
 }
 
+const SIDE_REGION_UNLOCK_NAME: Record<SideContentRegionId, Parameters<typeof t>[0]> = {
+  challenge_tower: "stages.challengeTower",
+  cadence: "ui.e0536c253c",
+  depth: "ui.cd2bb578b4",
+  arena: "ui.262553905b",
+  equip: "ui.6003da6bd2",
+  warena: "stages.warena",
+  guild: "stages.guildRaid",
+};
+
+function sideRegionUnlockIcon(_id: SideContentRegionId): string {
+  return "/art/ui/nav/battle.webp";
+}
+
+function enqueueSideRegionUnlock(id: SideContentRegionId): void {
+  tryEnqueueGuideUnlock({
+    id: hubUnlockEventId(`region.${id}`),
+    kind: "hub",
+    iconSrc: sideRegionUnlockIcon(id),
+    titleKey: "ui.featureUnlock.hubTitle",
+    nameKey: SIDE_REGION_UNLOCK_NAME[id],
+  });
+}
+
 function tryEnqueueGuideUnlock(event: FeatureUnlockEvent): void {
   if (enqueueFeatureUnlock(save, event)) {
     showNextFeatureUnlock();
@@ -3575,6 +3621,7 @@ function enqueueOnboardStepUnlock(step: OnboardStep): void {
         titleKey: "ui.featureUnlock.hubTitle",
       });
     }
+    enqueueSideRegionUnlock("guild");
     return;
   }
   switch (step) {
@@ -3601,6 +3648,7 @@ function enqueueOnboardStepUnlock(step: OnboardStep): void {
         iconSrc: "/art/hub/bldg-summon.webp",
         titleKey: "ui.featureUnlock.buildingTitle",
       });
+      enqueueSideRegionUnlock("cadence");
       break;
     case "enhance":
       tryEnqueueGuideUnlock({
@@ -3610,6 +3658,8 @@ function enqueueOnboardStepUnlock(step: OnboardStep): void {
         titleKey: "ui.featureUnlock.hubTitle",
         nameKey: "ui.featureUnlock.guide.enhance",
       });
+      enqueueSideRegionUnlock("depth");
+      enqueueSideRegionUnlock("challenge_tower");
       break;
     case "party":
       tryEnqueueGuideUnlock({
@@ -3618,6 +3668,11 @@ function enqueueOnboardStepUnlock(step: OnboardStep): void {
         iconSrc: "/art/hub/emblem-party.svg",
         titleKey: "ui.featureUnlock.buildingTitle",
       });
+      enqueueSideRegionUnlock("arena");
+      enqueueSideRegionUnlock("equip");
+      break;
+    case "equip":
+      enqueueSideRegionUnlock("warena");
       break;
     default:
       break;
@@ -4351,6 +4406,9 @@ function skipBattleToResult(): void {
   dmgFloats = [];
   stoneSummonFx = null;
   stoneResultFx = null;
+  stoneResultSheetReport = null;
+  stoneResultSheetOpen = false;
+  stoneResultSheetResolve = null;
   if (!battle.finishReason) {
     resolveBattleAuto(battle, 600);
     if (!battle.finishReason) {
@@ -4394,7 +4452,7 @@ function startBattle(stage: StageDef): void {
     }
   }
   if (stage.mode === "guild_raid") {
-    save = syncRaidAttemptDay(syncRaidWeek(save));
+    save = syncRaidAttemptDay(syncRaidWeek(syncChallengeTowerMonth(save)));
     if ((save.raidAttemptsDay ?? 0) >= RAID_ATTEMPTS_DAILY) {
       flash(`${t("ui.guild.raidAttempts")} 0/${RAID_ATTEMPTS_DAILY}`);
       render();
@@ -4429,6 +4487,7 @@ function startBattle(stage: StageDef): void {
   resultStep = 1;
   lastScrollGain = 0;
   lastScrollPremiumGain = 0;
+  lastScrollLegendGain = 0;
   autoMode = false;
   battleAutoSettingsOpen = false;
   battleAutoLive = { stone: battleAutoOptions.stone, combat: battleAutoOptions.combat };
@@ -4440,14 +4499,15 @@ function startBattle(stage: StageDef): void {
   lastSeenBoardClearSeq = 0;
   boardRekindleFx = false;
   seenBoardTokenKeys = new Set();
-  shapeFlashIds = [];
-  shapeFlashUntil = 0;
   waveEnterIds = new Set();
   waveBannerText = null;
   pageTransitionFx = null;
   winVanishPlayed = false;
   stoneSummonFx = null;
   stoneResultFx = null;
+  stoneResultSheetReport = null;
+  stoneResultSheetOpen = false;
+  stoneResultSheetResolve = null;
   battleFxBusy = false;
   battleSkipSeq += 1;
   armBattleSkipTimer();
@@ -5734,6 +5794,10 @@ function applyStageDropInfo(opts?: { animate?: boolean }): void {
     return;
   }
 
+  if (selected.id === "depth" && stagesDepthDungeon) {
+    cairosDropCosmeticSeed = Math.floor(Math.random() * 1_000_000_000);
+  }
+
   const html = renderStageDropInfoModal(selected);
   const animate = opts?.animate !== false;
   if (existing) {
@@ -5917,6 +5981,7 @@ function grantRewardIfNeeded(): void {
   const victory = battle.finishReason === "ally_win";
   const scrollsBefore = save.scrolls;
   const scrollsPremiumBefore = save.scrollsPremium ?? 0;
+  const scrollsLegendBefore = save.scrollsLegend ?? 0;
   const { save: next, reward } = applyRewards(
     save,
     currentStage,
@@ -5931,6 +5996,10 @@ function grantRewardIfNeeded(): void {
   lastScrollPremiumGain = Math.max(
     0,
     (save.scrollsPremium ?? 0) - scrollsPremiumBefore,
+  );
+  lastScrollLegendGain = Math.max(
+    0,
+    (save.scrollsLegend ?? 0) - scrollsLegendBefore,
   );
   lastReward = reward;
   resultStep = 1;
@@ -6042,6 +6111,19 @@ function nextCampaignStage(stage: StageDef): StageDef | null {
   return nextStageInProgression(save, stage, effectiveDiff(stage));
 }
 
+function resultEnergyBadgeHtml(): string {
+  const energy = Math.floor(save.island.energy);
+  const energyMax = save.island.energyMax ?? 100;
+  return `<div class="result-energy-badge res-item res-item--energy" title="${escapeHtml(t("res.energy"))}" aria-label="${escapeHtml(t("res.energy"))}">
+    <div class="res-energy-row">
+      <span class="res-energy-ico-wrap">
+        <img class="res-ico" src="/art/ui/res/energy.svg" width="18" height="18" alt="" draggable="false" />
+      </span>
+      <strong class="res-val">${energy}<small>/${energyMax}</small></strong>
+    </div>
+  </div>`;
+}
+
 function resultBattleAction(
   stage: StageDef,
   action: "again" | "next",
@@ -6052,8 +6134,7 @@ function resultBattleAction(
   const enabled = energy >= cost;
   return `<button type="button" class="result-battle-action result-battle-action--${action}${enabled ? "" : " is-disabled"}" data-result-battle="${action}" ${enabled ? "" : "disabled"}>
     <span class="result-battle-action-label">${escapeHtml(label)}</span>
-    <span class="result-battle-action-energy"><img src="/art/ui/res/energy.svg" width="16" height="16" alt="" draggable="false" />${cost}</span>
-    <small>${energy}/${save.island.energyMax ?? 100}</small>
+    <span class="res-cost-chip result-battle-action-energy"><img class="res-ico" src="/art/ui/res/energy.svg" width="20" height="20" alt="" draggable="false" /><strong>${cost}</strong></span>
   </button>`;
 }
 
@@ -6166,6 +6247,16 @@ function renderResult(): string {
           icon: scrollArtSrc("premium"),
           label: t("res.scrollPremium"),
           amount: `+${lastScrollPremiumGain}`,
+          tone: "scroll",
+        }),
+      );
+    }
+    if (lastScrollLegendGain) {
+      lootTiles.push(
+        resultLootTile({
+          icon: scrollArtSrc("legend"),
+          label: t("res.scrollLegend"),
+          amount: `+${lastScrollLegendGain}`,
           tone: "scroll",
         }),
       );
@@ -6352,6 +6443,7 @@ function renderResult(): string {
     ${navBackBtn({ nav: "stages", label: t("ui.1a7f31cadb") })}
     ${battleSkyHtml(stage)}
     <div class="result-screen ${win ? "is-win" : "is-lose"}${firstRite ? " is-onboard-first" : ""}" data-result-step="${resultStep}">
+      ${resultEnergyBadgeHtml()}
       <div class="result-banner result-banner--compact">
         <h2 class="result-title">${title}</h2>
         <p class="result-stage">${stageLine}</p>
@@ -6471,8 +6563,6 @@ function pulseShapeBonusesAfterStone(
   );
   if (!shapes.length) return 0;
   const shapeMs = fxDurationMs(880, battleSpeed);
-  shapeFlashIds = shapes.map((s) => s.id);
-  shapeFlashUntil = Date.now() + fxDurationMs(900, battleSpeed);
   pulseCircleAbsorb(app, stoneColorTeam(color), "shape", shapeMs);
   spawnCircleAbsorbVfx(app, stoneColorTeam(color), "shape", shapeMs);
   app.querySelector(".battle-amp-chip")?.classList.add("is-hot");
@@ -6496,7 +6586,59 @@ function pulseTeamSummonerCast(team: "ally" | "enemy"): number {
   return castMs;
 }
 
+function boardTokenLabel(id: string): string {
+  return t(`ui.boardToken.${id}` as Parameters<typeof t>[0]);
+}
+
+function shapeBonusLabel(id: string): string {
+  return t(`ui.shape.${id}` as Parameters<typeof t>[0]);
+}
+
+function boardMarkTitle(id: string): string {
+  if (id === "heal_orb") return t("ui.boardMarkHeal");
+  if (id === "hp_bomb") return t("ui.boardMarkBomb");
+  return t(`ui.boardMark.${id}` as Parameters<typeof t>[0]);
+}
+
+function stoneResultChipsForDisplay(report: StoneReport): StoneReportChip[] {
+  const notable =
+    report.showResultSheet ||
+    report.chips.some(
+      (c) =>
+        c.kind === "token" ||
+        c.kind === "shape" ||
+        c.kind === "victory" ||
+        c.kind === "heal" ||
+        c.kind === "shield" ||
+        c.kind === "dmg" ||
+        c.kind === "seal",
+    );
+  return report.chips.filter((c) => c.kind !== "mana" || notable);
+}
+
 function stoneResultChipHtml(chip: StoneReportChip): string {
+  if (chip.kind === "token" && chip.id) {
+    const src = battleBoardMarkSrc(chip.id);
+    const svg = battleBoardMarkFallbackSrc(chip.id);
+    const label = boardTokenLabel(chip.id);
+    return `<span class="stone-result-chip stone-result-chip--token" title="${escapeHtml(label)}"><img class="stone-result-token-img" src="${src}" data-svg="${svg}" width="28" height="28" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" /><strong>${escapeHtml(label)}</strong></span>`;
+  }
+  if (chip.kind === "shape" && chip.id) {
+    const label = shapeBonusLabel(chip.id);
+    return `<span class="stone-result-chip stone-result-chip--shape">${escapeHtml(label)}</span>`;
+  }
+  if (chip.kind === "heal") {
+    return `<span class="stone-result-chip stone-result-chip--heal">${escapeHtml(t("ui.stoneHeal", { n: chip.n ?? 0 }))}</span>`;
+  }
+  if (chip.kind === "shield") {
+    return `<span class="stone-result-chip stone-result-chip--shield">${escapeHtml(t("ui.stoneShield", { n: chip.n ?? 0 }))}</span>`;
+  }
+  if (chip.kind === "seal") {
+    return `<span class="stone-result-chip stone-result-chip--seal">${escapeHtml(t("ui.stoneSeal", { n: chip.n ?? 0 }))}</span>`;
+  }
+  if (chip.kind === "dmg") {
+    return `<span class="stone-result-chip stone-result-chip--dmg">${escapeHtml(t("ui.stoneDmg", { n: chip.n ?? 0 }))}</span>`;
+  }
   if (chip.kind === "gold" || chip.kind === "crystal") {
     const src =
       chip.kind === "crystal"
@@ -6505,6 +6647,9 @@ function stoneResultChipHtml(chip: StoneReportChip): string {
     const title =
       chip.kind === "crystal" ? t("res.crystal") : t("res.gold");
     return `<span class="res-cost-chip stone-result-chip stone-result-chip--res" title="${escapeHtml(title)}"><img class="res-ico" src="${src}" width="16" height="16" alt="" draggable="false" /><strong>${chip.n ?? 0}</strong></span>`;
+  }
+  if (chip.kind === "mana") {
+    return `<span class="stone-result-chip stone-result-chip--mana">${escapeHtml(t("ui.stoneMana", { n: chip.n ?? 0 }))}</span>`;
   }
   const key =
     chip.kind === "atk"
@@ -6523,9 +6668,130 @@ function stoneResultChipHtml(chip: StoneReportChip): string {
   return `<span class="stone-result-chip stone-result-chip--${chip.kind}">${escapeHtml(t(key, { n: chip.n ?? 0 }))}</span>`;
 }
 
+function stoneResultSheetPickHtml(report: StoneReport): string {
+  const token = report.chips.find((c) => c.kind === "token" && c.id);
+  if (token?.id) {
+    const src = battleBoardMarkSrc(token.id);
+    const svg = battleBoardMarkFallbackSrc(token.id);
+    const label = boardTokenLabel(token.id);
+    return `<div class="stone-result-sheet-pick">
+      <img class="stone-result-sheet-mark" src="${src}" data-svg="${svg}" width="48" height="48" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" />
+      <strong>${escapeHtml(label)}</strong>
+    </div>`;
+  }
+  if (report.chips.some((c) => c.kind === "victory")) {
+    const src = battleBoardMarkSrc("victory");
+    const svg = battleBoardMarkFallbackSrc("victory");
+    return `<div class="stone-result-sheet-pick">
+      <img class="stone-result-sheet-mark" src="${src}" data-svg="${svg}" width="48" height="48" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" />
+      <strong>${escapeHtml(t("ui.boardMarkVictory"))}</strong>
+    </div>`;
+  }
+  if (report.capturedCount >= 3) {
+    return `<div class="stone-result-sheet-pick stone-result-sheet-pick--capture">
+      <strong>${escapeHtml(t("ui.stoneCapture", { n: report.chips.find((c) => c.kind === "capture")?.n ?? 0 }))}</strong>
+    </div>`;
+  }
+  return "";
+}
+
+function stoneResultSheetFxHtml(report: StoneReport): string {
+  const fx = report.chips.filter((c) => c.kind !== "token");
+  if (!fx.length) return "";
+  return `<div class="stone-result-sheet-fx">${fx.map(stoneResultChipHtml).join("")}</div>`;
+}
+
+function renderStoneResultSheetLayer(): string {
+  const open = stoneResultSheetOpen && !!stoneResultSheetReport;
+  const report = stoneResultSheetReport;
+  const side = report?.team === "enemy" ? " enemy" : "";
+  const pick = report ? stoneResultSheetPickHtml(report) : "";
+  const fx = report ? stoneResultSheetFxHtml(report) : "";
+  return `<div class="settings-layer stone-result-sheet-layer${side}" id="stone-result-sheet-layer"${open ? "" : " hidden"} aria-hidden="${open ? "false" : "true"}">
+    <button type="button" class="settings-backdrop" id="btn-stone-result-sheet-backdrop" aria-label="${escapeHtml(t("ui.stoneResult.confirm"))}"></button>
+    <div class="settings-sheet stone-result-sheet" role="dialog" aria-modal="true" aria-labelledby="stone-result-sheet-title">
+      <h2 class="stone-result-sheet-title" id="stone-result-sheet-title">${escapeHtml(t("ui.stoneResult.title"))}</h2>
+      ${pick}
+      ${fx}
+      <button type="button" class="primary stone-result-sheet-ok" id="btn-stone-result-sheet-ok">${escapeHtml(t("ui.stoneResult.confirm"))}</button>
+    </div>
+  </div>`;
+}
+
+function applyStoneResultSheetOpen(): void {
+  const layer = stoneResultSheetOpen
+    ? ensureStoneResultSheetLayer()
+    : findStoneResultSheetLayer();
+  if (!layer) return;
+  const open = stoneResultSheetOpen && !!stoneResultSheetReport;
+  layer.hidden = !open;
+  layer.setAttribute("aria-hidden", open ? "false" : "true");
+  layer.classList.toggle("enemy", stoneResultSheetReport?.team === "enemy");
+  if (!open) {
+    rememberOverlayClose("stone-result-sheet-layer");
+    return;
+  }
+  const report = stoneResultSheetReport!;
+  const pickHtml = stoneResultSheetPickHtml(report);
+  const existingPick = layer.querySelector(".stone-result-sheet-pick");
+  if (existingPick) {
+    if (pickHtml) existingPick.outerHTML = pickHtml;
+    else existingPick.remove();
+  } else if (pickHtml) {
+    layer
+      .querySelector(".stone-result-sheet-title")
+      ?.insertAdjacentHTML("afterend", pickHtml);
+  }
+  const fx = layer.querySelector(".stone-result-sheet-fx");
+  if (fx) fx.innerHTML = stoneResultSheetFxHtml(report);
+  else if (stoneResultSheetFxHtml(report)) {
+    layer
+      .querySelector(".stone-result-sheet-ok")
+      ?.insertAdjacentHTML("beforebegin", stoneResultSheetFxHtml(report));
+  }
+  promoteOverlayToAppRoot(layer);
+  replayModalPop(layer);
+  rememberOverlayOpen("stone-result-sheet-layer");
+}
+
+function closeStoneResultSheet(): void {
+  if (!stoneResultSheetOpen) return;
+  stoneResultSheetOpen = false;
+  stoneResultSheetReport = null;
+  applyStoneResultSheetOpen();
+  const resolve = stoneResultSheetResolve;
+  stoneResultSheetResolve = null;
+  resolve?.();
+}
+
+function findStoneResultSheetLayer(): HTMLElement | null {
+  return app.querySelector<HTMLElement>("#stone-result-sheet-layer");
+}
+
+function ensureStoneResultSheetLayer(): HTMLElement | null {
+  let layer = findStoneResultSheetLayer();
+  if (layer) return layer;
+  app.insertAdjacentHTML("beforeend", renderStoneResultSheetLayer());
+  layer = findStoneResultSheetLayer();
+  bindStoneResultSheet(layer);
+  return layer;
+}
+
+function bindStoneResultSheet(layer: HTMLElement | null = findStoneResultSheetLayer()): void {
+  if (!layer || layer.dataset.bound === "1") return;
+  layer.dataset.bound = "1";
+  const close = () => closeStoneResultSheet();
+  layer
+    .querySelector("#btn-stone-result-sheet-ok")
+    ?.addEventListener("click", close);
+  layer
+    .querySelector("#btn-stone-result-sheet-backdrop")
+    ?.addEventListener("click", close);
+}
+
 function renderStoneResultLayer(): string {
   const open = !!stoneResultFx;
-  const chips = stoneResultFx?.chips ?? [];
+  const chips = stoneResultFx ? stoneResultChipsForDisplay(stoneResultFx) : [];
   const side = stoneResultFx?.team === "enemy" ? " enemy" : "";
   return `<div class="stone-result-layer${side}" id="stone-result-layer"${open ? "" : ' hidden aria-hidden="true"'}>
     <div class="stone-result-card">${chips.map(stoneResultChipHtml).join("")}</div>
@@ -6540,26 +6806,53 @@ function applyStoneResultLayer(): void {
   layer.setAttribute("aria-hidden", open ? "false" : "true");
   layer.classList.toggle("enemy", stoneResultFx?.team === "enemy");
   const card = layer.querySelector(".stone-result-card");
-  if (card) {
-    card.innerHTML = (stoneResultFx?.chips ?? []).map(stoneResultChipHtml).join("");
+  if (card && stoneResultFx) {
+    card.innerHTML = stoneResultChipsForDisplay(stoneResultFx)
+      .map(stoneResultChipHtml)
+      .join("");
   }
 }
 
 async function presentStoneResult(report: StoneReport | null): Promise<void> {
   if (!report) return;
-  const chips = report.chips.filter((c) => c.kind !== "mana");
+  const chips = stoneResultChipsForDisplay(report);
   if (!chips.length) return;
   stoneResultFx = { ...report, chips };
   applyStoneResultLayer();
   const layer = app.querySelector<HTMLElement>("#stone-result-layer");
   layer?.classList.remove("is-out");
   layer?.classList.add("is-in");
-  await waitFx(fxDurationMs(720, battleSpeed));
+  const dwell =
+    chips.length > 2 ||
+    chips.some((c) => c.kind === "shape" || c.kind === "token")
+      ? 1100
+      : chips.some((c) => !["atk", "spd", "def"].includes(c.kind))
+        ? 900
+        : 720;
+  await waitFx(fxDurationMs(dwell, battleSpeed));
   layer?.classList.remove("is-in");
   layer?.classList.add("is-out");
   await waitFx(fxDurationMs(180, battleSpeed));
   stoneResultFx = null;
   applyStoneResultLayer();
+}
+
+async function presentStoneResultSheet(report: StoneReport): Promise<void> {
+  stoneResultSheetReport = report;
+  stoneResultSheetOpen = true;
+  applyStoneResultSheetOpen();
+  return new Promise((resolve) => {
+    stoneResultSheetResolve = resolve;
+  });
+}
+
+async function presentStoneOutcome(report: StoneReport | null): Promise<void> {
+  if (!report) return;
+  if (report.showResultSheet) {
+    await presentStoneResultSheet(report);
+    return;
+  }
+  await presentStoneResult(report);
 }
 
 /** Dismiss forge result + symbol detail when leaving the current monster context. */
@@ -6623,7 +6916,7 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     await waitFx(Math.max(appearMs, shapeMs));
     stoneSummonFx = null;
     app.querySelector(".battle-layout")?.classList.remove("is-stone-summoning");
-    await presentStoneResult(battle.lastStoneReport);
+    await presentStoneOutcome(battle.lastStoneReport);
     await resolveCombatUntilAllyInput({ holdBusy: true });
     cueOnboardFirstSkills();
   } finally {
@@ -7064,7 +7357,7 @@ async function resolveCombatUntilAllyInput(opts?: {
             ? pulseShapeBonusesAfterStone(placed.x, placed.y, placed.color)
             : 0;
           await waitFx(Math.max(appearMs, shapeMs));
-          await presentStoneResult(report);
+          await presentStoneOutcome(report);
         }
       }
 
@@ -7746,12 +8039,7 @@ function renderBoardCells(canClick: boolean): string {
           token.id === "heal_orb")
           ? "crystal"
           : "gold";
-      const tokenTitle =
-        token?.id === "heal_orb"
-          ? t("ui.boardMarkHeal")
-          : token?.id === "hp_bomb"
-            ? t("ui.boardMarkBomb")
-            : "";
+      const tokenTitle = token ? escapeHtml(boardMarkTitle(token.id)) : "";
       const forbid = battle.isForbidden({ x, y });
       const forbidClass = forbid && !stone ? " forbid" : "";
       const starClass = starSet.has(key) && !stone ? " star" : "";
@@ -7822,7 +8110,11 @@ function renderBoardCells(canClick: boolean): string {
                     escapeHtml(t("ui.boardMarkVictory")),
                   )
                 : starSet.has(key)
-                  ? boardMarkHtml("star", "star-mark")
+                  ? boardMarkHtml(
+                      "star",
+                      "star-mark",
+                      escapeHtml(t("ui.shape.star")),
+                    )
                   : `<span class="node-mark" aria-hidden="true"></span>`;
       const contentKey = `${stone ?? ""}|${token?.id ?? ""}|${summoning ? "s" : ""}|${rivalLast ? "r" : ""}|${forbid && !stone ? "f" : ""}|${bait ? "b" : ""}|${victory === key && !stone ? "v" : ""}|${starSet.has(key) && !stone ? "*" : ""}`;
       cells += `<button type="button" class="cell magic-node${placeable ? " legal is-placeable" : ""}${summoning ? " is-summoning fx-summon-seal" : ""}${rivalLast ? " is-rival-last" : ""}${tokenClass}${tokenSpawnClass}${forbidClass}${baitClass}${starClass}${victoryClass}${stone ? ` has-stone stone-${stone}` : ""}" data-x="${x}" data-y="${y}" data-ck="${contentKey}" ${placeable ? "" : "disabled"}>${stoneHtml}</button>`;
@@ -9115,7 +9407,7 @@ function applyResMoreOpen(): void {
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .feature-unlock-sheet, .attendance-sheet, .summoner-info-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .growth-result-sheet, .growth-rite-play, .glory-up-play",
+    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .feature-unlock-sheet, .attendance-sheet, .summoner-info-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .stone-result-sheet, .growth-result-sheet, .growth-rite-play, .glory-up-play",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -9222,6 +9514,7 @@ const APP_ROOT_OVERLAY_IDS = [
   "forge-confirm-layer",
   "mon-rite-layer",
   "sys-confirm-layer",
+  "stone-result-sheet-layer",
   GROWTH_REVEAL_LAYER_ID,
   WISH_REVEAL_LAYER_ID,
 ] as const;
@@ -9282,10 +9575,16 @@ function applyEvolveOpen(): void {
 }
 
 function findBattleAutoSettingsLayer(): HTMLElement | null {
-  return (
-    document.getElementById("battle-auto-settings") ??
-    app.querySelector<HTMLElement>("#battle-auto-settings")
-  );
+  const bodyLayer = document.body.querySelector<HTMLElement>("#battle-auto-settings");
+  const appLayer = app.querySelector<HTMLElement>("#battle-auto-settings");
+  if (bodyLayer && appLayer && bodyLayer !== appLayer) appLayer.remove();
+  return bodyLayer ?? appLayer;
+}
+
+function findBattleAutoSettingsCard(): HTMLElement | null {
+  return findBattleAutoSettingsLayer()?.querySelector<HTMLElement>(
+    ".battle-auto-settings-card",
+  ) ?? null;
 }
 
 function removeBattleAutoSettingsLayer(): void {
@@ -9298,12 +9597,16 @@ function positionBattleAutoSettings(
   layer: HTMLElement,
   btn: HTMLElement | null,
 ): void {
+  const card = findBattleAutoSettingsCard();
+  if (!card) return;
+  layer.style.zIndex = String(Math.max(overlayStackZ, 10500));
   if (!btn) return;
   const r = btn.getBoundingClientRect();
   const pad = 8;
   const gap = 8;
   const width = Math.min(250, Math.max(160, window.innerWidth - pad * 2));
-  const height = Math.max(layer.offsetHeight, 120);
+  card.style.width = `${Math.round(width)}px`;
+  const height = Math.max(card.offsetHeight, 120);
   let left = r.right - width;
   left = Math.min(
     Math.max(pad, left),
@@ -9311,19 +9614,17 @@ function positionBattleAutoSettings(
   );
   let top = r.top - height - gap;
   if (top < pad) top = Math.min(window.innerHeight - height - pad, r.bottom + gap);
-  layer.style.position = "fixed";
-  layer.style.inset = "auto";
-  layer.style.left = `${Math.round(left)}px`;
-  layer.style.top = `${Math.round(top)}px`;
-  layer.style.right = "auto";
-  layer.style.bottom = "auto";
-  layer.style.width = `${Math.round(width)}px`;
-  layer.style.zIndex = String(Math.max(overlayStackZ, 10500));
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
 }
 
 function ensureBattleAutoSettings(): HTMLElement | null {
   let layer = findBattleAutoSettingsLayer();
-  if (layer && !layer.querySelector("[data-battle-settings-tab]")) {
+  if (
+    layer &&
+    (!layer.querySelector("[data-battle-settings-tab]") ||
+      !layer.classList.contains("battle-settings-layer"))
+  ) {
     layer.remove();
     layer = null;
   }
@@ -9454,14 +9755,30 @@ function bindBattleAutoSettingsLayer(layer: HTMLElement | null): void {
 }
 
 let battleAutoSettingsDelegateBound = false;
+let battleAutoSettingsViewportBound = false;
+function ensureBattleAutoSettingsViewport(): void {
+  if (battleAutoSettingsViewportBound) return;
+  battleAutoSettingsViewportBound = true;
+  const onViewportChange = () => {
+    if (!battleAutoSettingsOpen) return;
+    const layer = findBattleAutoSettingsLayer();
+    const btn = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
+    if (layer && btn) positionBattleAutoSettings(layer, btn);
+  };
+  window.addEventListener("resize", onViewportChange, { passive: true });
+  window.visualViewport?.addEventListener("resize", onViewportChange, { passive: true });
+  window.visualViewport?.addEventListener("scroll", onViewportChange, { passive: true });
+}
 function ensureBattleAutoSettingsDelegate(): void {
   if (battleAutoSettingsDelegateBound) return;
   battleAutoSettingsDelegateBound = true;
+  ensureBattleAutoSettingsViewport();
   app.addEventListener("click", (ev) => {
     const t = ev.target;
     if (!(t instanceof Element)) return;
     if (view !== "battle" || !battle) return;
     if (!t.closest("#btn-auto-settings")) return;
+    ev.stopPropagation();
     battleAutoSettingsOpen = !battleAutoSettingsOpen;
     applyBattleAutoSettingsOpen();
   });
@@ -12442,6 +12759,7 @@ function renderHome(): string {
     save.island.summonerLevel >= 17 ||
     save.island.buildings.some((b) => b.id === "fusion_star");
   const mineOk = Boolean(mine) || save.island.summonerLevel >= 10;
+  const towerOk = isChallengeTowerContentUnlocked(save);
 
   const lockSvg = `<span class="island-spot-lock" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2zm-6-2a2 2 0 1 1 4 0v2h-4V7zm6 12H7v-8h10v8z"/></svg></span>`;
 
@@ -12570,6 +12888,13 @@ function renderHome(): string {
                   sub: t("ui.fusion.spotSub"),
                 })}
         ${spot("gateway", islandSpotTitle("gateway"), 55.5, 33.1, { tone: "gate", sub: t('ui.13c82de693') })}
+        ${spot("challenge_tower", islandSpotTitle("challenge_tower"), 62.4, 38.9, {
+                  tone: "gate",
+                  locked: !towerOk,
+                  sub: towerOk
+                    ? `${challengeTowerFloor(syncChallengeTowerMonth(save))}/${CHALLENGE_TOWER_FLOORS}`
+                    : undefined,
+                })}
         ${spot("mana_pond", islandSpotTitle("mana_pond"), 19, 62.2, {
                   tone: "pond",
                   sub: `Lv.${pondLv} ${"\u00B7"} ${t('ui.df72a8753d')} ${storedMana}/${pondCap}`,
@@ -14489,6 +14814,7 @@ function monsterRoleLabel(role: string | undefined, base?: {
 }
 
 function scrollArtSrc(kind: ScrollKind): string {
+  if (kind === "legend") return "/art/ui/res/scroll-premium.webp";
   return `/art/ui/res/scroll-${kind}.webp`;
 }
 
@@ -15045,6 +15371,7 @@ function renderSummonRiteContent(): string {
     normal: t('ui.aef1a1e70e'),
     premium: t('ui.1c208809ed'),
     mystic: t('ui.2d586d2a06'),
+    legend: t('res.scrollLegendShort'),
   };
   const castRow = hasReveal
     ? ""
@@ -21348,8 +21675,15 @@ function stageDropPreview(stage: StageDef, opts?: { equipWeekly?: boolean; keySe
   return `<span class="stage-card-drops">${chips}${gear}${awakenEssences}${mat}</span>`;
 }
 
+function stageEnemyIds(stage: StageDef): string[] {
+  if (stage.enemyWaves?.length) {
+    return [...new Set(stage.enemyWaves.flat())];
+  }
+  return [...new Set(stage.enemyMonsterIds)];
+}
+
 function stageAppearingMons(stage: StageDef): string {
-  const ids = [...new Set(stage.enemyMonsterIds)].slice(0, 6);
+  const ids = stageEnemyIds(stage).slice(0, 6);
   if (!ids.length) return "";
   const icons = ids
     .map((id) => {
@@ -21366,7 +21700,7 @@ function stageAppearingMons(stage: StageDef): string {
 
 function stageListMarker(stage: StageDef, idx: number): string {
   if (stage.mode === "scenario") return `${stage.map}-${stage.stage}`;
-  if (stage.mode === "depth" || stage.mode === "equip") return String(stage.stage);
+  if (stage.mode === "depth" || stage.mode === "equip" || stage.mode === "challenge_tower") return String(stage.stage);
   return String(stage.stage > 0 ? stage.stage : idx + 1);
 }
 
@@ -21481,6 +21815,11 @@ function stagesRegions(): StagesRegion[] {
       stages: WORLD_ARENA_STAGES,
       warena: true,
     },
+    challenge_tower: {
+      name: t("stages.challengeTower"),
+      blurb: t("stages.challengeTowerBlurb"),
+      stages: CHALLENGE_TOWER_STAGES,
+    },
     guild: {
       name: t("stages.guildRaid"),
       blurb: t("stages.guildRaidBlurb"),
@@ -21512,9 +21851,21 @@ function regionProgress(stages: StageDef[]): {
   cleared: number;
   total: number;
 } {
+  if (stages[0]?.mode === "challenge_tower") {
+    const synced = syncChallengeTowerMonth(save);
+    const cleared = challengeTowerFloor(synced);
+    const unlocked =
+      isChallengeTowerContentUnlocked(save) && cleared < CHALLENGE_TOWER_FLOORS;
+    return { unlocked: unlocked || cleared > 0, cleared, total: CHALLENGE_TOWER_FLOORS };
+  }
   const cleared = stages.filter((s) => save.clearedStages.includes(s.id)).length;
   const unlocked = stages.some((s) => isStageUnlocked(save, s.id));
   return { unlocked, cleared, total: stages.length };
+}
+
+function isStagesRegionOpen(region: StagesRegion): boolean {
+  if (!isSideRegionGuideOpen(onboard.step, region.id)) return false;
+  return regionProgress(region.stages).unlocked;
 }
 
 /** Only the main-quest maps run Normal/Hard/Hell; everything else is floor-based. */
@@ -21541,6 +21892,10 @@ function resetCoreStageBindings(): void {
 function openStagesRegionPin(regionId: string): void {
   const region = stagesRegions().find((candidate) => candidate.id === regionId);
   if (!region) return;
+  if (!isStagesRegionOpen(region)) {
+    flash(t("ui.b72f5a4752"));
+    return;
+  }
   const isSameRegion = stagesRegion === region.id;
   const next = isSameRegion ? null : region.id;
   stagesRegion = next;
@@ -21628,6 +21983,10 @@ function applyStagesRegionOpen(opts?: { animate?: boolean }): void {
     btn.classList.toggle("is-active", btn.dataset.region === stagesRegion);
   });
   app.classList.toggle("stage-prep-open", view === "stages" && !!stageEntryId);
+  app.classList.toggle(
+    "stages-overlay-open",
+    view === "stages" && (!!stagesRegion || !!stageEntryId),
+  );
 
   const selected = stagesRegion
     ? stagesRegions().find((r) => r.id === stagesRegion) ?? null
@@ -21830,6 +22189,7 @@ function stageDropsGear(stage: StageDef): boolean {
 
 /** PVP regions hand out glory only — the drop sheet has nothing to show there. */
 function regionHasDrops(region: StagesRegion): boolean {
+  if (region.id === "challenge_tower") return true;
   return region.stages.some(
     (s) => stageDropsSymbols(s) || stageDropsGear(s) || !!s.awakenElement,
   );
@@ -21854,6 +22214,90 @@ function regionPrimaryDropSet(region: StagesRegion): (typeof SYMBOL_SETS)[number
   return SYMBOL_SETS.find((x) => x.id === bestId) ?? null;
 }
 
+function cairosCosmeticSlotNum(setId: string, artSlot: number): number {
+  let h = cairosDropCosmeticSeed ^ artSlot;
+  for (let i = 0; i < setId.length; i++) {
+    h = Math.imul(h ^ setId.charCodeAt(i), 2654435761);
+  }
+  return ((h >>> 0) % 6) + 1;
+}
+
+function cairosDungeonDropMeta(floors: StageDef[]): {
+  minStar: number;
+  maxStar: number;
+  setIds: string[];
+} {
+  const setIds = [
+    ...new Set(
+      floors.flatMap((s) =>
+        s.dropSetPool?.length ? s.dropSetPool : [s.dropSetId],
+      ),
+    ),
+  ];
+  let minStar = 99;
+  let maxStar = 0;
+  for (const stage of floors) {
+    for (const w of stage.starWeights ?? []) {
+      minStar = Math.min(minStar, w.value);
+      maxStar = Math.max(maxStar, w.value);
+    }
+  }
+  if (minStar > maxStar) {
+    minStar = 1;
+    maxStar = 6;
+  }
+  return { minStar, maxStar, setIds };
+}
+
+function cairosGradeRangeHtml(): string {
+  const rare = symbolQualityMeta("rare");
+  const legend = symbolQualityMeta("legend");
+  return `<span class="cairos-drop-range cairos-drop-range--grade">
+    <span class="gear-detail-grade rarity--${rare.id}">${escapeHtml(rare.label)}</span>
+    <span class="cairos-drop-range-sep" aria-hidden="true">~</span>
+    <span class="gear-detail-grade rarity--${legend.id}">${escapeHtml(legend.label)}</span>
+  </span>`;
+}
+
+function renderCairosStageDropInfoModal(region: StagesRegion): string {
+  if (!stagesDepthDungeon) return "";
+  const floors = cairosStagesFor(stagesDepthDungeon);
+  const { minStar, maxStar, setIds } = cairosDungeonDropMeta(floors);
+  const starRange = t("ui.cairosDropStarRange", { min: minStar, max: maxStar });
+  const symbolTiles = setIds
+    .map((setId) => {
+      const def = SYMBOL_SETS.find((x) => x.id === setId);
+      const name = def?.nameKo ?? setId;
+      const pieces = ([1, 2, 3, 4, 5, 6] as const)
+        .map((artSlot) => {
+          const num = cairosCosmeticSlotNum(setId, artSlot);
+          return `<span class="cairos-drop-piece" title="${escapeHtml(name)}">
+            ${symbolArtImg(setId, artSlot, "cairos-drop-piece-art", 48)}
+            <span class="cairos-drop-piece-num" aria-hidden="true">${num}</span>
+          </span>`;
+        })
+        .join("");
+      return `<div class="cairos-drop-set">
+        <div class="cairos-drop-pieces">${pieces}</div>
+        <span class="cairos-drop-set-name">${escapeHtml(name)}</span>
+      </div>`;
+    })
+    .join("");
+
+  return `<div class="stage-drop-info-layer" id="stage-drop-info-layer" role="presentation">
+    <button type="button" class="stage-drop-info-backdrop" id="btn-stage-drop-info-close" aria-label="${t("ui.94b7dba159")}"></button>
+    <div class="stage-drop-info-modal stage-drop-info-modal--cairos" role="dialog" aria-modal="true" aria-labelledby="stage-drop-info-title">
+      ${modalCloseX(t("ui.94b7dba159"), "btn-stage-drop-info-close")}
+      <h2 class="stage-drop-info-title" id="stage-drop-info-title">${escapeHtml(t("ui.stageDropInfo"))}</h2>
+      <div class="cairos-drop-meta">
+        <span class="cairos-drop-range cairos-drop-range--stars">${escapeHtml(starRange)}</span>
+        ${cairosGradeRangeHtml()}
+      </div>
+      <div class="cairos-drop-symbols">${symbolTiles}</div>
+    </div>
+  </div>`;
+}
+
 function stageDropInfoRow(opts: {
   icon: string;
   name: string;
@@ -21870,6 +22314,25 @@ function stageDropInfoRow(opts: {
 
 function renderStageDropInfoModal(region: StagesRegion): string {
   if (!stagesDropInfoOpen || !regionHasDrops(region)) return "";
+  if (region.id === "depth" && stagesDepthDungeon) {
+    return renderCairosStageDropInfoModal(region);
+  }
+  if (region.id === "challenge_tower") {
+    return `<div class="stage-drop-info-layer" id="stage-drop-info-layer" role="presentation">
+    <button type="button" class="stage-drop-info-backdrop" id="btn-stage-drop-info-close" aria-label="${t("ui.94b7dba159")}"></button>
+    <div class="stage-drop-info-modal" role="dialog" aria-modal="true" aria-labelledby="stage-drop-info-title">
+      ${modalCloseX(t("ui.94b7dba159"), "btn-stage-drop-info-close")}
+      <h2 class="stage-drop-info-title" id="stage-drop-info-title">${escapeHtml(t("ui.stageDropInfo"))}</h2>
+      <div class="stage-drop-info-rows">
+        ${stageDropInfoRow({
+          icon: scrollArtSrc("legend"),
+          name: t("ui.stageDropScrollLegend"),
+          sub: "100F",
+        })}
+      </div>
+    </div>
+  </div>`;
+  }
   const set = regionPrimaryDropSet(region);
   const setBonus = set
     ? t("ui.stageDropSetBonus", { n: set.pieces, effect: set.effectKo })
@@ -22310,6 +22773,16 @@ function renderGuildRaidRegionBody(): string {
   </section>`;
 }
 
+function cairosDungeonPortraitHtml(dungeon: CairosDungeon): string {
+  const circle = `/art/battle/circle/cairos-${dungeon}.webp`;
+  const boss = `/art/battle/boss/cairos-${dungeon}-front.webp`;
+  return `<span class="dungeon-pick-portrait"><img class="dungeon-pick-portrait-img" src="${boss}" width="96" height="96" alt="" draggable="false" onerror="this.onerror=null;this.src='${circle}'" /></span>`;
+}
+
+function cairosDungeonSymbolTypesHtml(stage: StageDef): string {
+  return stageDropPreview(stage, { keySets: true });
+}
+
 function renderCairosRegionBody(): string {
   const dungeons: { id: CairosDungeon; key: "ui.dungeon.giant" | "ui.dungeon.dragon" | "ui.dungeon.necro" }[] = [
     { id: "giant", key: "ui.dungeon.giant" },
@@ -22317,14 +22790,16 @@ function renderCairosRegionBody(): string {
     { id: "necro", key: "ui.dungeon.necro" },
   ];
   if (!stagesDepthDungeon) {
-    return `<div class="dungeon-pick-list">${dungeons
+    return `<div class="dungeon-pick-list dungeon-pick-list--depth">${dungeons
       .map((d) => {
         const floors = cairosStagesFor(d.id);
         const sample = floors[floors.length - 1] ?? floors[0]!;
-        return `<button type="button" class="dungeon-pick-card" data-depth-dungeon="${d.id}">
-          <img class="dungeon-pick-art" src="/art/battle/circle/cairos-${d.id}.webp" width="160" height="160" alt="" draggable="false" />
-          <strong class="dungeon-pick-name">${escapeHtml(t(d.key))}</strong>
-          ${stageDropPreview(sample, { keySets: true })}
+        return `<button type="button" class="dungeon-pick-card dungeon-pick-card--depth" data-depth-dungeon="${d.id}">
+          ${cairosDungeonPortraitHtml(d.id)}
+          <span class="dungeon-pick-main">
+            <strong class="dungeon-pick-name">${escapeHtml(t(d.key))}</strong>
+            <span class="dungeon-pick-symbols">${cairosDungeonSymbolTypesHtml(sample)}</span>
+          </span>
         </button>`;
       })
       .join("")}</div>`;
@@ -22336,10 +22811,13 @@ function renderCairosRegionBody(): string {
       : stagesDepthDungeon === "dragon"
         ? "ui.dungeon.dragon"
         : "ui.dungeon.necro";
-  return `<div class="dungeon-floor-wrap">
-    <button type="button" class="dungeon-floor-back" data-depth-back>${escapeHtml(t("ui.dungeon.back"))}</button>
+  return `<div class="dungeon-floor-wrap dungeon-floor-wrap--depth">
+    <button type="button" class="nav-back nav-back--labeled dungeon-floor-back" data-depth-back aria-label="${escapeHtml(t("ui.dungeon.back"))}">
+      <img class="nav-back-ico" src="/art/ui/back-arrow.svg" width="18" height="18" alt="" draggable="false" />
+      <span class="nav-back-label">${ARROW_LEFT}${escapeHtml(t("ui.dungeon.back"))}</span>
+    </button>
     <h3 class="dungeon-floor-title">${escapeHtml(t(titleKey))}</h3>
-    <div class="stage-list stage-list--expedition stage-list--dungeon">${stageButtons(floors, { drops: true })}</div>
+    <div class="stage-list stage-list--expedition stage-list--dungeon">${stageButtons(floors)}</div>
   </div>`;
 }
 
@@ -22425,6 +22903,10 @@ function renderStagesRegionSheet(region: StagesRegion): string {
   if (region.equipWeekly) {
     extras = `<div class="season-panel"><span class="guild-chip">${escapeHtml(t("ui.9cbaf58b88"))}<strong>${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT}</strong></span></div>`;
   }
+  if (region.id === "challenge_tower") {
+    const floor = challengeTowerFloor(syncChallengeTowerMonth(save));
+    extras = `<div class="season-panel"><span class="guild-chip">${escapeHtml(t("stages.challengeTowerProgress"))}<strong>${floor}/${CHALLENGE_TOWER_FLOORS}</strong></span></div>`;
+  }
   if (region.arena || region.warena) {
     extras = "";
   }
@@ -22439,6 +22921,7 @@ function renderStagesRegionSheet(region: StagesRegion): string {
     region.arena || region.warena ? "stages-region-sheet--pvp" : "",
     region.id === "depth" ||
     region.id === "cadence" ||
+    region.id === "challenge_tower" ||
     region.equipWeekly ||
     region.guild
       ? "stages-region-sheet--dungeon"
@@ -22475,9 +22958,10 @@ function renderStagesRegionSheet(region: StagesRegion): string {
             <strong>${energyNow}/${energyMax}</strong>
           </span>`;
 
-  const dropBtn = regionHasDrops(region)
-    ? `<button type="button" class="stages-region-drop-btn${stagesDropInfoOpen ? " is-on" : ""}" id="btn-region-drop-info" aria-pressed="${stagesDropInfoOpen ? "true" : "false"}">${t("ui.stageDropInfo")}</button>`
-    : "";
+  const dropBtn =
+    regionHasDrops(region) && (region.id !== "depth" || !!stagesDepthDungeon)
+      ? `<button type="button" class="stages-region-drop-btn${stagesDropInfoOpen ? " is-on" : ""}" id="btn-region-drop-info" aria-pressed="${stagesDropInfoOpen ? "true" : "false"}">${t("ui.stageDropInfo")}</button>`
+      : "";
 
   const diffMeta =
     STAGE_DIFFICULTIES.find((d) => d.id === stageEntryDiff) ??
@@ -22526,6 +23010,7 @@ function renderStages(): string {
   const pins = regions
     .map((r) => {
       const prog = regionProgress(r.stages);
+      const open = isStagesRegionOpen(r);
       const active = stagesRegion === r.id;
       const mq = isMainQuestRegion(r.id);
       const onboardPin =
@@ -22545,21 +23030,21 @@ function renderStages(): string {
           : mq
             ? `${prog.cleared}/${STAGES_PER_AREA}`
             : `${prog.cleared}/${prog.total}`;
-      const lockMark = prog.unlocked
+      const lockMark = open
         ? ""
         : `<span class="stages-pin-lock" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2zm-6-2a2 2 0 1 1 4 0v2h-4V7zm6 12H7v-8h10v8z"/></svg></span>`;
       const titleNum = mark
         ? `<span class="stages-pin-num" aria-hidden="true">${mark}</span>`
         : "";
       const ariaName = mark ? `${mark} ${r.name}` : r.name;
-      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${prog.unlocked ? "" : " is-locked"}${active ? " is-active" : ""}${onboardPin}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" data-core-region="${r.id}" aria-label="${ariaName}${prog.unlocked ? "" : ` ${MIDDOT} ${t('ui.b35f488f01')}`}" ${prog.unlocked ? "" : 'data-locked="1"'}>
+      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${open ? "" : " is-locked"}${active ? " is-active" : ""}${onboardPin}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" data-core-region="${r.id}" aria-label="${ariaName}${open ? "" : ` ${MIDDOT} ${t('ui.b35f488f01')}`}" ${open ? "" : 'data-locked="1"'}>
         <span class="stages-pin-dot" aria-hidden="true">${mq ? `<span class="stages-pin-mark">${mark}</span>` : ""}</span>
         <span class="stages-pin-label">
           <strong>${lockMark}${titleNum}${r.name}</strong>
           ${
-            prog.unlocked && !sub
+            open && !sub
               ? ""
-              : `<small>${prog.unlocked ? sub : t('ui.759f762a02')}</small>`
+              : `<small>${open ? sub : t('ui.759f762a02')}</small>`
           }
         </span>
       </button>`;
@@ -22640,8 +23125,9 @@ function renderBattleAutoSettings(): string {
     </button>`;
   const screenOn = battleSettingsTab === "screen";
   const autoOn = battleSettingsTab === "auto";
-  return `<section class="battle-auto-settings" id="battle-auto-settings" aria-label="${escapeHtml(t("ui.battleSettings"))}" hidden aria-hidden="true">
-    <div class="battle-auto-settings-card">
+  return `<div class="settings-layer battle-settings-layer battle-auto-settings" id="battle-auto-settings" aria-label="${escapeHtml(t("ui.battleSettings"))}" hidden aria-hidden="true">
+    <button type="button" class="settings-backdrop" data-auto-settings-close aria-label="${escapeHtml(t("ui.1a7f31cadb"))}"></button>
+    <div class="battle-auto-settings-card" role="dialog" aria-modal="true">
       <div class="battle-auto-settings-head">
         <strong>${escapeHtml(t("ui.battleSettings"))}</strong>
         <button type="button" class="battle-auto-settings-close" data-auto-settings-close aria-label="${escapeHtml(t("ui.1a7f31cadb"))}">&times;</button>
@@ -22663,7 +23149,7 @@ function renderBattleAutoSettings(): string {
         </div>
       </div>
     </div>
-  </section>`;
+  </div>`;
 }
 
 function renderBattle(manaPct: number): string {
@@ -22728,7 +23214,7 @@ function renderBattle(manaPct: number): string {
     onboard.step === "battle" && currentStage?.id === ONBOARD_FIRST_STAGE_ID
       ? " is-onboard-rite"
       : ""
-  }${bossMode ? " battle-screen--boss" : ""}${chaseClass}" data-bg="${battleBgIdForStage(currentStage)}">
+  }${currentStage?.bossMonsterId ? " battle-screen--boss-stage" : ""}${bossMode ? " battle-screen--boss" : ""}${chaseClass}" data-bg="${battleBgIdForStage(currentStage)}">
     ${battleSkyHtml(currentStage)}
     <header class="battle-chrome">
       ${renderBoardMini()}
@@ -22836,6 +23322,10 @@ function refreshBattleView(): boolean {
     "battle-screen--boss",
     next.classList.contains("battle-screen--boss"),
   );
+  screen.classList.toggle(
+    "battle-screen--boss-stage",
+    next.classList.contains("battle-screen--boss-stage"),
+  );
   for (const name of [...screen.classList]) {
     if (name.startsWith("is-page-")) screen.classList.remove(name);
   }
@@ -22891,6 +23381,10 @@ function leaveBattleOrResultScreen(): void {
   autoMode = false;
   battleAutoSettingsOpen = false;
   removeBattleAutoSettingsLayer();
+  stoneResultSheetOpen = false;
+  stoneResultSheetReport = null;
+  stoneResultSheetResolve?.();
+  stoneResultSheetResolve = null;
   clearAutoTimer();
   clearBattleSkipTimer();
   battleSkipTimeReady = false;
@@ -22908,6 +23402,7 @@ function leaveBattleOrResultScreen(): void {
   lastReward = null;
   lastScrollGain = 0;
   lastScrollPremiumGain = 0;
+  lastScrollLegendGain = 0;
   dmgFloats = [];
   clearBattleSkillSelection();
   view = "stages";
@@ -23063,6 +23558,7 @@ function bindBattleInteractive(): void {
     if (autoMode) scheduleAuto();
   });
 
+  bindStoneResultSheet();
   bindBattleAutoSettings();
 
   app.querySelector("#btn-battle-skip")?.addEventListener("click", () => {
@@ -23807,6 +24303,7 @@ function applyViewChange(next: View, opts?: { fromBack?: boolean }): void {
         lastReward = null;
         lastScrollGain = 0;
         lastScrollPremiumGain = 0;
+  lastScrollLegendGain = 0;
       }
     }
   }
@@ -23884,6 +24381,8 @@ function isOverlayIdOpen(id: string): boolean {
       return islandLayoutEdit;
     case "battle-auto-settings":
       return battleAutoSettingsOpen;
+    case "stone-result-sheet-layer":
+      return stoneResultSheetOpen;
     case "stages-region":
       return view === "stages" && !!stagesRegion && !stageEntryId;
     case "stage-prep":
@@ -23993,6 +24492,11 @@ function closeOverlayById(id: string): boolean {
     if (!battleAutoSettingsOpen) return false;
     battleAutoSettingsOpen = false;
     applyBattleAutoSettingsOpen();
+    return true;
+  }
+  if (id === "stone-result-sheet-layer") {
+    if (!stoneResultSheetOpen) return false;
+    closeStoneResultSheet();
     return true;
   }
   if (id === "stage-prep") {
@@ -24389,6 +24893,10 @@ function closeLeftoverTransientUi(): boolean {
   if (battleAutoSettingsOpen) {
     battleAutoSettingsOpen = false;
     applyBattleAutoSettingsOpen();
+    return true;
+  }
+  if (stoneResultSheetOpen) {
+    closeStoneResultSheet();
     return true;
   }
   if (onboardWelcomeOpen) {
@@ -25447,6 +25955,7 @@ function bind(): void {
     if (autoMode) scheduleAuto();
   });
 
+  bindStoneResultSheet();
   bindBattleAutoSettings();
 
   app.querySelector("#btn-battle-skip")?.addEventListener("click", () => {
@@ -25475,6 +25984,7 @@ function bind(): void {
     lastReward = null;
     lastScrollGain = 0;
     lastScrollPremiumGain = 0;
+  lastScrollLegendGain = 0;
     currentStage = null;
     runOnboardCta();
     showNextBuildingUnlockModal();
@@ -25493,6 +26003,7 @@ function bind(): void {
       lastReward = null;
       lastScrollGain = 0;
       lastScrollPremiumGain = 0;
+  lastScrollLegendGain = 0;
       battle = null;
       dmgFloats = [];
       startBattle(next);
@@ -25512,6 +26023,7 @@ function bind(): void {
     lastReward = null;
     lastScrollGain = 0;
     lastScrollPremiumGain = 0;
+  lastScrollLegendGain = 0;
     battle = null;
     dmgFloats = [];
     view = "stages";

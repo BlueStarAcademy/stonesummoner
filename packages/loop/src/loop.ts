@@ -200,6 +200,10 @@ import {
   emptyDailyActivity,
   type DailyActivity,
 } from "./dailyMissions.js";
+import {
+  monthKey,
+  syncChallengeTowerMonth,
+} from "./challengeTower.js";
 export {
   DAILY_MISSION_WISH,
   DAILY_MISSION_WISH_MANA,
@@ -1341,6 +1345,8 @@ export interface PlayerSave {
   scrollsPremium: number;
   /** 신성/심연 소환서. */
   scrollsMystic: number;
+  /** 전설 소환서 (4~5성). */
+  scrollsLegend: number;
   gear: SummonerGear;
   /** Unequipped gear drops (equip vault bag). */
   gearBag: GearPiece[];
@@ -1463,12 +1469,16 @@ export interface PlayerSave {
    * cloud sync carries it so Capacitor / multi-device stays aligned.
    */
   onboardRite: OnboardRiteSave | null;
-  /** Next attendance calendar day to claim (1–30). */
+  /** Next attendance calendar day to claim (1–14). */
   attendanceDayIndex: number;
   /** Consecutive daily attendance claim streak. */
   attendanceStreak: number;
   /** YYYY-MM-DD of last attendance claim. */
   attendanceLastClaimDay: string | null;
+  /** YYYY-MM calendar month key for 도전의 탑 progress. */
+  challengeTowerMonthKey: string | null;
+  /** Highest floor cleared this month (0–100). */
+  challengeTowerFloor: number;
   /** Feature-unlock modal ids already shown (building/hub/summoner). */
   seenFeatureUnlockIds: string[];
 }
@@ -1847,6 +1857,7 @@ export function createNewSave(now = Date.now()): PlayerSave {
     scrolls,
     scrollsPremium,
     scrollsMystic,
+    scrollsLegend: 0,
     gear,
     gearBag: [],
     gearBagSlots: GEAR_BAG_BASE_SLOTS,
@@ -1912,6 +1923,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     attendanceDayIndex: 1,
     attendanceStreak: 0,
     attendanceLastClaimDay: null,
+    challengeTowerMonthKey: monthKey(now),
+    challengeTowerFloor: 0,
     seenFeatureUnlockIds: [],
   };
 }
@@ -3327,6 +3340,7 @@ export function runSetParty(
 export function scrollCount(save: PlayerSave, kind: ScrollKind): number {
   if (kind === "premium") return Math.max(0, Math.floor(save.scrollsPremium ?? 0));
   if (kind === "mystic") return Math.max(0, Math.floor(save.scrollsMystic ?? 0));
+  if (kind === "legend") return Math.max(0, Math.floor(save.scrollsLegend ?? 0));
   return Math.max(0, Math.floor(save.scrolls ?? 0));
 }
 
@@ -3334,7 +3348,8 @@ export function totalScrollCount(save: PlayerSave): number {
   return (
     scrollCount(save, "normal") +
     scrollCount(save, "premium") +
-    scrollCount(save, "mystic")
+    scrollCount(save, "mystic") +
+    scrollCount(save, "legend")
   );
 }
 
@@ -3346,6 +3361,7 @@ export function withScrollDelta(
   const next = Math.max(0, scrollCount(save, kind) + Math.floor(delta));
   if (kind === "premium") return { ...save, scrollsPremium: next };
   if (kind === "mystic") return { ...save, scrollsMystic: next };
+  if (kind === "legend") return { ...save, scrollsLegend: next };
   return { ...save, scrolls: next };
 }
 
@@ -5106,7 +5122,9 @@ export function applyRewards(
             ? 1.5
             : stage.mode === "equip"
               ? 1.15
-              : 1;
+              : stage.mode === "challenge_tower"
+                ? 1.1
+                : 1;
   const affix = gearAffixTotals(getActiveGear(save));
   const manaGain = Math.round((180 + stage.stage * 60) * modeMul * affix.battleGoldMul);
   const arenaNpcMatch = stage.mode === "arena" && !!opts?.arenaNpc;
@@ -5144,6 +5162,9 @@ export function applyRewards(
     working = bumpDailyActivity(working, "warena");
   } else if (stage.mode === "guild_raid") {
     working = bumpDailyActivity(working, "raid");
+  } else if (stage.mode === "challenge_tower") {
+    working = syncChallengeTowerMonth(working);
+    working = bumpDailyActivity(working, "dungeon");
   }
 
   const beforeAccountLv = accountSummonerLevel(
@@ -5232,7 +5253,8 @@ export function applyRewards(
   const symbols = [...save.symbols];
   let symbol: SymbolInstance | undefined;
   let symbolBagFull = false;
-  if (rng() < dropChance) {
+  const towerNoLoot = stage.mode === "challenge_tower";
+  if (!towerNoLoot && rng() < dropChance) {
     if (symbols.length >= symbolBagCapacity(save)) {
       symbolBagFull = true;
     } else {
@@ -5326,11 +5348,12 @@ export function applyRewards(
   const dropRoll = rng();
   // PVP pays in glory and season standing only — no scroll, symbol, or gear loot.
   const pvpNoLoot = stage.mode === "arena" || stage.mode === "world_arena";
-  const mysticalChance = pvpNoLoot
+  const scrollNoLoot = pvpNoLoot || towerNoLoot;
+  const mysticalChance = scrollNoLoot
     ? 0
     : (stage.mode === "weekday" ? 0.08 : stage.mode === "scenario" ? 0.07 : 0.05) *
       affix.scrollChanceMul;
-  const unknownChance = pvpNoLoot
+  const unknownChance = scrollNoLoot
     ? 0
     : Math.min(
         1,
@@ -5351,9 +5374,24 @@ export function applyRewards(
     };
   }
 
-  const cleared = save.clearedStages.includes(stage.id)
-    ? save.clearedStages
-    : [...save.clearedStages, stage.id];
+  const cleared =
+    stage.mode === "challenge_tower"
+      ? save.clearedStages
+      : save.clearedStages.includes(stage.id)
+        ? save.clearedStages
+        : [...save.clearedStages, stage.id];
+  let challengeTowerFloor = working.challengeTowerFloor ?? 0;
+  let challengeTowerMonthKey =
+    working.challengeTowerMonthKey ?? monthKey();
+  let scrollsLegend = save.scrollsLegend ?? 0;
+  if (stage.mode === "challenge_tower") {
+    const priorFloor = challengeTowerFloor;
+    challengeTowerFloor = Math.max(challengeTowerFloor, stage.stage);
+    challengeTowerMonthKey = monthKey();
+    if (stage.stage === 100 && priorFloor < 100) {
+      scrollsLegend += 1;
+    }
+  }
   const clearedHard =
     difficulty === "hard" || difficulty === "hell"
       ? save.clearedHardStages?.includes(stage.id)
@@ -5441,6 +5479,8 @@ export function applyRewards(
   if (scrollsPremium > (save.scrollsPremium ?? 0))
     extras.push(`${SCROLL_KIND_LABEL.premium} +1`);
   else if (scrolls > save.scrolls) extras.push(`${SCROLL_KIND_LABEL.normal} +1`);
+  if (scrollsLegend > (save.scrollsLegend ?? 0))
+    extras.push(`${SCROLL_KIND_LABEL.legend} +1`);
 
   let awakenMats = normalizeAwakenMats(working.awakenMats);
   let skillMats = working.skillMats ?? 0;
@@ -5522,6 +5562,7 @@ export function applyRewards(
       clearedHellStages: clearedHell,
       scrolls,
       scrollsPremium,
+      scrollsLegend,
       gloryPoints,
       jinmunStones,
       gloryLevels: working.gloryLevels ?? {},
@@ -5541,6 +5582,8 @@ export function applyRewards(
       skillMats,
       trialTokens,
       trialTitleUnlocked,
+      challengeTowerMonthKey,
+      challengeTowerFloor,
       raidBossHp,
       raidMilestonesClaimed,
       raidWeekKey: working.raidWeekKey ?? null,
@@ -5619,6 +5662,9 @@ export function runSortie(
         message: `오늘 레이드 시도 한도 소진 (${RAID_ATTEMPTS_DAILY}회)`,
       };
     }
+  }
+  if (stage.mode === "challenge_tower") {
+    working = syncChallengeTowerMonth(working, now);
   }
   const difficulty =
     stage.mode === "arena" ||

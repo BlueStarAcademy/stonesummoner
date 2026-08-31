@@ -8,7 +8,9 @@ import {
   defaultOnboardSnapshot,
   deriveOnboardStep,
   fromOnboardRiteSave,
+  isSideRegionGuideOpen,
   isVirginOnboard,
+  sideRegionsUnlockedAtGuideStep,
   skipOnboardForProgressedSave,
   toOnboardRiteSave,
 } from "../src/core-loop/onboarding.ts";
@@ -96,5 +98,17 @@ const restored = fromOnboardRiteSave(cloud);
 assert(restored?.step === "party", "cloud rite roundtrip keeps step");
 assert(restored?.summoned === true, "cloud rite roundtrip keeps flags");
 assert(fromOnboardRiteSave(null) === null, "null cloud rite is null");
+
+assert(!isSideRegionGuideOpen("gateway", "cadence"), "cadence locked at gateway");
+assert(!isSideRegionGuideOpen("battle", "depth"), "depth locked before enhance");
+assert(isSideRegionGuideOpen("summon", "cadence"), "cadence opens at summon");
+assert(isSideRegionGuideOpen("enhance", "depth"), "depth opens at enhance");
+assert(isSideRegionGuideOpen("party", "arena"), "arena opens at party");
+assert(isSideRegionGuideOpen("equip", "warena"), "warena opens at equip");
+assert(isSideRegionGuideOpen("done", "guild"), "guild opens when guide done");
+assert(
+  sideRegionsUnlockedAtGuideStep("done").length === 6,
+  "all six side regions open at done",
+);
 
 console.log("smoke-onboarding OK");
