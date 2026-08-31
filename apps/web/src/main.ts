@@ -5318,6 +5318,38 @@ function openStagePrepInfoFromEl(el: HTMLElement): void {
   applyStagePrepInfo({ animate: true });
 }
 
+function renderStagePrepMonsterHeroHtml(opts: {
+  element: string;
+  name: string;
+  role: string;
+  level: number;
+  starsHtml: string;
+  artHtml: string;
+  familyAttr?: string;
+  tagHtml?: string;
+}): string {
+  const el = opts.element;
+  const elLabel = monsterElementLabel(el);
+  const elSrc = monsterElementArtSrc(el) ?? "";
+  return `<div class="stage-prep-info-hero el-${el}">
+    <span class="stage-prep-info-art-wrap"${opts.familyAttr ?? ""}>${opts.artHtml}</span>
+    <div class="stage-prep-info-hero-copy">
+      <div class="mon-inspect-title-row">
+        <span class="mon-el-ico mon-el-ico--${el}" title="${escapeHtml(elLabel)}" aria-label="${escapeHtml(elLabel)}">
+          <img class="mon-el-ico-img" src="${escapeHtml(elSrc)}" width="24" height="24" alt="" draggable="false" />
+        </span>
+        <strong class="mon-inspect-name">${escapeHtml(opts.name)}</strong>
+        <span class="mon-inspect-type" title="${escapeHtml(opts.role)}">${escapeHtml(opts.role)}</span>
+      </div>
+      <div class="mon-inspect-meta-row">
+        <span class="mon-inspect-lv">Lv.${opts.level}</span>
+        ${opts.tagHtml ?? ""}
+      </div>
+      <div class="stage-prep-info-stars">${opts.starsHtml}</div>
+    </div>
+  </div>`;
+}
+
 function renderStagePrepInfoModal(): string {
   const info = stagePrepInfo;
   if (!info) return "";
@@ -5380,7 +5412,7 @@ function renderStagePrepInfoModal(): string {
           .map((line) => `<li>${escapeHtml(line)}</li>`)
           .join("");
         return `<div class="stage-prep-info-skill">
-          ${monsterSkillArtImg(m.monsterId, si, sk, "stage-prep-info-skill-img", 36)}
+          ${monsterSkillArtImg(m.monsterId, si, sk, "stage-prep-info-skill-img", 52)}
           <span class="stage-prep-info-skill-copy">
             <strong>${escapeHtml(sk.nameKo)}</strong>
             <small>Lv.${lv}${lv >= MAX_SKILL_LEVEL ? " MAX" : ""}</small>
@@ -5389,14 +5421,17 @@ function renderStagePrepInfoModal(): string {
         </div>`;
       })
       .join("");
-    body = `<div class="stage-prep-info-hero el-${el}">
-      <span class="stage-prep-info-art-wrap"${monsterSlotFamilyAttr(m.monsterId)}>${ownedMonsterArtImg(m, "stage-prep-info-art", 88) || "?"}</span>
-      <div class="stage-prep-info-hero-copy">
-        <strong>${escapeHtml(def?.nameKo ?? m.monsterId)}</strong>
-        <small>${escapeHtml(monsterElementLabel(el))} ${MIDDOT} ${escapeHtml(role)} ${MIDDOT} Lv.${m.level}</small>
-        <div class="stage-prep-info-stars">${monStarsHtml(Math.max(1, def?.naturalStars ?? 1))}${(m.evolve ?? 0) > 0 ? `<span class="mon-evo">+${m.evolve}</span>` : ""}</div>
-      </div>
-    </div>
+    const evo =
+      (m.evolve ?? 0) > 0 ? `<span class="mon-evo">+${m.evolve}</span>` : "";
+    body = `${renderStagePrepMonsterHeroHtml({
+      element: el,
+      name: def?.nameKo ?? m.monsterId,
+      role,
+      level: m.level,
+      starsHtml: `${monStarsHtml(Math.max(1, def?.naturalStars ?? 1))}${evo}`,
+      artHtml: ownedMonsterArtImg(m, "stage-prep-info-art", 88) || "?",
+      familyAttr: monsterSlotFamilyAttr(m.monsterId),
+    })}
     ${preview ? renderInspectCombatStatsHtml(preview, { combined: true }) : ""}
     <div class="stage-prep-info-section">
       <h3>${escapeHtml(t("ui.stagePrepInfoSkills"))}</h3>
@@ -5436,7 +5471,7 @@ function renderStagePrepInfoModal(): string {
     const el = def.element;
     const role = monsterRoleLabel(def.role, def.baseStats);
     const base = def.baseStats;
-    const statsHtml = `<div class="mon-book-stats mon-inspect-stats mon-inspect-stats--grid2x4" role="list">
+    const statsHtml = `<div class="stage-prep-info-stats" role="list">
       <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(t("ui.statHp"))}</span><span class="stat-cell-v">${base.hp}</span></div>
       <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(t("ui.statAtk"))}</span><span class="stat-cell-v">${base.atk}</span></div>
       <div class="stat-cell" role="listitem"><span class="stat-cell-k">${escapeHtml(t("ui.statDef"))}</span><span class="stat-cell-v">${base.def}</span></div>
@@ -5448,7 +5483,7 @@ function renderStagePrepInfoModal(): string {
           .map((line) => `<li>${escapeHtml(line)}</li>`)
           .join("");
         return `<div class="stage-prep-info-skill">
-          ${monsterSkillArtImg(def.id, si, sk, "stage-prep-info-skill-img", 36)}
+          ${monsterSkillArtImg(def.id, si, sk, "stage-prep-info-skill-img", 52)}
           <span class="stage-prep-info-skill-copy">
             <strong>${escapeHtml(sk.nameKo)}</strong>
             <ul>${lines}</ul>
@@ -5456,14 +5491,16 @@ function renderStagePrepInfoModal(): string {
         </div>`;
       })
       .join("");
-    body = `<div class="stage-prep-info-hero el-${el}">
-      <span class="stage-prep-info-art-wrap"${monsterSlotFamilyAttr(def.id)}>${monsterArtImg(def.id, "stage-prep-info-art", 88) || "?"}</span>
-      <div class="stage-prep-info-hero-copy">
-        <strong>${escapeHtml(def.nameKo)}</strong>
-        <small>${escapeHtml(t("ui.stagePrepInfoEnemy"))} ${MIDDOT} Lv.${info.level} ${MIDDOT} ${escapeHtml(monsterElementLabel(el))} ${MIDDOT} ${escapeHtml(role)}</small>
-        <div class="stage-prep-info-stars">${monStarsHtml(Math.max(1, def.naturalStars))}</div>
-      </div>
-    </div>
+    body = `${renderStagePrepMonsterHeroHtml({
+      element: el,
+      name: def.nameKo,
+      role,
+      level: info.level,
+      starsHtml: monStarsHtml(Math.max(1, def.naturalStars)),
+      artHtml: monsterArtImg(def.id, "stage-prep-info-art", 88) || "?",
+      familyAttr: monsterSlotFamilyAttr(def.id),
+      tagHtml: `<span class="stage-prep-info-tag">${escapeHtml(t("ui.stagePrepInfoEnemy"))}</span>`,
+    })}
     ${statsHtml}
     <div class="stage-prep-info-section">
       <h3>${escapeHtml(t("ui.stagePrepInfoSkills"))}</h3>
