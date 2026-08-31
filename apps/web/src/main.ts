@@ -1775,6 +1775,18 @@ let stonePickPlaceCued = false;
 let selectedSkillIndex: number | null = null;
 type BattleSummonerSkillId = "open" | "declare" | "dual" | "clean" | "guard";
 let selectedSummonerSkill: string | null = null;
+/** Battle skill long-press inspect sheet. */
+type BattleSkillInfoTarget =
+  | { kind: "monster"; skillIndex: number }
+  | { kind: "summoner"; skillId: string };
+let battleSkillInfo: BattleSkillInfoTarget | null = null;
+let battleSkillLongPress: {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  timer: ReturnType<typeof setTimeout>;
+} | null = null;
+let battleSkillSuppressClick = false;
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let energyRegenTimer: ReturnType<typeof setInterval> | null = null;
 let wishCooldownTimer: ReturnType<typeof setInterval> | null = null;
@@ -4415,6 +4427,9 @@ function skipBattleToResult(): void {
   stoneResultSheetResolve = null;
   stonePickHelpOpen = false;
   stonePickPlaceCued = false;
+  battleSkillInfo = null;
+  clearBattleSkillLongPress();
+  battleSkillSuppressClick = false;
   if (!battle.finishReason) {
     resolveBattleAuto(battle, 600);
     if (!battle.finishReason) {
@@ -4516,6 +4531,9 @@ function startBattle(stage: StageDef): void {
   stoneResultSheetResolve = null;
   stonePickHelpOpen = false;
   stonePickPlaceCued = false;
+  battleSkillInfo = null;
+  clearBattleSkillLongPress();
+  battleSkillSuppressClick = false;
   battleFxBusy = false;
   battleSkipSeq += 1;
   armBattleSkipTimer();
@@ -8050,7 +8068,7 @@ function renderSkillButtons(active: Unit | null, awaitSkill: boolean): string {
       monId != null && sk
         ? monsterSkillArtImg(monId, i, sk, "skill-btn-ico", 40)
         : skillArtImg(sk?.vfxId, "skill-btn-ico", 40);
-    return `<button type="button" class="skill-btn${state}${selected}" data-skill="${i}" ${disabled ? "disabled" : ""}>
+    return `<button type="button" class="skill-btn${state}${selected}${disabled ? " is-disabled" : ""}" data-skill="${i}"${disabled ? ' aria-disabled="true"' : ""}>
       ${ico}
       <span class="skill-btn-label">${label}</span>
       ${cd > 0 ? `<span class="skill-btn-cd">${cd}</span>` : ""}
@@ -8072,7 +8090,7 @@ function renderSummonerSkillButtons(
       const selected =
         selectedSummonerSkill === sk.id ? " is-selected" : "";
       const state = ready ? " ready" : "";
-      return `<button type="button" class="summoner-sk skill-btn mag-${escapeHtml(sk.id)}${state}${selected}" data-summoner-skill="${escapeHtml(sk.id)}" ${ready ? "" : "disabled"}>
+      return `<button type="button" class="summoner-sk skill-btn mag-${escapeHtml(sk.id)}${state}${selected}${ready ? "" : " is-disabled"}" data-summoner-skill="${escapeHtml(sk.id)}"${ready ? "" : ' aria-disabled="true"'}>
         ${summonerSkillArtImg(sk.id, "skill-btn-ico", 40)}
         <span class="skill-btn-label">${escapeHtml(sk.nameKo)}</span>
       </button>`;
@@ -8091,6 +8109,254 @@ function renderActiveUnitSkills(u: Unit): string {
       : renderSkillButtons(u, true);
   if (!body) return "";
   return `<div class="battle-unit-skills" role="toolbar" aria-label="${escapeHtml(t("ui.battleUnitSkills"))}">${body}</div>`;
+}
+
+function skillBtnIsBlocked(btn: HTMLButtonElement): boolean {
+  return (
+    btn.disabled ||
+    btn.getAttribute("aria-disabled") === "true" ||
+    btn.classList.contains("is-disabled")
+  );
+}
+
+function clearBattleSkillLongPress(): void {
+  if (!battleSkillLongPress) return;
+  clearTimeout(battleSkillLongPress.timer);
+  battleSkillLongPress = null;
+}
+
+function battleSkillInfoBodyHtml(target: BattleSkillInfoTarget): string {
+  if (!battle) return "";
+  const active = battle.activeUnitId
+    ? battle.getUnit(battle.activeUnitId)
+    : null;
+  if (!active) return "";
+
+  if (target.kind === "monster") {
+    const sk = active.skills?.[target.skillIndex];
+    if (!sk) return "";
+    const monId = active.kind === "monster" ? active.monsterId : null;
+    const ico =
+      monId != null
+        ? monsterSkillArtImg(monId, target.skillIndex, sk, "battle-skill-info-img", 56)
+        : skillArtImg(sk.vfxId, "battle-skill-info-img", 56);
+    const flavor = sk.descKo?.trim() ? sk.descKo.trim() : "";
+    const lines = monsterSkillDescLines(sk);
+    const lineHtml = lines
+      .map((line) => `<li>${escapeHtml(line)}</li>`)
+      .join("");
+    return `<div class="battle-skill-info-hero">
+      ${ico}
+      <div class="battle-skill-info-copy">
+        <strong>${escapeHtml(sk.nameKo)}</strong>
+        ${flavor ? `<p class="battle-skill-info-flavor">${escapeHtml(flavor)}</p>` : ""}
+      </div>
+    </div>
+    <ul class="building-info-list battle-skill-info-list">${lineHtml}</ul>`;
+  }
+
+  const magics = battle.summonerOf(active.team).magicSkills ?? [];
+  const sk = magics.find((s) => s.id === target.skillId);
+  if (!sk) return "";
+  const el =
+    battle.summonerOf(active.team).summonerElement ??
+    save.activeSummoner ??
+    "light";
+  const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
+  const rank = magicRank(prog, sk.id);
+  const lines = magicSkillDescLines(sk, rank);
+  return `<div class="battle-skill-info-hero">
+    ${summonerSkillArtImg(sk.id, "battle-skill-info-img", 56)}
+    <div class="battle-skill-info-copy">
+      <strong>${escapeHtml(sk.nameKo)}</strong>
+      <small>${escapeHtml(t("ui.magicRankLabel", { rank, max: MAX_MAGIC_RANK }))}</small>
+    </div>
+  </div>
+  <ul class="building-info-list battle-skill-info-list">${lines
+    .map((line) => `<li>${escapeHtml(line)}</li>`)
+    .join("")}</ul>`;
+}
+
+function renderBattleSkillInfoLayer(): string {
+  const open = !!battleSkillInfo;
+  const body = battleSkillInfo ? battleSkillInfoBodyHtml(battleSkillInfo) : "";
+  const title = escapeHtml(t("ui.skillDetail"));
+  return `<div class="settings-layer battle-skill-info-layer" id="battle-skill-info-layer"${open ? "" : " hidden"} aria-hidden="${open ? "false" : "true"}">
+    <button type="button" class="settings-backdrop" id="btn-battle-skill-info-backdrop" aria-label="${escapeHtml(t("ui.stagePrepInfoClose"))}"></button>
+    <div class="settings-sheet battle-skill-info-sheet" role="dialog" aria-modal="true" aria-labelledby="battle-skill-info-title">
+      <div class="settings-sheet-handle" aria-hidden="true"></div>
+      ${modalCloseX(t("ui.stagePrepInfoClose"), "btn-battle-skill-info-close")}
+      <h2 class="settings-title" id="battle-skill-info-title">${title}</h2>
+      <div class="building-info-body battle-skill-info-body" id="battle-skill-info-body">${body}</div>
+      <button type="button" class="primary battle-skill-info-ok" id="btn-battle-skill-info-ok">${escapeHtml(t("ui.stagePrepInfoClose"))}</button>
+    </div>
+  </div>`;
+}
+
+function findBattleSkillInfoLayer(): HTMLElement | null {
+  return app.querySelector<HTMLElement>("#battle-skill-info-layer");
+}
+
+function bindBattleSkillInfo(layer: HTMLElement | null = findBattleSkillInfoLayer()): void {
+  if (!layer || layer.dataset.bound === "1") return;
+  layer.dataset.bound = "1";
+  const close = () => closeBattleSkillInfoSoft();
+  layer.querySelector("#btn-battle-skill-info-ok")?.addEventListener("click", close);
+  layer
+    .querySelector("#btn-battle-skill-info-backdrop")
+    ?.addEventListener("click", close);
+  layer.querySelector("#btn-battle-skill-info-close")?.addEventListener("click", close);
+}
+
+function ensureBattleSkillInfoLayer(): HTMLElement | null {
+  let layer = findBattleSkillInfoLayer();
+  if (layer) return layer;
+  app.insertAdjacentHTML("beforeend", renderBattleSkillInfoLayer());
+  layer = findBattleSkillInfoLayer();
+  bindBattleSkillInfo(layer);
+  return layer;
+}
+
+function applyBattleSkillInfoOpen(): void {
+  const layer = battleSkillInfo
+    ? ensureBattleSkillInfoLayer()
+    : findBattleSkillInfoLayer();
+  if (!layer) return;
+  const open = !!battleSkillInfo;
+  layer.hidden = !open;
+  layer.setAttribute("aria-hidden", open ? "false" : "true");
+  if (!open) {
+    rememberOverlayClose("battle-skill-info-layer");
+    return;
+  }
+  const body = layer.querySelector("#battle-skill-info-body");
+  if (body) body.innerHTML = battleSkillInfoBodyHtml(battleSkillInfo!);
+  promoteOverlayToAppRoot(layer);
+  replayModalPop(layer);
+  rememberOverlayOpen("battle-skill-info-layer");
+}
+
+function openBattleSkillInfoSoft(target: BattleSkillInfoTarget): void {
+  battleSkillInfo = target;
+  applyBattleSkillInfoOpen();
+}
+
+function closeBattleSkillInfoSoft(): void {
+  if (!battleSkillInfo) return;
+  battleSkillInfo = null;
+  applyBattleSkillInfoOpen();
+}
+
+function battleSkillInfoTargetFromBtn(
+  btn: HTMLElement,
+): BattleSkillInfoTarget | null {
+  if (btn.dataset.skill != null) {
+    const idx = Number(btn.dataset.skill);
+    if (!Number.isFinite(idx)) return null;
+    return { kind: "monster", skillIndex: idx };
+  }
+  const id = btn.dataset.summonerSkill;
+  if (id) return { kind: "summoner", skillId: id };
+  return null;
+}
+
+/** 1s hold on battle skill icons → description sheet; blocks copy/context menus. */
+function bindBattleSkillInspect(): void {
+  const roots = app.querySelectorAll<HTMLElement>(
+    ".battle-unit-skills, .battle-hud",
+  );
+  roots.forEach((root) => {
+    if (root.dataset.battleSkillLpBound === "1") return;
+    root.dataset.battleSkillLpBound = "1";
+
+    const skillBtnFromEvent = (ev: Event): HTMLButtonElement | null => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return null;
+      return t.closest<HTMLButtonElement>(
+        "button.skill-btn[data-skill], button.skill-btn[data-summoner-skill], button.summoner-sk[data-summoner-skill]",
+      );
+    };
+
+    root.addEventListener(
+      "contextmenu",
+      (ev) => {
+        if (!skillBtnFromEvent(ev)) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+      },
+      true,
+    );
+
+    root.addEventListener(
+      "selectstart",
+      (ev) => {
+        if (!skillBtnFromEvent(ev)) return;
+        ev.preventDefault();
+      },
+      true,
+    );
+
+    root.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0) return;
+      const btn = skillBtnFromEvent(ev);
+      if (!btn || !root.contains(btn)) return;
+      clearBattleSkillLongPress();
+      const target = battleSkillInfoTargetFromBtn(btn);
+      if (!target) return;
+      battleSkillLongPress = {
+        pointerId: ev.pointerId,
+        startX: ev.clientX,
+        startY: ev.clientY,
+        timer: setTimeout(() => {
+          if (!battleSkillLongPress) return;
+          battleSkillLongPress = null;
+          battleSkillSuppressClick = true;
+          try {
+            navigator.vibrate?.(18);
+          } catch {
+            /* ignore */
+          }
+          openBattleSkillInfoSoft(target);
+        }, 1000),
+      };
+    });
+
+    root.addEventListener("pointermove", (ev) => {
+      if (!battleSkillLongPress || battleSkillLongPress.pointerId !== ev.pointerId) {
+        return;
+      }
+      if (
+        Math.hypot(
+          ev.clientX - battleSkillLongPress.startX,
+          ev.clientY - battleSkillLongPress.startY,
+        ) > 12
+      ) {
+        clearBattleSkillLongPress();
+      }
+    });
+
+    const end = (ev: PointerEvent) => {
+      if (battleSkillLongPress && battleSkillLongPress.pointerId === ev.pointerId) {
+        clearBattleSkillLongPress();
+      }
+    };
+    root.addEventListener("pointerup", end);
+    root.addEventListener("pointercancel", end);
+
+    root.addEventListener(
+      "click",
+      (ev) => {
+        if (!battleSkillSuppressClick) return;
+        const btn = skillBtnFromEvent(ev);
+        if (!btn) return;
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        battleSkillSuppressClick = false;
+      },
+      true,
+    );
+  });
+  bindBattleSkillInfo();
 }
 
 function renderUnit(
@@ -9602,7 +9868,7 @@ function applyResMoreOpen(): void {
 /** Replay centered modal pop animation when a layer becomes visible. */
 function replayModalPop(layer: HTMLElement | null): void {
   const sheet = layer?.querySelector<HTMLElement>(
-    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .feature-unlock-sheet, .attendance-sheet, .summoner-info-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .stone-result-sheet, .stone-pick-help-sheet, .growth-result-sheet, .growth-rite-play, .glory-up-play",
+    ".settings-sheet, .mission-sheet, .mission-reward-sheet, .community-sheet, .shop-sheet, .stages-region-sheet, .stage-entry-modal, .skill-feed-sheet, .power-up-sheet, .building-info-sheet, .feature-unlock-sheet, .attendance-sheet, .summoner-info-sheet, .bldg-up-sheet, .dojo-insc-up-sheet, .sym-detail-compare, .sym-detail-sheet, .sym-bag-expand-sheet, .codex-sheet, .forge-reveal, .gear-detail-compare, .gear-detail-sheet, .gear-sell-confirm-sheet, .sys-confirm-sheet, .sum-magic-detail-sheet, .battle-auto-settings-card, .stone-result-sheet, .stone-pick-help-sheet, .battle-skill-info-sheet, .growth-result-sheet, .growth-rite-play, .glory-up-play",
   );
   if (!sheet) return;
   sheet.style.animation = "none";
@@ -9711,6 +9977,7 @@ const APP_ROOT_OVERLAY_IDS = [
   "sys-confirm-layer",
   "stone-result-sheet-layer",
   "stone-pick-help-layer",
+  "battle-skill-info-layer",
   GROWTH_REVEAL_LAYER_ID,
   WISH_REVEAL_LAYER_ID,
 ] as const;
@@ -23584,6 +23851,10 @@ function leaveBattleOrResultScreen(): void {
   stonePickHelpOpen = false;
   stonePickPlaceCued = false;
   findStonePickHelpLayer()?.remove();
+  battleSkillInfo = null;
+  clearBattleSkillLongPress();
+  battleSkillSuppressClick = false;
+  findBattleSkillInfoLayer()?.remove();
   clearAutoTimer();
   clearBattleSkipTimer();
   battleSkipTimeReady = false;
@@ -23659,6 +23930,7 @@ function bindBattleInteractive(): void {
 
   bindStonePickTaps();
   bindStonePickChrome();
+  bindBattleSkillInspect();
   syncActiveUnitSkillPosition();
 
   app.querySelectorAll<HTMLButtonElement>(".suggest-chip").forEach((btn) => {
@@ -23702,12 +23974,17 @@ function bindBattleInteractive(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-skill]").forEach((btn) => {
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
+      if (battleSkillSuppressClick) {
+        battleSkillSuppressClick = false;
+        ev.preventDefault();
+        return;
+      }
       if (
         !battle ||
         battle.phase !== "await_skill" ||
         (autoMode && battleAutoLive.combat) ||
         battleFxBusy ||
-        btn.disabled
+        skillBtnIsBlocked(btn)
       )
         return;
       const idx = Number(btn.dataset.skill);
@@ -23727,11 +24004,17 @@ function bindBattleInteractive(): void {
     .forEach((btn) => {
       btn.addEventListener("click", (ev) => {
         ev.stopPropagation();
+        if (battleSkillSuppressClick) {
+          battleSkillSuppressClick = false;
+          ev.preventDefault();
+          return;
+        }
         if (
           !battle ||
           battle.phase !== "await_skill" ||
           (autoMode && battleAutoLive.combat) ||
-          battleFxBusy
+          battleFxBusy ||
+          skillBtnIsBlocked(btn)
         )
           return;
         const id = btn.dataset.summonerSkill;
@@ -24585,6 +24868,8 @@ function isOverlayIdOpen(id: string): boolean {
       return stoneResultSheetOpen;
     case "stone-pick-help-layer":
       return stonePickHelpOpen;
+    case "battle-skill-info-layer":
+      return !!battleSkillInfo;
     case "stages-region":
       return view === "stages" && !!stagesRegion && !stageEntryId;
     case "stage-prep":
@@ -24704,6 +24989,11 @@ function closeOverlayById(id: string): boolean {
   if (id === "stone-pick-help-layer") {
     if (!stonePickHelpOpen) return false;
     closeStonePickHelpSoft();
+    return true;
+  }
+  if (id === "battle-skill-info-layer") {
+    if (!battleSkillInfo) return false;
+    closeBattleSkillInfoSoft();
     return true;
   }
   if (id === "stage-prep") {
@@ -26063,6 +26353,7 @@ function bind(): void {
 
   bindStonePickTaps();
   bindStonePickChrome();
+  bindBattleSkillInspect();
 
   app.querySelectorAll<HTMLButtonElement>(".suggest-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -26108,12 +26399,17 @@ function bind(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-skill]").forEach((btn) => {
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
+      if (battleSkillSuppressClick) {
+        battleSkillSuppressClick = false;
+        ev.preventDefault();
+        return;
+      }
       if (
         !battle ||
         battle.phase !== "await_skill" ||
         (autoMode && battleAutoLive.combat) ||
         battleFxBusy ||
-        btn.disabled
+        skillBtnIsBlocked(btn)
       )
         return;
       const idx = Number(btn.dataset.skill);
@@ -26133,11 +26429,17 @@ function bind(): void {
     .forEach((btn) => {
       btn.addEventListener("click", (ev) => {
         ev.stopPropagation();
+        if (battleSkillSuppressClick) {
+          battleSkillSuppressClick = false;
+          ev.preventDefault();
+          return;
+        }
         if (
           !battle ||
           battle.phase !== "await_skill" ||
           (autoMode && battleAutoLive.combat) ||
-          battleFxBusy
+          battleFxBusy ||
+          skillBtnIsBlocked(btn)
         )
           return;
         const id = btn.dataset.summonerSkill;
