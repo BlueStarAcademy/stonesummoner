@@ -977,14 +977,8 @@ export class Battle {
     const gains = gainsForBoardEvent(kind, result.capturedCount, manaMul);
 
     if (kind === "safe_place") {
+      // Plain placements grant mana only — no combat buff auras.
       this.log.push(`일반 소환: 마력 +${Math.round(gains.mana)}`);
-      this.applyBoardAuraToTeam(unit.team, {
-        atk: 0.1,
-        spd: 0.08,
-        turns: 3,
-      });
-      chips.push({ kind: "atk", n: 10 });
-      chips.push({ kind: "spd", n: 8 });
     }
 
     let ampDelta = gains.amplifyDelta;
@@ -1096,24 +1090,12 @@ export class Battle {
 
     const sm = this.summonerOf(unit.team);
     if (gains.captureDamageBonus > 0) {
+      // One capture payoff only: next monster hit damage (no stacked atk/crit auras).
       this.pendingCaptureDamageBonus[unit.team] = gains.captureDamageBonus;
-      const auraAtk = Math.min(0.4, gains.captureDamageBonus * 0.85);
-      this.applyBoardAuraToTeam(unit.team, {
-        atk: auraAtk,
-        critRate: Math.min(0.2, gains.captureDamageBonus * 0.35),
-        turns: 3,
-      });
       chips.push({
         kind: "capture",
         n: Math.round(gains.captureDamageBonus * 100),
       });
-      chips.push({ kind: "atk", n: Math.round(auraAtk * 100) });
-      if (Math.min(0.2, gains.captureDamageBonus * 0.35) >= 0.05) {
-        chips.push({
-          kind: "crit",
-          n: Math.round(Math.min(0.2, gains.captureDamageBonus * 0.35) * 100),
-        });
-      }
       this.log.push(
         `따냄 버프: 다음 소환수 피해 +${Math.round(gains.captureDamageBonus * 100)}%`,
       );
@@ -1157,7 +1139,7 @@ export class Battle {
           chips.push({ kind: "shape", id: sh.id });
           this.log.push(`형상 ${sh.labelKo}`);
         }
-        this.applyShapeBoardAura(unit.team, sh.id);
+        // Shape amplify/mana/shield only — no stacked combat stat auras on place.
         if (sh.id === "axis") {
           unit.cutImmune = Math.max(unit.cutImmune ?? 0, 1);
           this.log.push(`형상 축 연결: 절단 면역 1회`);
@@ -1252,10 +1234,8 @@ export class Battle {
     const showResultSheet =
       !!picked ||
       claimedVictory ||
-      kind === "capture_large" ||
-      (this.modules.moduleD &&
-        result.capturedCount >= CAPTURE_SHOP_THRESHOLD &&
-        unit.team === "ally");
+      result.capturedCount > 0 ||
+      chips.some((c) => c.kind === "shape" || c.kind === "shield");
     this.lastStoneReport = {
       team: unit.team,
       x: point.x,

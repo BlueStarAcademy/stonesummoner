@@ -6674,31 +6674,70 @@ function stoneResultSheetPickHtml(report: StoneReport): string {
     const src = battleBoardMarkSrc(token.id);
     const svg = battleBoardMarkFallbackSrc(token.id);
     const label = boardTokenLabel(token.id);
-    return `<div class="stone-result-sheet-pick">
-      <img class="stone-result-sheet-mark" src="${src}" data-svg="${svg}" width="48" height="48" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" />
-      <strong>${escapeHtml(label)}</strong>
+    return `<div class="stone-result-sheet-hero">
+      <img class="stone-result-sheet-mark" src="${src}" data-svg="${svg}" width="72" height="72" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" />
+      <strong class="stone-result-sheet-name">${escapeHtml(label)}</strong>
     </div>`;
   }
   if (report.chips.some((c) => c.kind === "victory")) {
     const src = battleBoardMarkSrc("victory");
     const svg = battleBoardMarkFallbackSrc("victory");
-    return `<div class="stone-result-sheet-pick">
-      <img class="stone-result-sheet-mark" src="${src}" data-svg="${svg}" width="48" height="48" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" />
-      <strong>${escapeHtml(t("ui.boardMarkVictory"))}</strong>
+    return `<div class="stone-result-sheet-hero">
+      <img class="stone-result-sheet-mark" src="${src}" data-svg="${svg}" width="72" height="72" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" />
+      <strong class="stone-result-sheet-name">${escapeHtml(t("ui.boardMarkVictory"))}</strong>
     </div>`;
   }
-  if (report.capturedCount >= 3) {
-    return `<div class="stone-result-sheet-pick stone-result-sheet-pick--capture">
-      <strong>${escapeHtml(t("ui.stoneCapture", { n: report.chips.find((c) => c.kind === "capture")?.n ?? 0 }))}</strong>
+  if (report.capturedCount > 0) {
+    const n = report.chips.find((c) => c.kind === "capture")?.n ?? 0;
+    return `<div class="stone-result-sheet-hero stone-result-sheet-hero--capture">
+      <span class="stone-result-sheet-cap-num" aria-hidden="true">${report.capturedCount}</span>
+      <strong class="stone-result-sheet-name">${escapeHtml(t("ui.stoneCapture", { n }))}</strong>
+    </div>`;
+  }
+  const shape = report.chips.find((c) => c.kind === "shape" && c.id);
+  if (shape?.id) {
+    return `<div class="stone-result-sheet-hero stone-result-sheet-hero--shape">
+      <strong class="stone-result-sheet-name">${escapeHtml(shapeBonusLabel(shape.id))}</strong>
     </div>`;
   }
   return "";
 }
 
+/** One primary payoff row for the confirm sheet (token effect / capture / shield). */
+function stoneResultSheetPrimaryChip(report: StoneReport): StoneReportChip | null {
+  const prefer = [
+    "heal",
+    "shield",
+    "dmg",
+    "seal",
+    "crit",
+    "atk",
+    "spd",
+    "def",
+    "capture",
+    "victory",
+    "gold",
+    "crystal",
+    "mana",
+  ] as const;
+  for (const kind of prefer) {
+    const hit = report.chips.find((c) => c.kind === kind);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 function stoneResultSheetFxHtml(report: StoneReport): string {
-  const fx = report.chips.filter((c) => c.kind !== "token");
-  if (!fx.length) return "";
-  return `<div class="stone-result-sheet-fx">${fx.map(stoneResultChipHtml).join("")}</div>`;
+  const primary = stoneResultSheetPrimaryChip(report);
+  if (!primary) return "";
+  // Hero already carries capture / victory label — avoid a duplicate chip.
+  if (primary.kind === "capture" && report.capturedCount > 0) return "";
+  if (primary.kind === "victory") {
+    const mana = report.chips.find((c) => c.kind === "mana");
+    if (!mana) return "";
+    return `<div class="stone-result-sheet-fx">${stoneResultChipHtml(mana)}</div>`;
+  }
+  return `<div class="stone-result-sheet-fx">${stoneResultChipHtml(primary)}</div>`;
 }
 
 function renderStoneResultSheetLayer(): string {
@@ -6733,7 +6772,7 @@ function applyStoneResultSheetOpen(): void {
   }
   const report = stoneResultSheetReport!;
   const pickHtml = stoneResultSheetPickHtml(report);
-  const existingPick = layer.querySelector(".stone-result-sheet-pick");
+  const existingPick = layer.querySelector(".stone-result-sheet-hero");
   if (existingPick) {
     if (pickHtml) existingPick.outerHTML = pickHtml;
     else existingPick.remove();
@@ -6742,12 +6781,15 @@ function applyStoneResultSheetOpen(): void {
       .querySelector(".stone-result-sheet-title")
       ?.insertAdjacentHTML("afterend", pickHtml);
   }
-  const fx = layer.querySelector(".stone-result-sheet-fx");
-  if (fx) fx.innerHTML = stoneResultSheetFxHtml(report);
-  else if (stoneResultSheetFxHtml(report)) {
+  const fxHost = layer.querySelector(".stone-result-sheet-fx");
+  const fxHtml = stoneResultSheetFxHtml(report);
+  if (fxHost) {
+    if (fxHtml) fxHost.outerHTML = fxHtml;
+    else fxHost.remove();
+  } else if (fxHtml) {
     layer
       .querySelector(".stone-result-sheet-ok")
-      ?.insertAdjacentHTML("beforebegin", stoneResultSheetFxHtml(report));
+      ?.insertAdjacentHTML("beforebegin", fxHtml);
   }
   promoteOverlayToAppRoot(layer);
   replayModalPop(layer);
@@ -6914,10 +6956,15 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     const appearMs = arenaStoneAppearMs("ally", kind);
     pulseArenaStonePlace("ally", report, appearMs);
     const shapeMs = pulseShapeBonusesAfterStone(x, y, "black");
-    await waitFx(Math.max(appearMs, shapeMs));
     stoneSummonFx = null;
     app.querySelector(".battle-layout")?.classList.remove("is-stone-summoning");
-    await presentStoneOutcome(battle.lastStoneReport);
+    // Manual: show the confirm sheet immediately after the stone lands.
+    if (report?.showResultSheet && !autoMode) {
+      await presentStoneOutcome(report);
+    } else {
+      await waitFx(Math.max(appearMs, shapeMs));
+      await presentStoneOutcome(report);
+    }
     await resolveCombatUntilAllyInput({ holdBusy: true });
     cueOnboardFirstSkills();
   } finally {

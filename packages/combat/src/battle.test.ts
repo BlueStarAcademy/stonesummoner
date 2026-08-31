@@ -212,7 +212,7 @@ describe("Battle flow", () => {
     assert.equal(b.lastStoneReport?.team, "enemy");
   });
 
-  it("safe place grants mana and team combat aura chips", () => {
+  it("safe place grants mana without combat buff chips", () => {
     const b = new Battle({
       boardSize: 5,
       units: roster(),
@@ -229,8 +229,12 @@ describe("Battle flow", () => {
     assert.match(b.log.join("\n"), /일반 소환: 마력/);
     const kinds = (b.lastStoneReport?.chips ?? []).map((c) => c.kind);
     assert.ok(kinds.includes("mana"));
-    assert.ok(kinds.includes("atk"));
-    assert.ok(kinds.includes("spd"));
+    assert.equal(kinds.includes("atk"), false);
+    assert.equal(kinds.includes("spd"), false);
+    assert.equal(b.lastStoneReport?.showResultSheet, false);
+    const mon = b.getUnit("a-m1")!;
+    assert.equal(mon.atkBuffPct ?? 0, 0);
+    assert.equal(mon.spdBuffPct ?? 0, 0);
     b.useSkill();
     for (const u of b.units) u.atb = 0;
     b.getUnit("a-sum")!.atb = 100;
@@ -1066,6 +1070,15 @@ describe("Battle flow", () => {
     assert.equal(b3.pendingCaptureDamageBonus.ally, 0.18);
     assert.ok(b3.allySummoner.mana >= m0 + 20); // 20% of 100
     assert.equal(b3.skillAmplifyBonus, 0);
+    assert.equal(b3.lastStoneReport?.showResultSheet, true);
+    const captureChips = (b3.lastStoneReport?.chips ?? []).filter(
+      (c) => c.kind === "atk" || c.kind === "spd" || c.kind === "crit" || c.kind === "capture",
+    );
+    assert.equal(captureChips.length, 1);
+    assert.equal(captureChips[0]?.kind, "capture");
+    const monAfterCap = b3.getUnit("a-m1")!;
+    assert.equal(monAfterCap.atkBuffPct ?? 0, 0);
+    assert.equal(monAfterCap.critRateBuff ?? 0, 0);
     const hp0 = b3.getUnit("e-m1")!.hp;
     const hits = b3.useSkill({ targetId: "e-m1" });
     assert.ok(hits[0]!.damage > 0);

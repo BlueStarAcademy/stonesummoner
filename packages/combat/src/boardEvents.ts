@@ -50,7 +50,7 @@ export function gainsForBoardEvent(
   const n = Math.max(0, capturedCount);
   if (kind === "capture_large" || kind === "capture_small" || n >= 1) {
     return {
-      // Mild persistent Amp — main payoff is N×damage + mana + team aura.
+      // Mild persistent Amp — main payoff is N× next-hit damage + mana.
       amplifyDelta: n >= 3 ? 0.06 : 0.04,
       skillAmplifyBonus: 0,
       mana: 0,
