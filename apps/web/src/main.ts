@@ -3633,14 +3633,6 @@ function enqueueOnboardStepUnlock(step: OnboardStep): void {
         titleKey: "ui.featureUnlock.buildingTitle",
       });
       break;
-    case "stages":
-      tryEnqueueGuideUnlock({
-        id: hubUnlockEventId("stages"),
-        kind: "hub",
-        iconSrc: hubUnlockIcon("stages"),
-        titleKey: "ui.featureUnlock.hubTitle",
-      });
-      break;
     case "summon":
       tryEnqueueGuideUnlock({
         id: "guide:summon_hearth",
