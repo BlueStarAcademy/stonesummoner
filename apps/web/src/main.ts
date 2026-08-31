@@ -6984,13 +6984,65 @@ async function presentStoneResultSheet(report: StoneReport): Promise<void> {
   });
 }
 
+function stoneBuffChipLabel(chip: StoneReportChip): string | null {
+  if (chip.kind === "atk") return t("ui.stoneBuffAtk", { n: chip.n ?? 0 });
+  if (chip.kind === "def") return t("ui.stoneBuffDef", { n: chip.n ?? 0 });
+  if (chip.kind === "spd") return t("ui.stoneBuffSpd", { n: chip.n ?? 0 });
+  if (chip.kind === "crit") return t("ui.stoneBuffCrit", { n: chip.n ?? 0 });
+  if (chip.kind === "shield") return t("ui.stoneShield", { n: chip.n ?? 0 });
+  if (chip.kind === "capture") return t("ui.stoneCapture", { n: chip.n ?? 0 });
+  return null;
+}
+
+function stoneBuffUntilLine(report: StoneReport): string | null {
+  const parts = report.chips
+    .map(stoneBuffChipLabel)
+    .filter((s): s is string => !!s);
+  if (!parts.length) return null;
+  return t("ui.stoneBuffUntilNext", { buff: parts.join(` ${MIDDOT} `) });
+}
+
+/** Center rising line for stone buffs (not a toast). */
+function spawnStoneBuffUntilFloat(report: StoneReport | null | undefined): number {
+  const line = report ? stoneBuffUntilLine(report) : null;
+  if (!line) return 0;
+  const host =
+    app.querySelector<HTMLElement>(".battle-layout") ??
+    app.querySelector<HTMLElement>(".battle-screen");
+  if (!host) return 0;
+  host.querySelectorAll(".stone-buff-float").forEach((el) => el.remove());
+  const el = document.createElement("div");
+  el.className = `stone-buff-float${report!.team === "enemy" ? " is-enemy" : ""}`;
+  el.setAttribute("aria-live", "polite");
+  el.textContent = line;
+  host.appendChild(el);
+  const ms = fxDurationMs(2000, battleSpeed);
+  el.style.setProperty("--stone-buff-ms", `${ms}ms`);
+  window.setTimeout(() => el.remove(), ms);
+  return ms;
+}
+
 async function presentStoneOutcome(report: StoneReport | null): Promise<void> {
   if (!report) return;
+  const buffMs = spawnStoneBuffUntilFloat(report);
   if (report.showResultSheet) {
     await presentStoneResultSheet(report);
     return;
   }
-  await presentStoneResult(report);
+  const chips = stoneResultChipsForDisplay(report).filter(
+    (c) =>
+      c.kind !== "atk" &&
+      c.kind !== "def" &&
+      c.kind !== "spd" &&
+      c.kind !== "crit" &&
+      c.kind !== "shield" &&
+      c.kind !== "capture",
+  );
+  if (chips.length) {
+    await presentStoneResult({ ...report, chips });
+    return;
+  }
+  if (buffMs > 0) await waitFx(Math.min(buffMs, fxDurationMs(900, battleSpeed)));
 }
 
 /** Dismiss forge result + symbol detail when leaving the current monster context. */

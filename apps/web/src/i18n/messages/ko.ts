@@ -1324,6 +1324,7 @@ const messages: MessageDict = {
   "ui.stoneBuffDef": "+방어력 {n}%",
   "ui.stoneBuffSpd": "+속도 {n}%",
   "ui.stoneBuffCrit": "+치명타 {n}%",
+  "ui.stoneBuffUntilNext": "다음 마법석 소환전까지 {buff}",
   "ui.stoneCapture": "+피해 {n}%",
   "ui.stoneMana": "+{n}",
   "ui.stoneVictory": "+{n}",

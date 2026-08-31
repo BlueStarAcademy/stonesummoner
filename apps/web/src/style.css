@@ -8706,6 +8706,63 @@ main {
   pointer-events: none;
 }
 
+.stone-buff-float {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  z-index: 24;
+  transform: translate(-50%, -50%);
+  max-width: min(92vw, 380px);
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #c9a22788;
+  background: #140e28e8;
+  box-shadow: 0 8px 20px #000a, inset 0 1px 0 #ffffff22;
+  color: #f3e6b8;
+  font-size: 0.82rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  animation: stone-buff-float-rise var(--stone-buff-ms, 2s) ease-out forwards;
+}
+
+.stone-buff-float.is-enemy {
+  border-color: #c0707088;
+  color: #f0d0d0;
+}
+
+@keyframes stone-buff-float-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -40%);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -55%);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(-50%, -120%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -160%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stone-buff-float {
+    animation: none;
+    opacity: 1;
+    transform: translate(-50%, -80%);
+  }
+}
+
 .stone-result-layer[hidden] {
   display: none;
 }

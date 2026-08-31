@@ -1345,6 +1345,7 @@ export type MessageKey =
   | "ui.stoneBuffDef"
   | "ui.stoneBuffSpd"
   | "ui.stoneBuffCrit"
+  | "ui.stoneBuffUntilNext"
   | "ui.stoneCapture"
   | "ui.stoneMana"
   | "ui.stoneVictory"

@@ -5003,6 +5003,10 @@
     "ko": "+치명타 {n}%",
     "en": "+Crit {n}%"
   },
+  "ui.stoneBuffUntilNext": {
+    "ko": "다음 마법석 소환전까지 {buff}",
+    "en": "Until next magic stone: {buff}"
+  },
   "ui.stoneCapture": {
     "ko": "+피해 {n}%",
     "en": "+DMG {n}%"

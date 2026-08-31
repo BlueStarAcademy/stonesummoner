@@ -1324,6 +1324,7 @@ const messages: MessageDict = {
   "ui.stoneBuffDef": "+DEF {n}%",
   "ui.stoneBuffSpd": "+SPD {n}%",
   "ui.stoneBuffCrit": "+Crit {n}%",
+  "ui.stoneBuffUntilNext": "Until next magic stone: {buff}",
   "ui.stoneCapture": "+DMG {n}%",
   "ui.stoneMana": "+{n}",
   "ui.stoneVictory": "+{n}",
