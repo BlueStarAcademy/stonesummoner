@@ -6848,7 +6848,8 @@ async function presentStoneResultSheet(report: StoneReport): Promise<void> {
 
 async function presentStoneOutcome(report: StoneReport | null): Promise<void> {
   if (!report) return;
-  if (report.showResultSheet) {
+  // AUTO must never wait on the confirm sheet — use the brief chip FX instead.
+  if (report.showResultSheet && !autoMode) {
     await presentStoneResultSheet(report);
     return;
   }
@@ -7537,6 +7538,8 @@ function setBattleAutoMode(on: boolean): void {
   autoMode = on;
   if (on) {
     clearBattleSkillSelection();
+    // Dismiss a blocking stone-result sheet so AUTO can resume immediately.
+    if (stoneResultSheetOpen) closeStoneResultSheet();
     commitBattleAutoLive();
     scheduleAuto();
     return;
