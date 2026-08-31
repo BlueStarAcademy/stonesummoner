@@ -9840,11 +9840,25 @@ body > .battle-settings-layer.settings-layer {
   overflow: hidden;
   border: 1px solid #c9a22788;
   border-radius: 14px;
-  background: linear-gradient(160deg, #211a3680, #100d1b80);
+  /* Near-opaque panel — tabs stay readable; option rows must not wash out over battle art */
+  background: linear-gradient(160deg, #211a36f7, #100d1bf7);
   box-shadow: 0 12px 26px #000b, inset 0 1px 0 #ffffff1a;
   pointer-events: auto;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  color: #f0e6c8;
+}
+
+.battle-settings-panel {
+  display: block;
+  min-height: 44px;
+  background: #14101cf2;
+}
+
+/* Author display:block must not beat [hidden] / tab off-state */
+.battle-settings-panel[hidden],
+.battle-settings-panel.is-hidden {
+  display: none !important;
 }
 
 .battle-auto-settings.is-open .battle-auto-settings-card {
@@ -9902,10 +9916,6 @@ body > .battle-settings-layer.settings-layer {
   border-bottom-color: transparent;
 }
 
-.battle-settings-panel.is-hidden {
-  display: none !important;
-}
-
 .battle-auto-options {
   display: grid;
   gap: 1px;
@@ -9920,15 +9930,15 @@ body > .battle-settings-layer.settings-layer {
   padding: 4px 8px 4px 10px;
   border: 0;
   border-radius: 9px;
-  background: transparent;
-  color: #d8d1e8;
+  background: #1a1528cc;
+  color: #f0e6c8;
   font-size: 0.75rem;
   text-align: left;
 }
 
 .battle-auto-option:hover,
 .battle-auto-option:focus-visible {
-  background: #ffffff12;
+  background: #2a2440;
 }
 
 .battle-auto-option i {
