@@ -1,13 +1,13 @@
-import {
-  CHALLENGE_TOWER_FLOORS,
-  challengeTowerStageFloor,
-} from "stonesummoner-data";
+import { CHALLENGE_TOWER_FLOORS as TOWER_FLOORS } from "stonesummoner-data";
+import { challengeTowerStageFloor as stageFloorFromId } from "stonesummoner-data";
 import type { PlayerSave } from "./loop.js";
 
-export {
-  CHALLENGE_TOWER_FLOORS,
-  challengeTowerStageFloor,
-} from "stonesummoner-data";
+export const CHALLENGE_TOWER_FLOORS = TOWER_FLOORS;
+
+/** Floor number for a ToA stage id (`toa_f12` → 12), or null if not a tower stage. */
+export function challengeTowerStageFloor(stageId: string): number | null {
+  return stageFloorFromId(stageId);
+}
 
 /** Calendar month key (UTC), e.g. 2026-08. */
 export function monthKey(now = Date.now()): string {
