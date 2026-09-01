@@ -8,11 +8,32 @@ export {
   getMonsterFamilyArtKey,
   listMonsterFamilies,
   resolveMonsterId,
+  FAMILY_KIT_PROFILES,
+  familyKitProfile,
 } from "./monsters.js";
-export type { MonsterDef, Element, MonsterRole, FamilySeed } from "./monsters.js";
+export type {
+  BalanceArchetype,
+  CombatTag,
+  Element,
+  FamilyIdentity,
+  FamilyKitProfile,
+  FamilySeed,
+  FamilySkillProfile,
+  KitMechanic,
+  MonsterDef,
+  MonsterRole,
+} from "./monsters.js";
 export { SKILL_DMG_MUL, scenarioEnemyHpMul } from "./combatTune.js";
 export { basicStrike, dmg } from "./skills.js";
-export type { SkillDef, SkillEffect, StatModAxis, CcKind } from "./skills.js";
+export type {
+  AllyTarget,
+  CcKind,
+  DamageScalingSource,
+  EnemyTarget,
+  SkillDef,
+  SkillEffect,
+  StatModAxis,
+} from "./skills.js";
 export {
   describeSkillVfx,
   monsterSkillVfxId,

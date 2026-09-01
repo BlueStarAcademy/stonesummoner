@@ -1,5 +1,5 @@
 import type { SkillDef } from "../skills.js";
-import type { Element, MonsterRole } from "./types.js";
+import type { BalanceArchetype, Element } from "./types.js";
 
 export const EL_PREFIX: Record<Element, { s1: string; s2: string; s3: string }> = {
   fire: { s1: "화염", s2: "작열", s3: "폭염" },
@@ -85,7 +85,7 @@ type VfxHint = {
   orbBolt?: boolean;
 };
 
-function s2Desc(el: Element, role: MonsterRole): string {
+function s2Desc(el: Element, role: BalanceArchetype): string {
   const e = ESSENCE[el];
   switch (role) {
     case "attacker":
@@ -141,7 +141,7 @@ function s2Desc(el: Element, role: MonsterRole): string {
   }
 }
 
-function s3Desc(el: Element, role: MonsterRole): string {
+function s3Desc(el: Element, role: BalanceArchetype): string {
   const e = ESSENCE[el];
   switch (role) {
     case "attacker":
@@ -179,7 +179,7 @@ function s3Desc(el: Element, role: MonsterRole): string {
 export function familySkillDescKo(
   el: Element,
   slot: "s2" | "s3",
-  role: MonsterRole,
+  role: BalanceArchetype,
 ): string {
   return slot === "s2" ? s2Desc(el, role) : s3Desc(el, role);
 }
@@ -189,7 +189,7 @@ function atkMelee(el: Element): boolean {
 }
 
 export function familySkillVfx(
-  role: MonsterRole,
+  role: BalanceArchetype,
   slot: "s2" | "s3",
   el: Element,
 ): VfxHint {
