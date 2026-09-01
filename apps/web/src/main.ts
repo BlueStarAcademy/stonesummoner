@@ -4143,6 +4143,11 @@ async function prepareIslandAssets(): Promise<void> {
   };
   view = "auth";
   render();
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
   const [result] = await Promise.all([
     preloadIslandAssets(urls, updateIslandPreloadProgress, {
       concurrency: 6,
