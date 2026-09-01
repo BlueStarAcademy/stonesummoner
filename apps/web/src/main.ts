@@ -4148,12 +4148,13 @@ async function prepareIslandAssets(): Promise<void> {
       window.requestAnimationFrame(() => resolve());
     });
   });
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
   const [result] = await Promise.all([
     preloadIslandAssets(urls, updateIslandPreloadProgress, {
       concurrency: 6,
       timeoutMs: 10_000,
     }),
-    new Promise<void>((resolve) => window.setTimeout(resolve, 350)),
+    new Promise<void>((resolve) => window.setTimeout(resolve, 750)),
   ]);
   if (result.failed.length === 0) markIslandAssetPackPrepared();
   islandPreloadProgress = null;
