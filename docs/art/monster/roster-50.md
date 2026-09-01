@@ -67,3 +67,32 @@ id = artKey = `{familyId}_{element}` (English snake).
 ## 레거시 매핑
 
 구 Phase1 id → 동생급·동역할 신종 (세이브/시나리오).
+
+## Status-ailment showcase (25)
+| Stars | familyId | nameKo | role |
+| --- | --- | --- | --- |
+| 1 | ember_wisp | 불씨위습 | attacker |
+| 1 | toxin_mite | 독진드기 | debuffer |
+| 1 | ward_totem | 수호토템 | tank |
+| 1 | rime_dart | 서리침 | debuffer |
+| 1 | purify_finch | 정화핀치 | support |
+| 2 | blaze_hound | 작열사냥개 | attacker |
+| 2 | plague_toad | 역병두꺼비 | debuffer |
+| 2 | iron_ward | 철벽수호 | tank |
+| 2 | mute_owl | 침묵올빼미 | debuffer |
+| 2 | cleanse_monk | 정화승 | support |
+| 3 | spark_raptor | 불꽃랩터 | attacker |
+| 3 | fang_hydra | 독니히드라 | debuffer |
+| 3 | aegis_scarab | 아이기스갑충 | tank |
+| 3 | slumber_moth | 동면나방 | debuffer |
+| 3 | sanctum_dove | 성역비둘기 | support |
+| 4 | inferno_colossus | 지옥거상 | attacker |
+| 4 | venom_tyrant | 맹독군주 | debuffer |
+| 4 | glacier_bastion | 빙하요새 | tank |
+| 4 | hex_mute | 봉인저주 | debuffer |
+| 4 | purify_hierophant | 정화대제사장 | support |
+| 5 | flame_slaughter | 화염학살자 | attacker |
+| 5 | poison_overlord | 독군주 | debuffer |
+| 5 | absolute_frost | 절대빙결 | tank |
+| 5 | curse_catalyst | 저주촉매 | debuffer |
+| 5 | sanctuary_oracle | 성역예언자 | support |
