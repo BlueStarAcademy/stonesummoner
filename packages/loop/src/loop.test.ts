@@ -143,7 +143,11 @@ import {
   runClaimMainQuest,
 } from "./mainQuest.js";
 import { migrateSave, pickPreferredSave } from "./migrateSave.js";
-import { expForStage } from "./progress.js";
+import {
+  expForStage,
+  SCENARIO_DIFF_ENERGY_MUL,
+  SCENARIO_DIFF_ENEMY_LEVEL_BONUS,
+} from "./progress.js";
 import { FUSION_RECIPES, isFusionOnlyFamily } from "stonesummoner-data";
 
 describe("game loop", () => {
@@ -1480,8 +1484,8 @@ describe("game loop", () => {
   it("uses Summoners War account and monster EXP curves with difficulty scaling", () => {
     const stage = getStage("garen_1_1")!;
     assert.equal(expForStage(stage, "normal"), 68);
-    assert.equal(expForStage(stage, "hard"), Math.round(68 * 6.96));
-    assert.equal(expForStage(stage, "hell"), Math.round(68 * 14.61));
+    assert.equal(expForStage(stage, "hard"), Math.round(68 * 1.7));
+    assert.equal(expForStage(stage, "hell"), Math.round(68 * 3.5));
 
     const mon = {
       uid: "t1",
@@ -1516,6 +1520,25 @@ describe("game loop", () => {
     );
     assert.ok(hardClear.save.clearedHardStages.includes("garen_1_1"));
     assert.ok((hardClear.reward.summonerExp ?? 0) > (hardLocked.reward.summonerExp ?? 0));
+  });
+
+  it("scales scenario energy and enemy power like Summoners War Normal/Hard/Hell", () => {
+    const stage = getStage("garen_1_1")!;
+    assert.equal(SCENARIO_DIFF_ENERGY_MUL.hard, 4 / 3);
+    assert.equal(SCENARIO_DIFF_ENERGY_MUL.hell, 5 / 3);
+    assert.equal(SCENARIO_DIFF_ENEMY_LEVEL_BONUS.hard, 5);
+    assert.equal(SCENARIO_DIFF_ENEMY_LEVEL_BONUS.hell, 10);
+
+    const save = createNewSave(0);
+    const normal = createStageBattle(stage, save, { difficulty: "normal" });
+    const hard = createStageBattle(stage, save, { difficulty: "hard" });
+    const hell = createStageBattle(stage, save, { difficulty: "hell" });
+    const normalEnemy = normal.units.find((u) => u.team === "enemy" && u.kind === "monster")!;
+    const hardEnemy = hard.units.find((u) => u.team === "enemy" && u.kind === "monster")!;
+    const hellEnemy = hell.units.find((u) => u.team === "enemy" && u.kind === "monster")!;
+    assert.ok(hardEnemy.stats.hp > normalEnemy.stats.hp);
+    assert.ok(hellEnemy.stats.hp > hardEnemy.stats.hp);
+    assert.ok(hellEnemy.stats.atk > hardEnemy.stats.atk);
   });
 
   it("opens scenario hard only after every stage on the map is cleared on normal", () => {

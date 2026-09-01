@@ -192,6 +192,9 @@ import {
   isDifficultyOpen,
   isStageUnlocked,
   isStageUnlockedForDifficulty,
+  scenarioDiffEnemyLevelBonus,
+  scenarioDiffEnemyStatMul,
+  scenarioDiffEnergyMul,
   stageUnlockLabel,
   type ScenarioDifficulty,
 } from "./progress.js";
@@ -292,6 +295,14 @@ export {
   isStageUnlocked,
   isStageUnlockedForDifficulty,
   nextStageInProgression,
+  scenarioDiffEnemyLevelBonus,
+  scenarioDiffEnemyStatMul,
+  scenarioDiffEnergyMul,
+  scenarioDiffExpMul,
+  SCENARIO_DIFF_ENERGY_MUL,
+  SCENARIO_DIFF_ENEMY_LEVEL_BONUS,
+  SCENARIO_DIFF_ENEMY_STAT_MUL,
+  SCENARIO_DIFF_EXP_MUL,
   stageUnlockLabel,
 } from "./progress.js";
 export type { ScenarioDifficulty } from "./progress.js";
@@ -1794,6 +1805,17 @@ function scaleScenarioEnemyHp(unit: Unit, stage: StageDef): Unit {
   if (mul === 1) return unit;
   const hp = Math.max(1, Math.round(unit.stats.hp * mul));
   unit.stats = { ...unit.stats, hp };
+  unit.hp = hp;
+  if (unit.originalMaxHp != null) unit.originalMaxHp = hp;
+  return unit;
+}
+
+function applyScenarioDiffStatMul(unit: Unit, mul: number): Unit {
+  if (mul === 1) return unit;
+  const hp = Math.max(1, Math.round(unit.stats.hp * mul));
+  const atk = Math.max(1, Math.round(unit.stats.atk * mul));
+  const def = Math.max(1, Math.round(unit.stats.def * mul));
+  unit.stats = { ...unit.stats, hp, atk, def };
   unit.hp = hp;
   if (unit.originalMaxHp != null) unit.originalMaxHp = hp;
   return unit;
@@ -4771,8 +4793,9 @@ export function createStageBattle(
     enemyIds = filtered.length > 0 ? filtered : enemyIds.slice(0, 1);
   }
 
-  const diffBonus =
-    opts?.difficulty === "hell" ? 4 : opts?.difficulty === "hard" ? 2 : 0;
+  const difficulty = opts?.difficulty ?? "normal";
+  const diffBonus = scenarioDiffEnemyLevelBonus(difficulty);
+  const diffStatMul = scenarioDiffEnemyStatMul(difficulty);
   const enemyLevel = () =>
     1 + Math.floor(stage.stage / 2) + Math.floor(stage.map / 3) + diffBonus;
 
@@ -4781,8 +4804,11 @@ export function createStageBattle(
       ? enemyIds
       : stage.enemyWaves?.[wave - 1] ?? stage.enemyMonsterIds;
 
+  const scaleEnemy = (unit: Unit): Unit =>
+    applyScenarioDiffStatMul(unit, diffStatMul);
+
   const enemyMonsters = enemyIds.map((id, i) =>
-    stageEnemyUnit(id, stage, 1, i, enemyLevel()),
+    scaleEnemy(stageEnemyUnit(id, stage, 1, i, enemyLevel())),
   );
 
   const enemyUnits: Unit[] = [
@@ -4793,9 +4819,9 @@ export function createStageBattle(
       kind: "summoner",
       element: "dark",
       stats: {
-        hp: 4800 + diffBonus * 400,
-        atk: 145 + diffBonus * 14,
-        def: 210 + diffBonus * 20,
+        hp: Math.round((4800 + diffBonus * 400) * diffStatMul),
+        atk: Math.round((145 + diffBonus * 14) * diffStatMul),
+        def: Math.round((210 + diffBonus * 20) * diffStatMul),
         spd: 88,
         critRate: 12,
         critDmg: 50,
@@ -4881,12 +4907,14 @@ export function createStageBattle(
     rng: opts?.rng,
     spawnWave: (wave) =>
       enemyIdsForWave(wave).map((id, i) =>
-        stageEnemyUnit(
-          id,
-          stage,
-          wave,
-          i,
-          enemyLevel() + (wave - 1),
+        scaleEnemy(
+          stageEnemyUnit(
+            id,
+            stage,
+            wave,
+            i,
+            enemyLevel() + (wave - 1),
+          ),
         ),
       ),
   });
@@ -5676,10 +5704,7 @@ export function runSortie(
       : (opts?.difficulty ?? "normal");
   const energyCost =
     stage.mode === "scenario"
-      ? Math.ceil(
-          stage.energyCost *
-            (difficulty === "hell" ? 2 : difficulty === "hard" ? 1.5 : 1),
-        )
+      ? Math.ceil(stage.energyCost * scenarioDiffEnergyMul(difficulty))
       : stage.energyCost;
   const energy = Math.floor(working.island.energy);
   if (energyCost > 0 && energy < energyCost) {
