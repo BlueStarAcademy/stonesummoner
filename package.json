@@ -26,6 +26,7 @@
     "test:data": "npm test -w stonesummoner-data",
     "test:loop": "npm test -w stonesummoner-loop",
     "balance:simulate": "tsx scripts/simulate-balance.ts",
+    "skills:audit-diversity": "tsx scripts/audit-skill-diversity.ts",
     "i18n:gen": "node apps/web/scripts/gen-i18n-packs.mjs",
     "store:graphics": "node scripts/gen-play-store-graphics.mjs",
     "icons:export": "node scripts/export-app-icons.mjs",

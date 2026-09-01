@@ -1,7 +1,18 @@
-import type { FamilyRosterEntry } from "./types.js";
+import { familyKitProfile } from "./familyKitProfiles.js";
+import type {
+  BalanceArchetype,
+  CombatTag,
+  FamilyRosterEntry,
+} from "./types.js";
 
 /** Compact Phase 2 roster — 50 families. artKey per element = `{familyId}_{element}`. */
-export const FAMILY_ROSTER: readonly FamilyRosterEntry[] = [
+const LEGACY_FAMILY_ROSTER: readonly {
+  familyId: string;
+  nameKo: string;
+  naturalStars: number;
+  role: BalanceArchetype;
+  stonePassiveId: FamilyRosterEntry["stonePassiveId"];
+}[] = [
   // 1★
   { familyId: "stone_golem", nameKo: "돌골렘", naturalStars: 1, role: "tank", stonePassiveId: "high_amp_dr" },
   { familyId: "forest_sprite", nameKo: "숲요정", naturalStars: 1, role: "support", stonePassiveId: "shield_core_heal" },
@@ -58,3 +69,28 @@ export const FAMILY_ROSTER: readonly FamilyRosterEntry[] = [
   { familyId: "eternal_healer", nameKo: "영원의치유사", naturalStars: 5, role: "support", stonePassiveId: "shield_core_heal" },
   { familyId: "absolute_captor", nameKo: "절대포획자", naturalStars: 5, role: "capturer", stonePassiveId: "capture_mana" },
 ] as const;
+
+function inferredCombatTags(
+  balanceArchetype: BalanceArchetype,
+): readonly CombatTag[] {
+  const focus: CombatTag =
+    balanceArchetype === "attacker"
+      ? "damage"
+      : balanceArchetype === "support"
+        ? "healer"
+        : balanceArchetype === "tank"
+          ? "protector"
+          : balanceArchetype === "capturer"
+            ? "turn_cycle"
+            : "control";
+  return [balanceArchetype, focus];
+}
+
+export const FAMILY_ROSTER: readonly FamilyRosterEntry[] =
+  LEGACY_FAMILY_ROSTER.map(({ role: balanceArchetype, ...entry }) => ({
+    ...entry,
+    role: familyKitProfile(entry.familyId).role,
+    balanceArchetype,
+    familyIdentity: balanceArchetype,
+    combatTags: inferredCombatTags(balanceArchetype),
+  }));

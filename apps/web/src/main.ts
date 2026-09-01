@@ -44,6 +44,7 @@ import {
   type ArenaStoneFxKind,
 } from "./battle/fx";
 import { playSkillVfx, spawnCircleAbsorbVfx } from "./battle/skillVfx";
+import { monsterSkillDescLines } from "./battle/skillDescription";
 import { renderUnitStatusIcons } from "./battle/statusIcons";
 import { destroyAllSpine, mountBattleSpines, playSpineClip } from "./battle/spinePilot";
 import {
@@ -15179,47 +15180,6 @@ function monsterSkillFlavorText(
   return monsterSkillFlavorFromEffects(skill);
 }
 
-function monsterSkillDescLines(
-  skill: {
-    cooldown: number;
-    effects: {
-      kind: string;
-      target?: string;
-      coeff?: number;
-      amount?: number;
-    }[];
-  } | null | undefined,
-): string[] {
-  if (!skill) return [];
-  const lines: string[] = [
-    skill.cooldown > 0
-      ? t("ui.skillCdLabel", { n: skill.cooldown })
-      : t("ui.skillCdNone"),
-  ];
-  for (const e of skill.effects) {
-    if (e.kind === "damage") {
-      const pct = Math.round((e.coeff ?? 0) * 100);
-      lines.push(
-        e.target === "all_enemies"
-          ? t("ui.skillFxDamageAll", { pct })
-          : t("ui.skillFxDamageSingle", { pct }),
-      );
-    } else if (e.kind === "heal") {
-      const pct = Math.round((e.coeff ?? 0) * 100);
-      lines.push(
-        e.target === "self"
-          ? t("ui.skillFxHealSelf", { pct })
-          : t("ui.skillFxHealAlly", { pct }),
-      );
-    } else if (e.kind === "shield") {
-      lines.push(t("ui.skillFxShield", { pct: Math.round((e.coeff ?? 0) * 100) }));
-    } else if (e.kind === "mana") {
-      lines.push(t("ui.skillFxMana", { n: e.amount ?? 0 }));
-    }
-  }
-  return lines;
-}
-
 function monsterSkillLevelPowerMult(level: number): number {
   return 1 + (Math.max(1, Math.floor(level)) - 1) * 0.08;
 }
@@ -15248,34 +15208,10 @@ function monsterSkillDescLinesAtLevel(
 ): string[] {
   if (!skill) return [];
   const cd = monsterSkillCooldownAtLevel(skill, level);
-  const lines: string[] = [
-    cd > 0 ? t("ui.skillCdLabel", { n: cd }) : t("ui.skillCdNone"),
-  ];
-  const mult = monsterSkillLevelPowerMult(level);
-  for (const e of skill.effects) {
-    if (e.kind === "damage") {
-      const pct = Math.round((e.coeff ?? 0) * mult * 100);
-      lines.push(
-        e.target === "all_enemies"
-          ? t("ui.skillFxDamageAll", { pct })
-          : t("ui.skillFxDamageSingle", { pct }),
-      );
-    } else if (e.kind === "heal") {
-      const pct = Math.round((e.coeff ?? 0) * mult * 100);
-      lines.push(
-        e.target === "self"
-          ? t("ui.skillFxHealSelf", { pct })
-          : t("ui.skillFxHealAlly", { pct }),
-      );
-    } else if (e.kind === "shield") {
-      lines.push(
-        t("ui.skillFxShield", { pct: Math.round((e.coeff ?? 0) * mult * 100) }),
-      );
-    } else if (e.kind === "mana") {
-      lines.push(t("ui.skillFxMana", { n: Math.round((e.amount ?? 0) * mult) }));
-    }
-  }
-  return lines;
+  return monsterSkillDescLines(skill, {
+    cooldown: cd,
+    powerMultiplier: monsterSkillLevelPowerMult(level),
+  });
 }
 
 function monSkillLevelBadgeText(level: number): string {
@@ -15386,7 +15322,7 @@ function renderMonsterSkillDetailHtml(
   </section>`;
 }
 
-/** Map catalog role (tank/dps/support/flex). */
+/** Map catalog role, with legacy archetype fallbacks. */
 function monsterRoleLabel(role: string | undefined, base?: {
   hp: number;
   atk: number;
@@ -15397,6 +15333,14 @@ function monsterRoleLabel(role: string | undefined, base?: {
     case "stonesage":
       return t("ui.roleSupport");
     case "attacker":
+      return t("ui.roleAttack");
+    case "hp":
+      return t("ui.roleHp");
+    case "defense":
+      return t("ui.roleDefense");
+    case "speed":
+      return t("ui.roleSpeed");
+    // Legacy save/catalog values during migration.
     case "capturer":
     case "debuffer":
       return t("ui.roleAttack");

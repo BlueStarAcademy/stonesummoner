@@ -53,6 +53,7 @@ import {
   imprintSymbolMain,
   mainStatAtEnhance,
   MAX_GEAR_ENHANCE,
+  FAMILY_KIT_PROFILES,
   MONSTERS,
   normalizeSummonerGear,
   rollGearDrop,
@@ -68,6 +69,7 @@ import {
   summarizeSymbolSets,
   WEEKDAY_STAGES,
   isWeekdayStageOpenToday,
+  SKILL_DMG_MUL,
 } from "./index.js";
 
 describe("phase1 data", () => {
@@ -116,6 +118,181 @@ describe("phase1 data", () => {
     }
   });
 
+  it("keeps five display roles evenly distributed without changing balance identity", () => {
+    const families = MONSTERS.filter((monster) => monster.element === "fire");
+    const counts = Object.fromEntries(
+      ["attacker", "hp", "defense", "speed", "support"].map((role) => [
+        role,
+        families.filter((family) => family.role === role).length,
+      ]),
+    );
+    assert.deepEqual(counts, {
+      attacker: 10,
+      hp: 10,
+      defense: 10,
+      speed: 10,
+      support: 10,
+    });
+    assert.equal(new Set(families.map((family) => family.role)).size, 5);
+    for (const family of families) {
+      assert.equal(family.familyIdentity, family.balanceArchetype);
+      assert.ok(family.combatTags.includes(family.familyIdentity));
+    }
+    assert.equal(getMonster("seal_elder_fire")?.familyIdentity, "stonesage");
+    assert.equal(getMonster("capture_lord_fire")?.familyIdentity, "capturer");
+    assert.equal(getMonster("doom_oracle_fire")?.familyIdentity, "debuffer");
+  });
+
+  it("defines distinct profiles for all 50 families", () => {
+    assert.equal(Object.keys(FAMILY_KIT_PROFILES).length, 50);
+    const familyIds = new Set(MONSTERS.map((monster) => monster.familyId));
+    assert.deepEqual(
+      new Set(Object.keys(FAMILY_KIT_PROFILES)),
+      familyIds,
+    );
+    const allSignatures = Object.values(FAMILY_KIT_PROFILES).map((profile) =>
+      JSON.stringify({ s2: profile.s2, s3: profile.s3 }),
+    );
+    assert.equal(new Set(allSignatures).size, 50);
+    for (const role of ["attacker", "hp", "defense", "speed", "support"] as const) {
+      const signatures = Object.values(FAMILY_KIT_PROFILES)
+        .filter((profile) => profile.role === role)
+        .map((profile) =>
+          JSON.stringify({
+            s2: profile.s2,
+            s3: profile.s3,
+          }),
+        );
+      assert.equal(signatures.length, 10);
+      assert.equal(new Set(signatures).size, signatures.length);
+    }
+  });
+
+  it("keeps S1 offensive, varies later kits, and represents every planned mechanic", () => {
+    const allSkills = MONSTERS.flatMap((monster) => monster.skills);
+    for (const monster of MONSTERS) {
+      const [s1, s2, s3] = monster.skills;
+      assert.ok(s1.effects.some((effect) => effect.kind === "damage"));
+      assert.ok(s1.effects.some((effect) => effect.kind !== "damage"));
+      assert.equal(s1.cooldown, 0);
+      assert.ok(s2.cooldown >= 2 && s2.cooldown <= 6);
+      assert.ok(s3.cooldown >= 2 && s3.cooldown <= 6);
+    }
+    const damageShare =
+      allSkills.filter((skill) =>
+        skill.effects.some((effect) => effect.kind === "damage"),
+      ).length / allSkills.length;
+    assert.ok(damageShare <= 0.7, `damage skill share ${damageShare}`);
+
+    const represented = new Set(
+      allSkills.flatMap((skill) => skill.effects.map((effect) => effect.kind)),
+    );
+    for (const kind of [
+      "heal",
+      "buff",
+      "debuff",
+      "dot",
+      "strip",
+      "cleanse",
+      "cc",
+      "hot",
+      "heal_block",
+      "silence",
+      "atb",
+      "revive",
+      "cooldown",
+      "damage_share",
+      "reflect",
+      "provoke",
+    ]) {
+      assert.ok(represented.has(kind), `missing effect kind ${kind}`);
+    }
+    const damageEffects = allSkills.flatMap((skill) =>
+      skill.effects.filter((effect) => effect.kind === "damage"),
+    );
+    assert.deepEqual(
+      new Set(damageEffects.map((effect) => effect.source ?? "atk")),
+      new Set(["atk", "maxHp", "def", "spd", "targetMaxHp"]),
+    );
+    assert.ok(damageEffects.some((effect) => (effect.ignoreDef ?? 0) > 0));
+  });
+
+  it("preserves natural stars, stat curves, and established damage budgets", () => {
+    assert.equal(SKILL_DMG_MUL, 3.4);
+    assert.deepEqual(
+      [1, 2, 3, 4, 5].map(
+        (stars) =>
+          new Set(
+            MONSTERS.filter((monster) => monster.naturalStars === stars).map(
+              (monster) => monster.familyId,
+            ),
+          ).size,
+      ),
+      [10, 10, 12, 12, 6],
+    );
+    assert.deepEqual(getMonster("stone_golem_fire")?.baseStats, {
+      hp: 3800,
+      atk: 110,
+      def: 250,
+      spd: 92,
+      critRate: 20,
+      critDmg: 55,
+      accuracy: 0,
+      resistance: 25,
+    });
+    assert.deepEqual(getMonster("wolf_fighter_fire")?.baseStats, {
+      hp: 3750,
+      atk: 264,
+      def: 180,
+      spd: 102,
+      critRate: 28,
+      critDmg: 65,
+      accuracy: 0,
+      resistance: 15,
+    });
+    assert.deepEqual(getMonster("absolute_captor_wind")?.baseStats, {
+      hp: 5300,
+      atk: 290,
+      def: 240,
+      spd: 119,
+      critRate: 25,
+      critDmg: 55,
+      accuracy: 8,
+      resistance: 15,
+    });
+
+    const bases: Record<string, readonly [number, number?, number?]> = {
+      attacker: [1.15, 1.7, 1.2],
+      support: [0.9],
+      tank: [0.95, 1.2],
+      debuffer: [1, 1.35, 1.05],
+      stonesage: [1, 1.25, 1.1],
+      capturer: [1.1, 1.5, 1.6],
+    };
+    const expectedCoeff = (stars: number, base: number) =>
+      Math.round((base + (stars - 3) * 0.08) * SKILL_DMG_MUL * 100) / 100;
+    for (const monster of MONSTERS) {
+      for (const [slot, skill] of monster.skills.entries()) {
+        const damage = skill.effects.find((effect) => effect.kind === "damage");
+        if (!damage || damage.kind !== "damage") continue;
+        let base = bases[monster.balanceArchetype]![slot];
+        if (
+          slot === 2 &&
+          monster.balanceArchetype === "attacker" &&
+          (monster.element === "water" || monster.element === "dark")
+        ) {
+          base = 1.85;
+        }
+        assert.ok(base !== undefined, `${monster.id} gained a new damage budget`);
+        assert.equal(
+          damage.coeff,
+          expectedCoeff(monster.naturalStars, base),
+          `${monster.id} changed its legacy S${slot + 1} coefficient`,
+        );
+      }
+    }
+  });
+
   it("assigns unique visual identities to every runtime skill", () => {
     const monsterVfxIds = MONSTERS.flatMap((m) =>
       m.skills.map((skill) => skill.vfxId),
@@ -161,10 +338,10 @@ describe("phase1 data", () => {
     assert.notEqual(impFire.skills[1]!.nameKo, impWater.skills[1]!.nameKo);
     assert.notEqual(impFire.skills[2]!.descKo, impWater.skills[2]!.descKo);
     assert.notEqual(impFire.skills[1]!.nameKo, lizardFire.skills[1]!.nameKo);
-    assert.equal(
+    assert.notEqual(
       impFire.skills[1]!.descKo,
       lizardFire.skills[1]!.descKo,
-      "same role+element share action-only desc",
+      "same-role families keep distinct mechanics",
     );
   });
 

@@ -15,8 +15,13 @@ export {
   resolveMonsterId,
   expandFamily,
   buildFamilySeeds,
+  FAMILY_KIT_PROFILES,
+  familyKitProfile,
 } from "./monsters/index.js";
 export type {
+  BalanceArchetype,
+  CombatTag,
+  FamilyIdentity,
   MonsterDef,
   Element,
   MonsterRole,
@@ -24,3 +29,8 @@ export type {
   ElementKit,
   Stats,
 } from "./monsters/types.js";
+export type {
+  FamilyKitProfile,
+  FamilySkillProfile,
+  KitMechanic,
+} from "./monsters/familyKitProfiles.js";

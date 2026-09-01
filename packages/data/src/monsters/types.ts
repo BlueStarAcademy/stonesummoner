@@ -11,13 +11,26 @@ export const ELEMENTS: readonly Element[] = [
   "dark",
 ] as const;
 
-export type MonsterRole =
+/** Player-facing role. Keep this list in sync with role filters in clients. */
+export type MonsterRole = "attacker" | "hp" | "defense" | "speed" | "support";
+
+/** Internal legacy archetype used only to preserve established stat/skill budgets. */
+export type BalanceArchetype =
   | "attacker"
   | "support"
   | "tank"
   | "debuffer"
   | "stonesage"
   | "capturer";
+
+export type FamilyIdentity = BalanceArchetype;
+export type CombatTag =
+  | FamilyIdentity
+  | "damage"
+  | "healer"
+  | "control"
+  | "protector"
+  | "turn_cycle";
 
 export interface MonsterDef {
   id: string;
@@ -27,7 +40,12 @@ export interface MonsterDef {
   artKey: string;
   element: Element;
   naturalStars: number;
-  role: string;
+  role: MonsterRole;
+  /** Stat-curve identity retained across display-role reclassification. */
+  balanceArchetype: BalanceArchetype;
+  /** Legacy fantasy/mechanical identity, independent from display role. */
+  familyIdentity: FamilyIdentity;
+  combatTags: readonly CombatTag[];
   baseStats: {
     hp: number;
     atk: number;
@@ -50,7 +68,7 @@ export type Stats = MonsterDef["baseStats"];
 export type ElementKit = {
   skillCoeff: number;
   skills: [SkillDef, SkillDef, SkillDef];
-  role?: string;
+  role?: MonsterRole;
   baseStats?: Partial<Stats>;
   stonePassiveId?: StonePassiveId;
 };
@@ -61,6 +79,9 @@ export type FamilySeed = {
   artKey: string;
   naturalStars: number;
   role: MonsterRole;
+  balanceArchetype: BalanceArchetype;
+  familyIdentity: FamilyIdentity;
+  combatTags: readonly CombatTag[];
   baseStats: Stats;
   stonePassiveId: StonePassiveId;
   kits: Record<Element, ElementKit>;
@@ -71,6 +92,9 @@ export type FamilyRosterEntry = {
   nameKo: string;
   naturalStars: number;
   role: MonsterRole;
+  balanceArchetype: BalanceArchetype;
+  familyIdentity: FamilyIdentity;
+  combatTags: readonly CombatTag[];
   stonePassiveId: StonePassiveId;
 };
 

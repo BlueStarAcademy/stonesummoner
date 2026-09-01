@@ -1,10 +1,10 @@
-import type { MonsterRole, Stats } from "./types.js";
+import type { BalanceArchetype, Stats } from "./types.js";
 
 /**
  * Lv1 bases aligned to Summoners War, so SW-scale symbol flats (HP+ 2448)
  * stay meaningful. Level/evolve multipliers in roster.ts still apply on top.
  */
-export function baseStatsFor(stars: number, role: MonsterRole): Stats {
+export function baseStatsFor(stars: number, role: BalanceArchetype): Stats {
   const s = Math.max(1, Math.min(5, stars));
   const tier = {
     1: { hp: 3000, atk: 155, def: 140, spd: 96 },
@@ -14,7 +14,7 @@ export function baseStatsFor(stars: number, role: MonsterRole): Stats {
     5: { hp: 5300, atk: 290, def: 240, spd: 104 },
   }[s as 1 | 2 | 3 | 4 | 5]!;
 
-  const bias: Record<MonsterRole, Partial<Stats>> = {
+  const bias: Record<BalanceArchetype, Partial<Stats>> = {
     attacker: { atk: 32, hp: -250, critRate: 8, spd: 2 },
     support: { atk: -63, hp: 500, def: 30, critRate: -5 },
     tank: { atk: -45, hp: 700, def: 90, spd: -4, resistance: 10 },

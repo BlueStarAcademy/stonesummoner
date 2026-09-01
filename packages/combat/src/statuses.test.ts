@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { listUnitStatuses } from "./statuses.js";
+import {
+  addStatus,
+  advanceUnitStatuses,
+  listUnitStatuses,
+  removeStatuses,
+} from "./statuses.js";
 import type { Unit } from "./types.js";
 
 function unit(partial: Partial<Unit> = {}): Unit {
@@ -73,5 +78,52 @@ describe("listUnitStatuses", () => {
       }),
     );
     assert.deepEqual(icons, []);
+  });
+
+  it("tracks source, replace/stack semantics, owner turns, and dispellability", () => {
+    const target = unit();
+    addStatus(target, {
+      kind: "atk_up",
+      sourceUnitId: "caster-a",
+      polarity: "buff",
+      turns: 2,
+      stacking: "replace",
+      dispellable: true,
+      amount: 0.2,
+    });
+    addStatus(target, {
+      kind: "atk_up",
+      sourceUnitId: "caster-b",
+      polarity: "buff",
+      turns: 3,
+      stacking: "replace",
+      dispellable: true,
+      amount: 0.3,
+    });
+    addStatus(target, {
+      kind: "dot",
+      sourceUnitId: "caster-a",
+      polarity: "debuff",
+      turns: 2,
+      stacking: "stack",
+      dispellable: true,
+      value: 10,
+    });
+    addStatus(target, {
+      kind: "dot",
+      sourceUnitId: "caster-b",
+      polarity: "debuff",
+      turns: 2,
+      stacking: "stack",
+      dispellable: false,
+      value: 20,
+    });
+    assert.equal(target.statuses?.filter((status) => status.kind === "atk_up").length, 1);
+    assert.equal(target.statuses?.find((status) => status.kind === "atk_up")?.sourceUnitId, "caster-b");
+    assert.equal(target.statuses?.filter((status) => status.kind === "dot").length, 2);
+    advanceUnitStatuses(target);
+    assert.equal(target.atkBuffTicks, 2);
+    assert.equal(removeStatuses(target, "debuff", 2).length, 1);
+    assert.equal(target.statuses?.filter((status) => status.kind === "dot").length, 1);
   });
 });
