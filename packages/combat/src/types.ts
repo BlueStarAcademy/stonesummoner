@@ -31,6 +31,55 @@ export interface UnitStats {
   resistance?: number;
 }
 
+export type StatusPolarity = "buff" | "debuff";
+export type StatusStacking = "replace" | "extend" | "stack";
+export type StatusKind =
+  | "atk_up"
+  | "def_up"
+  | "spd_up"
+  | "crit_up"
+  | "crit_dmg_up"
+  | "accuracy_up"
+  | "immunity"
+  | "shield"
+  | "hot"
+  | "damage_reduction"
+  | "damage_share"
+  | "reflect"
+  | "atk_down"
+  | "def_down"
+  | "spd_down"
+  | "crit_down"
+  | "crit_dmg_down"
+  | "accuracy_down"
+  | "dot"
+  | "provoke"
+  | "stun"
+  | "freeze"
+  | "sleep"
+  | "heal_block"
+  | "silence";
+
+/** Turn-based, unit-scoped combat state. Board and equipment passives stay separate. */
+export interface StatusInstance {
+  /** Stable per-application identity; stacked DoTs have distinct ids. */
+  id: string;
+  kind: StatusKind;
+  sourceUnitId: string;
+  polarity: StatusPolarity;
+  turns: number;
+  stacking: StatusStacking;
+  dispellable: boolean;
+  stacks: number;
+  amount?: number;
+  /** Snapshot used by DoT/HoT and other source-scaled effects. */
+  value?: number;
+  /** Provoke or damage-share partner. */
+  linkedUnitId?: string;
+  /** Permanent equipment-derived effects never enter this collection. */
+  hidden?: boolean;
+}
+
 export interface Unit {
   id: string;
   name: string;
@@ -50,6 +99,8 @@ export interface Unit {
   skillCd?: number[];
   stonePassive?: StonePassiveId;
   alive: boolean;
+  /** Authoritative runtime statuses. Legacy fields below are mirrored during migration. */
+  statuses?: StatusInstance[];
   /** Next skill: flat critRate bonus (consumed on hit). */
   critCharm?: number;
   /** Next skill: flat critDmg bonus (consumed on hit). */
@@ -90,6 +141,12 @@ export interface Unit {
   defDebuffTicks?: number;
   spdDebuffPct?: number;
   spdDebuffTicks?: number;
+  critRateDebuff?: number;
+  critRateDebuffTicks?: number;
+  critDmgDebuff?: number;
+  critDmgDebuffTicks?: number;
+  accuracyDebuff?: number;
+  accuracyDebuffTicks?: number;
   /** DoT: fraction of source ATK dealt each ATB-ready tick. */
   dotAtkCoeff?: number;
   dotTicks?: number;
@@ -113,6 +170,19 @@ export interface Unit {
   stunOnHitChance?: number;
   /** Remaining turns skipped (기절). */
   stunnedTurns?: number;
+  /** Distinct control states; stunnedTurns remains the aggregate compatibility view. */
+  frozenTurns?: number;
+  sleepingTurns?: number;
+  healBlockTurns?: number;
+  silenceTurns?: number;
+  hotTurns?: number;
+  hotAmount?: number;
+  damageReductionTurns?: number;
+  damageShareTurns?: number;
+  damageSharePct?: number;
+  damageShareTargetId?: string;
+  reflectTurns?: number;
+  reflectPct?: number;
   /** 격노(Violent): % chance for extra turn after skill. */
   violentChance?: number;
   /** 응징(Nemesis): ATB % per 7% HP lost when hit. */

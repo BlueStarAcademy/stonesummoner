@@ -1723,7 +1723,7 @@ function enemySummonerProfile(stage: StageDef): {
   return { weakBoard, awaken, skillTree };
 }
 
-function skillsForMonster(
+export function skillsForMonster(
   m: NonNullable<ReturnType<typeof getMonster>>,
   evolve = 0,
   skillLevels: [number, number, number] = defaultSkillLevels(),
@@ -1737,7 +1737,12 @@ function skillsForMonster(
       ...sk,
       cooldown: Math.max(0, sk.cooldown - cdCut),
       effects: sk.effects.map((e) => {
-        if (e.kind === "damage" || e.kind === "heal" || e.kind === "shield") {
+        if (
+          e.kind === "damage" ||
+          e.kind === "heal" ||
+          e.kind === "hot" ||
+          e.kind === "shield"
+        ) {
           return { ...e, coeff: e.coeff * (1 + evoBump + skBump) };
         }
         if (e.kind === "mana") {

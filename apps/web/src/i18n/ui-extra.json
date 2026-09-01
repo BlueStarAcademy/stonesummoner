@@ -2443,6 +2443,10 @@
     "ko": "체력형",
     "en": "Health"
   },
+  "ui.roleSpeed": {
+    "ko": "속도형",
+    "en": "Speed"
+  },
   "ui.roleSupport": {
     "ko": "지원형",
     "en": "Support"
@@ -2682,6 +2686,194 @@
   "ui.skillFxMana": {
     "ko": "마나 +{n}",
     "en": "Mana +{n}"
+  },
+  "ui.skillTargetOneEnemy": {
+    "ko": "적 1명",
+    "en": "1 enemy"
+  },
+  "ui.skillTargetAllEnemies": {
+    "ko": "적 전체",
+    "en": "all enemies"
+  },
+  "ui.skillTargetSelf": {
+    "ko": "자신",
+    "en": "self"
+  },
+  "ui.skillTargetLowestAlly": {
+    "ko": "체력이 가장 낮은 아군",
+    "en": "lowest-HP ally"
+  },
+  "ui.skillTargetAllAllies": {
+    "ko": "아군 전체",
+    "en": "all allies"
+  },
+  "ui.skillTargetOneAlly": {
+    "ko": "아군 1명",
+    "en": "1 ally"
+  },
+  "ui.skillScaleAtk": {
+    "ko": "공격력",
+    "en": "ATK"
+  },
+  "ui.skillScaleDef": {
+    "ko": "방어력",
+    "en": "DEF"
+  },
+  "ui.skillScaleSpd": {
+    "ko": "공격 속도",
+    "en": "SPD"
+  },
+  "ui.skillScaleMaxHp": {
+    "ko": "최대 체력",
+    "en": "max HP"
+  },
+  "ui.skillScaleTargetMaxHp": {
+    "ko": "대상의 최대 체력",
+    "en": "target max HP"
+  },
+  "ui.skillScaleCurrentHp": {
+    "ko": "현재 체력",
+    "en": "current HP"
+  },
+  "ui.skillScaleLostHp": {
+    "ko": "잃은 체력",
+    "en": "lost HP"
+  },
+  "ui.skillAxisAtk": {
+    "ko": "공격력",
+    "en": "ATK"
+  },
+  "ui.skillAxisDef": {
+    "ko": "방어력",
+    "en": "DEF"
+  },
+  "ui.skillAxisSpd": {
+    "ko": "공격 속도",
+    "en": "SPD"
+  },
+  "ui.skillAxisCritRate": {
+    "ko": "치명타 확률",
+    "en": "critical rate"
+  },
+  "ui.skillAxisCritDmg": {
+    "ko": "치명타 피해",
+    "en": "critical damage"
+  },
+  "ui.skillAxisAccuracy": {
+    "ko": "효과 적중",
+    "en": "accuracy"
+  },
+  "ui.skillCcStun": {
+    "ko": "기절",
+    "en": "stun"
+  },
+  "ui.skillCcFreeze": {
+    "ko": "빙결",
+    "en": "freeze"
+  },
+  "ui.skillCcSleep": {
+    "ko": "수면",
+    "en": "sleep"
+  },
+  "ui.skillFxDamage": {
+    "ko": "{target} · {source} {pct}% 피해",
+    "en": "{target} · {pct}% {source} damage"
+  },
+  "ui.skillFxHeal": {
+    "ko": "{target} · {source} {pct}% 회복",
+    "en": "{target} · heal for {pct}% {source}"
+  },
+  "ui.skillFxShieldTarget": {
+    "ko": "{target} · {source} {pct}% 실드",
+    "en": "{target} · {pct}% {source} shield"
+  },
+  "ui.skillFxBuff": {
+    "ko": "{target} · {axis} +{pct}%",
+    "en": "{target} · {axis} +{pct}%"
+  },
+  "ui.skillFxDebuff": {
+    "ko": "{target} · {axis} -{pct}%",
+    "en": "{target} · {axis} -{pct}%"
+  },
+  "ui.skillFxCc": {
+    "ko": "{target} · {cc}",
+    "en": "{target} · {cc}"
+  },
+  "ui.skillFxDot": {
+    "ko": "{target} · 매 턴 {source} {pct}% 피해",
+    "en": "{target} · {pct}% {source} damage each turn"
+  },
+  "ui.skillFxHot": {
+    "ko": "{target} · 매 턴 {source} {pct}% 회복",
+    "en": "{target} · heal {pct}% {source} each turn"
+  },
+  "ui.skillFxStrip": {
+    "ko": "{target} · 이로운 효과 {count}개 제거",
+    "en": "{target} · remove {count} beneficial effect(s)"
+  },
+  "ui.skillFxCleanse": {
+    "ko": "{target} · 해로운 효과 {count}개 제거",
+    "en": "{target} · remove {count} harmful effect(s)"
+  },
+  "ui.skillFxProvoke": {
+    "ko": "{target} · 도발",
+    "en": "{target} · provoke"
+  },
+  "ui.skillFxHealBlock": {
+    "ko": "{target} · 회복 불가",
+    "en": "{target} · block healing"
+  },
+  "ui.skillFxSilence": {
+    "ko": "{target} · 침묵",
+    "en": "{target} · silence"
+  },
+  "ui.skillFxAtbUp": {
+    "ko": "{target} · 공격 게이지 +{pct}%",
+    "en": "{target} · attack bar +{pct}%"
+  },
+  "ui.skillFxAtbDown": {
+    "ko": "{target} · 공격 게이지 -{pct}%",
+    "en": "{target} · attack bar -{pct}%"
+  },
+  "ui.skillFxRevive": {
+    "ko": "{target} · 체력 {pct}%로 부활",
+    "en": "{target} · revive with {pct}% HP"
+  },
+  "ui.skillFxCooldownUp": {
+    "ko": "{target} · 스킬 쿨타임 {n}턴 증가",
+    "en": "{target} · increase skill cooldown by {n} turn(s)"
+  },
+  "ui.skillFxCooldownDown": {
+    "ko": "{target} · 스킬 쿨타임 {n}턴 감소",
+    "en": "{target} · reduce skill cooldown by {n} turn(s)"
+  },
+  "ui.skillFxShare": {
+    "ko": "{target} · 받는 피해 {pct}% 분담",
+    "en": "{target} · share {pct}% of incoming damage"
+  },
+  "ui.skillFxReflect": {
+    "ko": "{target} · 받은 피해 {pct}% 반사",
+    "en": "{target} · reflect {pct}% of damage received"
+  },
+  "ui.skillFxIgnoreDefense": {
+    "ko": "방어력 무시",
+    "en": "Ignore defense"
+  },
+  "ui.skillFxIgnoreDefenseApplied": {
+    "ko": "{text} · 방어력 무시",
+    "en": "{text} · ignore defense"
+  },
+  "ui.skillFxIgnoreDefensePercent": {
+    "ko": "{text} · 방어력 {pct}% 무시",
+    "en": "{text} · ignore {pct}% defense"
+  },
+  "ui.skillFxWithTurns": {
+    "ko": "{text} · {turns}턴",
+    "en": "{text} · {turns} turn(s)"
+  },
+  "ui.skillFxWithChance": {
+    "ko": "{text} · {pct}% 확률",
+    "en": "{text} · {pct}% chance"
   },
   "ui.hubDojo": {
     "ko": "진문 수련장",

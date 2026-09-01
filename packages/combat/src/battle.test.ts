@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { basicStrike } from "stonesummoner-data";
 import { Battle, makeUnit, pickAutoSkillIndex } from "./battle.js";
+import { addStatus, hasStatus, statusesOf } from "./statuses.js";
 import type { SummonerState, Unit } from "./types.js";
 
 const sampleSkills = [
@@ -1217,5 +1218,316 @@ describe("Battle flow", () => {
     assert.match(b.log.join("\n"), /진문개방 \[.*mana/);
     const mon = b.getUnit("a-m1")!;
     assert.ok((mon.atkBuffPct ?? 0) > 0);
+  });
+});
+
+describe("diverse skill runtime", () => {
+  function combatWithSkill(
+    effects: NonNullable<Unit["skills"]>[number]["effects"],
+  ) {
+    const units = roster();
+    units.push(
+      makeUnit({
+        id: "a-m2",
+        name: "AllyTwo",
+        team: "ally",
+        kind: "monster",
+        element: "wind",
+        stats: { hp: 400, atk: 80, def: 80, spd: 80, critRate: 0, critDmg: 50 },
+        skillCoeff: 1,
+        hp: 80,
+      }),
+    );
+    units[1]!.skills = [{ id: "test", nameKo: "test", cooldown: 0, effects }];
+    const battle = new Battle({
+      boardSize: 5,
+      units,
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+    });
+    battle.phase = "await_skill";
+    battle.activeUnitId = "a-m1";
+    return battle;
+  }
+
+  it("uses source scaling and defense ignore", () => {
+    const base = combatWithSkill([
+      { kind: "damage", target: "single", coeff: 0.5, source: "def" },
+    ]);
+    base.getUnit("a-m1")!.stats.def = 1000;
+    base.getUnit("e-m1")!.stats.def = 1000;
+    const hp0 = base.getUnit("e-m1")!.hp;
+    base.useSkill({ targetId: "e-m1", skillIndex: 0 });
+    const defScaled = hp0 - base.getUnit("e-m1")!.hp;
+
+    const ignored = combatWithSkill([
+      {
+        kind: "damage",
+        target: "single",
+        coeff: 0.5,
+        source: "def",
+        ignoreDef: 1,
+      },
+    ]);
+    ignored.getUnit("a-m1")!.stats.def = 1000;
+    ignored.getUnit("e-m1")!.stats.def = 1000;
+    const hp1 = ignored.getUnit("e-m1")!.hp;
+    ignored.useSkill({ targetId: "e-m1", skillIndex: 0 });
+    assert.ok(hp1 - ignored.getUnit("e-m1")!.hp > defScaled);
+  });
+
+  it("applies heal, shield, buffs, HoT, ATB and cooldown decrease", () => {
+    const battle = combatWithSkill([
+      { kind: "heal", target: "all_allies", coeff: 0.2 },
+      { kind: "shield", target: "all_allies", coeff: 0.1 },
+      { kind: "buff", target: "all_allies", axis: "spd", amount: 0.3, turns: 2 },
+      { kind: "hot", target: "all_allies", coeff: 0.1, turns: 2 },
+      { kind: "atb", target: "all_allies", amount: 25 },
+      { kind: "cooldown", target: "all_allies", direction: "decrease", amount: 1 },
+    ]);
+    battle.getUnit("a-m2")!.skills = sampleSkills;
+    battle.getUnit("a-m2")!.skillCd = [2, 2, 2];
+    battle.useSkill({ targetId: "a-m2", skillIndex: 0 });
+    const ally = battle.getUnit("a-m2")!;
+    assert.equal(ally.hp, 160);
+    assert.equal(ally.shieldHp, 40);
+    assert.equal(ally.spdBuffPct, 0.3);
+    assert.equal(ally.atb, 25);
+    assert.deepEqual(ally.skillCd, [1, 1, 1]);
+    assert.equal(hasStatus(ally, "hot"), true);
+  });
+
+  it("lands hostile effects after activation and clamped resistance", () => {
+    const battle = combatWithSkill([
+      { kind: "debuff", target: "single", axis: "spd", amount: 0.3, turns: 2 },
+      { kind: "dot", target: "single", coeff: 0.2, turns: 2 },
+      { kind: "cc", target: "single", cc: "freeze", turns: 1, chance: 1 },
+      { kind: "heal_block", target: "single", turns: 2, chance: 1 },
+      { kind: "silence", target: "single", turns: 2, chance: 1 },
+      { kind: "provoke", target: "single", turns: 2, chance: 1 },
+      { kind: "cooldown", target: "single", direction: "increase", amount: 2 },
+    ]);
+    const enemy = battle.getUnit("e-m1")!;
+    enemy.skillCd = [0, 0, 0];
+    battle.useSkill({ targetId: enemy.id, skillIndex: 0 });
+    assert.equal(enemy.spdDebuffPct, 0.3);
+    assert.equal(statusesOf(enemy).filter((status) => status.kind === "dot").length, 1);
+    assert.equal(hasStatus(enemy, "freeze"), true);
+    assert.equal(hasStatus(enemy, "heal_block"), true);
+    assert.equal(hasStatus(enemy, "silence"), true);
+    assert.equal(enemy.provokeTargetId, "a-m1");
+    assert.deepEqual(enemy.skillCd, [2, 2, 2]);
+
+    const resisted = combatWithSkill([
+      { kind: "cc", target: "single", cc: "stun", turns: 1, chance: 1 },
+    ]);
+    resisted.getUnit("e-m1")!.stats.resistance = 100;
+    (resisted as unknown as { rng: () => number }).rng = () => 0.1;
+    resisted.useSkill({ targetId: "e-m1", skillIndex: 0 });
+    assert.equal(hasStatus(resisted.getUnit("e-m1")!, "stun"), false);
+
+    const immune = combatWithSkill([
+      { kind: "dot", target: "single", coeff: 1, turns: 2 },
+    ]);
+    addStatus(immune.getUnit("e-m1")!, {
+      kind: "immunity",
+      sourceUnitId: "e-m1",
+      polarity: "buff",
+      turns: 2,
+      stacking: "replace",
+      dispellable: true,
+    });
+    immune.useSkill({ targetId: "e-m1", skillIndex: 0 });
+    assert.equal(hasStatus(immune.getUnit("e-m1")!, "dot"), false);
+  });
+
+  it("applies SPD debuff to actual ATB gain", () => {
+    const battle = combatWithSkill([
+      { kind: "debuff", target: "single", axis: "spd", amount: 0.5, turns: 2 },
+    ]);
+    battle.useSkill({ targetId: "e-m1", skillIndex: 0 });
+    for (const unit of battle.units) unit.atb = 0;
+    battle.tickUntilReady(1);
+    assert.equal(battle.getUnit("e-m1")!.atb, 4.25);
+  });
+
+  it("strips and cleanses by priority and count", () => {
+    const strip = combatWithSkill([
+      { kind: "strip", target: "single", count: 1 },
+    ]);
+    const enemy = strip.getUnit("e-m1")!;
+    addStatus(enemy, {
+      kind: "atk_up",
+      sourceUnitId: enemy.id,
+      polarity: "buff",
+      turns: 3,
+      stacking: "replace",
+      dispellable: true,
+      amount: 0.5,
+    });
+    addStatus(enemy, {
+      kind: "immunity",
+      sourceUnitId: enemy.id,
+      polarity: "buff",
+      turns: 3,
+      stacking: "replace",
+      dispellable: true,
+    });
+    strip.useSkill({ targetId: enemy.id, skillIndex: 0 });
+    assert.equal(hasStatus(enemy, "immunity"), false);
+    assert.equal(hasStatus(enemy, "atk_up"), true);
+
+    const cleanse = combatWithSkill([
+      { kind: "cleanse", target: "all_allies", count: 1 },
+    ]);
+    const ally = cleanse.getUnit("a-m2")!;
+    addStatus(ally, {
+      kind: "atk_down",
+      sourceUnitId: "e-m1",
+      polarity: "debuff",
+      turns: 3,
+      stacking: "replace",
+      dispellable: true,
+      amount: 0.5,
+    });
+    addStatus(ally, {
+      kind: "sleep",
+      sourceUnitId: "e-m1",
+      polarity: "debuff",
+      turns: 2,
+      stacking: "replace",
+      dispellable: true,
+    });
+    cleanse.useSkill({ skillIndex: 0 });
+    assert.equal(hasStatus(ally, "sleep"), false);
+    assert.equal(hasStatus(ally, "atk_down"), true);
+  });
+
+  it("revives dead allies and AUTO prioritizes revive, heal, cleanse, then strip", () => {
+    const reviveSkill = {
+      id: "revive",
+      nameKo: "revive",
+      cooldown: 3,
+      effects: [{ kind: "revive" as const, target: "ally_lowest" as const, hpFraction: 0.4 }],
+    };
+    const battle = combatWithSkill(reviveSkill.effects);
+    const ally = battle.getUnit("a-m2")!;
+    ally.alive = false;
+    ally.hp = 0;
+    battle.useSkill({ targetId: ally.id, skillIndex: 0 });
+    assert.equal(ally.alive, true);
+    assert.equal(ally.hp, 160);
+
+    const chooser = battle.getUnit("a-m1")!;
+    chooser.skills = [
+      sampleSkills[0]!,
+      { id: "heal", nameKo: "heal", cooldown: 0, effects: [{ kind: "heal", target: "ally_lowest", coeff: 0.2 }] },
+      reviveSkill,
+    ];
+    chooser.skillCd = [0, 0, 0];
+    ally.alive = false;
+    assert.equal(pickAutoSkillIndex(chooser, battle.units), 2);
+    ally.alive = true;
+    ally.hp = 10;
+    assert.equal(pickAutoSkillIndex(chooser, battle.units), 1);
+  });
+
+  it("obeys provoke, wakes sleep on damage, and expires reduction/share/reflect", () => {
+    const battle = combatWithSkill([
+      { kind: "damage", target: "single", coeff: 0.1 },
+    ]);
+    const attacker = battle.getUnit("a-m1")!;
+    const enemy = battle.getUnit("e-m1")!;
+    addStatus(attacker, {
+      kind: "provoke",
+      sourceUnitId: enemy.id,
+      linkedUnitId: enemy.id,
+      polarity: "debuff",
+      turns: 1,
+      stacking: "replace",
+      dispellable: true,
+    });
+    addStatus(enemy, {
+      kind: "sleep",
+      sourceUnitId: attacker.id,
+      polarity: "debuff",
+      turns: 2,
+      stacking: "replace",
+      dispellable: true,
+    });
+    battle.useSkill({ targetId: "e-sum", skillIndex: 0 });
+    assert.equal(hasStatus(enemy, "sleep"), false);
+    assert.equal(hasStatus(attacker, "provoke"), false);
+
+    for (const kind of ["damage_reduction", "damage_share", "reflect"] as const) {
+      addStatus(enemy, {
+        kind,
+        sourceUnitId: enemy.id,
+        polarity: "buff",
+        turns: 1,
+        stacking: "replace",
+        dispellable: true,
+        amount: 0.25,
+      });
+    }
+    const advance = combatWithSkill([{ kind: "heal", target: "self", coeff: 0 }]);
+    const actor = advance.getUnit("a-m1")!;
+    actor.statuses = enemy.statuses?.map((status) => ({ ...status }));
+    advance.useSkill({ skillIndex: 0 });
+    assert.equal(hasStatus(actor, "damage_reduction"), false);
+    assert.equal(hasStatus(actor, "damage_share"), false);
+    assert.equal(hasStatus(actor, "reflect"), false);
+  });
+
+  it("reduces, shares, and reflects incoming damage while statuses are active", () => {
+    const battle = combatWithSkill([
+      { kind: "damage", target: "single", coeff: 0.2 },
+    ]);
+    const attacker = battle.getUnit("a-m1")!;
+    const target = battle.getUnit("e-m1")!;
+    const partner = makeUnit({
+      id: "e-m2",
+      name: "EnemyTwo",
+      team: "enemy",
+      kind: "monster",
+      element: "water",
+      stats: { hp: 500, atk: 10, def: 10, spd: 10, critRate: 0, critDmg: 50 },
+      skillCoeff: 1,
+    });
+    battle.units.push(partner);
+    addStatus(target, {
+      kind: "damage_reduction",
+      sourceUnitId: target.id,
+      polarity: "buff",
+      turns: 2,
+      stacking: "replace",
+      dispellable: true,
+      amount: 0.5,
+    });
+    addStatus(target, {
+      kind: "damage_share",
+      sourceUnitId: partner.id,
+      linkedUnitId: partner.id,
+      polarity: "buff",
+      turns: 2,
+      stacking: "replace",
+      dispellable: true,
+      amount: 0.5,
+    });
+    addStatus(target, {
+      kind: "reflect",
+      sourceUnitId: target.id,
+      polarity: "buff",
+      turns: 2,
+      stacking: "replace",
+      dispellable: true,
+      amount: 0.5,
+    });
+    const attackerHp = attacker.hp;
+    battle.useSkill({ targetId: target.id, skillIndex: 0 });
+    assert.ok(target.hp < target.stats.hp);
+    assert.ok(partner.hp < partner.stats.hp);
+    assert.ok(attacker.hp < attackerHp);
   });
 });

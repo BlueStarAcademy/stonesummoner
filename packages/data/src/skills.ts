@@ -14,6 +14,8 @@ export type SkillEffect =
       coeff: number;
       /** Defaults to ATK for backwards compatibility. */
       source?: DamageScalingSource;
+      /** Normalizes non-ATK source values while preserving the base skill budget. */
+      sourceFactor?: number;
       /** Fraction of DEF ignored, from 0 (none) to 1 (all). */
       ignoreDef?: number;
     }

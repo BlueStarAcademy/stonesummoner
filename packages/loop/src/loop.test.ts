@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createEmptyGear, createStarterGear, createSymbol, getMonster, getStage, CHAPTER1_STAGES, EQUIP_STAGES, GEAR_BAG_BASE_SLOTS, GEAR_BAG_EXPAND_STEP, GEAR_BAG_MAX_SLOTS, getGearAffix, normalizeGearPiece } from "stonesummoner-data";
+import { createEmptyGear, createStarterGear, createSymbol, getMonster, getStage, CHAPTER1_STAGES, EQUIP_STAGES, GEAR_BAG_BASE_SLOTS, GEAR_BAG_EXPAND_STEP, GEAR_BAG_MAX_SLOTS, getGearAffix, normalizeGearPiece, MONSTERS } from "stonesummoner-data";
 import {
   createNewSave,
   createStageBattle,
@@ -132,6 +132,7 @@ import {
   addOwnedMonsterExp,
   monsterPowerUpExp,
   withDefaultSummonerMagicLoadout,
+  skillsForMonster,
 } from "./loop.js";
 import {
   getArenaOpponent,
@@ -2789,6 +2790,44 @@ describe("game loop", () => {
     assert.equal(broke.message, "crystal_short");
     const icon = runSetProfileIcon(second.save, second.save.roster[0]!.monsterId);
     assert.equal(icon.profileIconId, second.save.roster[0]!.monsterId);
+  });
+});
+
+describe("skill runtime scaling", () => {
+  it("scales new HoT coefficients without changing utility effect budgets", () => {
+    const monster = MONSTERS.find((candidate) =>
+      candidate.skills.some((skill) =>
+        skill.effects.some((effect) => effect.kind === "hot"),
+      ),
+    );
+    assert.ok(monster);
+    const base = skillsForMonster(monster, 0, [1, 1, 1]);
+    const raised = skillsForMonster(monster, 2, [3, 3, 3]);
+    const baseHot = base
+      .flatMap((skill) => skill.effects)
+      .find((effect) => effect.kind === "hot");
+    const raisedHot = raised
+      .flatMap((skill) => skill.effects)
+      .find((effect) => effect.kind === "hot");
+    assert.ok(baseHot && raisedHot);
+    assert.ok(raisedHot.coeff > baseHot.coeff);
+
+    const originalUtility = monster.skills
+      .flatMap((skill) => skill.effects)
+      .find(
+        (effect) =>
+          effect.kind !== "damage" &&
+          effect.kind !== "heal" &&
+          effect.kind !== "hot" &&
+          effect.kind !== "shield" &&
+          effect.kind !== "mana",
+      );
+    if (originalUtility) {
+      const scaledUtility = raised
+        .flatMap((skill) => skill.effects)
+        .find((effect) => effect.kind === originalUtility.kind);
+      assert.deepEqual(scaledUtility, originalUtility);
+    }
   });
 });
 

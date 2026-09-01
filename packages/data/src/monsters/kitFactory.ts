@@ -239,9 +239,18 @@ function damageEffect(
           : entry.role === "speed"
             ? "spd"
             : "atk";
+  const sourceFactor =
+    source === "maxHp"
+      ? 0.06
+      : source === "targetMaxHp"
+        ? 0.04
+        : source === "spd"
+          ? 3
+          : 1;
   return {
     ...original,
     source,
+    sourceFactor,
     ...(entry.role === "attacker" && element === "dark"
       ? { ignoreDef: 0.2 }
       : {}),
