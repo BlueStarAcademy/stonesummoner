@@ -7,7 +7,15 @@ export type {
   StoneReportChip,
   StoneReportChipKind,
 } from "./battle.js";
-export { computeDamage, clampAmplify, elementMultiplier, defenseMitigation } from "./damage.js";
+export {
+  computeDamage,
+  clampAmplify,
+  elementMultiplier,
+  elementRelation,
+  defenseMitigation,
+  ELEMENT_ADVANTAGE_CRIT_BONUS,
+} from "./damage.js";
+export type { ElementRelation } from "./damage.js";
 export {
   amplifyCapFromPowerDelta,
   estimateCombatPower,
