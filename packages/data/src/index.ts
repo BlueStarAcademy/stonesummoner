@@ -238,8 +238,15 @@ export {
   SCENARIO_NORMAL_STAR_WEIGHTS,
   scenarioSymbolDropTable,
 } from "./scenario.js";
+export {
+  STAGES_MAP_NATURAL,
+  STAGES_LANDMARK_LAYOUT,
+  STAGES_TERRAIN_ART_PATH,
+  stagesLandmarkArtPath,
+} from "./stagesMap.js";
 export type { ContentMode, CairosDungeon, MainQuestPinId, StageDef } from "./scenario.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";
+export type { StagesLandmarkId, StagesLandmarkDef } from "./stagesMap.js";
 export {
   canUnlockSkillNode,
   getSkillTreeNode,

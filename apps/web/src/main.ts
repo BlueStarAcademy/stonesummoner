@@ -202,6 +202,10 @@ import {
   MAIN_QUEST_PIN_LAYOUT,
   MAIN_QUEST_STAGES,
   SIDE_CONTENT_PIN_LAYOUT,
+  STAGES_LANDMARK_LAYOUT,
+  STAGES_MAP_NATURAL as STAGES_MAP_NATURAL_DATA,
+  STAGES_TERRAIN_ART_PATH,
+  stagesLandmarkArtPath,
   STAGES_PER_AREA,
   TRIAL_STAGES,
   CHALLENGE_TOWER_STAGES,
@@ -3157,12 +3161,15 @@ let stagesPanDrag: {
   moved: boolean;
 } | null = null;
 /** Atlas pixel size — pin x/y% are fractions of this image, not the viewport crop. */
-const STAGES_MAP_NATURAL = { w: 1080, h: 1920 } as const;
+const STAGES_MAP_NATURAL = {
+  w: STAGES_MAP_NATURAL_DATA.w,
+  h: STAGES_MAP_NATURAL_DATA.h,
+} as const;
 const STAGES_MAP_ASPECT = STAGES_MAP_NATURAL.w / STAGES_MAP_NATURAL.h;
 /** World larger than viewport so the full atlas can be panned. */
-const STAGES_WORLD_OVERSCAN = 1.55;
+const STAGES_WORLD_OVERSCAN = 1.9;
 /** Bump when atlas fit metrics change so the next bind re-centers once. */
-const STAGES_MAP_FIT_VERSION = 1;
+const STAGES_MAP_FIT_VERSION = 2;
 let stagesMapFitApplied = 0;
 let stagesWorldResizeObs: ResizeObserver | null = null;
 
@@ -23621,19 +23628,24 @@ function renderStages(): string {
       </button>`;
     })
     .join("");
+  const landmarks = STAGES_LANDMARK_LAYOUT.map((lm) => {
+    const scale = lm.scale ?? 1;
+    return `<img class="stages-landmark${lm.id === "challenge_tower" ? " stages-landmark--hero" : ""}" src="${stagesLandmarkArtPath(lm.artKey)}" alt="" draggable="false" decoding="async" style="left:${lm.x}%;top:${lm.y}%;--lm-scale:${scale}" data-landmark="${lm.id}" aria-hidden="true" />`;
+  }).join("");
   return `<div class="stages-hub stages-hub--map">
     <div class="stages-viewport" id="stages-viewport">
       <div class="stages-world" id="stages-world" style="transform:translate(${stagesPan.x}px,${stagesPan.y}px)">
         <img
           class="stages-map-img"
-          src="/art/stages/stages-world-map.png"
-          width="1080"
-          height="1920"
+          src="${STAGES_TERRAIN_ART_PATH}"
+          width="${STAGES_MAP_NATURAL.w}"
+          height="${STAGES_MAP_NATURAL.h}"
           alt=""
           decoding="async"
           draggable="false"
         />
         <div class="stages-map-veil" aria-hidden="true"></div>
+        <div class="stages-landmarks" aria-hidden="true">${landmarks}</div>
         <div class="stages-mq-nodes">${mqNodes}</div>
         <div class="stages-map-pins">${pins}</div>
       </div>
@@ -24514,7 +24526,7 @@ function applyStagesPan(): void {
 
 /**
  * Size the pannable world to the atlas aspect ratio so pin left%/top% map 1:1
- * onto stages-world-map.png on every device (no object-fit cover crop drift).
+ * onto stages-world-terrain.webp on every device (no object-fit cover crop drift).
  */
 function sizeStagesWorld(viewport: HTMLElement, world: HTMLElement): void {
   const vw = viewport.clientWidth;

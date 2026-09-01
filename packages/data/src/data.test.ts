@@ -15,6 +15,9 @@ import {
   MAIN_QUEST_AREA_COUNT,
   MAIN_QUEST_PIN_LAYOUT,
   MAIN_QUEST_STAGES,
+  SIDE_CONTENT_PIN_LAYOUT,
+  STAGES_LANDMARK_LAYOUT,
+  STAGES_MAP_NATURAL,
   STAGES_PER_AREA,
   bumpGearEnhance,
   canEquipGearOnElement,
@@ -214,6 +217,20 @@ describe("phase1 data", () => {
       ),
       true,
     );
+  });
+
+  it("stages map landmarks share coords with side pins on the expansive atlas", () => {
+    assert.equal(STAGES_MAP_NATURAL.w, 2160);
+    assert.equal(STAGES_MAP_NATURAL.h, 2880);
+    assert.equal(STAGES_LANDMARK_LAYOUT.length, SIDE_CONTENT_PIN_LAYOUT.length);
+    assert.ok(STAGES_LANDMARK_LAYOUT.some((l) => l.id === "challenge_tower"));
+    for (const pin of SIDE_CONTENT_PIN_LAYOUT) {
+      const lm = STAGES_LANDMARK_LAYOUT.find((l) => l.id === pin.id);
+      assert.ok(lm, pin.id);
+      assert.equal(lm!.x, pin.x);
+      assert.equal(lm!.y, pin.y);
+      assert.ok(lm!.artKey.length > 0);
+    }
   });
 
   it("maps each scenario area to SW-order symbol set", () => {
