@@ -1,5 +1,7 @@
 import {
+  createSymbol,
   getStage,
+  mainStatAtEnhance,
   type StageDef,
 } from "stonesummoner-data";
 import {
@@ -45,6 +47,73 @@ function median(values: number[]): number {
   return ordered[Math.floor(ordered.length / 2)] ?? 0;
 }
 
+function benchmarkSave(stage: StageDef, difficulty: ScenarioDifficulty) {
+  const save = createNewSave(0);
+  const enemyLevel =
+    stage.difficultyBalance?.[difficulty]?.enemyLevel ??
+    stage.enemyLevel ??
+    1;
+  const targetLevel = Math.max(
+    stage.mode === "scenario" ? 5 : 15,
+    Math.min(40, enemyLevel - (stage.cairosTier ? 2 : 5)),
+  );
+  const deepFarm =
+    stage.cairosTier === "abyss_normal" ||
+    stage.cairosTier === "abyss_hard" ||
+    (stage.mode === "depth" && stage.stage >= 7);
+  const symbols = [...save.symbols];
+  const roster = save.roster.map((monster, monsterIndex) => {
+    const next = {
+      ...monster,
+      level: targetLevel,
+      evolve: deepFarm ? 5 : monster.evolve,
+      awaken: deepFarm ? 1 : monster.awaken,
+      skillLevels: deepFarm
+        ? ([3, 3, 3] as [number, number, number])
+        : monster.skillLevels,
+      symbolSlots: [...monster.symbolSlots],
+    };
+    if (!deepFarm || monsterIndex >= 4) return next;
+    next.symbolSlots = Array.from({ length: 6 }, (_, index) => {
+      const slot = (index + 1) as 1 | 2 | 3 | 4 | 5 | 6;
+      const setId = slot <= 2 ? "hwalro" : "yongmaeng";
+      const symbol = createSymbol(
+        setId,
+        slot,
+        `bench_${monster.uid}_${slot}`,
+        { stars: 6, quality: "legend", rng: seeded(monsterIndex * 10 + slot) },
+      );
+      symbol.enhance = 15;
+      symbol.mainValue = mainStatAtEnhance(
+        symbol.mainStat as Parameters<typeof mainStatAtEnhance>[0],
+        6,
+        15,
+      );
+      symbols.push(symbol);
+      return symbol.id;
+    });
+    return next;
+  });
+  return {
+    ...save,
+    roster,
+    symbols,
+    island: {
+      ...save.island,
+      energy: 999,
+      summonerLevel: targetLevel,
+    },
+    summoners: {
+      ...save.summoners,
+      [save.activeSummoner]: {
+        ...save.summoners[save.activeSummoner],
+        level: targetLevel,
+        awaken: deepFarm ? 4 : save.summoners[save.activeSummoner].awaken,
+      },
+    },
+  };
+}
+
 function simulate(
   stage: StageDef,
   difficulty: ScenarioDifficulty,
@@ -58,7 +127,7 @@ function simulate(
 
   for (let seed = 1; seed <= runs; seed++) {
     const rng = seeded(seed * 7_919 + stage.stage * 101 + stage.map);
-    const save = createNewSave(0);
+    const save = benchmarkSave(stage, difficulty);
     const battle = createStageBattle(stage, save, { difficulty, rng });
     const result = resolveBattleAuto(battle, 250);
     turns.push(result.turns);
