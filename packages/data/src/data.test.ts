@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   applySymbolsToStats,
+  effectiveSymbolSetCounts,
   canGrindSymbol,
   symbolCombatMods,
   describeSkillVfx,
@@ -11,6 +12,8 @@ import {
   CAIROS_DRAGON_STAGES,
   CAIROS_GIANT_STAGES,
   CAIROS_NECRO_STAGES,
+  CHALLENGE_TOWER_HARD_STAGES,
+  CHALLENGE_TOWER_NORMAL_STAGES,
   DEPTH_STAGES,
   MAIN_QUEST_AREA_COUNT,
   MAIN_QUEST_PIN_LAYOUT,
@@ -68,9 +71,9 @@ import {
 } from "./index.js";
 
 describe("phase1 data", () => {
-  it("has 50 families x 5 elements and 16 symbol sets", () => {
+  it("has 50 families x 5 elements and 17 symbol sets", () => {
     assert.equal(MONSTERS.length, 250);
-    assert.equal(SYMBOL_SETS.length, 16);
+    assert.equal(SYMBOL_SETS.length, 17);
     assert.ok(getMonster("wolf_fighter_fire"));
     assert.ok(getMonster("lotus_dancer_wind"));
     assert.ok(getMonster("abyss_priest_dark"));
@@ -238,15 +241,38 @@ describe("phase1 data", () => {
     }
   });
 
-  it("has Cairos giant/dragon/necro B1–B10 with set pools", () => {
-    assert.equal(CAIROS_GIANT_STAGES.length, 10);
-    assert.equal(CAIROS_DRAGON_STAGES.length, 10);
-    assert.equal(CAIROS_NECRO_STAGES.length, 10);
-    assert.equal(DEPTH_STAGES.length, 30);
+  it("uses explicit modern scenario difficulty profiles", () => {
+    for (const stage of MAIN_QUEST_STAGES) {
+      assert.equal(stage.waves, 3);
+      assert.ok(stage.balanceProfile?.startsWith("sw-modern-scenario-"));
+      const normal = stage.difficultyBalance?.normal;
+      const hard = stage.difficultyBalance?.hard;
+      const hell = stage.difficultyBalance?.hell;
+      assert.ok(normal && hard && hell);
+      assert.equal(normal.energyCost, stage.stage === 7 ? 4 : 3);
+      assert.equal(hard.energyCost, stage.stage === 7 ? 5 : 4);
+      assert.equal(hell.energyCost, stage.stage === 7 ? 6 : 5);
+      assert.ok(normal.enemyLevel < hard.enemyLevel);
+      assert.ok(hard.enemyLevel <= hell.enemyLevel);
+      assert.ok(normal.monsterExpPool > 0);
+      assert.ok(hell.monsterExpPool >= hard.monsterExpPool);
+    }
+  });
+
+  it("has modern Cairos B1–B10 plus Abyss Normal/Hard with set pools", () => {
+    assert.equal(CAIROS_GIANT_STAGES.length, 12);
+    assert.equal(CAIROS_DRAGON_STAGES.length, 12);
+    assert.equal(CAIROS_NECRO_STAGES.length, 12);
+    assert.equal(DEPTH_STAGES.length, 36);
     assert.ok(CAIROS_GIANT_STAGES[0]!.dropSetPool?.includes("myosu"));
     assert.ok(CAIROS_DRAGON_STAGES[0]!.dropSetPool?.includes("gyeongno"));
     assert.ok(CAIROS_NECRO_STAGES[0]!.dropSetPool?.includes("chimtu"));
     assert.ok(getStage("giant_b10")?.starWeights?.length);
+    assert.equal(getStage("giant_abyss_normal")?.cairosTier, "abyss_normal");
+    assert.equal(getStage("giant_abyss_hard")?.cairosTier, "abyss_hard");
+    assert.ok(
+      getStage("giant_abyss_hard")?.dropSetPool?.includes("muhyeong"),
+    );
   });
 
   it("builds five B1-B10 awakening boss dungeons with weekday rotation", () => {
@@ -262,7 +288,7 @@ describe("phase1 data", () => {
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       );
       for (const stage of floors) {
-        assert.equal(stage.enemyWaves?.length, stage.stage >= 8 ? 3 : 2);
+        assert.equal(stage.enemyWaves?.length, 4);
         assert.equal(stage.enemyWaves?.at(-1)?.[0], stage.bossMonsterId);
         assert.equal(stage.bossArtId, `awaken-${element}`);
         assert.ok(stage.awakenEssenceDrops?.length);
@@ -290,14 +316,46 @@ describe("phase1 data", () => {
     }
   });
 
-  it("builds every Giant floor as a guaranteed final-wave boss encounter", () => {
+  it("defines independent Normal and Hard tower ladders", () => {
+    assert.equal(CHALLENGE_TOWER_NORMAL_STAGES.length, 100);
+    assert.equal(CHALLENGE_TOWER_HARD_STAGES.length, 100);
+    assert.equal(CHALLENGE_TOWER_NORMAL_STAGES[0]!.id, "toa_f1");
+    assert.equal(CHALLENGE_TOWER_HARD_STAGES[0]!.id, "toa_hard_f1");
+    for (const stage of [
+      ...CHALLENGE_TOWER_NORMAL_STAGES,
+      ...CHALLENGE_TOWER_HARD_STAGES,
+    ]) {
+      assert.equal(stage.waves, 3);
+      assert.ok(stage.energyCost >= 3 && stage.energyCost <= 8);
+      assert.ok(stage.balanceProfile);
+      assert.ok(stage.rewardTable);
+    }
+  });
+
+  it("gives custom reward modes explicit non-synthetic balance fields", () => {
+    for (const stage of [
+      ...EQUIP_STAGES,
+      getStage("trial_b1")!,
+      getStage("trial_b2")!,
+      getStage("trial_b3")!,
+      getStage("guild_raid_boss")!,
+    ]) {
+      assert.equal(typeof stage.enemyLevel, "number");
+      assert.equal(typeof stage.accountExpReward, "number");
+      assert.equal(typeof stage.monsterExpPool, "number");
+      assert.ok(stage.balanceProfile);
+      assert.ok(stage.rewardTable);
+    }
+  });
+
+  it("builds every Giant floor as a four-wave final boss encounter", () => {
     for (const stage of CAIROS_GIANT_STAGES) {
-      assert.equal(stage.dropChance, 1);
+      assert.equal(stage.waves, 4);
       assert.equal(stage.enemyWaves?.length, stage.waves);
       assert.equal(stage.enemyWaves?.at(-1)?.[0], stage.bossMonsterId);
       assert.equal(stage.bossMonsterId, "stone_golem_dark");
       assert.equal(stage.bossArtId, "cairos-giant");
-      assert.ok((stage.bossHpMultiplier ?? 0) > 2);
+      assert.ok((stage.bossHpMultiplier ?? 0) >= 2);
       assert.ok(
         stage.qualityWeights?.every(
           ({ value }) => value === "rare" || value === "epic" || value === "legend",
@@ -722,6 +780,19 @@ describe("phase1 data", () => {
     assert.equal(prog[0]!.effectKo, "체력 +15%");
   });
 
+  it("uses an Intangible symbol to fill one missing equipped set piece", () => {
+    const violent = [1, 2, 3].map((slot) =>
+      createSymbol("gyeongno", slot as 1 | 2 | 3, `v${slot}`),
+    );
+    const intangible = createSymbol("muhyeong", 4, "intangible");
+    const counts = effectiveSymbolSetCounts([...violent, intangible]);
+    assert.equal(counts.gyeongno, 4);
+    assert.equal(symbolCombatMods([...violent, intangible]).violentChance, 22);
+    const progress = summarizeSymbolSets([...violent, intangible]);
+    assert.equal(progress.find((set) => set.setId === "gyeongno")?.active, true);
+    assert.equal(progress.find((set) => set.setId === "muhyeong")?.active, false);
+  });
+
   it("doubles 2-set bonuses at 4 pieces (hwalro +30% hp)", () => {
     const base = {
       hp: 1000,
@@ -770,7 +841,7 @@ describe("phase1 data", () => {
     }));
     const mods = symbolCombatMods(fourBogang);
     assert.equal(mods.startShieldPct, 0.3);
-    assert.equal(summarizeSymbolSets(fourBogang)[0]!.effectKo, "아군 실드 3턴(체력의 30%)");
+    assert.equal(summarizeSymbolSets(fourBogang)[0]!.effectKo, "착용자 실드 3턴(체력의 30%)");
   });
 
   it("applies SW set bonuses (mussang/chimtu/jipjung)", () => {
@@ -961,10 +1032,7 @@ describe("phase1 data", () => {
     assert.ok(b1.starWeights!.every((r) => r.value >= 3));
     assert.ok(b1.starWeights!.every((r) => r.value <= 4));
     assert.ok(b5.starWeights!.some((r) => r.value === 6));
-    assert.ok(b10.starWeights!.every((r) => r.value >= 5 && r.value <= 6));
-    const b10Five = b10.starWeights!.find((r) => r.value === 5)!.w;
-    const b10Six = b10.starWeights!.find((r) => r.value === 6)!.w;
-    assert.ok(b10Five > b10Six, "B10 still leans ★5 over ★6");
+    assert.deepEqual(b10.starWeights, [{ value: 6, w: 100 }]);
     assert.ok(b10.qualityWeights!.every((r) => r.value !== "normal"));
     assert.ok(
       (b10.qualityWeights!.find((r) => r.value === "rare")?.w ?? 0) >= 55,

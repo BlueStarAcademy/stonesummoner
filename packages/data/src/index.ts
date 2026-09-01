@@ -94,6 +94,7 @@ export {
   applySymbolsToStats,
   bumpSymbolEnhance,
   countSymbolSets,
+  effectiveSymbolSetCounts,
   describeSymbol,
   emptySymbolCombatMods,
   formatSymbolSetEffect,
@@ -226,6 +227,9 @@ export {
   GUILD_RAID_STAGES,
   TRIAL_STAGES,
   CHALLENGE_TOWER_STAGES,
+  CHALLENGE_TOWER_NORMAL_STAGES,
+  CHALLENGE_TOWER_HARD_STAGES,
+  ALL_CHALLENGE_TOWER_STAGES,
   CHALLENGE_TOWER_FLOORS,
   challengeTowerStageFloor,
   WEEKDAY_STAGES,
@@ -239,8 +243,26 @@ export {
   scenarioSymbolDropTable,
   scenarioGearStarWeights,
 } from "./scenario.js";
-export type { ContentMode, CairosDungeon, MainQuestPinId, StageDef } from "./scenario.js";
+export type {
+  ContentMode,
+  CairosDungeon,
+  CairosTier,
+  ChallengeTowerDifficulty,
+  MainQuestPinId,
+  ScenarioDifficultyKey,
+  StageDef,
+  StageDifficultyBalance,
+} from "./scenario.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";
+export {
+  SW_ABYSS_PROFILES,
+  SW_CAIROS_B1_B10,
+  SW_MODE_EFFICIENCY_PROFILES,
+  SW_MODERN_SNAPSHOT,
+  SW_SCENARIO_DIFFICULTY,
+  SW_SCENARIO_STRUCTURE,
+  SW_SCENARIO_XP_ANCHORS,
+} from "./balance/swModern.js";
 export {
   canUnlockSkillNode,
   getSkillTreeNode,

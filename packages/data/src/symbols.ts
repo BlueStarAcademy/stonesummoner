@@ -39,7 +39,8 @@ export type SymbolSetId =
   | "pamyeol"
   | "myosu"
   | "gyeongno"
-  | "chimtu";
+  | "chimtu"
+  | "muhyeong";
 
 export interface SymbolSetDef {
   id: SymbolSetId;
@@ -49,6 +50,8 @@ export interface SymbolSetDef {
   effectKo: string;
   /** Scenario map 1–13, or null if Cairos-only. */
   dropMap: number | null;
+  /** Intangible: fills one missing piece of another set. */
+  wildcard?: boolean;
 }
 
 export const SYMBOL_SETS: SymbolSetDef[] = [
@@ -59,7 +62,7 @@ export const SYMBOL_SETS: SymbolSetDef[] = [
   { id: "jipjung", nameKo: "집중", swName: "Focus", pieces: 2, effectKo: "효과적중 +20%", dropMap: 5 },
   { id: "gunhim", nameKo: "굳힘", swName: "Guard", pieces: 2, effectKo: "방어력 +15%", dropMap: 6 },
   { id: "yeongyeol", nameKo: "연결", swName: "Endure", pieces: 2, effectKo: "효과저항 +20%", dropMap: 7 },
-  { id: "bogang", nameKo: "보강", swName: "Shield", pieces: 2, effectKo: "아군 실드 3턴(체력의 15%)", dropMap: 8 },
+  { id: "bogang", nameKo: "보강", swName: "Shield", pieces: 2, effectKo: "착용자 실드 3턴(체력의 15%)", dropMap: 8 },
   { id: "hwangyeok", nameKo: "환격", swName: "Revenge", pieces: 2, effectKo: "반격확률 +15%", dropMap: 9 },
   { id: "ssangnip", nameKo: "쌍립", swName: "Will", pieces: 2, effectKo: "면역 1턴", dropMap: 10 },
   { id: "eungjing", nameKo: "응징", swName: "Nemesis", pieces: 2, effectKo: "피격 시 ATB +4%(HP 7% 손실마다)", dropMap: 11 },
@@ -68,6 +71,7 @@ export const SYMBOL_SETS: SymbolSetDef[] = [
   { id: "myosu", nameKo: "묘수", swName: "Despair", pieces: 4, effectKo: "기절 확률 +25%", dropMap: null },
   { id: "gyeongno", nameKo: "격노", swName: "Violent", pieces: 4, effectKo: "추가턴 +22%", dropMap: null },
   { id: "chimtu", nameKo: "침투", swName: "Rage", pieces: 4, effectKo: "치명피해 +40%", dropMap: null },
+  { id: "muhyeong", nameKo: "무형", swName: "Intangible", pieces: 2, effectKo: "부족한 세트 1개 대체", dropMap: null, wildcard: true },
 ];
 
 const SET_IDS = new Set<string>(SYMBOL_SETS.map((s) => s.id));

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+  <defs>
+    <radialGradient id="muhyeong-aura" cx="50%" cy="46%" r="52%">
+      <stop stop-color="#d9d2ff" stop-opacity=".9"/>
+      <stop offset=".52" stop-color="#8f7ce8" stop-opacity=".34"/>
+      <stop offset="1" stop-color="#44356f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="muhyeong-ink" x1="16" y1="12" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff"/>
+      <stop offset=".35" stop-color="#d8d0ff"/>
+      <stop offset=".72" stop-color="#927de8"/>
+      <stop offset="1" stop-color="#493477"/>
+    </linearGradient>
+  </defs>
+  <circle cx="36" cy="36" r="31" fill="url(#muhyeong-aura)"/>
+  <path d="M36 9C23 9 14 19 14 31c0 10 7 17 16 17 8 0 14-5 14-12 0-5-4-9-9-9-4 0-7 3-7 7 0 3 2 5 5 5"
+        stroke="url(#muhyeong-ink)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M36 63c13 0 22-10 22-22 0-10-7-17-16-17-8 0-14 5-14 12 0 5 4 9 9 9 4 0 7-3 7-7 0-3-2-5-5-5"
+        stroke="url(#muhyeong-ink)" stroke-width="6" stroke-linecap="round" opacity=".88"/>
+  <circle cx="36" cy="36" r="4.5" fill="#fff" stroke="#8f7ce8" stroke-width="2"/>
+</svg>
