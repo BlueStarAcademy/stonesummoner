@@ -10084,12 +10084,15 @@ body > .battle-settings-layer.settings-layer {
   top: 0;
   left: 0;
   z-index: 1;
-  width: min(250px, calc(100vw - 16px));
+  display: flex;
+  flex-direction: column;
+  width: 250px;
+  height: 202px;
   overflow: hidden;
   border: 1px solid #c9a22788;
   border-radius: 14px;
-  /* Near-opaque panel — tabs stay readable; option rows must not wash out over battle art */
-  background: linear-gradient(160deg, #211a36f7, #100d1bf7);
+  /* 50% opacity — battle art stays visible behind the sheet */
+  background: linear-gradient(160deg, #211a3680, #100d1b80);
   box-shadow: 0 12px 26px #000b, inset 0 1px 0 #ffffff1a;
   pointer-events: auto;
   backdrop-filter: none;
@@ -10099,8 +10102,11 @@ body > .battle-settings-layer.settings-layer {
 
 .battle-settings-panel {
   display: block;
-  min-height: 44px;
-  background: #14101cf2;
+  flex: 1 1 auto;
+  min-height: 126px;
+  height: 126px;
+  overflow: hidden;
+  background: #14101c80;
 }
 
 /* Author display:block must not beat [hidden] / tab off-state */
@@ -10117,6 +10123,7 @@ body > .battle-settings-layer.settings-layer {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
   min-height: 38px;
   padding: 0 8px 0 12px;
   border-bottom: 1px solid #c9a2273d;
@@ -10141,6 +10148,7 @@ body > .battle-settings-layer.settings-layer {
 .battle-settings-tabs {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
   padding: 6px 8px 0;
 }
 

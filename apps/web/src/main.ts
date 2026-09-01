@@ -10193,6 +10193,10 @@ function removeBattleAutoSettingsLayer(): void {
   rememberOverlayClose("battle-auto-settings");
 }
 
+/** Fixed card box — must match `.battle-auto-settings-card` in style.css. */
+const BATTLE_SETTINGS_CARD_WIDTH = 250;
+const BATTLE_SETTINGS_CARD_HEIGHT = 202;
+
 /** Toggle battle AUTO sheet without remounting combat. */
 function positionBattleAutoSettings(
   layer: HTMLElement,
@@ -10205,9 +10209,9 @@ function positionBattleAutoSettings(
   const r = btn.getBoundingClientRect();
   const pad = 8;
   const gap = 8;
-  const width = Math.min(250, Math.max(160, window.innerWidth - pad * 2));
+  const width = Math.min(BATTLE_SETTINGS_CARD_WIDTH, Math.max(160, window.innerWidth - pad * 2));
   card.style.width = `${Math.round(width)}px`;
-  const height = Math.max(card.offsetHeight, 120);
+  const height = BATTLE_SETTINGS_CARD_HEIGHT;
   let left = r.right - width;
   left = Math.min(
     Math.max(pad, left),
