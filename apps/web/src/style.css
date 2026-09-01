@@ -14781,7 +14781,9 @@ body > .battle-settings-layer.settings-layer {
 }
 
 .result-exp-row--lead {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 46%;
+  margin-inline: auto;
 }
 
 .result-exp-row--party {

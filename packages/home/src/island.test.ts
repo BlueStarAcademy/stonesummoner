@@ -90,7 +90,7 @@ describe("Phase1 island", () => {
       island.buildings.find((b) => b.id === "mana_pond")!.level,
       1,
     );
-    assert.match(blocked.message, /계정 Lv\.3/);
+    assert.match(blocked.message, /소환사 Lv\.3/);
     island = { ...island, summonerLevel: 3 };
     const r = upgradeBuilding(island, "mana_pond");
     assert.equal(r.island.buildings.find((b) => b.id === "mana_pond")!.level, 2);

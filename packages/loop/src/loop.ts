@@ -126,6 +126,11 @@ import {
   type WishReward,
 } from "stonesummoner-home";
 import {
+  accountLevelOf,
+  sharedSummonerProgress,
+} from "./summonerLevel.js";
+export { accountLevelOf, sharedSummonerProgress } from "./summonerLevel.js";
+import {
   createStarterRoster,
   describeOwned,
   emptySymbolSlots,
@@ -1011,27 +1016,36 @@ export const SUMMONER_ELEMENT_LABEL: Record<SummonerElement, string> = {
 export function createSummonerRoster(
   seed?: Partial<ElementSummonerProfile>,
 ): Record<SummonerElement, ElementSummonerProfile> {
-  const light: ElementSummonerProfile = {
-    level: Math.max(1, Math.floor(seed?.level ?? 1)),
-    exp: Math.max(0, Math.floor(seed?.exp ?? 0)),
-    awaken: Math.max(0, Math.floor(seed?.awaken ?? 0)),
-    gear: seed?.gear
-      ? normalizeSummonerGear(seed.gear, "light")
-      : createEmptyGear(),
-  };
-  const blank = (el: SummonerElement): ElementSummonerProfile => ({
-    level: 1,
-    exp: 0,
-    awaken: 0,
-    gear: createEmptyGear(),
+  const level = Math.max(1, Math.floor(seed?.level ?? 1));
+  const exp = Math.max(0, Math.floor(seed?.exp ?? 0));
+  const slot = (el: SummonerElement, awaken: number): ElementSummonerProfile => ({
+    level,
+    exp,
+    awaken,
+    gear:
+      el === "light" && seed?.gear
+        ? normalizeSummonerGear(seed.gear, "light")
+        : createEmptyGear(),
   });
   return {
-    fire: blank("fire"),
-    water: blank("water"),
-    wind: blank("wind"),
-    light,
-    dark: blank("dark"),
+    fire: slot("fire", 0),
+    water: slot("water", 0),
+    wind: slot("wind", 0),
+    light: slot("light", Math.max(0, Math.floor(seed?.awaken ?? 0))),
+    dark: slot("dark", 0),
   };
+}
+
+function withSharedSummonerProgress(
+  summoners: Record<SummonerElement, ElementSummonerProfile>,
+  shared: { level: number; exp: number },
+): Record<SummonerElement, ElementSummonerProfile> {
+  const next = { ...summoners };
+  for (const el of SUMMONER_ELEMENTS) {
+    const cur = next[el] ?? { level: 1, exp: 0, awaken: 0 };
+    next[el] = { ...cur, level: shared.level, exp: shared.exp };
+  }
+  return next;
 }
 
 export function createEmptySummonerMagic(): Record<
@@ -1066,16 +1080,8 @@ export function createEmptySummonerMagicLoadouts(): Record<
 export function accountSummonerLevel(
   summoners: Record<SummonerElement, ElementSummonerProfile>,
 ): number {
-  return Math.max(
-    1,
-    ...SUMMONER_ELEMENTS.map((e) => summoners[e]?.level ?? 1),
-  );
-}
-
-/** Account level = highest elemental summoner level. */
-export function accountLevelOf(save: PlayerSave): number {
-  if (save.summoners) return accountSummonerLevel(save.summoners);
-  return Math.max(1, Math.floor(save.island.summonerLevel ?? 1));
+  return sharedSummonerProgress({ summonerLevel: 1, summonerExp: 0 }, summoners)
+    .level;
 }
 
 export function getActiveSummoner(save: PlayerSave): ElementSummonerProfile {
@@ -1089,7 +1095,7 @@ export function getActiveSummoner(save: PlayerSave): ElementSummonerProfile {
   );
 }
 
-/** Mirror active awaken + account max level onto legacy island/awaken fields. */
+/** Mirror shared level/EXP onto every elemental kit + island fields. */
 export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
   let summoners = save.summoners ?? createSummonerRoster({
     level: save.island.summonerLevel,
@@ -1112,7 +1118,12 @@ export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
       gear: normalizeSummonerGear(seedGear, el),
     };
   }
-  summoners = nextSummoners;
+  const shared = sharedSummonerProgress(
+    save.island,
+    nextSummoners,
+    activeSummoner,
+  );
+  summoners = withSharedSummonerProgress(nextSummoners, shared);
   const active = summoners[activeSummoner] ?? summoners.light;
   const activeGear = normalizeSummonerGear(active.gear, activeSummoner);
   const summonerMagic = {
@@ -1143,8 +1154,8 @@ export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
     gearBag,
     island: {
       ...save.island,
-      summonerLevel: accountSummonerLevel(summoners),
-      summonerExp: active.exp,
+      summonerLevel: shared.level,
+      summonerExp: shared.exp,
     },
   };
 }
@@ -1297,7 +1308,8 @@ export function setActiveSummoner(
   });
 }
 
-export function addActiveSummonerExp(
+/** Shared summoner/user EXP. Alias kept so callers do not fork per-element growth. */
+export function addSummonerExpToSave(
   save: PlayerSave,
   amount: number,
   now = Date.now(),
@@ -1308,28 +1320,37 @@ export function addActiveSummonerExp(
   unlockedBuildingIds: BuildingId[];
 } {
   const synced = syncSummonerMirrors(save);
-  const beforeAccountLv = accountSummonerLevel(
-    synced.summoners ?? createSummonerRoster(),
-  );
+  const beforeAccountLv = accountLevelOf(synced);
   const beforeBuildingIds = new Set(synced.island.buildings.map((b) => b.id));
-  const el = synced.activeSummoner;
-  const cur = synced.summoners[el];
-  let exp = cur.exp + amount;
-  let level = cur.level;
+  const shared = sharedSummonerProgress(
+    synced.island,
+    synced.summoners,
+    synced.activeSummoner,
+  );
+  let exp = shared.exp + Math.max(0, Math.floor(amount));
+  let level = shared.level;
   let levelsGained = 0;
-  while (exp >= summonerExpToNext(level)) {
-    exp -= summonerExpToNext(level);
+  let need = summonerExpToNext(level);
+  while (need > 0 && exp >= need) {
+    exp -= need;
     level += 1;
     levelsGained += 1;
+    need = summonerExpToNext(level);
   }
-  const summoners = {
-    ...synced.summoners,
-    [el]: { ...cur, level, exp },
-  };
-  let next = syncSummonerMirrors({ ...synced, summoners });
-  const afterAccountLv = accountSummonerLevel(
-    next.summoners ?? createSummonerRoster(),
-  );
+  const summoners = withSharedSummonerProgress(synced.summoners, {
+    level,
+    exp,
+  });
+  let next = syncSummonerMirrors({
+    ...synced,
+    summoners,
+    island: {
+      ...synced.island,
+      summonerLevel: level,
+      summonerExp: exp,
+    },
+  });
+  const afterAccountLv = accountLevelOf(next);
   const accountLevelsGained = Math.max(0, afterAccountLv - beforeAccountLv);
   const targetMax = energyMaxForLevel(afterAccountLv);
   let island = {
@@ -1347,6 +1368,8 @@ export function addActiveSummonerExp(
     unlockedBuildingIds,
   };
 }
+
+export const addActiveSummonerExp = addSummonerExpToSave;
 
 /** Serialized first-rite guide progress (mirrors web onboard snapshot). */
 export type OnboardRiteSave = {
@@ -2377,7 +2400,7 @@ export function runFusion(
   const island = syncBuildingUnlocks(tickProduction(save.island));
   if (
     !island.buildings.some((b) => b.id === "fusion_star") &&
-    island.summonerLevel < 17
+    accountLevelOf(save) < 17
   ) {
     return {
       save: { ...save, island },
@@ -2460,7 +2483,7 @@ export function runRecipeFusion(
   const recipe = getFusionRecipe(recipeId);
   if (!recipe) return { save, message: `조합 레시피 없음: ${recipeId}` };
   const needLv = recipe.unlockSummonerLevel ?? 1;
-  if (island.summonerLevel < needLv) {
+  if (accountLevelOf({ ...save, island }) < needLv) {
     return {
       save: { ...save, island },
       message: `조합 해금 필요 (소환사 Lv.${needLv})`,
@@ -2887,7 +2910,7 @@ export function runCraftScroll(save: PlayerSave): LoopStepResult {
   let island = syncBuildingUnlocks(tickProduction(save.island));
   if (
     !island.buildings.some((b) => b.id === "craft_hall") &&
-    island.summonerLevel < 19
+    accountLevelOf(save) < 19
   ) {
     return {
       save: { ...save, island },
@@ -2922,7 +2945,7 @@ export function runCraftEssence(save: PlayerSave): LoopStepResult {
   let island = syncBuildingUnlocks(tickProduction(save.island));
   if (
     !island.buildings.some((b) => b.id === "fuse_center") &&
-    island.summonerLevel < 12
+    accountLevelOf(save) < 12
   ) {
     return {
       save: { ...save, island },
@@ -2998,7 +3021,7 @@ export function runPracticeDojo(
   let island = syncBuildingUnlocks(tickProduction(save.island, now), now);
   if (
     !island.buildings.some((b) => b.id === "practice_dojo") &&
-    island.summonerLevel < 8
+    accountLevelOf(save) < 8
   ) {
     return {
       save: { ...save, island },
@@ -3043,7 +3066,7 @@ export function runBuyCircleInscription(
   let island = syncBuildingUnlocks(tickProduction(save.island));
   if (
     !island.buildings.some((b) => b.id === "practice_dojo") &&
-    island.summonerLevel < 8
+    accountLevelOf(save) < 8
   ) {
     return {
       save: { ...save, island },
@@ -3081,7 +3104,7 @@ function guildHallIsland(save: PlayerSave) {
   const island = syncBuildingUnlocks(tickProduction(save.island));
   const unlocked =
     island.buildings.some((b) => b.id === "guild_hall") ||
-    island.summonerLevel >= 12;
+    accountLevelOf(save) >= 12;
   return { island, unlocked };
 }
 
@@ -3158,7 +3181,7 @@ export function runGuildCheckIn(
   let island = syncBuildingUnlocks(tickProduction(save.island, now), now);
   if (
     !island.buildings.some((b) => b.id === "guild_hall") &&
-    island.summonerLevel < 12
+    accountLevelOf(save) < 12
   ) {
     return {
       save: { ...save, island },
@@ -4154,10 +4177,11 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
     };
   }
   const needLv = awakenMinLevel(cur);
-  if (active.level < needLv) {
+  const sharedLv = accountLevelOf(synced);
+  if (sharedLv < needLv) {
     return {
       save: synced,
-      message: `진화 해금: 소환사 Lv.${needLv}+ 필요 (현재 ${active.level})`,
+      message: `진화 해금: 소환사 Lv.${needLv}+ 필요 (현재 ${sharedLv})`,
     };
   }
   const manaCost = awakenManaCost(cur);
@@ -4227,7 +4251,7 @@ export function runUnlockSkillNode(
   const gate = canUnlockSkillNode(
     unlocked,
     nodeId as SkillTreeNodeId,
-    save.island.summonerLevel,
+    accountLevelOf(save),
   );
   if (!gate.ok) {
     return { save, message: gate.reason };
@@ -4320,7 +4344,7 @@ export function runEnhanceMagicSkill(
     };
   }
   const needLv = magicEnhanceRequiredLevel(cur);
-  const sumLv = synced.summoners[el]?.level ?? 1;
+  const sumLv = accountLevelOf(synced);
   if (sumLv < needLv) {
     return {
       save: synced,
@@ -5257,9 +5281,7 @@ export function applyRewards(
     working = bumpDailyActivity(working, "dungeon");
   }
 
-  const beforeAccountLv = accountSummonerLevel(
-    working.summoners ?? createSummonerRoster(),
-  );
+  const beforeAccountLv = accountLevelOf(working);
   const beforeActive = getActiveSummoner(working);
   const beforeParty = working.party
     .map((uid) => working.roster.find((m) => m.uid === uid))
@@ -5282,31 +5304,18 @@ export function applyRewards(
   working = { ...working, roster: rosterAfter };
 
   const afterActive = getActiveSummoner(working);
-  const afterAccountLv = accountSummonerLevel(
-    working.summoners ?? createSummonerRoster(),
-  );
+  const afterAccountLv = accountLevelOf(working);
   const expTracks: ExpTrackGain[] = [
     {
-      kind: "user",
-      id: "user",
+      kind: "summoner",
+      id: working.activeSummoner ?? "light",
+      element: working.activeSummoner ?? "light",
       gained: expGain,
       beforeLevel: beforeAccountLv,
       beforeExp: beforeActive.exp,
       afterLevel: afterAccountLv,
       afterExp: afterActive.exp,
       expPerLevel: summonerExpToNext(afterAccountLv),
-      levelsGained: Math.max(0, afterAccountLv - beforeAccountLv),
-    },
-    {
-      kind: "summoner",
-      id: working.activeSummoner ?? "light",
-      element: working.activeSummoner ?? "light",
-      gained: expGain,
-      beforeLevel: beforeActive.level,
-      beforeExp: beforeActive.exp,
-      afterLevel: afterActive.level,
-      afterExp: afterActive.exp,
-      expPerLevel: summonerExpToNext(afterActive.level),
       levelsGained: leveled.levelsGained,
     },
     ...beforeParty.map((bp) => {

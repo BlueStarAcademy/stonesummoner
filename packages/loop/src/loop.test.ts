@@ -133,6 +133,10 @@ import {
   monsterPowerUpExp,
   withDefaultSummonerMagicLoadout,
   skillsForMonster,
+  addActiveSummonerExp,
+  createSummonerRoster,
+  syncSummonerMirrors,
+  accountLevelOf,
 } from "./loop.js";
 import {
   getArenaOpponent,
@@ -183,15 +187,15 @@ describe("game loop", () => {
     }
   });
 
-  it("gates production upgrades on account level, not the active summoner", () => {
+  it("gates production upgrades on the shared summoner level", () => {
     let save = createNewSave(0);
     save = {
       ...save,
       activeSummoner: "light",
-      island: { ...save.island, mana: 8000, summonerLevel: 1 },
+      island: { ...save.island, mana: 8000, summonerLevel: 3 },
       summoners: {
         ...save.summoners,
-        light: { ...save.summoners.light, level: 1 },
+        light: { ...save.summoners.light, level: 3 },
         fire: { ...save.summoners.fire, level: 3 },
       },
     };
@@ -201,16 +205,16 @@ describe("game loop", () => {
       2,
     );
 
-    const staleIsland = {
+    const tooLow = {
       ...createNewSave(0),
-      island: { ...createNewSave(0).island, mana: 8000, summonerLevel: 10 },
+      island: { ...createNewSave(0).island, mana: 8000, summonerLevel: 1 },
     };
-    const blocked = runUpgradeBuilding(staleIsland, "mana_pond");
+    const blocked = runUpgradeBuilding(tooLow, "mana_pond");
     assert.equal(
       blocked.save.island.buildings.find((b) => b.id === "mana_pond")!.level,
       1,
     );
-    assert.match(blocked.message, /계정 Lv\.3/);
+    assert.match(blocked.message, /소환사 Lv\.3/);
   });
 
   it("drops stage crystals rarely like Summoners War extras", () => {
@@ -1489,23 +1493,15 @@ describe("game loop", () => {
     assert.ok(next.island.buildings.some((b) => b.id === "wish_temple"));
     assert.ok((reward.unlockedBuildingIds ?? []).includes("wish_temple"));
 
-    // Non-max element level-up should not raise account energy max.
-    save = {
-      ...next,
-      activeSummoner: "fire",
-      summoners: {
-        ...next.summoners,
-        light: { ...next.summoners.light, level: 10 },
-        fire: { ...next.summoners.fire, level: 3, exp: 90 },
-      },
-      island: {
-        ...next.island,
-        summonerLevel: 10,
-        energyMax: 42 + (10 - 1) * 2,
-      },
-    };
-    const capped = applyRewards(save, stage, true, () => 0.99);
-    assert.equal(capped.save.island.energyMax, save.island.energyMax);
+    const fire = setActiveSummoner(
+      withUnlockedSummoners(next, [...SUMMONER_ELEMENTS]),
+      "fire",
+    );
+    assert.equal(fire.summoners.fire.level, fire.summoners.light.level);
+    assert.equal(fire.summoners.fire.exp, fire.summoners.light.exp);
+    const again = applyRewards(fire, stage, true, () => 0.99);
+    assert.equal(again.save.summoners.fire.level, again.save.summoners.water.level);
+    assert.equal(again.save.island.summonerLevel, again.save.summoners.fire.level);
   });
 
   it("uses explicit Summoners War account and monster EXP profiles", () => {
@@ -1885,6 +1881,35 @@ describe("game loop", () => {
     assert.equal(maxed.save.summonerAwaken, MAX_SUMMONER_AWAKEN);
   });
 
+  it("shares one summoner level across every elemental kit", () => {
+    let save = createNewSave(0);
+    const roster = createSummonerRoster({ level: 8, exp: 40 });
+    assert.equal(roster.fire.level, 8);
+    assert.equal(roster.dark.exp, 40);
+    save = {
+      ...save,
+      summoners: {
+        ...save.summoners,
+        light: { ...save.summoners.light, level: 6, exp: 10 },
+        fire: { ...save.summoners.fire, level: 9, exp: 80 },
+      },
+      island: { ...save.island, summonerLevel: 4, summonerExp: 3 },
+    };
+    save = syncSummonerMirrors(save);
+    assert.equal(accountLevelOf(save), 9);
+    for (const el of SUMMONER_ELEMENTS) {
+      assert.equal(save.summoners[el].level, 9);
+      assert.equal(save.summoners[el].exp, 80);
+    }
+    assert.equal(save.island.summonerLevel, 9);
+    assert.equal(save.island.summonerExp, 80);
+
+    const gained = addActiveSummonerExp(save, 20);
+    assert.equal(gained.save.island.summonerExp, 100);
+    assert.equal(gained.save.summoners.water.exp, 100);
+    assert.equal(gained.save.summoners.dark.level, gained.save.summoners.light.level);
+  });
+
   it("switches active summoner per element", () => {
     let save = withUnlockedSummoners(createNewSave(0), [...SUMMONER_ELEMENTS]);
     save = {
@@ -1941,6 +1966,8 @@ describe("game loop", () => {
     const unlocked = unlockAdditionalSummoner(at5, "water");
     assert.match(unlocked.message, /해금/);
     assert.ok(isSummonerUnlocked(unlocked.save, "water"));
+    assert.equal(unlocked.save.summoners.water.level, 5);
+    assert.equal(unlocked.save.summoners.fire.level, 5);
     assert.equal(setActiveSummoner(unlocked.save, "water").activeSummoner, "water");
     assert.equal(canUnlockAdditionalSummoner(unlocked.save, "wind"), false);
 
@@ -2639,6 +2666,8 @@ describe("game loop", () => {
     assert.equal(round!.partyPresets[2]?.summoner, "wind");
     assert.equal(round!.partyPresets[2]?.party.length, 2);
     assert.equal(round!.summoners.fire.level, 12);
+    assert.equal(round!.summoners.light.level, 12);
+    assert.equal(round!.island.summonerLevel, 12);
     assert.equal(round!.roster[0]?.awaken, 1);
     assert.equal(round!.skillMats, 9);
     assert.deepEqual(round!.awakenMats.fire, { low: 4, mid: 0, high: 0 });

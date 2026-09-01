@@ -4659,7 +4659,7 @@ function renderStagePrepDock(): string {
             <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
           </span>
           ${isSummonerSlotLocked(el) ? "" : `<span class="stage-prep-slot-awaken mon-slot-awaken-overlay">${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--rail")}</span>`}
-          ${isSummonerSlotLocked(el) ? "" : `<span class="mon-slot-lv-overlay">Lv.${p.level}</span>`}
+          ${isSummonerSlotLocked(el) ? "" : `<span class="mon-slot-lv-overlay">Lv.${accountLevelOf(save)}</span>`}
           ${summonerLockBadgeHtml(el)}
         </button>`;
       }).join("")}
@@ -5473,7 +5473,7 @@ function renderStagePrepInfoModal(): string {
       <img class="stage-prep-info-art" src="${summonerArtSrc(el)}" width="88" height="88" alt="" draggable="false" decoding="async" />
       <div class="stage-prep-info-hero-copy">
         <strong>${escapeHtml(leader.nameKo)}</strong>
-        <small>${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${p.level} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}</small>
+        <small>${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${accountLevelOf(save)} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}</small>
         <p class="stage-prep-info-leader"><span>${escapeHtml(t("ui.stagePrepLeaderPassive"))}</span></p>
         <div class="stage-prep-leader-markers">${renderLeaderPassiveMarkerChips(leaderBits.markers)}</div>
       </div>
@@ -6185,12 +6185,10 @@ function resultExpCard(track: ExpTrackGain | null, kind: ExpTrackGain["kind"]): 
   let label = t("ui.resultExpUser");
   let starsHtml = "";
   let gradeClass = "";
-  if (track.kind === "user") {
-    label = displayNickname() || t("ui.resultExpUser");
-  } else if (track.kind === "summoner") {
+  if (track.kind === "user" || track.kind === "summoner") {
     const el = track.element ?? save.activeSummoner ?? "light";
     icon = summonerArtSrc(el);
-    label = getSummonerLeader(el)?.nameKo || t("ui.resultExpSummoner");
+    label = displayNickname() || getSummonerLeader(el)?.nameKo || t("ui.resultExpSummoner");
     const awaken = getActiveSummoner(save).awaken ?? 0;
     const grade = invGradeFromStars(Math.min(5, Math.max(1, awaken + 1)));
     gradeClass = ` inv-grade--${grade}`;
@@ -6460,22 +6458,8 @@ function renderResult(): string {
     : win
       ? ([
           {
-            kind: "user",
-            id: "user",
-            gained: reward.summonerExp ?? 0,
-            beforeLevel: Math.max(
-              1,
-              save.island.summonerLevel - (reward.levelsGained ?? 0),
-            ),
-            beforeExp: 0,
-            afterLevel: save.island.summonerLevel,
-            afterExp: Math.floor(save.island.summonerExp ?? 0),
-            expPerLevel: summonerExpToNext(save.island.summonerLevel),
-            levelsGained: reward.levelsGained ?? 0,
-          },
-          {
             kind: "summoner",
-            id: "summoner",
+            id: save.activeSummoner ?? "light",
             element: save.activeSummoner ?? "light",
             gained: reward.summonerExp ?? 0,
             beforeLevel: Math.max(
@@ -6491,18 +6475,19 @@ function renderResult(): string {
         ] satisfies ExpTrackGain[])
       : [];
 
-  const userTrack = tracks.find((track) => track.kind === "user") ?? null;
-  const summonerTrack = tracks.find((track) => track.kind === "summoner") ?? null;
+  const summonerTrack =
+    tracks.find((track) => track.kind === "summoner") ??
+    tracks.find((track) => track.kind === "user") ??
+    null;
   const monsters = tracks.filter((track) => track.kind === "monster");
   const monsterSlots = [0, 1, 2, 3].map((index) =>
     resultExpCard(monsters[index] ?? null, "monster"),
   );
 
   const progressSection =
-    win && (userTrack || summonerTrack || monsters.length > 0)
-      ? `<section class="result-progress" aria-label="${t("ui.resultExpUser")}">
+    win && (summonerTrack || monsters.length > 0)
+      ? `<section class="result-progress" aria-label="${t("ui.resultExpSummoner")}">
         <ul class="result-exp-row result-exp-row--lead">
-          ${resultExpCard(userTrack, "user")}
           ${resultExpCard(summonerTrack, "summoner")}
         </ul>
         <ul class="result-exp-row result-exp-row--party">
@@ -9874,7 +9859,7 @@ function renderSummonerInfoBody(el: SummonerElement): string {
   const locked = !isSummonerUnlocked(save, el);
   const levelLine = locked
     ? escapeHtml(elementLabel(el))
-    : `${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${p.level} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}`;
+    : `${escapeHtml(elementLabel(el))} ${MIDDOT} Lv.${accountLevelOf(save)} ${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}`;
   return `<div class="summoner-info-body">
     <div class="stage-prep-info-hero el-${el}">
       <img class="stage-prep-info-art" src="${summonerArtSrc(el)}" width="88" height="88" alt="" draggable="false" decoding="async" />
@@ -13103,7 +13088,7 @@ function renderScreen(): void {
       <img class="summoner-pick-art" src="/art/summoner/${el}.webp" width="44" height="44" alt="" draggable="false" decoding="async" />
       <span class="summoner-pick-body">
         <strong>${escapeHtml(t("summonerPicker.summoner", { element: elementLabel(el) }))}</strong>
-        <small>${isSummonerSlotLocked(el) ? "" : `Lv.${p.level} `}${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}${on ? ` - ${escapeHtml(t("summonerPicker.active"))}` : ""}</small>
+        <small>${isSummonerSlotLocked(el) ? "" : `Lv.${userLv} `}${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}${on ? ` - ${escapeHtml(t("summonerPicker.active"))}` : ""}</small>
         ${summonerLockBadgeHtml(el)}
       </span>
     </button>`;
@@ -13142,7 +13127,7 @@ function renderScreen(): void {
             ${
               onIsland || view === "summoner" || view === "enhance"
                 ? ""
-                : `<span class="user-profile-sub">${escapeHtml(elementLabel(activeEl))} Lv.${activeSum.level} ${summonerAwakenGemsHtml(activeSum.awaken, "sum-awaken-gems-wrap--inline")}</span>`
+                : `<span class="user-profile-sub">${escapeHtml(elementLabel(activeEl))} ${summonerAwakenGemsHtml(activeSum.awaken, "sum-awaken-gems-wrap--inline")}</span>`
             }
           </div>
         </button>
@@ -13400,7 +13385,7 @@ function renderScreen(): void {
           <span class="tab-ico tab-summoner-face" aria-hidden="true">
             <img class="tab-ico-img tab-summoner-seal" src="/art/ui/nav/summoner-frame.webp" width="58" height="58" alt="" draggable="false" decoding="async" />
             <img class="tab-summoner-art" src="/art/summoner/${activeEl}.webp" width="42" height="42" alt="" draggable="false" decoding="async" />
-            <span class="tab-summoner-lv">Lv.${activeSum.level}</span>
+            <span class="tab-summoner-lv">Lv.${accountLevelOf(save)}</span>
           </span>
           <span class="tab-label">${escapeHtml(t("nav.summoner"))}</span>
         </span>
@@ -14835,7 +14820,7 @@ function renderPartyDock(mode: "party" | "arena-defense" = "party"): string {
             <img class="mon-slot-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
           </span>
           ${isSummonerSlotLocked(el) ? "" : `<span class="stage-prep-slot-awaken mon-slot-awaken-overlay">${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--rail")}</span>`}
-          ${isSummonerSlotLocked(el) ? "" : `<span class="mon-slot-lv-overlay">Lv.${p.level}</span>`}
+          ${isSummonerSlotLocked(el) ? "" : `<span class="mon-slot-lv-overlay">Lv.${accountLevelOf(save)}</span>`}
           ${summonerLockBadgeHtml(el)}
         </button>`;
       }).join("")}
@@ -19370,7 +19355,7 @@ function renderCodexLayer(): string {
         <strong>${escapeHtml(leader.nameKo)}</strong>
         <small class="codex-summoner-meta">
           <img class="codex-detail-el" src="${elSrc}" width="18" height="18" alt="" draggable="false" />
-          ${isSummonerSlotLocked(el) ? "" : `Lv.${p.level} `}${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}
+          ${isSummonerSlotLocked(el) ? "" : `Lv.${accountLevelOf(save)} `}${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--inline")}
         </small>
         ${summonerLockBadgeHtml(el)}
       </button>`;
@@ -19867,7 +19852,7 @@ function renderSummonerBook(): string {
       const on = el === activeEl;
       return `<button type="button" class="sum-rail-slot el-${el}${on ? " is-active" : ""} ${summonerSlotClass(el)}" data-select-summoner="${el}" role="option" aria-selected="${on ? "true" : "false"}" title="${escapeHtml(elementLabel(el))}">
         <img class="sum-rail-img" src="${summonerArtSrc(el)}" width="112" height="112" alt="" draggable="false" decoding="async" />
-        ${isSummonerSlotLocked(el) ? "" : `<span class="sum-rail-lv">Lv.${p.level}</span>`}
+        ${isSummonerSlotLocked(el) ? "" : `<span class="sum-rail-lv">Lv.${accountLevelOf(save)}</span>`}
         ${isSummonerSlotLocked(el) ? "" : `<span class="sum-rail-aw">${summonerAwakenGemsHtml(p.awaken, "sum-awaken-gems-wrap--rail")}</span>`}
         ${summonerLockBadgeHtml(el)}
       </button>`;

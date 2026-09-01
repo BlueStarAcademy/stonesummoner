@@ -3004,8 +3004,8 @@
     "en": "OK"
   },
   "ui.bldgUp.needAccount": {
-    "ko": "계정 Lv.{n}",
-    "en": "Account Lv.{n}"
+    "ko": "소환사 Lv.{n}",
+    "en": "Summoner Lv.{n}"
   },
   "ui.bldgProd.title": {
     "ko": "수집량",
@@ -3688,8 +3688,8 @@
     "en": "Close"
   },
   "ui.summonerInfo.unlockAt": {
-    "ko": "유저 레벨 {n}에 해금",
-    "en": "Unlocks at user level {n}"
+    "ko": "소환사 Lv.{n}",
+    "en": "Summoner Lv.{n}"
   },
   "ui.stagePrepTapRoster": {
     "ko": "소환수를 탭해 출전 / 해제",
@@ -4476,28 +4476,28 @@
     "en": "Form your battle party|Deploy up to four monsters|You can also adjust the party before fights"
   },
   "ui.bldgInfo.wish": {
-    "ko": "소원의 사당에서 보상을 뽑습니다|다양한 자원과 성장 보상을 얻을 수 있습니다|유저 레벨 7에 해금됩니다",
-    "en": "Draw rewards at the Temple of Wishes|Gain resources and growth rewards|Unlocks at user level 7"
+    "ko": "소원의 사당에서 보상을 뽑습니다|다양한 자원과 성장 보상을 얻을 수 있습니다|소환사 레벨 7에 해금됩니다",
+    "en": "Draw rewards at the Temple of Wishes|Gain resources and growth rewards|Unlocks at summoner level 7"
   },
   "ui.bldgInfo.dojo": {
-    "ko": "진문에 착수를 새기는 수련장입니다|하루 몇 회 수련으로 진문석을 얻습니다|진문석으로 시작 마나·증폭 상한·보드 징표를 각인합니다|유저 레벨 8에 해금됩니다",
-    "en": "Train to inscribe openings on the magic circle|Earn jinmun stones from a few daily drills|Spend them on start mana, Amplify cap, and board marks|Unlocks at user level 8"
+    "ko": "진문에 착수를 새기는 수련장입니다|하루 몇 회 수련으로 진문석을 얻습니다|진문석으로 시작 마나·증폭 상한·보드 징표를 각인합니다|소환사 레벨 8에 해금됩니다",
+    "en": "Train to inscribe openings on the magic circle|Earn jinmun stones from a few daily drills|Spend them on start mana, Amplify cap, and board marks|Unlocks at summoner level 8"
   },
   "ui.bldgInfo.crystal_mine": {
-    "ko": "시간이 지나면 수정을 생산·저장합니다|광맥을 터치해 쌓인 수정을 수거하세요|업그레이드로 생산량과 저장 한도를 늘릴 수 있습니다|유저 레벨 10에 해금됩니다",
-    "en": "Produces and stores crystals over time|Tap the mine bubble to collect crystals|Upgrade to raise production and capacity|Unlocks at user level 10"
+    "ko": "시간이 지나면 수정을 생산·저장합니다|광맥을 터치해 쌓인 수정을 수거하세요|업그레이드로 생산량과 저장 한도를 늘릴 수 있습니다|소환사 레벨 10에 해금됩니다",
+    "en": "Produces and stores crystals over time|Tap the mine bubble to collect crystals|Upgrade to raise production and capacity|Unlocks at summoner level 10"
   },
   "ui.bldgInfo.glory": {
     "ko": "영광 포인트로 버프 건물을 강화합니다|전투와 성장에 도움이 되는 효과를 얻습니다|포인트를 모아 장기적인 이득을 쌓으세요",
     "en": "Spend glory points to empower buff buildings|Gain lasting combat and growth bonuses|Bank points for long-term advantages"
   },
   "ui.bldgInfo.guild": {
-    "ko": "길드와 커뮤니티 기능을 이용합니다|동료와 교류하고 길드 활동을 확인하세요|유저 레벨 12에 해금됩니다",
-    "en": "Access guild and community features|Chat with allies and check guild activity|Unlocks at user level 12"
+    "ko": "길드와 커뮤니티 기능을 이용합니다|동료와 교류하고 길드 활동을 확인하세요|소환사 레벨 12에 해금됩니다",
+    "en": "Access guild and community features|Chat with allies and check guild activity|Unlocks at summoner level 12"
   },
   "ui.bldgInfo.fusion": {
-    "ko": "같은 종의 소환수를 융합해 진화합니다|높은 레벨·스킬·상징을 유지한 채 성장합니다|유저 레벨 17에 해금됩니다",
-    "en": "Fuse same-species monsters to evolve|Keep the better level, skills, and symbols|Unlocks at user level 17"
+    "ko": "같은 종의 소환수를 융합해 진화합니다|높은 레벨·스킬·상징을 유지한 채 성장합니다|소환사 레벨 17에 해금됩니다",
+    "en": "Fuse same-species monsters to evolve|Keep the better level, skills, and symbols|Unlocks at summoner level 17"
   },
   "ui.arena.setDefense": {
     "ko": "방어 덱 설정",

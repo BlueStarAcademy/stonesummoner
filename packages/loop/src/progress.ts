@@ -23,6 +23,7 @@ import {
   isChallengeTowerStageUnlocked,
 } from "./challengeTower.js";
 import type { PlayerSave } from "./loop.js";
+import { accountLevelOf } from "./summonerLevel.js";
 
 export type ScenarioDifficulty = "normal" | "hard" | "hell";
 
@@ -201,7 +202,7 @@ export function isStageUnlockedForDifficulty(
     }
     case "arena":
       return (
-        save.island.summonerLevel >= 5 ||
+        accountLevelOf(save) >= 5 ||
         save.clearedStages.includes("garen_1_3")
       );
     case "weekday":
@@ -223,7 +224,7 @@ export function isStageUnlockedForDifficulty(
       if (!save.clearedStages.includes("garen_1_4")) return false;
       return chainUnlocked(save, EQUIP_STAGES, stageId);
     case "world_arena":
-      if (!chapter2Cleared(save) && save.island.summonerLevel < 12) return false;
+      if (!chapter2Cleared(save) && accountLevelOf(save) < 12) return false;
       return chainUnlocked(save, WORLD_ARENA_STAGES, stageId);
     case "guild_raid":
       if (!save.guildName) return false;
