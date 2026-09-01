@@ -189,10 +189,12 @@ export {
   summonerAwakenEssenceCost,
 } from "./essences.js";
 import {
+  energyCostForStage,
   expForStage,
   isDifficultyOpen,
   isStageUnlocked,
   isStageUnlockedForDifficulty,
+  monsterExpPoolForStage,
   stageUnlockLabel,
   type ScenarioDifficulty,
 } from "./progress.js";
@@ -202,6 +204,7 @@ import {
   type DailyActivity,
 } from "./dailyMissions.js";
 import {
+  challengeTowerStageDifficulty,
   monthKey,
   syncChallengeTowerMonth,
 } from "./challengeTower.js";
@@ -287,11 +290,13 @@ export {
   SUMMON_SCROLL_COST,
 } from "./roster.js";
 export {
+  energyCostForStage,
   expForStage,
   isDifficultyOpen,
   isStageClearedOnDifficulty,
   isStageUnlocked,
   isStageUnlockedForDifficulty,
+  monsterExpPoolForStage,
   nextStageInProgression,
   stageUnlockLabel,
 } from "./progress.js";
@@ -340,8 +345,11 @@ export function equipVaultRemaining(
   );
 }
 
-/** Phase 3b: arena attacks per calendar day. */
-export const ARENA_ATTACKS_DAILY = 10;
+/** Arena invitations recharge one at a time instead of resetting daily. */
+export const ARENA_INVITATIONS_MAX = 10;
+export const ARENA_INVITATION_RECHARGE_MS = 30 * 60 * 1000;
+/** @deprecated Compatibility alias for older UI/tests. */
+export const ARENA_ATTACKS_DAILY = ARENA_INVITATIONS_MAX;
 /** Default ELO rating for new arena players. */
 export const DEFAULT_ARENA_RATING = 1000;
 export const ARENA_ELO_K = 32;
@@ -410,8 +418,36 @@ export function syncArenaAttackDay(
   now = Date.now(),
 ): PlayerSave {
   const day = todayKey(now);
-  if (save.arenaAttackDay === day) return save;
-  return { ...save, arenaAttackDay: day, arenaAttacksToday: 0 };
+  const explicit = Math.max(
+    0,
+    Math.min(
+      ARENA_INVITATIONS_MAX,
+      Math.floor(save.arenaInvitations ?? ARENA_INVITATIONS_MAX),
+    ),
+  );
+  const legacyRemaining =
+    save.arenaAttackDay === day
+      ? Math.max(
+          0,
+          ARENA_INVITATIONS_MAX - Math.floor(save.arenaAttacksToday ?? 0),
+        )
+      : ARENA_INVITATIONS_MAX;
+  const invitations = Math.min(explicit, legacyRemaining);
+  const updatedAt = save.arenaInvitationUpdatedAt ?? now;
+  const elapsed = Math.max(0, now - updatedAt);
+  const gained = Math.floor(elapsed / ARENA_INVITATION_RECHARGE_MS);
+  const next = Math.min(ARENA_INVITATIONS_MAX, invitations + gained);
+  const nextUpdatedAt =
+    next >= ARENA_INVITATIONS_MAX
+      ? now
+      : updatedAt + gained * ARENA_INVITATION_RECHARGE_MS;
+  return {
+    ...save,
+    arenaInvitations: next,
+    arenaInvitationUpdatedAt: nextUpdatedAt,
+    arenaAttackDay: day,
+    arenaAttacksToday: ARENA_INVITATIONS_MAX - next,
+  };
 }
 
 export function arenaAttacksRemaining(
@@ -419,7 +455,7 @@ export function arenaAttacksRemaining(
   now = Date.now(),
 ): number {
   const synced = syncArenaAttackDay(save, now);
-  return Math.max(0, ARENA_ATTACKS_DAILY - (synced.arenaAttacksToday ?? 0));
+  return synced.arenaInvitations;
 }
 
 export function syncGuildWeek(
@@ -1412,9 +1448,13 @@ export interface PlayerSave {
   skillMats: number;
   /** Phase 3b: arena defense lineup (local offline). */
   arenaDefense: { summoner: SummonerElement; party: string[] } | null;
-  /** Phase 3b: arena attacks used today. */
+  /** Rechargeable arena invitations (0–10). */
+  arenaInvitations: number;
+  /** Timestamp used to accrue one arena invitation every 30 minutes. */
+  arenaInvitationUpdatedAt: number;
+  /** @deprecated Compatibility mirror: max invitations minus current count. */
   arenaAttacksToday: number;
-  /** Phase 3b: YYYY-MM-DD of arena attack counter. */
+  /** @deprecated Compatibility day key for legacy saves/UI. */
   arenaAttackDay: string | null;
   /** Arena ELO rating (offline ladder). */
   arenaRating: number;
@@ -1481,6 +1521,10 @@ export interface PlayerSave {
   challengeTowerMonthKey: string | null;
   /** Highest floor cleared this month (0–100). */
   challengeTowerFloor: number;
+  /** Independent YYYY-MM key for the Hard tower track. */
+  challengeTowerHardMonthKey: string | null;
+  /** Highest Hard floor cleared this month (0–100). */
+  challengeTowerHardFloor: number;
   /** Feature-unlock modal ids already shown (building/hub/summoner). */
   seenFeatureUnlockIds: string[];
 }
@@ -1758,6 +1802,7 @@ function unitFromOwned(
     startShieldPct: mods.startShieldPct || undefined,
     counterChance: mods.counterChance || undefined,
     statusImmuneTurns: mods.statusImmuneTurns || undefined,
+    statusImmuneIsPassive: mods.statusImmuneTurns > 0 || undefined,
     lifestealPct: mods.lifestealPct || undefined,
     stunOnHitChance: mods.stunChance || undefined,
     violentChance: mods.violentChance || undefined,
@@ -1894,6 +1939,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     awakenMats: {},
     skillMats: 0,
     arenaDefense: null,
+    arenaInvitations: ARENA_INVITATIONS_MAX,
+    arenaInvitationUpdatedAt: now,
     arenaAttacksToday: 0,
     arenaAttackDay: null,
     arenaRating: DEFAULT_ARENA_RATING,
@@ -1927,6 +1974,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     attendanceLastClaimDay: null,
     challengeTowerMonthKey: monthKey(now),
     challengeTowerFloor: 0,
+    challengeTowerHardMonthKey: monthKey(now),
+    challengeTowerHardFloor: 0,
     seenFeatureUnlockIds: [],
   };
 }
@@ -3242,7 +3291,7 @@ export function listRoster(save: PlayerSave): string[] {
 
 export function listGear(save: PlayerSave): string[] {
   const gear = getActiveGear(save);
-  const leader = (gearLeaderAtkPct(gear) * 100).toFixed(1);
+  const summonerAtk = (gearLeaderAtkPct(gear) * 100).toFixed(1);
   const sets = summarizeGearSets(gear)
     .filter((s) => s.count > 0)
     .map(
@@ -3266,7 +3315,7 @@ export function listGear(save: PlayerSave): string[] {
     slotLine(
       "하의",
       gear.bottom,
-      `HP+${gear.bottom?.summonerHpBonus ?? 0} 리더+${((gear.bottom?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
+      `HP+${gear.bottom?.summonerHpBonus ?? 0} 소환사ATK+${((gear.bottom?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
     ),
     slotLine(
       "신발",
@@ -3276,7 +3325,7 @@ export function listGear(save: PlayerSave): string[] {
     slotLine(
       "반지",
       gear.ring,
-      `스킬+${((gear.ring?.skillPowerBonus ?? 0) * 100).toFixed(0)}% 리더+${((gear.ring?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
+      `스킬+${((gear.ring?.skillPowerBonus ?? 0) * 100).toFixed(0)}% 소환사ATK+${((gear.ring?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
     ),
     slotLine(
       "목걸이",
@@ -3284,7 +3333,7 @@ export function listGear(save: PlayerSave): string[] {
       `sense+${(gear.necklace?.boardSenseBonus ?? 0).toFixed(2)}`,
     ),
     `세트 ${sets || "없음"}`,
-    `리더 합산 ATK +${leader}%`,
+    `소환사 합산 ATK +${summonerAtk}%`,
     `가방 ${(save.gearBag ?? []).length}/${gearBagCapacity(save)}`,
   ];
 }
@@ -4702,11 +4751,12 @@ export function createStageBattle(
   const leader = getSummonerLeader(activeEl);
   const awakenAtk = awakenLeaderAtkPct(awaken);
   const gearAffix = gearAffixTotals(gear);
-  const affixAtk =
+  const gearLocalAtk =
+    gearLeaderAtkPct(gear) +
     gearAffix.allyAtkAdd + (stage.bossMonsterId ? gearAffix.bossAtkAdd : 0);
-  const gearAtk = gearLeaderAtkPct(gear) + tree.leaderAtkBonus + affixAtk;
   for (const u of allyMonsters) {
-    let atkMul = 1 + awakenAtk + gearAtk + (leader.atkPct ?? 0);
+    let atkMul =
+      1 + awakenAtk + tree.leaderAtkBonus + (leader.atkPct ?? 0);
     if (leader.elementAtkPct && u.element === activeEl) {
       atkMul += leader.elementAtkPct;
     }
@@ -4741,7 +4791,7 @@ export function createStageBattle(
           awaken * 300) *
           gearAffix.summonerHpMul,
       ),
-      atk: 155 + lvl * 5,
+      atk: Math.round((155 + lvl * 5) * (1 + gearLocalAtk)),
       def:
         210 +
         Math.floor(gear.shoes?.enhance ?? 0) +
@@ -4774,8 +4824,12 @@ export function createStageBattle(
 
   const diffBonus =
     opts?.difficulty === "hell" ? 4 : opts?.difficulty === "hard" ? 2 : 0;
+  const explicitEnemyLevel =
+    stage.difficultyBalance?.[opts?.difficulty ?? "normal"]?.enemyLevel ??
+    stage.enemyLevel;
   const enemyLevel = () =>
-    1 + Math.floor(stage.stage / 2) + Math.floor(stage.map / 3) + diffBonus;
+    explicitEnemyLevel ??
+    (1 + Math.floor(stage.stage / 2) + Math.floor(stage.map / 3) + diffBonus);
 
   const enemyIdsForWave = (wave: number): string[] =>
     hasEnemyOverride
@@ -4880,6 +4934,16 @@ export function createStageBattle(
     totalWaves,
     modules,
     rng: opts?.rng,
+    dungeonBoss:
+      stage.cairosDungeon && stage.bossMonsterId
+        ? {
+            kind: stage.cairosDungeon,
+            unitId: `e-w${totalWaves}-0`,
+            abyss:
+              stage.cairosTier === "abyss_normal" ||
+              stage.cairosTier === "abyss_hard",
+          }
+        : undefined,
     spawnWave: (wave) =>
       enemyIdsForWave(wave).map((id, i) =>
         stageEnemyUnit(
@@ -5129,7 +5193,12 @@ export function applyRewards(
                 ? 1.1
                 : 1;
   const affix = gearAffixTotals(getActiveGear(save));
-  const manaGain = Math.round((180 + stage.stage * 60) * modeMul * affix.battleGoldMul);
+  const profiledMana =
+    stage.difficultyBalance?.[difficulty]?.manaReward ?? stage.manaReward;
+  const manaGain = Math.round(
+    (profiledMana ?? (180 + stage.stage * 60) * modeMul) *
+      affix.battleGoldMul,
+  );
   const arenaNpcMatch = stage.mode === "arena" && !!opts?.arenaNpc;
   const stageGlory = stage.gloryReward ?? 0;
   let gloryGain =
@@ -5147,7 +5216,20 @@ export function applyRewards(
       affix.symbolChanceMul,
   );
   const expGain = Math.round(expForStage(stage, difficulty) * affix.expMul);
-  const monsterExpGain = Math.max(1, Math.round(expGain * 0.75));
+  const deployedMonsterCount = Math.max(
+    1,
+    save.party.filter((uid) => save.roster.some((m) => m.uid === uid)).length,
+  );
+  const monsterExpPool = monsterExpPoolForStage(stage, difficulty);
+  const monsterExpGain =
+    monsterExpPool > 0
+      ? Math.max(
+          1,
+          Math.round(
+            (monsterExpPool * affix.expMul) / deployedMonsterCount,
+          ),
+        )
+      : 0;
 
   let working = syncSummonerMirrors({
     ...save,
@@ -5268,7 +5350,9 @@ export function applyRewards(
           ? (stage.stage as 1 | 2 | 3 | 4 | 5 | 6)
           : undefined;
       symbol = rollSymbolDrop(rng, `drop_${stage.id}_${symbols.length}`, {
-        preferredSet: stage.dropSetId,
+        ...(stage.dropSetPool?.length
+          ? {}
+          : { preferredSet: stage.dropSetId }),
         preferredSlot,
         setPool: stage.dropSetPool,
         starWeights: dropStarWeights,
@@ -5371,7 +5455,7 @@ export function applyRewards(
     scrolls += 1;
   }
 
-  const crystalGain = rollStageCrystalDrop(stage, rng, affix.crystalChanceMul);
+  let crystalGain = rollStageCrystalDrop(stage, rng, affix.crystalChanceMul);
   if (crystalGain > 0) {
     island = {
       ...island,
@@ -5388,11 +5472,37 @@ export function applyRewards(
   let challengeTowerFloor = working.challengeTowerFloor ?? 0;
   let challengeTowerMonthKey =
     working.challengeTowerMonthKey ?? monthKey();
+  let challengeTowerHardFloor = working.challengeTowerHardFloor ?? 0;
+  let challengeTowerHardMonthKey =
+    working.challengeTowerHardMonthKey ?? monthKey();
   let scrollsLegend = save.scrollsLegend ?? 0;
   if (stage.mode === "challenge_tower") {
-    const priorFloor = challengeTowerFloor;
-    challengeTowerFloor = Math.max(challengeTowerFloor, stage.stage);
-    challengeTowerMonthKey = monthKey();
+    const towerDifficulty =
+      stage.challengeTowerDifficulty ??
+      challengeTowerStageDifficulty(stage.id) ??
+      "normal";
+    const priorFloor =
+      towerDifficulty === "hard"
+        ? challengeTowerHardFloor
+        : challengeTowerFloor;
+    if (towerDifficulty === "hard") {
+      challengeTowerHardFloor = Math.max(
+        challengeTowerHardFloor,
+        stage.stage,
+      );
+      challengeTowerHardMonthKey = monthKey();
+    } else {
+      challengeTowerFloor = Math.max(challengeTowerFloor, stage.stage);
+      challengeTowerMonthKey = monthKey();
+    }
+    if (stage.stage % 10 === 0 && priorFloor < stage.stage) {
+      const milestoneCrystal = towerDifficulty === "hard" ? 20 : 10;
+      crystalGain += milestoneCrystal;
+      island = {
+        ...island,
+        crystal: (island.crystal ?? 0) + milestoneCrystal,
+      };
+    }
     if (stage.stage === 100 && priorFloor < 100) {
       scrollsLegend += 1;
     }
@@ -5589,6 +5699,8 @@ export function applyRewards(
       trialTitleUnlocked,
       challengeTowerMonthKey,
       challengeTowerFloor,
+      challengeTowerHardMonthKey,
+      challengeTowerHardFloor,
       raidBossHp,
       raidMilestonesClaimed,
       raidWeekKey: working.raidWeekKey ?? null,
@@ -5652,10 +5764,10 @@ export function runSortie(
   }
   if (stage.mode === "arena") {
     working = syncArenaAttackDay(working, now);
-    if ((working.arenaAttacksToday ?? 0) >= ARENA_ATTACKS_DAILY) {
+    if (working.arenaInvitations <= 0) {
       return {
         save: working,
-        message: `오늘 아레나 공격 한도 소진 (${ARENA_ATTACKS_DAILY}회)`,
+        message: `아레나 초대장 부족 (${ARENA_INVITATIONS_MAX}장까지 충전)`,
       };
     }
   }
@@ -5671,19 +5783,32 @@ export function runSortie(
   if (stage.mode === "challenge_tower") {
     working = syncChallengeTowerMonth(working, now);
   }
+  if (
+    stage.mode === "depth" &&
+    (stage.cairosTier === "abyss_normal" ||
+      stage.cairosTier === "abyss_hard")
+  ) {
+    const families = working.party
+      .map((uid) => working.roster.find((monster) => monster.uid === uid))
+      .filter((monster): monster is OwnedMonster => !!monster)
+      .map(
+        (monster) =>
+          getMonster(monster.monsterId)?.familyId ?? monster.monsterId,
+      );
+    if (new Set(families).size !== families.length) {
+      return {
+        save: working,
+        message: `심연 던전은 같은 계열 소환수를 중복 편성할 수 없습니다`,
+      };
+    }
+  }
   const difficulty =
     stage.mode === "arena" ||
     stage.mode === "world_arena" ||
     stage.mode === "guild_raid"
       ? "normal"
       : (opts?.difficulty ?? "normal");
-  const energyCost =
-    stage.mode === "scenario"
-      ? Math.ceil(
-          stage.energyCost *
-            (difficulty === "hell" ? 2 : difficulty === "hard" ? 1.5 : 1),
-        )
-      : stage.energyCost;
+  const energyCost = energyCostForStage(stage, difficulty);
   const energy = Math.floor(working.island.energy);
   if (energyCost > 0 && energy < energyCost) {
     return {
@@ -5740,9 +5865,15 @@ export function runSortie(
       stage.mode === "equip"
         ? (working.equipVaultWeekEntries ?? 0) + 1
         : (working.equipVaultWeekEntries ?? 0),
+    arenaInvitations:
+      stage.mode === "arena"
+        ? Math.max(0, working.arenaInvitations - 1)
+        : working.arenaInvitations,
+    arenaInvitationUpdatedAt: working.arenaInvitationUpdatedAt,
     arenaAttacksToday:
       stage.mode === "arena"
-        ? (working.arenaAttacksToday ?? 0) + 1
+        ? ARENA_INVITATIONS_MAX -
+          Math.max(0, working.arenaInvitations - 1)
         : (working.arenaAttacksToday ?? 0),
     arenaAttackDay:
       stage.mode === "arena"

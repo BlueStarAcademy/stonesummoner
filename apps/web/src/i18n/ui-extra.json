@@ -4596,8 +4596,8 @@
     "en": "Defense +{n}"
   },
   "ui.gearBonusLeaderAtk": {
-    "ko": "리더 공격력 +{n}%",
-    "en": "Leader Attack Power +{n}%"
+    "ko": "소환사 공격력 +{n}%",
+    "en": "Summoner Attack Power +{n}%"
   },
   "ui.sumInfoLeaderBuffs": {
     "ko": "리더 버프",
@@ -4796,8 +4796,8 @@
     "en": "Skill power"
   },
   "ui.growthGearStatLeaderAtk": {
-    "ko": "리더 공격력",
-    "en": "Leader Attack Power"
+    "ko": "소환사 공격력",
+    "en": "Summoner Attack Power"
   },
   "ui.growthGearStatBoardSense": {
     "ko": "보드 감지",

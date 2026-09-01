@@ -62,15 +62,17 @@ Amplify = clamp(ComputedAmplify, 0.85, AmplifyCap)
 
 | 이벤트 | Amplify 기여 | 부가 (핵심) |
 |--------|--------------|-------------|
-| 안전 착수 | +0.01 | **마력 +6** (플랫 × manaMul). 스탯 오라 없음 |
-| 돌 N 따냄 | +0.02 ~ +0.03 (유지) | **다음 소환수 피해 ×(1+0.10N)** · **마력 +12%p×N** |
+| 안전 착수 | 없음 | **마력 +10** (플랫 × manaMul). 전투 버프 없음 |
+| 돌 N 따냄 | 지속 Amp 없음 | **아군 전체 피해 ×(1+0.18N)** · **마력 +20%p×N** |
 | 대마 유지 | 받는피해 ×0.90~0.95 | 힐↑ |
 | 활로1 압박 | 상대 ACC/행동 패널티 | — |
 | 보드 아이템 | 버프별 (치명/실드 등) | 일부 마나 +대 |
-| 형상 완성 | +0.03 ~ +0.08 짧은 지속 | Phase 2 |
+| 형상 완성 | 전투 버프 없음 | 마력 보상만 |
 
-따냄의 주 보상은 Amplify가 아니라 **다음 1회 몬스터 타격 피해 배율**과 **소환사 마력 게이지 %**다.
-`pendingCaptureDamageBonus`는 해당 팀 몬스터가 `applyHit`할 때 소모된다.
+따냄·아이템의 전투 버프는 소환사와 생존 소환수 전원에게 적용되며
+**다음 착수 직전까지** 유지된다. 첫 공격에 소모되지 않고, 같은 착수 주기에서
+여러 아군이 행동하면 모두 효과를 받는다. 일반 착수는 이전 바둑 버프를 지운 뒤
+기본 공격만 수행한다.
 
 `ComputedAmplify`는 전투 시작 1.0에서 시작해 이벤트마다 가산/감산 후 클램프.
 
@@ -82,10 +84,10 @@ Amplify = clamp(ComputedAmplify, 0.85, AmplifyCap)
 ManaPerSecond = BaseManaRegen(SummonerLevel, EquipManaCircuit)
 
 OnSafePlace:
-  Mana += 6 * (1 + EquipBoardSense) * phaseManaMul   // 마력 흡수. 스탯 버프 없음
+  Mana += 10 * (1 + EquipBoardSense) * phaseManaMul  // 마력 흡수. 전투 버프 없음
 
 OnCapture(N):
-  Mana += manaMax * 0.12 * N                     // 돌 1개당 게이지 12%p
+  Mana += manaMax * 0.20 * N                     // 돌 1개당 게이지 20%p
 
 ManaMax = 100  // 또는 장비·스킬트리 상한
 ManaFull = Mana >= ManaMax
@@ -95,8 +97,8 @@ ManaFull = Mana >= ManaMax
 
 | 이벤트 | 마나 |
 |--------|------|
-| 안전 착수 | **+6** (플랫 × manaMul) |
-| 따냄 N개 | **manaMax × 12% × N** |
+| 안전 착수 | **+10** (플랫 × manaMul) |
+| 따냄 N개 | **manaMax × 20% × N** |
 | 사석자석 아이템 | +30 ~ +40 |
 | 형상 완성 | +15 ~ +20 |
 | 자살수 시도 | 0 |

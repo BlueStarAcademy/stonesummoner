@@ -124,12 +124,13 @@ export interface BuildingInstance {
   lastUpdatedAt: number;
 }
 
-export const ENERGY_MAX = 100;
+/** Modern SW account energy baseline: 40 + 2 × account level. */
+export const ENERGY_MAX = 42;
 /** Extra max energy granted per summoner account level above 1. */
 export const ENERGY_MAX_PER_LEVEL = 2;
-/** Milliseconds per +1 energy while below max (3 minutes). */
-export const ENERGY_REGEN_MS = 180_000;
-/** Derived rate (1 per 3 minutes). Kept for callers that still read per-hour. */
+/** Modern SW natural regeneration: +1 energy every 5 minutes. */
+export const ENERGY_REGEN_MS = 300_000;
+/** Derived natural regeneration rate. */
 export const ENERGY_PER_HOUR = Math.round(3_600_000 / ENERGY_REGEN_MS);
 /**
  * Summoners War player-account EXP required from each level to the next.
@@ -183,7 +184,7 @@ export function summonerExpToNext(level: number): number {
   return required;
 }
 
-/** Max energy for a summoner/account level (Lv.1 = ENERGY_MAX). */
+/** Max energy: 40 + 2 × account level, before building bonuses. */
 export function energyMaxForLevel(level: number): number {
   const lv = Math.max(1, Math.floor(level));
   return ENERGY_MAX + (lv - 1) * ENERGY_MAX_PER_LEVEL;
@@ -224,7 +225,7 @@ export function createStarterIsland(now = Date.now()): IslandState {
     summonerExp: 0,
     mana: 3000,
     crystal: 50,
-    energy: 80,
+    energy: ENERGY_MAX,
     energyMax: ENERGY_MAX,
     energyUpdatedAt: now,
     manaProdBonus: 0,

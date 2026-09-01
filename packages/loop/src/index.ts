@@ -5,6 +5,8 @@ export {
   createDemoSave,
   createNewSave,
   createStageBattle,
+  energyCostForStage,
+  monsterExpPoolForStage,
   describeOwned,
   enhanceManaCost,
   evolveCrystalCost,
@@ -41,6 +43,8 @@ export {
   isoWeekKey,
   syncEquipVaultWeek,
   ARENA_ATTACKS_DAILY,
+  ARENA_INVITATIONS_MAX,
+  ARENA_INVITATION_RECHARGE_MS,
   DEFAULT_ARENA_RATING,
   ARENA_ELO_K,
   ARENA_NPC_GLORY_MUL,
@@ -274,8 +278,10 @@ export {
   isChallengeTowerStageUnlocked,
   isChallengeTowerStageCleared,
   challengeTowerStageFloor,
+  challengeTowerStageDifficulty,
   CHALLENGE_TOWER_FLOORS,
 } from "./challengeTower.js";
+export type { ChallengeTowerDifficulty } from "./challengeTower.js";
 export {
   evolveFodderCount,
   evolveManaCostForGrade,

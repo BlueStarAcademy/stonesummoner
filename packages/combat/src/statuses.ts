@@ -75,13 +75,19 @@ export function listUnitStatuses(u: Unit): UnitStatusIcon[] {
     "buff",
     (u.accuracyBuff ?? 0) > 0,
   );
-  push(out, "shield", u.shieldTurns ?? 0, "buff", (u.shieldHp ?? 0) > 0);
+  push(
+    out,
+    "shield",
+    u.shieldTurns ?? 0,
+    "buff",
+    (u.shieldHp ?? 0) > 0 && (u.shieldStatusVisible ?? true),
+  );
   push(
     out,
     "immune",
     u.statusImmuneTurns ?? 0,
     "buff",
-    (u.statusImmuneTurns ?? 0) > 0,
+    (u.statusImmuneTurns ?? 0) > 0 && !u.statusImmuneIsPassive,
   );
   push(
     out,
