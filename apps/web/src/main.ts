@@ -82,6 +82,8 @@ import {
 import { dematteArtInTree } from "./ui/dematteArt";
 import {
   islandCriticalAssetUrls,
+  isIslandAssetPackPrepared,
+  markIslandAssetPackPrepared,
   preloadIslandAssets,
   type IslandPreloadProgress,
 } from "./ui/islandPreload";
@@ -4133,6 +4135,7 @@ async function prepareIslandAssets(): Promise<void> {
     ),
     ...renderedIslandAssetUrls(),
   ].filter((url, index, all) => all.indexOf(url) === index);
+  if (await isIslandAssetPackPrepared(urls)) return;
   islandPreloadProgress = {
     completed: 0,
     total: urls.length,
@@ -4140,13 +4143,14 @@ async function prepareIslandAssets(): Promise<void> {
   };
   view = "auth";
   render();
-  await Promise.all([
+  const [result] = await Promise.all([
     preloadIslandAssets(urls, updateIslandPreloadProgress, {
       concurrency: 6,
       timeoutMs: 10_000,
     }),
     new Promise<void>((resolve) => window.setTimeout(resolve, 350)),
   ]);
+  if (result.failed.length === 0) markIslandAssetPackPrepared();
   islandPreloadProgress = null;
 }
 
