@@ -291,6 +291,7 @@ export {
 export {
   expForStage,
   isDifficultyOpen,
+  isScenarioTrackFullyCleared,
   isStageClearedOnDifficulty,
   isStageUnlocked,
   isStageUnlockedForDifficulty,

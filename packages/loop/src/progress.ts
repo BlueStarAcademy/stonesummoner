@@ -194,7 +194,21 @@ export function isStageClearedOnDifficulty(
   return clearedForDifficulty(save, difficulty).includes(stageId);
 }
 
-/** Hard/Hell for a scenario map open only after every stage on that map is cleared. */
+/** True when every main-quest stage (maps 1–13) is cleared on that track. */
+export function isScenarioTrackFullyCleared(
+  save: PlayerSave,
+  difficulty: ScenarioDifficulty,
+): boolean {
+  if (MAIN_QUEST_STAGES.length === 0) return false;
+  const cleared = clearedForDifficulty(save, difficulty);
+  return MAIN_QUEST_STAGES.every((s) => cleared.includes(s.id));
+}
+
+/**
+ * Scenario Hard/Hell unlock globally after the previous track is fully cleared
+ * through map 13 (종언의 신전) — Hard after all Normal, Hell after all Hard.
+ * Non-scenario content still unlocks per-stage.
+ */
 export function isDifficultyOpen(
   save: PlayerSave,
   stage: StageDef,
@@ -202,14 +216,10 @@ export function isDifficultyOpen(
 ): boolean {
   if (difficulty === "normal") return true;
   if (stage.mode === "scenario") {
-    const mapStages = stagesForMap(stage.map);
-    if (!mapStages.length) return false;
     if (difficulty === "hard") {
-      return mapStages.every((s) => save.clearedStages.includes(s.id));
+      return isScenarioTrackFullyCleared(save, "normal");
     }
-    return mapStages.every((s) =>
-      (save.clearedHardStages ?? []).includes(s.id),
-    );
+    return isScenarioTrackFullyCleared(save, "hard");
   }
   if (difficulty === "hard") return save.clearedStages.includes(stage.id);
   return (save.clearedHardStages ?? []).includes(stage.id);
