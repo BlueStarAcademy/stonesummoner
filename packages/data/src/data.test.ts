@@ -187,6 +187,31 @@ describe("phase1 data", () => {
     assert.ok(s1.coeff >= 3.4 && s1.coeff <= 4.2);
   });
 
+  it("keeps S1 ATK% identical across natural stars (SW-style)", () => {
+    const coeffs = [1, 2, 3, 4, 5].map((stars) => {
+      const m = MONSTERS.find(
+        (x) => x.naturalStars === stars && x.role === "attacker",
+      );
+      assert.ok(m, `missing attacker nat ${stars}`);
+      const s1 = m.skills[0]!.effects.find((e) => e.kind === "damage");
+      assert.ok(s1 && s1.kind === "damage");
+      return s1.coeff;
+    });
+    assert.ok(coeffs.every((c) => c === coeffs[0]));
+    assert.equal(coeffs[0], 3.7);
+  });
+
+  it("gives natural 5★ a clear base ATK edge over natural 1★", () => {
+    const n1 = MONSTERS.find(
+      (m) => m.naturalStars === 1 && m.role === "attacker",
+    )!;
+    const n5 = MONSTERS.find(
+      (m) => m.naturalStars === 5 && m.role === "attacker",
+    )!;
+    assert.ok(n5.baseStats.atk / n1.baseStats.atk >= 1.8);
+    assert.ok(n5.baseStats.hp / n1.baseStats.hp >= 1.8);
+  });
+
   it("chapter1 boards progress 5 → 7", () => {
     assert.equal(CHAPTER1_STAGES.length, 7);
     assert.equal(getStage("garen_1_1")?.boardSize, 5);
