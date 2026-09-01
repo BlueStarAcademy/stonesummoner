@@ -10143,9 +10143,9 @@ function applyBattleAutoSettingsOpen(): void {
   layer.setAttribute("aria-hidden", battleAutoSettingsOpen ? "false" : "true");
   if (battleAutoSettingsOpen) {
     document.body.appendChild(layer);
+    applyBattleSettingsUi();
     positionBattleAutoSettings(layer, btn);
     requestAnimationFrame(() => positionBattleAutoSettings(layer, btn));
-    applyBattleSettingsUi();
     if (opening) replayModalPop(layer);
     rememberOverlayOpen("battle-auto-settings");
   } else {
@@ -10172,7 +10172,9 @@ function restoreBattleAutoSettingsIfOpen(): void {
 /** Sync battle settings sheet tabs + toggles (no remount). */
 function applyBattleSettingsUi(): void {
   const allOn = battleAutoOptions.stone && battleAutoOptions.combat;
-  app.querySelectorAll<HTMLButtonElement>("[data-auto-option]").forEach((btn) => {
+  const layer = findBattleAutoSettingsLayer();
+  const optionRoot = layer ?? app;
+  optionRoot.querySelectorAll<HTMLButtonElement>("[data-auto-option]").forEach((btn) => {
     const id = btn.dataset.autoOption;
     const on =
       id === "minimap"
@@ -10187,7 +10189,6 @@ function applyBattleSettingsUi(): void {
     btn.classList.toggle("is-on", on);
     btn.setAttribute("aria-checked", on ? "true" : "false");
   });
-  const layer = findBattleAutoSettingsLayer();
   if (!layer) return;
   layer.querySelectorAll<HTMLButtonElement>("[data-battle-settings-tab]").forEach((btn) => {
     const tab = btn.dataset.battleSettingsTab;
@@ -10198,7 +10199,8 @@ function applyBattleSettingsUi(): void {
   layer.querySelectorAll<HTMLElement>("[data-battle-settings-panel]").forEach((panel) => {
     const on = panel.dataset.battleSettingsPanel === battleSettingsTab;
     panel.classList.toggle("is-hidden", !on);
-    panel.hidden = !on;
+    if (on) panel.removeAttribute("hidden");
+    else panel.setAttribute("hidden", "");
   });
 }
 
