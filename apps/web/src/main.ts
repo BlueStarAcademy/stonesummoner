@@ -171,8 +171,10 @@ import {
 import {
   captureShopOffers,
   pickAutoSkillIndex,
+  elementRelation,
   type Battle,
   type CaptureShopChoice,
+  type ElementRelation,
   type SkillResult,
   type SkillPresentation,
   type StoneReport,
@@ -7903,6 +7905,28 @@ function renderActiveUnitSkills(u: Unit): string {
   return `<div class="battle-unit-skills" role="toolbar" aria-label="${escapeHtml(t("ui.battleUnitSkills"))}">${body}</div>`;
 }
 
+/** Affinity of the current turn unit toward `target` (SW HP-bar tint). */
+function battleHpAffinityToward(target: Unit): ElementRelation | null {
+  if (!battle?.activeUnitId) return null;
+  const active = battle.getUnit(battle.activeUnitId);
+  if (!active || active.id === target.id) return null;
+  return elementRelation(active.element, target.element);
+}
+
+function battleHpAffinityClass(target: Unit): string {
+  const rel = battleHpAffinityToward(target);
+  if (rel === "advantage") return " hp-aff--weak";
+  if (rel === "disadvantage") return " hp-aff--resist";
+  return "";
+}
+
+function renderBattleUnitElementBadge(u: Unit): string {
+  const src = monsterElementArtSrc(u.element);
+  if (!src) return "";
+  const label = elementLabel(u.element as SummonerElement);
+  return `<span class="battle-unit-el el-${u.element}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><img class="battle-unit-el-img" src="${src}" width="18" height="18" alt="" draggable="false" decoding="async" /></span>`;
+}
+
 function renderUnit(
   u: Unit,
   opts?: { targetable?: boolean; boss?: boolean },
@@ -7940,6 +7964,8 @@ function renderUnit(
         ? ""
         : u.monsterId ?? ""
       : `summoner-${u.element}`;
+  const affClass = battleHpAffinityClass(u);
+  const elBadge = renderBattleUnitElementBadge(u);
 
   let barsHtml = "";
   if (isSummoner && battle) {
@@ -7954,6 +7980,7 @@ function renderUnit(
     );
     barsHtml = `<div class="battle-unit-bars battle-unit-bars--mana">
       <div class="battle-unit-mana-row">
+        ${elBadge}
         <span class="battle-unit-mana-num">${Math.floor(manaState.mana)}<small>/${manaState.manaMax}</small></span>
       </div>
       <div class="bar mana"><i style="width:${manaPctUnit}%"></i></div>
@@ -7962,14 +7989,15 @@ function renderUnit(
   } else {
     barsHtml = `<div class="battle-unit-bars">
       <div class="battle-unit-hp-row">
+        ${elBadge}
         <span class="battle-unit-hp-num">${Math.max(0, Math.round(u.hp + shield))}</span>
       </div>
-      <div class="bar hp"><i style="width:${hpPct}%"></i></div>
+      <div class="bar hp${affClass}"><i style="width:${hpPct}%"></i></div>
       <div class="bar atb"><i style="width:${atbPct}%"></i></div>
     </div>`;
   }
 
-  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${u.name}">
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${escapeHtml(`${u.name} · ${elementLabel(u.element as SummonerElement)}`)}">
     ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
     ${renderUnitStatusIcons(u)}
     <span class="battle-unit-glow" aria-hidden="true"></span>
@@ -23191,8 +23219,11 @@ function renderBattle(manaPct: number): string {
     : 0;
   const raidHp = save.raidBossHp ?? RAID_BOSS_MAX_HP;
   const raidPct = RAID_BOSS_MAX_HP ? (raidHp / RAID_BOSS_MAX_HP) * 100 : 0;
+  const bossAff = boss ? battleHpAffinityClass(boss) : "";
+  const bossEl = boss ? renderBattleUnitElementBadge(boss) : "";
   const bossBar = boss
-    ? `<div class="battle-boss-hp">
+    ? `<div class="battle-boss-hp${bossAff}">
+        ${bossEl}
         <span class="battle-boss-hp-fill" style="width:${bossHpPct}%"></span>
         <strong>${fmtRes(boss.hp)} / ${fmtRes(boss.stats.hp)}</strong>
       </div>${
