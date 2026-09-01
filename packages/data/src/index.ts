@@ -241,12 +241,19 @@ export {
 export {
   STAGES_MAP_NATURAL,
   STAGES_LANDMARK_LAYOUT,
+  STAGES_MQ_LANDMARK_LAYOUT,
   STAGES_TERRAIN_ART_PATH,
+  STAGES_MAP_HOME_REGION_ID,
   stagesLandmarkArtPath,
 } from "./stagesMap.js";
 export type { ContentMode, CairosDungeon, MainQuestPinId, StageDef } from "./scenario.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";
-export type { StagesLandmarkId, StagesLandmarkDef } from "./stagesMap.js";
+export type {
+  StagesLandmarkId,
+  StagesLandmarkDef,
+  StagesMqLandmarkDef,
+  StagesSideLandmarkId,
+} from "./stagesMap.js";
 export {
   canUnlockSkillNode,
   getSkillTreeNode,

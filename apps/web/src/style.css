@@ -15550,9 +15550,9 @@ body > .battle-settings-layer.settings-layer {
   position: absolute;
   left: 0;
   top: 0;
-  /* Width/height set in JS to atlas aspect (2160×2880) so pin % == image %. */
+  /* Width/height set in JS to atlas aspect (2880×3840) so pin % == image %. */
   width: 100%;
-  aspect-ratio: 2160 / 2880;
+  aspect-ratio: 2880 / 3840;
   height: auto;
   will-change: transform;
   user-select: none;
@@ -15606,6 +15606,11 @@ body > .battle-settings-layer.settings-layer {
 .stages-landmark--hero {
   width: min(28%, 148px);
   z-index: 1;
+}
+
+.stages-landmark--mq {
+  width: min(24%, 132px);
+  z-index: 0;
 }
 
 .stages-mq-nodes {

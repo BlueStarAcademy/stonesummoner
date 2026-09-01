@@ -3,16 +3,17 @@
 Expedition (출정) world map uses a **layered** layout — same idea as the home island:
 
 1. **Terrain only** — no baked buildings  
-2. **Landmark sprites** — placed by `%` from data  
+2. **Landmark sprites** — MQ regions (map-01…13 themes) + side content, placed by `%` from data  
 3. **UI pins** — clickable overlays on top
 
 ## Files
 
 | Asset | Path | Size |
 |-------|------|------|
-| Terrain | `apps/web/public/art/stages/stages-world-terrain.webp` | **2160×2880** (3:4) |
-| Terrain mid | `stages-world-terrain-1080.webp` | 1080×1440 |
-| Landmarks | `landmark-{artKey}.webp` | 512×512, alpha |
+| Terrain | `apps/web/public/art/stages/stages-world-terrain.webp` | **2880×3840** (3:4, expansive pan) |
+| Terrain mid | `stages-world-terrain-1080.webp` | 1440×1920 |
+| MQ landmarks | `landmark-mq-01.webp` … `mq-13.webp` | 512×512 — match battle `map-01`…`map-13` |
+| Side landmarks | `landmark-{artKey}.webp` | 512×512, alpha |
 | Legacy | `stages-world-map.png` | unused (baked atlas) |
 
 ## Data
@@ -20,33 +21,21 @@ Expedition (출정) world map uses a **layered** layout — same idea as the hom
 Source of truth: [`packages/data/src/stagesMap.ts`](../../packages/data/src/stagesMap.ts)
 
 - `STAGES_MAP_NATURAL` — atlas pixel size (must match terrain WebP)
-- `STAGES_LANDMARK_LAYOUT` — `{ id, artKey, x, y, scale, landmarkKo }`
-- `SIDE_CONTENT_PIN_LAYOUT` — derived from landmark x/y (do not fork coords)
-- Main-quest pins live on `MAIN_QUEST_AREAS` in `scenario.ts` (south→north spine)
+- `STAGES_MQ_LANDMARK_LAYOUT` — 13 main-quest region vignettes (battle-bg themed)
+- `STAGES_LANDMARK_LAYOUT` — side content (challenge tower, etc.)
+- `SIDE_CONTENT_PIN_LAYOUT` — derived from side landmark x/y
+- Camera home: `STAGES_MAP_HOME_REGION_ID` (`mq1`) — map always opens framed on stage 1
 
 To add a new side building later:
 
 1. Drop `landmark-{artKey}.webp` (512² dematted)
 2. Append one row to `STAGES_LANDMARK_LAYOUT`
-3. Wire the region id in `stagesRegions()` / unlock rules as needed
+3. Wire the region id in unlock rules as needed
 
-## Art prompts
+## Art notes
 
-**Terrain:** bright daytime fantasy expedition map, high-angle 3/4 view, empty stone plazas and plateaus for overlays, **no buildings**, azure sky, wide open feel.
-
-**Landmark:** Summoners War–style hand-painted 2D building sprite, isometric three-quarter, grounded base, transparent background, square crop. Challenge Tower is a dedicated tall tower — do not reuse the home gate art.
-
-## Processing
-
-```bash
-# Terrain
-npx sharp-cli -i src.png -o apps/web/public/art/stages/stages-world-terrain.webp \
-  resize 2160 2880 --fit cover
-
-# Landmark (after PNG dematte or via scripts/lib/dematte-webp.mjs)
-node -e "import('./scripts/lib/dematte-webp.mjs').then(m => m.pngToDematteWebp('in.png','out.webp',{size:512,lim:48,fit:'contain'}))"
-```
+MQ landmarks are painted from battle arena references (`/art/battle/bg/map-XX.webp`) so each pin matches its combat biome (moonlit forest, flame canyon, end temple, …).
 
 ## Camera
 
-`STAGES_WORLD_OVERSCAN ≈ 1.9` in `apps/web/src/main.ts` so the larger atlas pans with a wide expedition feel. Bump `STAGES_MAP_FIT_VERSION` when natural size or overscan changes.
+`STAGES_WORLD_OVERSCAN ≈ 2.35` so the large atlas pans freely on all axes. Opening the stages view always calls `focusStagesRegion("mq1")`.

@@ -17,6 +17,8 @@ import {
   MAIN_QUEST_STAGES,
   SIDE_CONTENT_PIN_LAYOUT,
   STAGES_LANDMARK_LAYOUT,
+  STAGES_MQ_LANDMARK_LAYOUT,
+  STAGES_MAP_HOME_REGION_ID,
   STAGES_MAP_NATURAL,
   STAGES_PER_AREA,
   bumpGearEnhance,
@@ -220,8 +222,8 @@ describe("phase1 data", () => {
   });
 
   it("stages map landmarks share coords with side pins on the expansive atlas", () => {
-    assert.equal(STAGES_MAP_NATURAL.w, 2160);
-    assert.equal(STAGES_MAP_NATURAL.h, 2880);
+    assert.equal(STAGES_MAP_NATURAL.w, 2880);
+    assert.equal(STAGES_MAP_NATURAL.h, 3840);
     assert.equal(STAGES_LANDMARK_LAYOUT.length, SIDE_CONTENT_PIN_LAYOUT.length);
     assert.ok(STAGES_LANDMARK_LAYOUT.some((l) => l.id === "challenge_tower"));
     for (const pin of SIDE_CONTENT_PIN_LAYOUT) {
@@ -230,6 +232,19 @@ describe("phase1 data", () => {
       assert.equal(lm!.x, pin.x);
       assert.equal(lm!.y, pin.y);
       assert.ok(lm!.artKey.length > 0);
+    }
+  });
+
+  it("main quest landmarks match pin coords and battle map themes", () => {
+    assert.equal(STAGES_MQ_LANDMARK_LAYOUT.length, 13);
+    assert.equal(STAGES_MAP_HOME_REGION_ID, "mq1");
+    for (const lm of STAGES_MQ_LANDMARK_LAYOUT) {
+      const pin = MAIN_QUEST_PIN_LAYOUT.find((p) => p.map === lm.map);
+      assert.ok(pin, `mq${lm.map}`);
+      assert.equal(pin!.x, lm.x);
+      assert.equal(pin!.y, lm.y);
+      assert.equal(lm.battleBgId, `map-${String(lm.map).padStart(2, "0")}`);
+      assert.equal(lm.artKey, `mq-${String(lm.map).padStart(2, "0")}`);
     }
   });
 
