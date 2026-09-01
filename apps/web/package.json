@@ -8,6 +8,7 @@
     "api": "node server.mjs",
     "prebuild": "node ../../scripts/check-skill-art.mjs && node ../../scripts/check-skill-art-manifest.mjs && node ../../scripts/check-battle-fx-art.mjs",
     "build": "npm run check:encoding && vite build",
+    "test": "tsx --test src/ui/islandPreload.test.ts",
     "preview": "vite preview",
     "start": "node server.mjs",
     "i18n:gen": "node scripts/gen-i18n-packs.mjs",
