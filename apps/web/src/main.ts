@@ -4140,10 +4140,13 @@ async function prepareIslandAssets(): Promise<void> {
   };
   view = "auth";
   render();
-  await preloadIslandAssets(urls, updateIslandPreloadProgress, {
-    concurrency: 6,
-    timeoutMs: 10_000,
-  });
+  await Promise.all([
+    preloadIslandAssets(urls, updateIslandPreloadProgress, {
+      concurrency: 6,
+      timeoutMs: 10_000,
+    }),
+    new Promise<void>((resolve) => window.setTimeout(resolve, 350)),
+  ]);
   islandPreloadProgress = null;
 }
 
