@@ -25,6 +25,8 @@ type VisibleStatusId =
   | "sleep"
   | "provoke"
   | "dot"
+  | "burn"
+  | "poison"
   | "heal-block"
   | "silence";
 
@@ -156,6 +158,19 @@ const GLYPH: Record<VisibleStatusId, string> = {
     "#8A58C8",
     "#241030",
     '<path fill="#E0C8FF" d="M12 5.2c2.8 3.4 5.4 6.2 5.4 9.1A5.4 5.4 0 0 1 12 19.6a5.4 5.4 0 0 1-5.4-5.3c0-2.9 2.6-5.7 5.4-9.1z"/>',
+  ),
+  burn: plate(
+    "#E07030",
+    "#401810",
+    '<path fill="#FFD0A0" d="M12 4.8c2.2 2.6 4.8 5.2 4.8 8.1A4.8 4.8 0 0 1 12 17.6a4.8 4.8 0 0 1-4.8-4.7c0-2.9 2.6-5.5 4.8-8.1z"/>' +
+      '<path fill="#FFF0C8" d="M12 9.2c1.1 1.3 2.2 2.6 2.2 4.1A2.2 2.2 0 0 1 12 15.4a2.2 2.2 0 0 1-2.2-2.1c0-1.5 1.1-2.8 2.2-4.1z"/>',
+  ),
+  poison: plate(
+    "#58A050",
+    "#183018",
+    '<circle cx="9.2" cy="9" r="2.2" fill="#C8F0B0"/>' +
+      '<circle cx="14.8" cy="9.6" r="2.6" fill="#A8E090"/>' +
+      '<circle cx="12" cy="14.8" r="3" fill="#D8FFC0"/>',
   ),
   "heal-block": plate(
     "#D85068",

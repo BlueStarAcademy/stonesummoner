@@ -18,6 +18,8 @@ export type SkillEffect =
       sourceFactor?: number;
       /** Fraction of DEF ignored, from 0 (none) to 1 (all). */
       ignoreDef?: number;
+      /** Multi-hit count (2–5). Damage is split across hits. */
+      hits?: number;
     }
   | { kind: "heal"; target: AllyTarget; coeff: number }
   | { kind: "hot"; target: AllyTarget; coeff: number; turns: number }
@@ -45,6 +47,10 @@ export type SkillEffect =
       /** Fraction of caster ATK per tick. */
       coeff: number;
       turns: number;
+      /** Typed DoT; omit for legacy generic dot. */
+      dotKind?: "burn" | "poison" | "generic";
+      /** 0..1 apply chance before ACC/RES. */
+      chance?: number;
     }
   | {
       kind: "cc";
@@ -88,7 +94,14 @@ export type SkillEffect =
       fraction: number;
       turns: number;
     }
-  | { kind: "provoke"; target: "single"; turns: number; chance?: number };
+  | { kind: "provoke"; target: "single"; turns: number; chance?: number }
+  | {
+      kind: "immunity";
+      target: "self" | "all_allies";
+      /** Status kinds blocked while active. Empty = full immunity. */
+      kinds?: Array<"burn" | "poison" | "stun" | "freeze" | "sleep" | "silence" | "heal_block" | "dot">;
+      turns: number;
+    };
 
 export interface SkillDef {
   id: string;

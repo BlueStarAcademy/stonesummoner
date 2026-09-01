@@ -1448,7 +1448,13 @@ const messages: MessageDict = {
   "ui.gearAffixEffect.boardSense": "Board sense +{n}%",
   "ui.gearAffixEffect.allyAtk": "Ally ATK +{n}%",
   "ui.gearAffixEffect.summonerHp": "Summoner HP +{n}%",
-  "ui.gearAffixEffect.bossAtk": "Boss ATK +{n}%"
+  "ui.gearAffixEffect.bossAtk": "Boss ATK +{n}%",
+  "ui.skillFxBurn": "{target} · Burn {pct}% ATK each turn",
+  "ui.skillFxPoison": "{target} · Poison {pct}% max HP each turn",
+  "ui.skillFxMultiHit": "{text} · {hits} hits",
+  "ui.skillFxImmunity": "{target} · Status immunity",
+  "ui.statusBurn": "Burn",
+  "ui.statusPoison": "Poison"
 };
 
 export default messages;

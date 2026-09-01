@@ -73,26 +73,28 @@ import {
 } from "./index.js";
 
 describe("phase1 data", () => {
-  it("has 50 families x 5 elements and 17 symbol sets", () => {
-    assert.equal(MONSTERS.length, 250);
+  it("has 75 families x 5 elements and 17 symbol sets", () => {
+    assert.equal(MONSTERS.length, 375);
     assert.equal(SYMBOL_SETS.length, 17);
     assert.ok(getMonster("wolf_fighter_fire"));
     assert.ok(getMonster("lotus_dancer_wind"));
     assert.ok(getMonster("abyss_priest_dark"));
     assert.ok(getMonster("magic_archer_fire"));
     assert.ok(getMonster("cinder_imp_fire"));
+    assert.ok(getMonster("ember_wisp_fire"));
+    assert.ok(getMonster("sanctuary_oracle_light"));
     // Legacy ids still resolve
     assert.equal(getMonster("fire_fang")?.id, "wolf_fighter_fire");
     assert.equal(getMonster("seokrang_fire")?.id, "wolf_fighter_fire");
     const families = new Set(MONSTERS.map((m) => m.familyId));
-    assert.equal(families.size, 50);
+    assert.equal(families.size, 75);
     const byStars = [1, 2, 3, 4, 5].map(
       (s) =>
         new Set(
           MONSTERS.filter((m) => m.naturalStars === s).map((m) => m.familyId),
         ).size,
     );
-    assert.deepEqual(byStars, [10, 10, 12, 12, 6]);
+    assert.deepEqual(byStars, [15, 15, 17, 17, 11]);
     for (const fam of families) {
       const variants = MONSTERS.filter((m) => m.familyId === fam);
       assert.equal(variants.length, 5);
@@ -127,11 +129,11 @@ describe("phase1 data", () => {
       ]),
     );
     assert.deepEqual(counts, {
-      attacker: 10,
-      hp: 10,
-      defense: 10,
-      speed: 10,
-      support: 10,
+      attacker: 15,
+      hp: 15,
+      defense: 15,
+      speed: 15,
+      support: 15,
     });
     assert.equal(new Set(families.map((family) => family.role)).size, 5);
     for (const family of families) {
@@ -143,8 +145,8 @@ describe("phase1 data", () => {
     assert.equal(getMonster("doom_oracle_fire")?.familyIdentity, "debuffer");
   });
 
-  it("defines distinct profiles for all 50 families", () => {
-    assert.equal(Object.keys(FAMILY_KIT_PROFILES).length, 50);
+  it("defines distinct profiles for all 75 families", () => {
+    assert.equal(Object.keys(FAMILY_KIT_PROFILES).length, 75);
     const familyIds = new Set(MONSTERS.map((monster) => monster.familyId));
     assert.deepEqual(
       new Set(Object.keys(FAMILY_KIT_PROFILES)),
@@ -153,7 +155,7 @@ describe("phase1 data", () => {
     const allSignatures = Object.values(FAMILY_KIT_PROFILES).map((profile) =>
       JSON.stringify({ s2: profile.s2, s3: profile.s3 }),
     );
-    assert.equal(new Set(allSignatures).size, 50);
+    assert.equal(new Set(allSignatures).size, 75);
     for (const role of ["attacker", "hp", "defense", "speed", "support"] as const) {
       const signatures = Object.values(FAMILY_KIT_PROFILES)
         .filter((profile) => profile.role === role)
@@ -163,7 +165,7 @@ describe("phase1 data", () => {
             s3: profile.s3,
           }),
         );
-      assert.equal(signatures.length, 10);
+      assert.equal(signatures.length, 15);
       assert.equal(new Set(signatures).size, signatures.length);
     }
   });
@@ -204,6 +206,7 @@ describe("phase1 data", () => {
       "damage_share",
       "reflect",
       "provoke",
+      "immunity",
     ]) {
       assert.ok(represented.has(kind), `missing effect kind ${kind}`);
     }
@@ -228,7 +231,7 @@ describe("phase1 data", () => {
             ),
           ).size,
       ),
-      [10, 10, 12, 12, 6],
+      [15, 15, 17, 17, 11],
     );
     assert.deepEqual(getMonster("stone_golem_fire")?.baseStats, {
       hp: 3800,
@@ -297,8 +300,8 @@ describe("phase1 data", () => {
     const monsterVfxIds = MONSTERS.flatMap((m) =>
       m.skills.map((skill) => skill.vfxId),
     );
-    assert.equal(monsterVfxIds.length, 750);
-    assert.equal(new Set(monsterVfxIds).size, 750);
+    assert.equal(monsterVfxIds.length, 1125);
+    assert.equal(new Set(monsterVfxIds).size, 1125);
 
     const summonerVfxIds = Object.values(
       ["fire", "water", "wind", "light", "dark"] as const,

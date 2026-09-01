@@ -5,6 +5,9 @@ export type KitMechanic =
   | "buff"
   | "debuff"
   | "dot"
+  | "burn"
+  | "poison"
+  | "multi_hit"
   | "strip"
   | "cleanse"
   | "cc"
@@ -20,7 +23,18 @@ export type KitMechanic =
   | "reflect"
   | "provoke"
   | "shield"
-  | "mana";
+  | "mana"
+  | "immunity";
+
+export type PassiveImmunityKind =
+  | "burn"
+  | "poison"
+  | "stun"
+  | "freeze"
+  | "sleep"
+  | "silence"
+  | "heal_block"
+  | "dot";
 
 export interface FamilySkillProfile {
   mechanic: KitMechanic;
@@ -34,6 +48,8 @@ export interface FamilyKitProfile {
   s1: KitMechanic;
   s2: FamilySkillProfile;
   s3: FamilySkillProfile;
+  /** Battle-start status immunities (not stone passives). */
+  passiveImmunity?: readonly PassiveImmunityKind[];
 }
 
 const skill = (
@@ -48,7 +64,15 @@ const profile = (
   s1: KitMechanic,
   s2: FamilySkillProfile,
   s3: FamilySkillProfile,
-): FamilyKitProfile => ({ familyId, role, s1, s2, s3 });
+  passiveImmunity?: readonly PassiveImmunityKind[],
+): FamilyKitProfile => ({
+  familyId,
+  role,
+  s1,
+  s2,
+  s3,
+  ...(passiveImmunity ? { passiveImmunity } : {}),
+});
 
 /**
  * Family-owned mechanical identity. Elemental composition and star-grade
@@ -109,7 +133,40 @@ export const FAMILY_KIT_PROFILES: Readonly<Record<string, FamilyKitProfile>> = {
   sky_warden: profile("sky_warden", "defense", "provoke", skill("shield", 3), skill("atb_drain", 5)),
   eternal_healer: profile("eternal_healer", "support", "heal", skill("hot", 2), skill("revive", 5)),
   absolute_captor: profile("absolute_captor", "speed", "atb_gain", skill("strip", 3, true), skill("silence", 6)),
+
+  // --- Status-ailment showcase families (25) ---
+  // 1★
+  ember_wisp: profile("ember_wisp", "attacker", "burn", skill("burn", 2, true), skill("multi_hit", 4, true)),
+  toxin_mite: profile("toxin_mite", "hp", "poison", skill("poison", 2, true), skill("multi_hit", 4, true)),
+  ward_totem: profile("ward_totem", "defense", "provoke", skill("immunity", 3), skill("shield", 5), ["burn"]),
+  rime_dart: profile("rime_dart", "speed", "cc", skill("cc", 3, true), skill("atb_drain", 5, true)),
+  purify_finch: profile("purify_finch", "support", "cleanse", skill("hot", 2), skill("cleanse", 4)),
+  // 2★
+  blaze_hound: profile("blaze_hound", "attacker", "burn", skill("burn", 3, true), skill("heal_block", 5, true)),
+  plague_toad: profile("plague_toad", "hp", "poison", skill("poison", 3, true), skill("debuff", 5, true)),
+  iron_ward: profile("iron_ward", "defense", "provoke", skill("immunity", 3), skill("damage_share", 5), ["poison"]),
+  mute_owl: profile("mute_owl", "speed", "silence", skill("silence", 3, true), skill("atb_drain", 5, true)),
+  cleanse_monk: profile("cleanse_monk", "support", "heal", skill("cleanse", 3), skill("hot", 5)),
+  // 3★
+  spark_raptor: profile("spark_raptor", "attacker", "burn", skill("burn", 3, true), skill("multi_hit", 5, true)),
+  fang_hydra: profile("fang_hydra", "hp", "poison", skill("poison", 3, true), skill("multi_hit", 5, true)),
+  aegis_scarab: profile("aegis_scarab", "defense", "immunity", skill("shield", 3), skill("immunity", 5), ["burn", "poison"]),
+  slumber_moth: profile("slumber_moth", "speed", "cc", skill("cc", 3, true), skill("silence", 5, true)),
+  sanctum_dove: profile("sanctum_dove", "support", "cleanse", skill("cleanse", 3), skill("heal", 5)),
+  // 4★
+  inferno_colossus: profile("inferno_colossus", "attacker", "burn", skill("burn", 3, true), skill("burn", 5, true)),
+  venom_tyrant: profile("venom_tyrant", "hp", "poison", skill("poison", 3, true), skill("poison", 5, true)),
+  glacier_bastion: profile("glacier_bastion", "defense", "cc", skill("cc", 3, true), skill("provoke", 5, true)),
+  hex_mute: profile("hex_mute", "speed", "silence", skill("heal_block", 3, true), skill("silence", 5, true)),
+  purify_hierophant: profile("purify_hierophant", "support", "cleanse", skill("cleanse", 3), skill("immunity", 5)),
+  // 5★
+  flame_slaughter: profile("flame_slaughter", "attacker", "burn", skill("burn", 3, true), skill("multi_hit", 6, true)),
+  poison_overlord: profile("poison_overlord", "hp", "poison", skill("poison", 3, true), skill("multi_hit", 6, true)),
+  absolute_frost: profile("absolute_frost", "defense", "cc", skill("cc", 3, true), skill("immunity", 6), ["freeze"]),
+  curse_catalyst: profile("curse_catalyst", "speed", "silence", skill("poison", 3, true), skill("silence", 6, true)),
+  sanctuary_oracle: profile("sanctuary_oracle", "support", "cleanse", skill("immunity", 3), skill("cleanse", 6), ["stun", "silence"]),
 };
+
 
 export function familyKitProfile(familyId: string): FamilyKitProfile {
   const found = FAMILY_KIT_PROFILES[familyId];

@@ -25,6 +25,8 @@ export type UnitStatusId =
   | "sleep"
   | "provoke"
   | "dot"
+  | "burn"
+  | "poison"
   | "hot"
   | "heal-block"
   | "silence"
@@ -171,6 +173,13 @@ export function addStatus(
     Partial<Pick<StatusInstance, "id" | "stacks">>,
 ): StatusInstance {
   const statuses = ensureStatuses(unit);
+  if (unit.immuneStatusKinds?.includes(input.kind)) {
+    return statuses.find((status) => status.kind === input.kind) ?? {
+      ...input,
+      id: input.id ?? nextStatusId(input.kind, input.sourceUnitId),
+      stacks: input.stacks ?? 1,
+    };
+  }
   if (input.stacking !== "stack") {
     const current = statuses.find((status) => status.kind === input.kind);
     if (current) {
@@ -225,6 +234,8 @@ const CLEANSE_PRIORITY: StatusKind[] = [
   "crit_dmg_down",
   "accuracy_down",
   "dot",
+  "burn",
+  "poison",
 ];
 
 export function removeStatuses(
@@ -310,7 +321,7 @@ export function tickUnitStatuses(unit: Unit): {
 } {
   const statuses = ensureStatuses(unit);
   const dotDamage = statuses
-    .filter((status) => status.kind === "dot")
+    .filter((status) => status.kind === "dot" || status.kind === "burn" || status.kind === "poison")
     .reduce((sum, status) => sum + Math.max(0, status.value ?? 0), 0);
   const hotHeal = statuses
     .filter((status) => status.kind === "hot")
@@ -354,6 +365,18 @@ function push(
 }
 
 /** Active combat statuses for unit-head icons (Summoners War–style strip). */
+
+function burnTurns(u: Unit): number {
+  return ensureStatuses(u)
+    .filter((s) => s.kind === "burn")
+    .reduce((max, s) => Math.max(max, s.turns), 0);
+}
+function poisonTurns(u: Unit): number {
+  return ensureStatuses(u)
+    .filter((s) => s.kind === "poison")
+    .reduce((max, s) => Math.max(max, s.turns), 0);
+}
+
 export function listUnitStatuses(u: Unit): UnitStatusIcon[] {
   if (!u.alive) return [];
   ensureStatuses(u);
@@ -437,6 +460,8 @@ export function listUnitStatuses(u: Unit): UnitStatusIcon[] {
     (u.provokeTicks ?? 0) > 0,
   );
   push(out, "dot", u.dotTicks ?? 0, "debuff", (u.dotTicks ?? 0) > 0);
+  push(out, "burn", burnTurns(u), "debuff", burnTurns(u) > 0);
+  push(out, "poison", poisonTurns(u), "debuff", poisonTurns(u) > 0);
   push(out, "hot", u.hotTurns ?? 0, "buff", (u.hotTurns ?? 0) > 0);
   push(out, "heal-block", u.healBlockTurns ?? 0, "debuff", (u.healBlockTurns ?? 0) > 0);
   push(out, "silence", u.silenceTurns ?? 0, "debuff", (u.silenceTurns ?? 0) > 0);

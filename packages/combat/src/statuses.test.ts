@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   addStatus,
   advanceUnitStatuses,
+  hasStatus,
   listUnitStatuses,
   removeStatuses,
+  tickUnitStatuses,
 } from "./statuses.js";
 import type { Unit } from "./types.js";
 
@@ -125,5 +127,60 @@ describe("listUnitStatuses", () => {
     assert.equal(target.atkBuffTicks, 2);
     assert.equal(removeStatuses(target, "debuff", 2).length, 1);
     assert.equal(target.statuses?.filter((status) => status.kind === "dot").length, 1);
+  });
+});
+
+describe("burn and poison ticks", () => {
+  it("ticks burn from ATK snapshot and poison from max HP", () => {
+    const burned = unit({ stats: { hp: 1000, atk: 200, def: 50, spd: 100, critRate: 0, critDmg: 150 } });
+    const poisoned = unit({ stats: { hp: 1000, atk: 200, def: 50, spd: 100, critRate: 0, critDmg: 150 } });
+    addStatus(burned, {
+      kind: "burn",
+      sourceUnitId: "src",
+      polarity: "debuff",
+      turns: 2,
+      stacking: "stack",
+      dispellable: true,
+      amount: 0.12,
+      value: 24,
+    });
+    addStatus(poisoned, {
+      kind: "poison",
+      sourceUnitId: "src",
+      polarity: "debuff",
+      turns: 2,
+      stacking: "stack",
+      dispellable: true,
+      amount: 0.05,
+      value: 50,
+    });
+    assert.equal(tickUnitStatuses(burned).dotDamage, 24);
+    assert.equal(tickUnitStatuses(poisoned).dotDamage, 50);
+  });
+
+  it("blocks immuneStatusKinds and cleanses burn/poison", () => {
+    const target = unit({ immuneStatusKinds: ["burn"] });
+    addStatus(target, {
+      kind: "burn",
+      sourceUnitId: "src",
+      polarity: "debuff",
+      turns: 2,
+      stacking: "stack",
+      dispellable: true,
+      value: 10,
+    });
+    assert.equal(hasStatus(target, "burn"), false);
+    addStatus(target, {
+      kind: "poison",
+      sourceUnitId: "src",
+      polarity: "debuff",
+      turns: 2,
+      stacking: "stack",
+      dispellable: true,
+      value: 10,
+    });
+    assert.equal(hasStatus(target, "poison"), true);
+    removeStatuses(target, "debuff", 1);
+    assert.equal(hasStatus(target, "poison"), false);
   });
 });

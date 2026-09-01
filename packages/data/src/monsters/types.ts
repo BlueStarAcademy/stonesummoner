@@ -61,6 +61,17 @@ export interface MonsterDef {
   skills: [SkillDef, SkillDef, SkillDef];
   stonePassiveId: StonePassiveId;
   stonePassive: string;
+  /** Combat status kinds this monster cannot receive. */
+  passiveImmunity?: readonly (
+    | "burn"
+    | "poison"
+    | "stun"
+    | "freeze"
+    | "sleep"
+    | "silence"
+    | "heal_block"
+    | "dot"
+  )[];
 }
 
 export type Stats = MonsterDef["baseStats"];
@@ -85,6 +96,7 @@ export type FamilySeed = {
   baseStats: Stats;
   stonePassiveId: StonePassiveId;
   kits: Record<Element, ElementKit>;
+  passiveImmunity?: MonsterDef["passiveImmunity"];
 };
 
 export type FamilyRosterEntry = {

@@ -5502,5 +5502,29 @@
   "ui.gearAffixEffect.bossAtk": {
     "ko": "보스전 공격력 +{n}%",
     "en": "Boss ATK +{n}%"
+  },
+  "ui.skillFxBurn": {
+    "ko": "{target} · 매 턴 공격력 {pct}% 화상",
+    "en": "{target} · Burn {pct}% ATK each turn"
+  },
+  "ui.skillFxPoison": {
+    "ko": "{target} · 매 턴 최대 체력 {pct}% 중독",
+    "en": "{target} · Poison {pct}% max HP each turn"
+  },
+  "ui.skillFxMultiHit": {
+    "ko": "{text} · {hits}회 공격",
+    "en": "{text} · {hits} hits"
+  },
+  "ui.skillFxImmunity": {
+    "ko": "{target} · 상태이상 면역",
+    "en": "{target} · Status immunity"
+  },
+  "ui.statusBurn": {
+    "ko": "화상",
+    "en": "Burn"
+  },
+  "ui.statusPoison": {
+    "ko": "중독",
+    "en": "Poison"
   }
 }

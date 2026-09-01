@@ -5,7 +5,7 @@ import type {
   FamilyRosterEntry,
 } from "./types.js";
 
-/** Compact Phase 2 roster — 50 families. artKey per element = `{familyId}_{element}`. */
+/** Compact Phase 2 roster — 75 families. artKey per element = `{familyId}_{element}`. */
 const LEGACY_FAMILY_ROSTER: readonly {
   familyId: string;
   nameKo: string;
@@ -68,6 +68,38 @@ const LEGACY_FAMILY_ROSTER: readonly {
   { familyId: "sky_warden", nameKo: "천공수호룡", naturalStars: 5, role: "tank", stonePassiveId: "high_amp_dr" },
   { familyId: "eternal_healer", nameKo: "영원의치유사", naturalStars: 5, role: "support", stonePassiveId: "shield_core_heal" },
   { familyId: "absolute_captor", nameKo: "절대포획자", naturalStars: 5, role: "capturer", stonePassiveId: "capture_mana" },
+
+  // Status-ailment showcase (25)
+  // 1★
+  { familyId: "ember_wisp", nameKo: "불씨위습", naturalStars: 1, role: "attacker", stonePassiveId: "capture_crit" },
+  { familyId: "toxin_mite", nameKo: "독진드기", naturalStars: 1, role: "debuffer", stonePassiveId: "capture_amp" },
+  { familyId: "ward_totem", nameKo: "수호토템", naturalStars: 1, role: "tank", stonePassiveId: "high_amp_dr" },
+  { familyId: "rime_dart", nameKo: "서리침", naturalStars: 1, role: "debuffer", stonePassiveId: "stone_ally_atb" },
+  { familyId: "purify_finch", nameKo: "정화핀치", naturalStars: 1, role: "support", stonePassiveId: "shield_core_heal" },
+  // 2★
+  { familyId: "blaze_hound", nameKo: "작열사냥개", naturalStars: 2, role: "attacker", stonePassiveId: "capture_crit" },
+  { familyId: "plague_toad", nameKo: "역병두꺼비", naturalStars: 2, role: "debuffer", stonePassiveId: "capture_amp" },
+  { familyId: "iron_ward", nameKo: "철벽수호", naturalStars: 2, role: "tank", stonePassiveId: "high_amp_dr" },
+  { familyId: "mute_owl", nameKo: "침묵올빼미", naturalStars: 2, role: "debuffer", stonePassiveId: "suggest_plus" },
+  { familyId: "cleanse_monk", nameKo: "정화승", naturalStars: 2, role: "support", stonePassiveId: "stone_ally_heal" },
+  // 3★
+  { familyId: "spark_raptor", nameKo: "불꽃랩터", naturalStars: 3, role: "attacker", stonePassiveId: "capture_crit" },
+  { familyId: "fang_hydra", nameKo: "독니히드라", naturalStars: 3, role: "debuffer", stonePassiveId: "capture_amp" },
+  { familyId: "aegis_scarab", nameKo: "아이기스갑충", naturalStars: 3, role: "tank", stonePassiveId: "high_amp_dr" },
+  { familyId: "slumber_moth", nameKo: "동면나방", naturalStars: 3, role: "debuffer", stonePassiveId: "stone_ally_atb" },
+  { familyId: "sanctum_dove", nameKo: "성역비둘기", naturalStars: 3, role: "support", stonePassiveId: "shield_core_heal" },
+  // 4★
+  { familyId: "inferno_colossus", nameKo: "지옥거상", naturalStars: 4, role: "attacker", stonePassiveId: "capture_crit" },
+  { familyId: "venom_tyrant", nameKo: "맹독군주", naturalStars: 4, role: "debuffer", stonePassiveId: "capture_amp" },
+  { familyId: "glacier_bastion", nameKo: "빙하요새", naturalStars: 4, role: "tank", stonePassiveId: "high_amp_dr" },
+  { familyId: "hex_mute", nameKo: "봉인저주", naturalStars: 4, role: "debuffer", stonePassiveId: "suggest_plus" },
+  { familyId: "purify_hierophant", nameKo: "정화대제사장", naturalStars: 4, role: "support", stonePassiveId: "shield_core_heal" },
+  // 5★
+  { familyId: "flame_slaughter", nameKo: "화염학살자", naturalStars: 5, role: "attacker", stonePassiveId: "capture_crit" },
+  { familyId: "poison_overlord", nameKo: "독군주", naturalStars: 5, role: "debuffer", stonePassiveId: "capture_amp" },
+  { familyId: "absolute_frost", nameKo: "절대빙결", naturalStars: 5, role: "tank", stonePassiveId: "high_amp_dr" },
+  { familyId: "curse_catalyst", nameKo: "저주촉매", naturalStars: 5, role: "debuffer", stonePassiveId: "suggest_plus" },
+  { familyId: "sanctuary_oracle", nameKo: "성역예언자", naturalStars: 5, role: "support", stonePassiveId: "shield_core_heal" },
 ] as const;
 
 function inferredCombatTags(
