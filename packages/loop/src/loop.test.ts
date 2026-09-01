@@ -1373,14 +1373,14 @@ describe("game loop", () => {
     assert.match(insufficient.message, /부족/);
   });
 
-  it("reports a guaranteed Giant symbol blocked by a full bag", () => {
+  it("reports a rolled Giant symbol blocked by a full bag", () => {
     const base = createNewSave(0);
     const symbols = Array.from({ length: symbolBagCapacity(base) }, (_, index) => ({
       ...createSymbol("hwalro", 1, `full_${index}`),
       id: `full_${index}`,
     }));
     const full = { ...base, symbols };
-    const result = applyRewards(full, getStage("giant_b1")!, true, () => 0.99);
+    const result = applyRewards(full, getStage("giant_b1")!, true, () => 0);
     assert.equal(result.reward.symbol, undefined);
     assert.equal(result.reward.symbolBagFull, true);
     assert.equal(result.save.symbols.length, symbols.length);
@@ -1465,7 +1465,7 @@ describe("game loop", () => {
 
   it("raises energy max and unlocks buildings on account level-up", () => {
     let save = createNewSave(0);
-    assert.equal(save.island.energyMax, 100);
+    assert.equal(save.island.energyMax, 42);
     // Level active summoner from 6 → 7 to unlock wish_temple (+2 energy max).
     // SW curve: Lv.6→7 needs 3110 EXP; leave a little room so one Normal clear tips it.
     save = {
@@ -1477,7 +1477,7 @@ describe("game loop", () => {
       island: {
         ...save.island,
         summonerLevel: 6,
-        energyMax: 100 + (6 - 1) * 2,
+        energyMax: 42 + (6 - 1) * 2,
       },
     };
     const beforeMax = save.island.energyMax;
@@ -1500,7 +1500,7 @@ describe("game loop", () => {
       island: {
         ...next.island,
         summonerLevel: 10,
-        energyMax: 100 + (10 - 1) * 2,
+        energyMax: 42 + (10 - 1) * 2,
       },
     };
     const capped = applyRewards(save, stage, true, () => 0.99);

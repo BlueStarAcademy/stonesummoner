@@ -1149,12 +1149,10 @@ describe("Battle flow", () => {
     b.lastStoneTeam = "enemy";
     b.tickUntilReady();
     const amp0 = b.amplify;
-    const mana0 = b.allySummoner.mana;
     assert.equal(b.playStone(top), true);
     assert.equal(b.openingBonusPending, false);
-    assert.ok(b.amplify >= amp0 + 0.03 - 1e-9);
-    assert.ok(b.allySummoner.mana >= mana0 + 8);
-    assert.match(b.log.join("\n"), /포석 보너스 \(중앙 국면\)/);
+    assert.equal(b.amplify, amp0);
+    assert.match(b.log.join("\n"), /포석 안내 종료/);
   });
 
   it("keeps capture power for every ally action through the next placement", () => {
