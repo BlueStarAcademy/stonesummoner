@@ -1,12 +1,29 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ISLAND_ASSET_PACK_VERSION,
   islandCriticalAssetUrls,
+  isIslandAssetPackPrepared,
+  markIslandAssetPackPrepared,
   preloadIslandAssets,
   type IslandPreloadProgress,
 } from "./islandPreload.js";
 
 describe("island image preload", () => {
+  it("marks the asset pack so later logins skip downloading", async () => {
+    let value: string | null = null;
+    const storage = {
+      getItem: () => value,
+      setItem: (_key: string, next: string) => {
+        value = next;
+      },
+    };
+    assert.equal(await isIslandAssetPackPrepared([], storage), false);
+    markIslandAssetPackPrepared(storage);
+    assert.equal(value, ISLAND_ASSET_PACK_VERSION);
+    assert.equal(await isIslandAssetPackPrepared([], storage), true);
+  });
+
   it("includes the map, buildings, navigation, summoner, and profile art once", () => {
     const urls = islandCriticalAssetUrls(
       "water",

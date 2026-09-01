@@ -66,6 +66,20 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,ico,png,woff2}"],
         // stages-world-map.png (~3.3 MB) and auth heroes exceed Workbox's 2 MiB default
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              /^\/art\/(?:home\/|hub\/|ui\/(?:nav|res)\/|summoner\/|auth\/|monster\/[^/]+\.(?:webp|png|svg)$)/.test(
+                url.pathname,
+              ),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "island-critical-v1",
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],

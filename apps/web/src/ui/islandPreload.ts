@@ -30,11 +30,40 @@ const STATIC_ASSETS = [
 ] as const;
 
 const readyAssets = new Set<string>();
+export const ISLAND_ASSET_CACHE_NAME = "island-critical-v1";
+/** Bump only when the island-visible asset pack changes. */
+export const ISLAND_ASSET_PACK_VERSION = "1";
+const ISLAND_ASSET_PACK_KEY = "stonesummoner:island-assets";
 
 export interface IslandPreloadProgress {
   completed: number;
   total: number;
   percent: number;
+}
+
+export async function isIslandAssetPackPrepared(
+  urls: readonly string[] = [],
+  storage: Pick<Storage, "getItem"> = localStorage,
+): Promise<boolean> {
+  if (storage.getItem(ISLAND_ASSET_PACK_KEY) !== ISLAND_ASSET_PACK_VERSION) {
+    return false;
+  }
+  if (typeof caches === "undefined" || urls.length === 0) return true;
+  try {
+    const cache = await caches.open(ISLAND_ASSET_CACHE_NAME);
+    const matches = await Promise.all(
+      [...new Set(urls)].map((url) => cache.match(url)),
+    );
+    return matches.every(Boolean);
+  } catch {
+    return true;
+  }
+}
+
+export function markIslandAssetPackPrepared(
+  storage: Pick<Storage, "setItem"> = localStorage,
+): void {
+  storage.setItem(ISLAND_ASSET_PACK_KEY, ISLAND_ASSET_PACK_VERSION);
 }
 
 export function islandCriticalAssetUrls(
@@ -48,7 +77,7 @@ export function islandCriticalAssetUrls(
   ].filter((url, index, all) => Boolean(url) && all.indexOf(url) === index);
 }
 
-function loadImage(url: string, timeoutMs: number): Promise<boolean> {
+function decodeImageSource(url: string, timeoutMs: number): Promise<boolean> {
   if (readyAssets.has(url)) return Promise.resolve(true);
   return new Promise((resolve) => {
     const image = new Image();
@@ -77,6 +106,32 @@ function loadImage(url: string, timeoutMs: number): Promise<boolean> {
     image.onerror = () => finish(false);
     image.src = url;
   });
+}
+
+async function cacheAndDecodeImage(
+  url: string,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (readyAssets.has(url)) return true;
+  if (typeof caches === "undefined") return decodeImageSource(url, timeoutMs);
+  try {
+    const cache = await caches.open(ISLAND_ASSET_CACHE_NAME);
+    let response = await cache.match(url);
+    if (!response) {
+      response = await fetch(url, { credentials: "same-origin" });
+      if (!response.ok) return false;
+      await cache.put(url, response.clone());
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const decoded = await decodeImageSource(objectUrl, timeoutMs);
+    URL.revokeObjectURL(objectUrl);
+    readyAssets.delete(objectUrl);
+    if (decoded) readyAssets.add(url);
+    return decoded;
+  } catch {
+    return decodeImageSource(url, timeoutMs);
+  }
 }
 
 export async function preloadIslandAssets(
@@ -108,7 +163,7 @@ export async function preloadIslandAssets(
       const url = pending[cursor++]!;
       const loaded = await (
         options?.load?.(url) ??
-        loadImage(url, options?.timeoutMs ?? 15_000)
+        cacheAndDecodeImage(url, options?.timeoutMs ?? 15_000)
       );
       if (!loaded) failed.push(url);
       completed += 1;
