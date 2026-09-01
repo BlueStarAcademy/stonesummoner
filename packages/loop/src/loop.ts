@@ -1322,6 +1322,7 @@ export type OnboardRiteSave = {
   equipped: boolean;
   hasBattleDrop: boolean;
   welcomeSeen: boolean;
+  circleTutorialSeen: boolean;
 };
 
 export interface PlayerSave {
@@ -1965,6 +1966,7 @@ export function createDemoSave(now = Date.now()): PlayerSave {
       equipped: true,
       hasBattleDrop: false,
       welcomeSeen: true,
+      circleTutorialSeen: true,
     },
   });
 }

@@ -323,6 +323,26 @@
     "ko": "확인",
     "en": "OK"
   },
+  "ui.stonePick.title": {
+    "ko": "마법석 소환",
+    "en": "Magic stone"
+  },
+  "ui.stonePick.helpTitle": {
+    "ko": "마법진 착수",
+    "en": "Circle placement"
+  },
+  "ui.stonePick.helpBtn": {
+    "ko": "도움말",
+    "en": "Help"
+  },
+  "ui.stonePick.helpConfirm": {
+    "ko": "확인",
+    "en": "OK"
+  },
+  "ui.stonePick.help": {
+    "ko": "마법진에 돌을 놓아 턴을 엽니다|빛나는 칸을 탭하면 착수됩니다|따내면 마나·증폭이 오릅니다|돌은 소환수가 아닙니다",
+    "en": "Place a stone on the circle to open your turn|Tap a glowing cell to place|Captures raise mana and amplify|Stones are not summon monsters"
+  },
   "ui.boardToken.crit_charm": {
     "ko": "치명부적",
     "en": "Crit charm"
@@ -4982,6 +5002,10 @@
   "ui.stoneBuffCrit": {
     "ko": "+치명타 {n}%",
     "en": "+Crit {n}%"
+  },
+  "ui.stoneBuffUntilNext": {
+    "ko": "다음 마법석 소환전까지 {buff}",
+    "en": "Until next magic stone: {buff}"
   },
   "ui.stoneCapture": {
     "ko": "+피해 {n}%",

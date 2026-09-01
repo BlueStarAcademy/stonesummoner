@@ -117,6 +117,8 @@ export type OnboardSnapshot = {
   hasBattleDrop: boolean;
   /** Welcome rite overlay already shown for this account. */
   welcomeSeen: boolean;
+  /** Battle stone-pick help sheet shown at least once. */
+  circleTutorialSeen: boolean;
 };
 
 export function defaultOnboardSnapshot(): OnboardSnapshot {
@@ -130,6 +132,7 @@ export function defaultOnboardSnapshot(): OnboardSnapshot {
     equipped: false,
     hasBattleDrop: false,
     welcomeSeen: false,
+    circleTutorialSeen: false,
   };
 }
 
@@ -144,7 +147,8 @@ export function isVirginOnboard(snap: OnboardSnapshot): boolean {
     !snap.partySet &&
     !snap.equipped &&
     !snap.hasBattleDrop &&
-    !snap.welcomeSeen
+    !snap.welcomeSeen &&
+    !snap.circleTutorialSeen
   );
 }
 
@@ -168,6 +172,7 @@ export function skipOnboardForProgressedSave(
     partySet: true,
     equipped: true,
     welcomeSeen: true,
+    circleTutorialSeen: true,
     hasBattleDrop: false,
   };
 }
@@ -194,6 +199,7 @@ export function readOnboardSnapshot(userId: string | null | undefined): OnboardS
       equipped: Boolean(parsed.equipped),
       hasBattleDrop: Boolean(parsed.hasBattleDrop),
       welcomeSeen: Boolean(parsed.welcomeSeen),
+      circleTutorialSeen: Boolean(parsed.circleTutorialSeen),
     };
   } catch {
     return defaultOnboardSnapshot();
@@ -364,6 +370,7 @@ export function toOnboardRiteSave(snap: OnboardSnapshot): {
   equipped: boolean;
   hasBattleDrop: boolean;
   welcomeSeen: boolean;
+  circleTutorialSeen: boolean;
 } {
   return {
     step: snap.step,
@@ -375,6 +382,7 @@ export function toOnboardRiteSave(snap: OnboardSnapshot): {
     equipped: snap.equipped,
     hasBattleDrop: snap.hasBattleDrop,
     welcomeSeen: snap.welcomeSeen,
+    circleTutorialSeen: snap.circleTutorialSeen,
   };
 }
 
@@ -394,5 +402,6 @@ export function fromOnboardRiteSave(raw: unknown): OnboardSnapshot | null {
     equipped: Boolean(parsed.equipped),
     hasBattleDrop: Boolean(parsed.hasBattleDrop),
     welcomeSeen: Boolean(parsed.welcomeSeen),
+    circleTutorialSeen: Boolean(parsed.circleTutorialSeen),
   };
 }
