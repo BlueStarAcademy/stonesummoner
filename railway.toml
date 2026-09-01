@@ -1,8 +1,27 @@
+# Railway builds from GitHub. For push→deploy:
+# Service Settings → Source → branch `main` + Autodeploy ON.
+# Optional backup: GitHub secret RAILWAY_DEPLOY_HOOK (see .github/workflows/deploy-railway.yml).
+# Do not enable "Wait for CI" if you want deploys to start immediately on push.
+
 [build]
 builder = "NIXPACKS"
 buildCommand = "npm install && npm run build"
+# Override any restrictive dashboard watch paths so app/code pushes always deploy.
+watchPatterns = [
+  "apps/**",
+  "packages/**",
+  "scripts/**",
+  "docs/**",
+  "package.json",
+  "package-lock.json",
+  "railway.toml",
+  "Dockerfile",
+  ".nvmrc",
+]
 
 [deploy]
 startCommand = "npm run start"
 healthcheckPath = "/"
+healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
