@@ -50,14 +50,14 @@ import {
   stageUnlockLabel,
   type PlayerSave,
 } from "stonesummoner-loop";
-import { tickProduction } from "stonesummoner-home";
+import { summonerExpToNext, tickProduction } from "stonesummoner-home";
 import { GLORY_BUILDINGS, SKILL_TREE_NODES, type GloryBuildingId } from "stonesummoner-data";
 
 function printStatus(save: PlayerSave): void {
   const { island, symbols, clearedStages, scrolls, roster } = save;
   console.log("────────────────────────────────────");
   console.log(
-    `소환사 Lv.${island.summonerLevel} (${Math.floor(island.summonerExp ?? 0)}/100 EXP) · 각성 ${save.summonerAwaken ?? 0} · 트리 ${(save.skillTree ?? []).length}/${SKILL_TREE_NODES.length}`,
+    `소환사 Lv.${island.summonerLevel} (${Math.floor(island.summonerExp ?? 0)}/${summonerExpToNext(island.summonerLevel)} EXP) · 각성 ${save.summonerAwaken ?? 0} · 트리 ${(save.skillTree ?? []).length}/${SKILL_TREE_NODES.length}`,
   );
   console.log(
     `골드 ${Math.floor(island.mana)} · 크리스탈 ${island.crystal} · 에너지 ${Math.floor(island.energy)}/${island.energyMax ?? 100}`,

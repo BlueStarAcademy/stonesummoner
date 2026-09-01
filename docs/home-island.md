@@ -5,7 +5,7 @@
 메인 홈 = 내려다보는 **거점 섬**.  
 소환사 레벨↑ → 건물 해금·건설 → 건물 레벨업 → 효과/생산↑.  
 생산형 건물은 **시간 경과로 자원 생성** 후 탭 수집.  
-소환사 레벨을 유저 레벨과 하나로 합치는 계획: [summoner-account-level.md](summoner-account-level.md).
+소환사 레벨 = 유저 레벨. 속성 키트를 바꿔도 레벨은 같다. [summoner-account-level.md](summoner-account-level.md)
 
 수치·해금 레벨 원천: [SW Buildings](https://summonerswar.fandom.com/wiki/Buildings) / Spokland.  
 이름만 진문·바둑 테마.

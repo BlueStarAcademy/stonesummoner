@@ -297,7 +297,7 @@ export function canUpgradeBuilding(
   if (userLv < need) {
     return {
       ok: false,
-      reason: `계정 Lv.${need}+ 필요 (현재 ${userLv})`,
+      reason: `소환사 Lv.${need}+ 필요 (현재 ${userLv})`,
     };
   }
   const cost = buildingUpgradeManaCost(inst.level);

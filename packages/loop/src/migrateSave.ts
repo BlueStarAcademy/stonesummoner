@@ -26,6 +26,7 @@ import {
   type PlayerSave,
   type SummonerElement,
 } from "./loop.js";
+import { sharedSummonerProgress } from "./summonerLevel.js";
 import { normalizeDailyActivity } from "./dailyMissions.js";
 import { normalizeAwakenMats } from "./essences.js";
 
@@ -131,6 +132,13 @@ export function migrateSave(raw: unknown): PlayerSave | null {
       gear: stripUnenhancedStarterGear(normalizeSummonerGear(seedGear, el)),
     };
   }
+  const shared = sharedSummonerProgress(island, summoners, activeSummoner);
+  for (const el of ["fire", "water", "wind", "light", "dark"] as const) {
+    const cur = summoners[el] ?? { level: 1, exp: 0, awaken: 0 };
+    summoners[el] = { ...cur, level: shared.level, exp: shared.exp };
+  }
+  island.summonerLevel = shared.level;
+  island.summonerExp = shared.exp;
   const mid: PlayerSave = {
     ...base,
     island,

@@ -3,7 +3,7 @@
 유저 계정과 소환사를 **같은 존재**로 본다.
 소환사 레벨이 곧 유저 레벨이며, 속성을 바꿔 다음 소환사를 해금해도 **레벨·경험치는 전원 동일**하다.
 
-이 문서는 구현 전 계획이다. 코드 변경은 후속 PR에서 한다.
+구현됨. 세이브·EXP·게이트·UI가 공유 소환사 레벨을 쓴다.
 
 관련: [summoner.md](summoner.md) · [summoner-phase2.md](summoner-phase2.md) · [home-island.md](home-island.md) · [content-map.md](content-map.md)
 

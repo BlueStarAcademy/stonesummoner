@@ -6,6 +6,7 @@ import {
   type MissionReward,
 } from "./mainQuest.js";
 import type { LoopStepResult, PlayerSave } from "./loop.js";
+import { accountLevelOf } from "./summonerLevel.js";
 
 export const DAILY_ACTIVITY_KEYS = [
   "wish",
@@ -84,7 +85,7 @@ export type DailyMissionDef = {
 };
 
 function accountLv(save: PlayerSave): number {
-  return Math.max(1, Math.floor(save.island.summonerLevel ?? 1));
+  return accountLevelOf(save);
 }
 
 function scaledGoal(
