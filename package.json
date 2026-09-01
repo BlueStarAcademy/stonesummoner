@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "dev": "npm run dev -w stonesummoner-web",
+    "dev:all": "sh -c 'npm run api -w stonesummoner-web & sleep 1 && npm run dev -w stonesummoner-web'",
     "api": "npm run api -w stonesummoner-web",
     "build": "npm run build -w stonesummoner-web",
     "start": "npm run start -w stonesummoner-web",
