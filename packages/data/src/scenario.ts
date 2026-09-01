@@ -257,8 +257,9 @@ type QualW = { value: SymbolQuality; w: number };
 export type ScenarioDropDifficulty = "normal" | "hard" | "hell";
 
 /**
- * Scenario rune tables (SWARFARM / wiki), then nudged a bit luckier.
- * Normal 1–2★ (tiny 3★), Hard 2–4★, Hell 3–5★. Boss (stage 7) leans higher.
+ * Scenario symbols: all difficulties cap at ★3.
+ * Higher ★ (4–6) come from depth/Cairos floors.
+ * Normal leans ★1, Hard ★2–3, Hell mostly ★3 (quality still scales).
  */
 export function scenarioSymbolDropTable(
   difficulty: ScenarioDropDifficulty,
@@ -269,14 +270,12 @@ export function scenarioSymbolDropTable(
     return {
       starWeights: boss
         ? [
-            { value: 3, w: 38 },
-            { value: 4, w: 44 },
-            { value: 5, w: 18 },
+            { value: 2, w: 18 },
+            { value: 3, w: 82 },
           ]
         : [
-            { value: 3, w: 50 },
-            { value: 4, w: 40 },
-            { value: 5, w: 10 },
+            { value: 2, w: 28 },
+            { value: 3, w: 72 },
           ],
       qualityWeights: [
         { value: "advanced", w: 22 },
@@ -291,14 +290,12 @@ export function scenarioSymbolDropTable(
     return {
       starWeights: boss
         ? [
-            { value: 2, w: 46 },
-            { value: 3, w: 40 },
-            { value: 4, w: 14 },
+            { value: 2, w: 42 },
+            { value: 3, w: 58 },
           ]
         : [
-            { value: 2, w: 60 },
-            { value: 3, w: 32 },
-            { value: 4, w: 8 },
+            { value: 2, w: 58 },
+            { value: 3, w: 42 },
           ],
       qualityWeights: [
         { value: "normal", w: 26 },
@@ -330,66 +327,123 @@ export function scenarioSymbolDropTable(
   };
 }
 
+/**
+ * Summoner gear from scenario still uses the older ★ curve (max ★5).
+ * Kept separate so the symbol ★3 stage cap does not nerf gear.
+ */
+export function scenarioGearStarWeights(
+  difficulty: ScenarioDropDifficulty,
+  stage = 1,
+): StarW[] {
+  const boss = stage >= 7;
+  if (difficulty === "hell") {
+    return boss
+      ? [
+          { value: 3, w: 38 },
+          { value: 4, w: 44 },
+          { value: 5, w: 18 },
+        ]
+      : [
+          { value: 3, w: 50 },
+          { value: 4, w: 40 },
+          { value: 5, w: 10 },
+        ];
+  }
+  if (difficulty === "hard") {
+    return boss
+      ? [
+          { value: 2, w: 46 },
+          { value: 3, w: 40 },
+          { value: 4, w: 14 },
+        ]
+      : [
+          { value: 2, w: 60 },
+          { value: 3, w: 32 },
+          { value: 4, w: 8 },
+        ];
+  }
+  return boss
+    ? [
+        { value: 1, w: 66 },
+        { value: 2, w: 28 },
+        { value: 3, w: 6 },
+      ]
+    : [
+        { value: 1, w: 80 },
+        { value: 2, w: 18 },
+        { value: 3, w: 2 },
+      ];
+}
+
 /** @deprecated use scenarioSymbolDropTable("normal") — kept for callers/tests */
 export const SCENARIO_NORMAL_STAR_WEIGHTS: StarW[] =
   scenarioSymbolDropTable("normal", 1).starWeights;
 
-/** SWARFARM Giant B1–B10 (2★–6★), then shifted toward the next star. */
+/**
+ * Depth (Cairos) symbols: ★3 floor → ★6 ceiling.
+ * Higher floors shift weight upward; B1 never rolls below ★3.
+ */
 const CAIROS_STAR_BY_FLOOR: StarW[][] = [
+  // B1
   [
-    { value: 2, w: 42 },
-    { value: 3, w: 50 },
-    { value: 4, w: 8 },
+    { value: 3, w: 82 },
+    { value: 4, w: 18 },
   ],
+  // B2
   [
-    { value: 2, w: 32 },
-    { value: 3, w: 54 },
-    { value: 4, w: 14 },
-  ],
-  [
-    { value: 2, w: 8 },
-    { value: 3, w: 48 },
+    { value: 3, w: 64 },
     { value: 4, w: 36 },
-    { value: 5, w: 8 },
   ],
+  // B3
   [
-    { value: 3, w: 34 },
-    { value: 4, w: 52 },
-    { value: 5, w: 14 },
+    { value: 3, w: 40 },
+    { value: 4, w: 48 },
+    { value: 5, w: 12 },
   ],
+  // B4
   [
-    { value: 3, w: 12 },
-    { value: 4, w: 56 },
-    { value: 5, w: 26 },
-    { value: 6, w: 6 },
-  ],
-  [
-    { value: 3, w: 4 },
+    { value: 3, w: 22 },
     { value: 4, w: 54 },
+    { value: 5, w: 24 },
+  ],
+  // B5
+  [
+    { value: 3, w: 10 },
+    { value: 4, w: 48 },
     { value: 5, w: 34 },
     { value: 6, w: 8 },
   ],
+  // B6
   [
-    { value: 4, w: 46 },
+    { value: 3, w: 4 },
+    { value: 4, w: 40 },
     { value: 5, w: 44 },
-    { value: 6, w: 10 },
+    { value: 6, w: 12 },
   ],
+  // B7
   [
-    { value: 4, w: 32 },
-    { value: 5, w: 52 },
+    { value: 4, w: 36 },
+    { value: 5, w: 48 },
     { value: 6, w: 16 },
   ],
+  // B8
   [
-    { value: 4, w: 14 },
-    { value: 5, w: 64 },
-    { value: 6, w: 22 },
-  ],
-  [
-    { value: 5, w: 74 },
+    { value: 4, w: 22 },
+    { value: 5, w: 52 },
     { value: 6, w: 26 },
   ],
+  // B9
+  [
+    { value: 4, w: 10 },
+    { value: 5, w: 54 },
+    { value: 6, w: 36 },
+  ],
+  // B10
+  [
+    { value: 5, w: 58 },
+    { value: 6, w: 42 },
+  ],
 ];
-
 /** Cairos rarity is Rare/Hero/Legend only (~70/25/5 in SW); we tilt to ~62/28/10. */
 const CAIROS_QUALITY: QualW[] = [
   { value: "rare", w: 62 },

@@ -944,21 +944,27 @@ describe("phase1 data", () => {
     assert.ok(drop.stars >= 1 && drop.stars <= 3);
   });
 
-  it("aligns scenario and Cairos drops to SW-like tables (slightly better)", () => {
+  it("caps scenario symbols at ★3 and starts Cairos from ★3 upward by floor", () => {
     const normal = scenarioSymbolDropTable("normal", 1);
     const hard = scenarioSymbolDropTable("hard", 1);
     const hell = scenarioSymbolDropTable("hell", 7);
     assert.ok(normal.dropChance >= 0.4 && normal.dropChance < 0.5);
-    assert.ok(hard.starWeights.every((r) => r.value >= 2 && r.value <= 4));
-    assert.ok(hell.starWeights.some((r) => r.value === 5));
+    for (const table of [normal, hard, hell]) {
+      assert.ok(table.starWeights.every((r) => r.value >= 1 && r.value <= 3));
+      assert.ok(table.starWeights.some((r) => r.value === 3));
+    }
     assert.ok(hell.qualityWeights.some((r) => r.value === "legend"));
 
     const b1 = getStage("giant_b1")!;
+    const b5 = getStage("giant_b5")!;
     const b10 = getStage("giant_b10")!;
+    assert.ok(b1.starWeights!.every((r) => r.value >= 3));
     assert.ok(b1.starWeights!.every((r) => r.value <= 4));
+    assert.ok(b5.starWeights!.some((r) => r.value === 6));
+    assert.ok(b10.starWeights!.every((r) => r.value >= 5 && r.value <= 6));
     const b10Five = b10.starWeights!.find((r) => r.value === 5)!.w;
     const b10Six = b10.starWeights!.find((r) => r.value === 6)!.w;
-    assert.ok(b10Five > b10Six, "B10 should still be mostly ★5 like SW");
+    assert.ok(b10Five > b10Six, "B10 still leans ★5 over ★6");
     assert.ok(b10.qualityWeights!.every((r) => r.value !== "normal"));
     assert.ok(
       (b10.qualityWeights!.find((r) => r.value === "rare")?.w ?? 0) >= 55,

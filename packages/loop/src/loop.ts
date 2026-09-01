@@ -77,6 +77,7 @@ import {
   isWeekdayStageOpenToday,
   WEEKDAY_SKILL_MAT_DROP,
   scenarioSymbolDropTable,
+  scenarioGearStarWeights,
   scenarioEnemyHpMul,
   SKILL_DMG_MUL,
   getFusionRecipe,
@@ -5246,7 +5247,9 @@ export function applyRewards(
   const dropQualityWeights =
     scenarioTable?.qualityWeights ?? stage.qualityWeights;
   const scenarioGearStars = scenarioTable
-    ? (scenarioTable.starWeights.filter((r) => r.value <= 5) as {
+    ? (scenarioGearStarWeights(difficulty, stage.stage).filter(
+        (r) => r.value <= 5,
+      ) as {
         value: 1 | 2 | 3 | 4 | 5;
         w: number;
       }[])

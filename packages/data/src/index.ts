@@ -237,6 +237,7 @@ export {
   WEEKDAY_SKILL_MAT_DROP,
   SCENARIO_NORMAL_STAR_WEIGHTS,
   scenarioSymbolDropTable,
+  scenarioGearStarWeights,
 } from "./scenario.js";
 export type { ContentMode, CairosDungeon, MainQuestPinId, StageDef } from "./scenario.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";
