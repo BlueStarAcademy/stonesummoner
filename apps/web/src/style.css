@@ -24738,8 +24738,7 @@ img.el-tint-dark {
   image-rendering: high-quality;
 }
 
-/* Low-framed inventory portraits — mild nudge only; bust crop now
-   keeps squat silhouettes mostly in-frame already. */
+/* Compact inventory portraits (e.g. dew_slime) — shrink so the full body stays in frame. */
 .mon-slot[data-art-family="dew_slime"] .mon-slot-img,
 .stage-prep-slot[data-art-family="dew_slime"] .stage-prep-slot-img,
 .arena-defense-slot[data-art-family="dew_slime"] .arena-defense-slot-img,
@@ -24747,9 +24746,9 @@ img.el-tint-dark {
 .fusion-recipe-mat[data-art-family="dew_slime"] .fusion-recipe-mat-img,
 .codex-cell[data-art-family="dew_slime"] .codex-cell-img,
 .stage-prep-info-art-wrap[data-art-family="dew_slime"] .stage-prep-info-art {
-  object-position: center 70%;
-  transform: scale(1.06);
-  transform-origin: center 75%;
+  object-position: center center;
+  transform: scale(0.74);
+  transform-origin: center center;
 }
 
 .mon-slot-stars {
