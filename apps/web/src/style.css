@@ -9699,6 +9699,43 @@ button.battle-unit {
   image-rendering: high-quality;
 }
 
+/* Compact battle stills (e.g. dew_slime) — smaller on field, full silhouette visible. */
+.battle-unit[data-art-family="dew_slime"] {
+  --battle-compact-scale: 0.72;
+}
+
+.battle-unit[data-art-family="dew_slime"] .battle-unit-art {
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  height: clamp(70px, 11.2dvh, 92px);
+}
+
+.battle-unit[data-art-family="dew_slime"] .battle-unit-img {
+  object-position: center center;
+  transform-origin: center center;
+  animation-name: battle-unit-idle-compact;
+}
+
+@keyframes battle-unit-idle-compact {
+  0%, 100% { transform: scale(var(--battle-compact-scale)) translateY(0); }
+  50% { transform: scale(var(--battle-compact-scale)) translateY(-1.5px); }
+}
+
+.battle-unit.active[data-art-family="dew_slime"] .battle-unit-img {
+  transform: scale(var(--battle-compact-scale));
+}
+
+.battle-unit.dead[data-art-family="dew_slime"] .battle-unit-img {
+  transform: scale(var(--battle-compact-scale)) translateY(8px) rotate(-8deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .battle-unit[data-art-family="dew_slime"] .battle-unit-img {
+    transform: scale(var(--battle-compact-scale));
+  }
+}
+
 /* Spine owns character motion once ready; keep the painted still as fallback only. */
 .battle-unit-art.has-spine > .battle-unit-img {
   animation: none !important;
