@@ -8437,6 +8437,7 @@ function bindBattleSkillInspect(): void {
     );
   });
   bindBattleSkillInfo();
+}
 
 /** Affinity of the current turn unit toward `target` (SW HP-bar tint). */
 function battleHpAffinityToward(target: Unit): ElementRelation | null {
