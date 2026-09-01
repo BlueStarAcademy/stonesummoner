@@ -274,8 +274,8 @@ export {
   isChallengeTowerStageUnlocked,
   isChallengeTowerStageCleared,
   challengeTowerStageFloor,
+  CHALLENGE_TOWER_FLOORS,
 } from "./challengeTower.js";
-export { CHALLENGE_TOWER_FLOORS } from "stonesummoner-data";
 export {
   evolveFodderCount,
   evolveManaCostForGrade,
