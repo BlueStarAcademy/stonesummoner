@@ -1593,6 +1593,34 @@ export class Battle {
     }));
   }
 
+
+  /** Pick up to `count` living units; prefer `preferredId` when present. */
+  private pickLivingTargets(
+    pool: Unit[],
+    count: number | undefined,
+    preferredId?: string,
+  ): Unit[] {
+    const living = pool.filter((u) => u.alive);
+    if (!living.length) return [];
+    if (count == null || count <= 0 || count >= living.length) return living;
+    const n = Math.max(1, Math.min(5, Math.floor(count)));
+    const chosen: Unit[] = [];
+    const preferred = preferredId
+      ? living.find((u) => u.id === preferredId)
+      : undefined;
+    if (preferred) chosen.push(preferred);
+    const rest = living.filter((u) => u.id !== preferred?.id);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rest[i], rest[j]] = [rest[j]!, rest[i]!];
+    }
+    for (const u of rest) {
+      if (chosen.length >= n) break;
+      chosen.push(u);
+    }
+    return chosen.slice(0, n);
+  }
+
   private castMagicSkill(
     unit: Unit,
     skillId: string,
@@ -1634,9 +1662,13 @@ export class Battle {
 
     switch (def.kind) {
       case "aoe_damage": {
-        const foes = aliveSummons(
-          this.units,
-          unit.team === "ally" ? "enemy" : "ally",
+        const foes = this.pickLivingTargets(
+          aliveSummons(
+            this.units,
+            unit.team === "ally" ? "enemy" : "ally",
+          ),
+          def.hitCount,
+          targetId,
         );
         for (const t of foes) {
           results.push(this.applyHit(unit, t, power, true));
@@ -1644,30 +1676,59 @@ export class Battle {
         break;
       }
       case "single_damage": {
-        const target = this.resolveSingleTarget(unit, targetId);
-        if (target) results.push(this.applyHit(unit, target, power, true));
+        const foes = this.pickLivingTargets(
+          aliveSummons(
+            this.units,
+            unit.team === "ally" ? "enemy" : "ally",
+          ),
+          def.hitCount && def.hitCount > 1 ? def.hitCount : 1,
+          targetId,
+        );
+        for (const t of foes) {
+          results.push(this.applyHit(unit, t, power, true));
+        }
         break;
       }
       case "ally_buff_atk": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           this.applyStatBuff(u, "atk", power, def.turns ?? 2);
         }
         break;
       }
       case "ally_buff_spd": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           this.applyStatBuff(u, "spd", power, def.turns ?? 2);
         }
         break;
       }
       case "ally_buff_crit": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           this.applyStatBuff(u, "critRate", power, def.turns ?? 2);
         }
         break;
       }
       case "ally_heal": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           const amount = Math.round(u.stats.hp * power);
           u.hp = Math.min(u.stats.hp, u.hp + amount);
           this.log.push(`${u.name} 회복 +${amount}`);
@@ -1675,7 +1736,12 @@ export class Battle {
         break;
       }
       case "ally_shield": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           const amount = Math.round(u.stats.hp * power);
           u.shieldHp = (u.shieldHp ?? 0) + amount;
           u.shieldStatusVisible = true;
@@ -1692,10 +1758,15 @@ export class Battle {
         break;
       }
       case "enemy_debuff": {
-        for (const t of aliveSummons(
-          this.units,
-          unit.team === "ally" ? "enemy" : "ally",
-        )) {
+        const foes = this.pickLivingTargets(
+          aliveSummons(
+            this.units,
+            unit.team === "ally" ? "enemy" : "ally",
+          ),
+          def.hitCount,
+          targetId,
+        );
+        for (const t of foes) {
           this.applyStatDebuff(t, "atk", power, def.turns ?? 2);
           this.applyStatDebuff(t, "def", power * 0.8, def.turns ?? 2);
         }
@@ -1730,16 +1801,13 @@ export class Battle {
         break;
       }
       case "damage_reduce": {
-        for (const u of aliveSummons(this.units, unit.team)) {
-          addStatus(u, {
-            kind: "damage_reduction",
-            sourceUnitId: unit.id,
-            polarity: "buff",
-            turns: def.turns ?? 2,
-            stacking: "replace",
-            dispellable: true,
-            amount: power,
-          });
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
+          this.applyStatBuff(u, "damageReduce", power, def.turns ?? 2);
         }
         break;
       }

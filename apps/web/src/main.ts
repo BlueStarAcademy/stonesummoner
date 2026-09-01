@@ -249,8 +249,10 @@ import {
   magicTier2Unlocked,
   magicRank,
   magicSkillPower,
+  magicEnhanceEssenceCost,
   magicEnhanceManaCost,
   magicEnhanceCrystalCost,
+  magicEnhanceSuccessRate,
   magicEnhanceRequiredLevel,
   MAX_MAGIC_RANK,
   type MagicSkillSlot,
@@ -949,6 +951,8 @@ let gearBagFilterOpen = false;
 let gearBagFilterUiAbort: AbortController | null = null;
 /** Magic skill slot open in the summoner skill detail modal. */
 let sumMagicDetailSlot: MagicSkillSlot | null = null;
+let sumMagicJustUnlockedSlots: MagicSkillSlot[] = [];
+let sumMagicUnlockPulseTimer = 0;
 /** Grind/imprint/enhance before/after reveal card. */
 let forgeReveal: ForgeReveal | null = null;
 /** Pending grind/imprint/enhance confirmation (symbol id). */
@@ -1588,20 +1592,44 @@ function bindSumBookModalInteractions(): void {
       const beforeProg = save.summonerMagic?.[el] ?? emptyMagicProgress();
       const beforeRank = magicRank(beforeProg, id);
       const beforeTier2 = magicTier2Unlocked(el, beforeProg);
+      const ratePct = Math.round(magicEnhanceSuccessRate(beforeRank) * 100);
       const r = runEnhanceMagicSkill(save, id);
-      const afterProg = r.save.summonerMagic?.[el] ?? emptyMagicProgress();
-      const afterRank = magicRank(afterProg, id);
-      if (afterRank <= beforeRank) {
-        return;
-      }
+      // Gate failures never spend; only real attempts set enhanceSuccess.
+      if (r.enhanceSuccess == null) return;
       save = r.save;
       persist();
+      const afterProg = r.save.summonerMagic?.[el] ?? emptyMagicProgress();
+      const afterRank = magicRank(afterProg, id);
+      if (!r.enhanceSuccess) {
+        softRefreshSumBookUi({ skills: true, modals: true });
+        beginGrowthReveal({
+          kind: "magic",
+          portraitHtml: summonerSkillArtImg(def.id, "growth-rite-img", 96),
+          name: def.nameKo,
+          heroLine: t("ui.growthMagicFail", { pct: ratePct }),
+          stats: [],
+          skills: [
+            {
+              name: def.nameKo,
+              iconHtml: summonerSkillArtImg(def.id, "growth-skill-img", 44),
+              from: beforeRank,
+              to: beforeRank,
+              effect: t("ui.growthMagicFailNote"),
+            },
+          ],
+          notes: [],
+        });
+        return;
+      }
       const notes: string[] = [];
+      let unlockedSlots: MagicSkillSlot[] = [];
       if (!beforeProg.branch && afterProg.branch) {
         const next =
           afterProg.branch === "A"
             ? [kit.skills.A1, kit.skills.A2]
             : [kit.skills.B1, kit.skills.B2];
+        unlockedSlots =
+          afterProg.branch === "A" ? ["A1", "A2"] : ["B1", "B2"];
         notes.push(
           t("ui.growthMagicUnlockBranch", {
             skill1: next[0].nameKo,
@@ -1613,6 +1641,8 @@ function bindSumBookModalInteractions(): void {
           afterProg.branch === "A"
             ? [kit.skills.A3, kit.skills.A4]
             : [kit.skills.B3, kit.skills.B4];
+        unlockedSlots =
+          afterProg.branch === "A" ? ["A3", "A4"] : ["B3", "B4"];
         notes.push(
           t("ui.growthMagicUnlockTier2", {
             skill1: next[0].nameKo,
@@ -1620,7 +1650,17 @@ function bindSumBookModalInteractions(): void {
           }),
         );
       }
+      if (unlockedSlots.length) {
+        sumMagicJustUnlockedSlots = unlockedSlots;
+        if (sumMagicUnlockPulseTimer) window.clearTimeout(sumMagicUnlockPulseTimer);
+        sumMagicUnlockPulseTimer = window.setTimeout(() => {
+          sumMagicJustUnlockedSlots = [];
+          sumMagicUnlockPulseTimer = 0;
+          softRefreshSumBookUi({ skills: true });
+        }, 1200);
+      }
       const afterLines = magicSkillDescLines(def, afterRank);
+      softRefreshSumBookUi({ skills: true, modals: true });
       beginGrowthReveal({
         kind: "magic",
         portraitHtml: summonerSkillArtImg(def.id, "growth-rite-img", 96),
@@ -15233,28 +15273,76 @@ function magicSkillDescLines(
   lines.push(t("ui.magicManaCost", { pct: manaPct }));
   switch (sk.kind) {
     case "aoe_damage":
-      lines.push(t("ui.magicFxAoeDamage", { pct: pctInt }));
+      lines.push(
+        sk.hitCount && sk.hitCount > 0 && sk.hitCount < 99
+          ? t("ui.magicFxMultiDamage", { pct: pctInt, n: sk.hitCount })
+          : t("ui.magicFxAoeDamage", { pct: pctInt }),
+      );
       break;
     case "single_damage":
-      lines.push(t("ui.magicFxSingleDamage", { pct: pctInt }));
+      lines.push(
+        sk.hitCount && sk.hitCount > 1
+          ? t("ui.magicFxMultiDamage", { pct: pctInt, n: sk.hitCount })
+          : t("ui.magicFxSingleDamage", { pct: pctInt }),
+      );
       break;
     case "ally_buff_atk":
-      lines.push(t("ui.magicFxAllyBuffAtk", { pct: pctInt, turns }));
+      lines.push(
+        sk.hitCount && sk.hitCount > 1
+          ? t("ui.magicFxAllyBuffAtkMulti", {
+              pct: pctInt,
+              turns,
+              n: sk.hitCount,
+            })
+          : t("ui.magicFxAllyBuffAtk", { pct: pctInt, turns }),
+      );
       break;
     case "ally_buff_spd":
-      lines.push(t("ui.magicFxAllyBuffSpd", { pct: pctInt, turns }));
+      lines.push(
+        sk.hitCount && sk.hitCount > 1
+          ? t("ui.magicFxAllyBuffSpdMulti", {
+              pct: pctInt,
+              turns,
+              n: sk.hitCount,
+            })
+          : t("ui.magicFxAllyBuffSpd", { pct: pctInt, turns }),
+      );
       break;
     case "ally_buff_crit":
-      lines.push(t("ui.magicFxAllyBuffCrit", { pct: pctInt, turns }));
+      lines.push(
+        sk.hitCount && sk.hitCount > 1
+          ? t("ui.magicFxAllyBuffCritMulti", {
+              pct: pctInt,
+              turns,
+              n: sk.hitCount,
+            })
+          : t("ui.magicFxAllyBuffCrit", { pct: pctInt, turns }),
+      );
       break;
     case "ally_heal":
-      lines.push(t("ui.magicFxAllyHeal", { pct: pctInt }));
+      lines.push(
+        sk.hitCount && sk.hitCount > 1
+          ? t("ui.magicFxAllyHealMulti", { pct: pctInt, n: sk.hitCount })
+          : t("ui.magicFxAllyHeal", { pct: pctInt }),
+      );
       break;
     case "ally_shield":
-      lines.push(t("ui.magicFxAllyShield", { pct: pctInt }));
+      lines.push(
+        sk.hitCount && sk.hitCount > 1
+          ? t("ui.magicFxAllyShieldMulti", { pct: pctInt, n: sk.hitCount })
+          : t("ui.magicFxAllyShield", { pct: pctInt }),
+      );
       break;
     case "enemy_debuff":
-      lines.push(t("ui.magicFxEnemyDebuff", { pct: pctInt, turns }));
+      lines.push(
+        sk.hitCount && sk.hitCount > 1
+          ? t("ui.magicFxEnemyDebuffMulti", {
+              pct: pctInt,
+              turns,
+              n: sk.hitCount,
+            })
+          : t("ui.magicFxEnemyDebuff", { pct: pctInt, turns }),
+      );
       break;
     case "amplify":
       lines.push(t("ui.magicFxAmplify", { pct: pctInt }));
@@ -18764,28 +18852,56 @@ function renderSumMagicDetailModal(activeEl: SummonerElement): string {
       : [];
   const manaCost = magicEnhanceManaCost(rank);
   const crystalCost = magicEnhanceCrystalCost(rank);
+  const essenceCost = magicEnhanceEssenceCost(rank);
+  const successRate = magicEnhanceSuccessRate(rank);
   const needLv = magicEnhanceRequiredLevel(rank);
   const sumLv = save.summoners?.[activeEl]?.level ?? 1;
   const levelLocked = open && rank < MAX_MAGIC_RANK && sumLv < needLv;
+  const haveEssence = essenceAmountsFor(save.awakenMats, activeEl);
+  const essenceOk =
+    haveEssence.low >= essenceCost.low &&
+    haveEssence.mid >= essenceCost.mid &&
+    haveEssence.high >= essenceCost.high;
   const canEnhance =
     open &&
     rank < MAX_MAGIC_RANK &&
     !levelLocked &&
     save.island.mana >= manaCost &&
-    save.island.crystal >= crystalCost;
+    save.island.crystal >= crystalCost &&
+    essenceOk;
+  const essenceChips = (
+    [
+      ["low", essenceCost.low, haveEssence.low],
+      ["mid", essenceCost.mid, haveEssence.mid],
+      ["high", essenceCost.high, haveEssence.high],
+    ] as const
+  )
+    .filter(([, need]) => need > 0)
+    .map(
+      ([grade, need, have]) =>
+        `<span class="sum-magic-detail-cost-chip${have < need ? " is-short" : ""}" title="${escapeHtml(essenceGradeLabel(grade))}">
+              <img src="${essenceArtSrc(activeEl, grade)}" width="18" height="18" alt="" draggable="false" />
+              <strong>${need}</strong>
+            </span>`,
+    )
+    .join("");
   const enhanceCosts = `<span class="sum-magic-enhance-costs" aria-label="${escapeHtml(t("ui.sumMagicEnhanceCost"))}">
             <span class="sum-magic-detail-cost-chip${save.island.mana < manaCost ? " is-short" : ""}">
               <img src="/art/ui/res/gold.svg" width="18" height="18" alt="" draggable="false" />
-              ${fmtRes(manaCost)}
+              <strong>${fmtRes(manaCost)}</strong>
             </span>
             ${
               crystalCost > 0
                 ? `<span class="sum-magic-detail-cost-chip${save.island.crystal < crystalCost ? " is-short" : ""}">
                     <img src="/art/ui/res/crystal.svg" width="18" height="18" alt="" draggable="false" />
-                    ${fmtRes(crystalCost)}
+                    <strong>${fmtRes(crystalCost)}</strong>
                   </span>`
                 : ""
             }
+            ${essenceChips}
+            <span class="sum-magic-success-chip" title="${escapeHtml(t("ui.sumMagicEnhanceRate", { pct: Math.round(successRate * 100) }))}">
+              <strong>${Math.round(successRate * 100)}%</strong>
+            </span>
           </span>`;
   const enhanceBtn = levelLocked
     ? `<button type="button" class="auth-btn-primary sum-magic-enhance-btn is-level-locked" disabled>
@@ -19551,7 +19667,7 @@ function renderSumMagicTreeHtml(activeEl: SummonerElement): string {
     const needLvBadge = enhanceLvLocked
       ? `<span class="sum-magic-node-need-lv" aria-hidden="true">${CODEX_LOCK_HTML}<strong>${escapeHtml(t("summonerPicker.needLv", { n: needLv }))}</strong></span>`
       : "";
-    return `<button type="button" class="sum-magic-node${open ? " is-on" : " is-locked"}${sumMagicDetailSlot === slot ? " is-active" : ""}" data-magic-detail-slot="${slot}" title="${escapeHtml(title)}">
+    return `<button type="button" class="sum-magic-node${open ? " is-on" : " is-locked"}${sumMagicDetailSlot === slot ? " is-active" : ""}${sumMagicJustUnlockedSlots.includes(slot) ? " is-just-unlocked" : ""}" data-magic-detail-slot="${slot}" title="${escapeHtml(title)}">
       <div class="sum-magic-node-seal">
         ${summonerSkillArtImg(sk.id, "sum-magic-ico", 36)}
         ${rankBadge}

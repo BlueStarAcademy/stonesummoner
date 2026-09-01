@@ -31023,6 +31023,39 @@ button.linkish {
   opacity: 0.85;
 }
 
+.sum-magic-success-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(140, 210, 255, 0.4);
+  background: rgba(20, 40, 64, 0.45);
+  color: #cfefff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.sum-magic-node.is-on.is-just-unlocked .sum-magic-node-seal {
+  animation: sum-magic-unlock-pulse 1.1s ease-out 1;
+}
+
+@keyframes sum-magic-unlock-pulse {
+  0% {
+    transform: scale(0.86);
+    filter: brightness(1.35);
+  }
+  55% {
+    transform: scale(1.08);
+    filter: brightness(1.15);
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+  }
+}
+
 .sum-magic-node-seal {
   position: relative;
   display: grid;

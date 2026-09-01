@@ -66,8 +66,10 @@ import {
   getSummonerKit,
   getSummonerLeader,
   magicEnhanceCrystalCost,
+  magicEnhanceEssenceCost,
   magicEnhanceManaCost,
   magicEnhanceRequiredLevel,
+  magicEnhanceSuccessRate,
   magicRank,
   magicSkillPower,
   MAX_MAGIC_RANK,
@@ -1572,6 +1574,8 @@ export interface BattleReward {
 export interface LoopStepResult {
   save: PlayerSave;
   message: string;
+  /** Magic enhance attempt outcome (undefined for non-enhance steps). */
+  enhanceSuccess?: boolean;
   reward?: BattleReward;
   battleLog?: string[];
   /** Island buildings unlocked by account-level gain this step. */
@@ -4259,11 +4263,12 @@ export function runUnlockSkillNode(
   };
 }
 
-/** Enhance a Phase 2 summoner magic skill (+0→+5). First +5 unlocks that branch. */
+/** Enhance a Phase 2 summoner magic skill (+0→+5). Costs are spent on every attempt. */
 export function runEnhanceMagicSkill(
   save: PlayerSave,
   skillId: string,
   element?: SummonerElement,
+  rng: () => number = Math.random,
 ): LoopStepResult {
   const synced = syncSummonerMirrors(save);
   const el = element ?? synced.activeSummoner;
@@ -4275,20 +4280,13 @@ export function runEnhanceMagicSkill(
   }
   const prog = { ...(synced.summonerMagic[el] ?? emptyMagicProgress()) };
   prog.ranks = { ...prog.ranks };
-  // Upper skills locked until branch matches
-  if (
-    (def.slot === "A1" || def.slot === "A2") &&
-    prog.branch !== "A"
-  ) {
+  if ((def.slot === "A1" || def.slot === "A2") && prog.branch !== "A") {
     return {
       save: synced,
       message: `${def.nameKo} — A 기초를 +${MAX_MAGIC_RANK}까지 강화해 해금`,
     };
   }
-  if (
-    (def.slot === "B1" || def.slot === "B2") &&
-    prog.branch !== "B"
-  ) {
+  if ((def.slot === "B1" || def.slot === "B2") && prog.branch !== "B") {
     return {
       save: synced,
       message: `${def.nameKo} — B 기초를 +${MAX_MAGIC_RANK}까지 강화해 해금`,
@@ -4329,6 +4327,8 @@ export function runEnhanceMagicSkill(
   }
   const manaCost = magicEnhanceManaCost(cur);
   const crystalCost = magicEnhanceCrystalCost(cur);
+  const essenceCost = magicEnhanceEssenceCost(cur);
+  const rate = magicEnhanceSuccessRate(cur);
   if (synced.island.mana < manaCost) {
     return {
       save: synced,
@@ -4341,6 +4341,48 @@ export function runEnhanceMagicSkill(
       message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${synced.island.crystal})`,
     };
   }
+  const mats = normalizeAwakenMats(synced.awakenMats);
+  const haveMat = essenceAmountsFor(mats, el);
+  if (!canPayEssenceCost(haveMat, essenceCost)) {
+    const missing = (["low", "mid", "high"] as const).find(
+      (quality) => haveMat[quality] < essenceCost[quality],
+    )!;
+    return {
+      save: synced,
+      message: `속성 정수(${el}/${missing}) 부족 (필요 ${essenceCost[missing]}, 보유 ${haveMat[missing]})`,
+    };
+  }
+
+  const spentIsland = {
+    ...synced.island,
+    mana: synced.island.mana - manaCost,
+    crystal: synced.island.crystal - crystalCost,
+  };
+  const spentMats = {
+    ...mats,
+    [el]: {
+      low: haveMat.low - essenceCost.low,
+      mid: haveMat.mid - essenceCost.mid,
+      high: haveMat.high - essenceCost.high,
+    },
+  };
+  const spentSave = syncSummonerMirrors({
+    ...synced,
+    island: spentIsland,
+    awakenMats: spentMats,
+    summonerMagic: { ...synced.summonerMagic, [el]: prog },
+  });
+
+  const roll = rng();
+  if (roll >= rate) {
+    const pct = Math.round(rate * 100);
+    return {
+      save: spentSave,
+      enhanceSuccess: false,
+      message: `${SUMMONER_ELEMENT_LABEL[el]} ${def.nameKo} 강화 실패 (성공률 ${pct}%) (−골드 ${manaCost}${crystalCost > 0 ? ` · −크리스탈 ${crystalCost}` : ""} · −정수)`,
+    };
+  }
+
   const beforeTier2 = magicTier2Unlocked(el, prog);
   prog.ranks[skillId] = cur + 1;
   const nextProg = tryUnlockMagicBranch(el, prog);
@@ -4353,15 +4395,11 @@ export function runEnhanceMagicSkill(
         : "";
   return {
     save: syncSummonerMirrors({
-      ...synced,
-      summonerMagic: { ...synced.summonerMagic, [el]: nextProg },
-      island: {
-        ...synced.island,
-        mana: synced.island.mana - manaCost,
-        crystal: synced.island.crystal - crystalCost,
-      },
+      ...spentSave,
+      summonerMagic: { ...spentSave.summonerMagic, [el]: nextProg },
     }),
-    message: `${SUMMONER_ELEMENT_LABEL[el]} ${def.nameKo} +${cur + 1}${unlockedNote} (−골드 ${manaCost}${crystalCost > 0 ? ` · −크리스탈 ${crystalCost}` : ""})`,
+    enhanceSuccess: true,
+    message: `${SUMMONER_ELEMENT_LABEL[el]} ${def.nameKo} +${cur + 1}${unlockedNote} (−골드 ${manaCost}${crystalCost > 0 ? ` · −크리스탈 ${crystalCost}` : ""} · −정수)`,
   };
 }
 
@@ -4891,6 +4929,7 @@ export function createStageBattle(
       kind: sk.kind,
       power: magicSkillPower(sk, magicRank(magicProg, sk.id)),
       turns: sk.turns,
+      hitCount: sk.hitCount,
       descKo: sk.descKo,
       vfxFamily: sk.vfxFamily,
       orbBolt: sk.orbBolt,
@@ -4904,6 +4943,7 @@ export function createStageBattle(
       kind: sk.kind,
       power: magicSkillPower(sk, 0),
       turns: sk.turns,
+      hitCount: sk.hitCount,
       descKo: sk.descKo,
       vfxFamily: sk.vfxFamily,
       orbBolt: sk.orbBolt,
