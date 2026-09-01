@@ -80,6 +80,11 @@ import {
   battleStoneIdForTeam,
 } from "./battle/battleCircle";
 import { dematteArtInTree } from "./ui/dematteArt";
+import {
+  islandCriticalAssetUrls,
+  preloadIslandAssets,
+  type IslandPreloadProgress,
+} from "./ui/islandPreload";
 import { monsterSlotFamilyAttr } from "./ui/monsterSlotFraming";
 import {
   GROWTH_REVEAL_LAYER_ID,
@@ -790,6 +795,7 @@ let sessionUser: SessionUser | null = null;
 const authUi = {
   pane: "gate" as "gate" | "login" | "register" | "privacy" | "terms",
 };
+let islandPreloadProgress: IslandPreloadProgress | null = null;
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -4072,12 +4078,8 @@ async function enterWithUser(
       opts?.fresh === true ||
       readAuthPrefs().autoLogin);
   if (enterGame) {
+    await prepareIslandAssets();
     view = "home";
-    if (user.kind === "demo") {
-      flash(t("ui.0b00025fb4"));
-    } else if (user.kind === "guest") {
-      flash(t("ui.02f932d2cd"));
-    }
   } else {
     view = "auth";
     flash(
@@ -4095,17 +4097,66 @@ async function enterWithUser(
   }
 }
 
-function startGameFromAuth(): void {
+function updateIslandPreloadProgress(progress: IslandPreloadProgress): void {
+  islandPreloadProgress = progress;
+  const percent = app.querySelector<HTMLElement>(".island-preload-percent");
+  const bar = app.querySelector<HTMLElement>(".island-preload-bar");
+  const fill = app.querySelector<HTMLElement>(".island-preload-fill");
+  if (percent) percent.textContent = `${progress.percent}%`;
+  if (bar) bar.setAttribute("aria-valuenow", String(progress.percent));
+  if (fill) fill.style.width = `${progress.percent}%`;
+}
+
+function renderedIslandAssetUrls(): string[] {
+  const template = document.createElement("template");
+  template.innerHTML = renderHome();
+  const urls: string[] = [];
+  template.content.querySelectorAll<HTMLImageElement>("img").forEach((image) => {
+    const src = image.getAttribute("src");
+    if (src) urls.push(src);
+    const srcset = image.getAttribute("srcset");
+    if (srcset) {
+      for (const candidate of srcset.split(",")) {
+        const url = candidate.trim().split(/\s+/)[0];
+        if (url) urls.push(url);
+      }
+    }
+  });
+  return urls;
+}
+
+async function prepareIslandAssets(): Promise<void> {
+  const urls = [
+    ...islandCriticalAssetUrls(
+      save.activeSummoner ?? "light",
+      profileIconSrc(),
+    ),
+    ...renderedIslandAssetUrls(),
+  ].filter((url, index, all) => all.indexOf(url) === index);
+  islandPreloadProgress = {
+    completed: 0,
+    total: urls.length,
+    percent: 0,
+  };
+  view = "auth";
+  render();
+  await Promise.all([
+    preloadIslandAssets(urls, updateIslandPreloadProgress, {
+      concurrency: 6,
+      timeoutMs: 10_000,
+    }),
+    new Promise<void>((resolve) => window.setTimeout(resolve, 350)),
+  ]);
+  islandPreloadProgress = null;
+}
+
+async function startGameFromAuth(): Promise<void> {
   if (!sessionUser) return;
-  view = "home";
   syncOnboardFromSave({
     offerWelcome: !onboard.welcomeSeen && onboard.step !== "done",
   });
-  if (sessionUser.kind === "demo") {
-    flash(t("ui.0b00025fb4"));
-  } else if (sessionUser.kind === "guest") {
-    flash(t("ui.02f932d2cd"));
-  }
+  await prepareIslandAssets();
+  view = "home";
   render();
   window.requestAnimationFrame(() => {
     maybePromptAttendance();
@@ -9206,6 +9257,25 @@ function renderAuth(): string {
   </div>`;
 }
 
+function renderIslandPreload(): string {
+  const progress = islandPreloadProgress ?? {
+    completed: 0,
+    total: 1,
+    percent: 0,
+  };
+  const label = escapeHtml(t("boot.loading"));
+  return `${authHeroLayer()}
+    <div class="auth-screen auth-screen--form auth-island-preload">
+      ${authBrand()}
+      <div class="island-preload-card" aria-live="polite">
+        <strong class="island-preload-percent">${progress.percent}%</strong>
+        <div class="island-preload-bar" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.percent}">
+          <span class="island-preload-fill" style="width:${progress.percent}%"></span>
+        </div>
+      </div>
+    </div>`;
+}
+
 function isFacilityView(v: View = view): boolean {
   return (
     v === "summon" ||
@@ -12870,7 +12940,7 @@ function render(): void {
     const next = app.querySelector<HTMLElement>(".home-island");
     if (next && next !== keepIsland) next.replaceWith(keepIsland);
   }
-  setBackHistoryTrapWanted(view !== "auth");
+  setBackHistoryTrapWanted(view !== "auth" || !!islandPreloadProgress);
 }
 
 /** Full re-render; island DOM is preserved by render() when staying on the island. */
@@ -12900,6 +12970,20 @@ function renderScreen(): void {
       </div>
       ${authFooter()}
     </main>`;
+    return;
+  }
+  if (islandPreloadProgress) {
+    app.classList.add("auth-mode");
+    app.classList.remove(
+      "home-mode",
+      "expedition-mode",
+      "combat-mode",
+      "monster-mode",
+      "summoner-mode",
+      "facility-modal-open",
+      "party-modal-open",
+    );
+    app.innerHTML = `<main class="auth-main auth-main--center">${renderIslandPreload()}</main>`;
     return;
   }
 
@@ -24192,7 +24276,7 @@ function bindAuth(): void {
 
 
   app.querySelector("#auth-start")?.addEventListener("click", () => {
-    startGameFromAuth();
+    void startGameFromAuth();
   });
 
   app.querySelector("#auth-logout")?.addEventListener("click", () => {
@@ -25532,6 +25616,7 @@ function handleAuthHardwareBack(): void {
 }
 
 function handleHardwareBack(): void {
+  if (islandPreloadProgress) return;
   if (closeTopOverlay()) return;
   if (closeLeftoverTransientUi()) return;
   if (view === "auth") {
