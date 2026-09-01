@@ -2,6 +2,7 @@ import {
   createSymbol,
   getStage,
   mainStatAtEnhance,
+  MONSTERS,
   type StageDef,
 } from "stonesummoner-data";
 import {
@@ -16,6 +17,7 @@ import {
 type SimulationRow = {
   stageId: string;
   difficulty: ScenarioDifficulty;
+  partyProfile: PartyProfile;
   runs: number;
   wins: number;
   winRate: number;
@@ -24,7 +26,11 @@ type SimulationRow = {
   accountExpPerEnergy: number;
   symbolStars: Record<string, number>;
   symbolSets: Record<string, number>;
+  healingEventsPerRun: number;
+  controlEventsPerRun: number;
 };
+
+type PartyProfile = "mixed" | "attackers";
 
 function seeded(seed: number): () => number {
   let state = seed >>> 0;
@@ -47,7 +53,30 @@ function median(values: number[]): number {
   return ordered[Math.floor(ordered.length / 2)] ?? 0;
 }
 
-function benchmarkSave(stage: StageDef, difficulty: ScenarioDifficulty) {
+function profileMonsterIds(profile: PartyProfile): string[] {
+  const roles =
+    profile === "attackers"
+      ? ["attacker", "attacker", "attacker", "attacker"]
+      : ["attacker", "defense", "speed", "support"];
+  const usedFamilies = new Set<string>();
+  return roles.map((role, index) => {
+    const found = MONSTERS.find(
+      (monster) =>
+        monster.role === role &&
+        !usedFamilies.has(monster.familyId) &&
+        monster.element === (["fire", "water", "wind", "light"][index] ?? "dark"),
+    );
+    if (!found) throw new Error(`Missing benchmark monster for role ${role}`);
+    usedFamilies.add(found.familyId);
+    return found.id;
+  });
+}
+
+function benchmarkSave(
+  stage: StageDef,
+  difficulty: ScenarioDifficulty,
+  partyProfile: PartyProfile,
+) {
   const save = createNewSave(0);
   const enemyLevel =
     stage.difficultyBalance?.[difficulty]?.enemyLevel ??
@@ -62,9 +91,11 @@ function benchmarkSave(stage: StageDef, difficulty: ScenarioDifficulty) {
     stage.cairosTier === "abyss_hard" ||
     (stage.mode === "depth" && stage.stage >= 7);
   const symbols = [...save.symbols];
+  const profileIds = profileMonsterIds(partyProfile);
   const roster = save.roster.map((monster, monsterIndex) => {
     const next = {
       ...monster,
+      monsterId: profileIds[monsterIndex] ?? monster.monsterId,
       level: targetLevel,
       evolve: deepFarm ? 5 : monster.evolve,
       awaken: deepFarm ? 1 : monster.awaken,
@@ -118,18 +149,25 @@ function simulate(
   stage: StageDef,
   difficulty: ScenarioDifficulty,
   runs: number,
+  partyProfile: PartyProfile,
 ): SimulationRow {
   let wins = 0;
   let totalAccountExp = 0;
   const turns: number[] = [];
   const symbolStars: Record<string, number> = {};
   const symbolSets: Record<string, number> = {};
+  let healingEvents = 0;
+  let controlEvents = 0;
 
   for (let seed = 1; seed <= runs; seed++) {
     const rng = seeded(seed * 7_919 + stage.stage * 101 + stage.map);
-    const save = benchmarkSave(stage, difficulty);
+    const save = benchmarkSave(stage, difficulty, partyProfile);
     const battle = createStageBattle(stage, save, { difficulty, rng });
     const result = resolveBattleAuto(battle, 250);
+    healingEvents += battle.log.filter((line) => /회복|치유/.test(line)).length;
+    controlEvents += battle.log.filter((line) =>
+      /stun|freeze|sleep|기절|빙결|수면|침묵|도발/.test(line),
+    ).length;
     turns.push(result.turns);
     if (!result.victory) continue;
     wins += 1;
@@ -145,6 +183,7 @@ function simulate(
   return {
     stageId: stage.id,
     difficulty,
+    partyProfile,
     runs,
     wins,
     winRate: Number((wins / runs).toFixed(4)),
@@ -156,12 +195,15 @@ function simulate(
         : 0,
     symbolStars,
     symbolSets,
+    healingEventsPerRun: Number((healingEvents / runs).toFixed(2)),
+    controlEventsPerRun: Number((controlEvents / runs).toFixed(2)),
   };
 }
 
 const args = process.argv.slice(2);
 const runsArg = Number(args.find((arg) => arg.startsWith("--runs="))?.split("=")[1]);
 const runs = Number.isFinite(runsArg) && runsArg > 0 ? Math.floor(runsArg) : 200;
+const compareRoles = args.includes("--compare-roles");
 const requested = args.filter((arg) => !arg.startsWith("--"));
 const stageIds = requested.length
   ? requested
@@ -181,7 +223,12 @@ for (const stageId of stageIds) {
   const difficulties: ScenarioDifficulty[] =
     stage.mode === "scenario" ? ["normal", "hard", "hell"] : ["normal"];
   for (const difficulty of difficulties) {
-    rows.push(simulate(stage, difficulty, runs));
+    const profiles: PartyProfile[] = compareRoles
+      ? ["attackers", "mixed"]
+      : ["mixed"];
+    for (const profile of profiles) {
+      rows.push(simulate(stage, difficulty, runs, profile));
+    }
   }
 }
 
