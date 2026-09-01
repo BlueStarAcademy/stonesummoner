@@ -15322,7 +15322,7 @@ function renderMonsterSkillDetailHtml(
   </section>`;
 }
 
-/** Map catalog role (tank/dps/support/flex). */
+/** Map catalog role, with legacy archetype fallbacks. */
 function monsterRoleLabel(role: string | undefined, base?: {
   hp: number;
   atk: number;
@@ -15341,8 +15341,6 @@ function monsterRoleLabel(role: string | undefined, base?: {
     case "speed":
       return t("ui.roleSpeed");
     // Legacy save/catalog values during migration.
-    case "stonesage":
-      return t("ui.roleSupport");
     case "capturer":
     case "debuffer":
       return t("ui.roleAttack");
