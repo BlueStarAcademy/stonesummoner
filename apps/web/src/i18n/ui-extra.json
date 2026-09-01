@@ -5542,5 +5542,25 @@
   "ui.gearAffixEffect.bossAtk": {
     "ko": "보스전 공격력 +{n}%",
     "en": "Boss ATK +{n}%"
+  },
+  "ui.growthResultMagicSuccess": {
+    "ko": "마법 강화 성공",
+    "en": "Magic enhance success"
+  },
+  "ui.growthResultMagicFail": {
+    "ko": "마법 강화 실패",
+    "en": "Magic enhance failed"
+  },
+  "ui.growthMagicSuccessBadge": {
+    "ko": "성공",
+    "en": "Success"
+  },
+  "ui.growthMagicFailBadge": {
+    "ko": "실패",
+    "en": "Failed"
+  },
+  "ui.growthPlayingMagicRate": {
+    "ko": "성공률 {pct}%",
+    "en": "Success rate {pct}%"
   }
 }

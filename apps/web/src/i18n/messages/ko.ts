@@ -1458,7 +1458,12 @@ const messages: MessageDict = {
   "ui.gearAffixEffect.boardSense": "보드 감응 +{n}%",
   "ui.gearAffixEffect.allyAtk": "아군 공격력 +{n}%",
   "ui.gearAffixEffect.summonerHp": "소환사 HP +{n}%",
-  "ui.gearAffixEffect.bossAtk": "보스전 공격력 +{n}%"
+  "ui.gearAffixEffect.bossAtk": "보스전 공격력 +{n}%",
+  "ui.growthResultMagicSuccess": "마법 강화 성공",
+  "ui.growthResultMagicFail": "마법 강화 실패",
+  "ui.growthMagicSuccessBadge": "성공",
+  "ui.growthMagicFailBadge": "실패",
+  "ui.growthPlayingMagicRate": "성공률 {pct}%"
 };
 
 export default messages;

@@ -1618,6 +1618,8 @@ function bindSumBookModalInteractions(): void {
             },
           ],
           notes: [],
+          outcome: "fail",
+          ratePct,
         });
         return;
       }
@@ -1677,6 +1679,8 @@ function bindSumBookModalInteractions(): void {
           },
         ],
         notes,
+        outcome: "success",
+        ratePct,
       });
     });
   });

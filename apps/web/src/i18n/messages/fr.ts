@@ -1458,7 +1458,12 @@ const messages: MessageDict = {
   "ui.gearAffixEffect.boardSense": "Board sense +{n}%",
   "ui.gearAffixEffect.allyAtk": "Ally ATK +{n}%",
   "ui.gearAffixEffect.summonerHp": "Summoner HP +{n}%",
-  "ui.gearAffixEffect.bossAtk": "Boss ATK +{n}%"
+  "ui.gearAffixEffect.bossAtk": "Boss ATK +{n}%",
+  "ui.growthResultMagicSuccess": "Magic enhance success",
+  "ui.growthResultMagicFail": "Magic enhance failed",
+  "ui.growthMagicSuccessBadge": "Success",
+  "ui.growthMagicFailBadge": "Failed",
+  "ui.growthPlayingMagicRate": "Success rate {pct}%"
 };
 
 export default messages;

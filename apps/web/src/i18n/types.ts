@@ -1479,7 +1479,12 @@ export type MessageKey =
   | "ui.gearAffixEffect.boardSense"
   | "ui.gearAffixEffect.allyAtk"
   | "ui.gearAffixEffect.summonerHp"
-  | "ui.gearAffixEffect.bossAtk";
+  | "ui.gearAffixEffect.bossAtk"
+  | "ui.growthResultMagicSuccess"
+  | "ui.growthResultMagicFail"
+  | "ui.growthMagicSuccessBadge"
+  | "ui.growthMagicFailBadge"
+  | "ui.growthPlayingMagicRate";
 
 export type MessageDict = Record<MessageKey, string>;
 
