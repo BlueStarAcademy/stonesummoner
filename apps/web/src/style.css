@@ -11873,7 +11873,11 @@ body > .battle-settings-layer.settings-layer {
   right: auto;
   flex: 0 0 auto;
   z-index: 1;
-  width: min(132px, 34vw);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: min(100px, 26vw);
   pointer-events: none;
 }
 
@@ -11885,14 +11889,35 @@ body > .battle-settings-layer.settings-layer {
 .board.board-mini-grid {
   width: 100%;
   margin: 0;
-  padding: 5px;
-  gap: 2px;
-  border-radius: 12px;
+  padding: 4px;
+  gap: 1px;
+  border-radius: 10px;
   border: 1px solid #c9a22799;
   background: radial-gradient(circle at 50% 45%, #2a1f4ed0 0%, #120e1ce8 78%);
   box-shadow:
     inset 0 0 0 1px #f0d87844,
     0 8px 18px #0008;
+}
+
+/* Next ally stone turn — fill only, no label. */
+.board-mini-stone-meter {
+  position: relative;
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #c9a22766;
+  background: #0c0a14ee;
+  box-shadow: inset 0 1px 2px #000a;
+}
+
+.board-mini-stone-meter > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6a4cff 0%, #c9a227 55%, #f0d878 100%);
+  box-shadow: 0 0 8px #c9a22766;
+  transition: width 0.18s ease-out;
 }
 
 .board.board-mini-grid button.cell {
