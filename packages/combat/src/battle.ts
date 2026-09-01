@@ -977,14 +977,8 @@ export class Battle {
     const gains = gainsForBoardEvent(kind, result.capturedCount, manaMul);
 
     if (kind === "safe_place") {
+      // Plain placements grant mana only — no combat buff auras.
       this.log.push(`일반 소환: 마력 +${Math.round(gains.mana)}`);
-      this.applyBoardAuraToTeam(unit.team, {
-        atk: 0.1,
-        spd: 0.08,
-        turns: 3,
-      });
-      chips.push({ kind: "atk", n: 10 });
-      chips.push({ kind: "spd", n: 8 });
     }
 
     let ampDelta = gains.amplifyDelta;
@@ -1096,24 +1090,12 @@ export class Battle {
 
     const sm = this.summonerOf(unit.team);
     if (gains.captureDamageBonus > 0) {
+      // One capture payoff only: next monster hit damage (no stacked atk/crit auras).
       this.pendingCaptureDamageBonus[unit.team] = gains.captureDamageBonus;
-      const auraAtk = Math.min(0.4, gains.captureDamageBonus * 0.85);
-      this.applyBoardAuraToTeam(unit.team, {
-        atk: auraAtk,
-        critRate: Math.min(0.2, gains.captureDamageBonus * 0.35),
-        turns: 3,
-      });
       chips.push({
         kind: "capture",
         n: Math.round(gains.captureDamageBonus * 100),
       });
-      chips.push({ kind: "atk", n: Math.round(auraAtk * 100) });
-      if (Math.min(0.2, gains.captureDamageBonus * 0.35) >= 0.05) {
-        chips.push({
-          kind: "crit",
-          n: Math.round(Math.min(0.2, gains.captureDamageBonus * 0.35) * 100),
-        });
-      }
       this.log.push(
         `따냄 버프: 다음 소환수 피해 +${Math.round(gains.captureDamageBonus * 100)}%`,
       );
@@ -1157,7 +1139,7 @@ export class Battle {
           chips.push({ kind: "shape", id: sh.id });
           this.log.push(`형상 ${sh.labelKo}`);
         }
-        this.applyShapeBoardAura(unit.team, sh.id);
+        // Shape amplify/mana/shield only — no stacked combat stat auras on place.
         if (sh.id === "axis") {
           unit.cutImmune = Math.max(unit.cutImmune ?? 0, 1);
           this.log.push(`형상 축 연결: 절단 면역 1회`);
@@ -1252,10 +1234,8 @@ export class Battle {
     const showResultSheet =
       !!picked ||
       claimedVictory ||
-      kind === "capture_large" ||
-      (this.modules.moduleD &&
-        result.capturedCount >= CAPTURE_SHOP_THRESHOLD &&
-        unit.team === "ally");
+      result.capturedCount > 0 ||
+      chips.some((c) => c.kind === "shape" || c.kind === "shield");
     this.lastStoneReport = {
       team: unit.team,
       x: point.x,
@@ -2175,50 +2155,6 @@ export class Battle {
       },
       targetIds,
     );
-  }
-
-  private applyBoardAuraToTeam(
-    team: TeamId,
-    opts: {
-      atk?: number;
-      def?: number;
-      spd?: number;
-      critRate?: number;
-      turns: number;
-    },
-  ): void {
-    for (const u of this.units) {
-      if (!u.alive || u.team !== team || u.kind !== "monster") continue;
-      if (opts.atk) this.applyStatBuff(u, "atk", opts.atk, opts.turns);
-      if (opts.def) this.applyStatBuff(u, "def", opts.def, opts.turns);
-      if (opts.spd) this.applyStatBuff(u, "spd", opts.spd, opts.turns);
-      if (opts.critRate) this.applyStatBuff(u, "critRate", opts.critRate, opts.turns);
-    }
-  }
-
-  private applyShapeBoardAura(team: TeamId, shapeId: string): void {
-    switch (shapeId) {
-      case "corner":
-        this.applyBoardAuraToTeam(team, { atk: 0.08, turns: 3 });
-        break;
-      case "star":
-        this.applyBoardAuraToTeam(team, { spd: 0.1, turns: 3 });
-        break;
-      case "star_control":
-        this.applyBoardAuraToTeam(team, { atk: 0.14, def: 0.1, turns: 3 });
-        break;
-      case "tiger":
-        this.applyBoardAuraToTeam(team, { def: 0.14, turns: 3 });
-        break;
-      case "kosumi":
-        this.applyBoardAuraToTeam(team, { spd: 0.08, critRate: 0.12, turns: 3 });
-        break;
-      case "axis":
-        this.applyBoardAuraToTeam(team, { atk: 0.12, turns: 3 });
-        break;
-      default:
-        break;
-    }
   }
 
   private applyStatBuff(

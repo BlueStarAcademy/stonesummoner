@@ -8860,48 +8860,79 @@ main {
 }
 
 .stone-result-sheet-layer .stone-result-sheet {
-  width: min(92vw, 340px);
+  width: min(88vw, 300px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 12px;
-  padding: 16px 14px 14px;
+  gap: 14px;
+  padding: 18px 16px 14px;
   pointer-events: auto;
 }
 
 .stone-result-sheet-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: 0.92rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: #f2e6c4;
   text-align: center;
 }
 
-.stone-result-sheet-pick {
+.stone-result-sheet-hero {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 10px 8px;
-  border-radius: 12px;
-  border: 1px solid #c9a22755;
-  background: #1a152866;
+  gap: 10px;
+  padding: 16px 12px 14px;
+  border-radius: 16px;
+  border: 1px solid #c9a22766;
+  background:
+    radial-gradient(90% 70% at 50% 0%, #c9a22722, transparent 60%),
+    linear-gradient(165deg, #2a2216ee, #14100cee);
 }
 
-.stone-result-sheet-pick strong {
+.stone-result-sheet-hero--capture {
+  gap: 8px;
+}
+
+.stone-result-sheet-hero--shape {
+  padding: 18px 14px;
+}
+
+.stone-result-sheet-name {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   font-weight: 800;
-  color: #f2e6c4;
+  line-height: 1.25;
+  color: #f5edd8;
+  text-align: center;
+}
+
+.stone-result-sheet-cap-num {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid #c9a227aa;
+  background: radial-gradient(circle at 40% 30%, #3a3020, #16120c);
+  color: #f0d878;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 #fff2, 0 6px 16px #0008;
 }
 
 .stone-result-sheet-mark {
-  width: 48px;
-  height: 48px;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
   flex-shrink: 0;
+  filter: drop-shadow(0 4px 10px #000a);
 }
 
 .stone-result-sheet-fx {
@@ -8911,13 +8942,29 @@ main {
   justify-content: center;
 }
 
-.stone-result-sheet-ok {
-  width: 100%;
-  margin-top: 4px;
+.stone-result-sheet-fx .stone-result-chip {
+  min-height: 36px;
+  padding: 8px 14px;
+  font-size: 0.92rem;
+  font-weight: 800;
 }
 
-.stone-result-sheet-layer.enemy .stone-result-sheet-pick {
+.stone-result-sheet-ok {
+  width: 100%;
+  margin-top: 2px;
+  min-height: 44px;
+}
+
+.stone-result-sheet-layer.enemy .stone-result-sheet-hero {
   border-color: #a888d066;
+  background:
+    radial-gradient(90% 70% at 50% 0%, #7b6cff22, transparent 60%),
+    linear-gradient(165deg, #221830ee, #120e18ee);
+}
+
+.stone-result-sheet-layer.enemy .stone-result-sheet-cap-num {
+  border-color: #a888d0aa;
+  color: #d8c8ff;
 }
 
 .stone-result-chip--res {
