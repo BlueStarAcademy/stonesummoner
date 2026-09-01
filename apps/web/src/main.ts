@@ -8807,13 +8807,92 @@ function renderBoard(): string {
   </div>`;
 }
 
-/** Always-mounted right-side Go readout; stowed (not display:none) while the pick overlay is open. */
+/**
+ * Progress 0–100 toward the next ally stone turn (ATB simulation).
+ * Full when ally is already placing; empty when the wait is long.
+ */
+function nextAllyStoneMeterPct(): number {
+  if (!battle) return 0;
+  const active = battle.activeUnitId
+    ? battle.getUnit(battle.activeUnitId)
+    : null;
+  if (battle.phase === "await_stone" && active?.team === "ally") return 100;
+
+  type Sim = {
+    team: "ally" | "enemy";
+    spd: number;
+    atb: number;
+    spdBoost: number;
+    spdBuff: number;
+    stun: number;
+  };
+  const sims: Sim[] = battle.units
+    .filter((u) => u.alive)
+    .map((u) => ({
+      team: u.team,
+      spd: Math.max(1, u.stats.spd),
+      atb: u.atb,
+      spdBoost: u.spdBoostTurns ?? 0,
+      spdBuff: u.spdBuffPct ?? 0,
+      stun: u.stunnedTurns ?? 0,
+    }));
+  if (!sims.length) return 0;
+
+  let lastStone = battle.lastStoneTeam;
+  if (battle.phase === "await_stone" && active) {
+    lastStone = active.team;
+  }
+
+  let wait = 0;
+  const CAP = 80;
+  for (let guard = 0; guard < 2500; guard++) {
+    let bestIdx = -1;
+    let bestEta = Infinity;
+    for (let i = 0; i < sims.length; i++) {
+      const u = sims[i]!;
+      const rate =
+        u.spd * 0.1 * (u.spdBoost > 0 ? 1.4 : 1) * (1 + u.spdBuff);
+      if (rate <= 0) continue;
+      const eta = Math.max(0, 100 - u.atb) / rate;
+      if (eta < bestEta) {
+        bestEta = eta;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx < 0 || !Number.isFinite(bestEta)) break;
+
+    for (const u of sims) {
+      const rate =
+        u.spd * 0.1 * (u.spdBoost > 0 ? 1.4 : 1) * (1 + u.spdBuff);
+      u.atb += rate * bestEta;
+    }
+    wait += bestEta;
+
+    const actor = sims[bestIdx]!;
+    actor.atb = 0;
+    if (actor.spdBoost > 0) actor.spdBoost -= 1;
+    if (actor.stun > 0) {
+      actor.stun -= 1;
+      continue;
+    }
+    const needsStone = lastStone !== actor.team;
+    if (needsStone && actor.team === "ally") {
+      return Math.max(0, Math.min(100, Math.round(100 * (1 - wait / CAP))));
+    }
+    if (needsStone) lastStone = actor.team;
+  }
+  return 0;
+}
+
+/** Always-mounted Go readout; stowed (not display:none) while the pick overlay is open. */
 function renderBoardMini(): string {
   if (!battle) return "";
   const size = battle.board.size;
   const visible = !pickOverlayOpen() && battleMinimapOn;
+  const meterPct = nextAllyStoneMeterPct();
   return `<aside class="board-mini${visible ? "" : " is-stowed"}" id="board-mini" aria-hidden="${visible ? "false" : "true"}">
     <div class="board magic-circle board-mini-grid size-${size}" data-size="${size}" style="grid-template-columns:repeat(${size},minmax(0,1fr))"></div>
+    <div class="board-mini-stone-meter" aria-hidden="true"><i style="width:${meterPct}%"></i></div>
   </aside>`;
 }
 
@@ -8847,6 +8926,22 @@ function boardMiniContentKey(): string {
   return `${stones}|t:${tokens}|v:${victory}|e:${enemy}|s:${summon}|b:${bait}|h:${hoshi}`;
 }
 
+function syncBoardMiniStoneMeter(mini: HTMLElement | null = null): void {
+  if (!battle) return;
+  const host = mini ?? app.querySelector<HTMLElement>("#board-mini");
+  if (!host) return;
+  let meter = host.querySelector<HTMLElement>(".board-mini-stone-meter");
+  if (!meter) {
+    host.insertAdjacentHTML(
+      "beforeend",
+      `<div class="board-mini-stone-meter" aria-hidden="true"><i style="width:0%"></i></div>`,
+    );
+    meter = host.querySelector<HTMLElement>(".board-mini-stone-meter");
+  }
+  const fill = meter?.querySelector<HTMLElement>("i");
+  if (fill) fill.style.width = `${nextAllyStoneMeterPct()}%`;
+}
+
 /** Patch the live mini board in place so stone images do not reload. */
 function syncBoardMini(): void {
   if (!battle) return;
@@ -8857,11 +8952,12 @@ function syncBoardMini(): void {
   mini.removeAttribute("hidden");
   mini.classList.toggle("is-stowed", !show);
   mini.setAttribute("aria-hidden", show ? "false" : "true");
+  syncBoardMiniStoneMeter(mini);
 
   const size = battle.board.size;
   let grid = mini.querySelector<HTMLElement>(".board-mini-grid");
   if (!grid) {
-    mini.innerHTML = `<div class="board magic-circle board-mini-grid size-${size}" data-size="${size}" style="grid-template-columns:repeat(${size},minmax(0,1fr))"></div>`;
+    mini.innerHTML = `<div class="board magic-circle board-mini-grid size-${size}" data-size="${size}" style="grid-template-columns:repeat(${size},minmax(0,1fr))"></div><div class="board-mini-stone-meter" aria-hidden="true"><i style="width:${nextAllyStoneMeterPct()}%"></i></div>`;
     grid = mini.querySelector<HTMLElement>(".board-mini-grid");
     if (!grid) return;
   }

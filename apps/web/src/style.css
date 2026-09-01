@@ -11917,7 +11917,11 @@ body > .battle-settings-layer.settings-layer {
   right: auto;
   flex: 0 0 auto;
   z-index: 1;
-  width: min(132px, 34vw);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: min(100px, 26vw);
   pointer-events: none;
 }
 
@@ -11929,14 +11933,35 @@ body > .battle-settings-layer.settings-layer {
 .board.board-mini-grid {
   width: 100%;
   margin: 0;
-  padding: 5px;
-  gap: 2px;
-  border-radius: 12px;
+  padding: 4px;
+  gap: 1px;
+  border-radius: 10px;
   border: 1px solid #c9a22799;
   background: radial-gradient(circle at 50% 45%, #2a1f4ed0 0%, #120e1ce8 78%);
   box-shadow:
     inset 0 0 0 1px #f0d87844,
     0 8px 18px #0008;
+}
+
+/* Next ally stone turn — fill only, no label. */
+.board-mini-stone-meter {
+  position: relative;
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #c9a22766;
+  background: #0c0a14ee;
+  box-shadow: inset 0 1px 2px #000a;
+}
+
+.board-mini-stone-meter > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6a4cff 0%, #c9a227 55%, #f0d878 100%);
+  box-shadow: 0 0 8px #c9a22766;
+  transition: width 0.18s ease-out;
 }
 
 .board.board-mini-grid button.cell {
@@ -12330,6 +12355,17 @@ body > .battle-settings-layer.settings-layer {
   overflow: visible;
 }
 
+.skill-caster-fx img,
+.skill-support-aura img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
 .skill-caster-core {
   position: absolute;
   left: 50%;
@@ -12440,29 +12476,69 @@ body > .battle-settings-layer.settings-layer {
   transform: translate(-50%, 0);
   pointer-events: none;
   z-index: 2;
-  border-radius: 50%;
-  opacity: 0;
-  animation: skill-caster-release var(--release-ms, 320ms) ease-out both;
+  overflow: visible;
 }
 
-.skill-caster-release--fire {
-  box-shadow: 0 0 20px #ff703066, inset 0 0 14px #ff582833;
+.skill-caster-release img {
+  mix-blend-mode: screen;
 }
 
-.skill-caster-release--water {
-  box-shadow: 0 0 20px #40d0ff66, inset 0 0 14px #28c8ff33;
+.skill-cast-gather {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  width: 72%;
+  height: 72%;
+  margin: 0;
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  z-index: 4;
+  overflow: visible;
 }
 
-.skill-caster-release--wind {
-  box-shadow: 0 0 20px #60f09866, inset 0 0 14px #48e88833;
+.skill-cast-gather img {
+  mix-blend-mode: screen;
 }
 
-.skill-caster-release--light {
-  box-shadow: 0 0 20px #ffe85066, inset 0 0 14px #ffe83833;
+.skill-trap-hex {
+  position: absolute;
+  width: 88px;
+  height: 88px;
+  margin: 0;
+  transform: translate(-50%, -58%);
+  pointer-events: none;
+  z-index: 7;
+  overflow: visible;
+  animation: skill-trap-ring-pop var(--trap-ms, 560ms) ease-out both;
 }
 
-.skill-caster-release--dark {
-  box-shadow: 0 0 20px #c098ff66, inset 0 0 14px #9878f833;
+.skill-trap-hex img {
+  mix-blend-mode: screen;
+}
+
+.skill-melee-trail {
+  position: absolute;
+  inset: -8% -18%;
+  pointer-events: none;
+  z-index: 3;
+  overflow: visible;
+  animation: skill-melee-dash-sweep var(--dash-ms, 320ms) ease-out both;
+}
+
+.skill-melee-trail img {
+  mix-blend-mode: screen;
+}
+
+.circle-rite {
+  position: absolute;
+  inset: -10%;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+
+.circle-rite img {
+  mix-blend-mode: screen;
 }
 
 .skill-fx.is-cast {

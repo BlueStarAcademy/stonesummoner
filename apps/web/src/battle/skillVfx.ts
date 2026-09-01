@@ -334,8 +334,19 @@ function presetLayers(
     if (preset === "wind-storm") {
       layers.push({ src: ART.slashWind, cls: "skfx-img skfx-img--slash" });
     }
-  } else if (preset === "heal" || preset === "shield" || preset === "buff") {
-    // Support auras are CSS rings only — no icon-shaped sprite sheets.
+  } else if (preset === "heal") {
+    layers.push({ src: ART.heal, cls: "skfx-img skfx-img--heal-bloom" });
+    layers.push({ src: ART.shock, cls: "skfx-img skfx-img--aura-glow skfx-img--aura-glow-heal" });
+    layers.push({ src: ART.heal, cls: "skfx-img skfx-img--aura-ring skfx-img--aura-ring-heal" });
+  } else if (preset === "shield") {
+    layers.push({ src: ART.shield, cls: "skfx-img skfx-img--ward" });
+    layers.push({ src: ART.shock, cls: "skfx-img skfx-img--aura-glow skfx-img--aura-glow-shield" });
+    layers.push({ src: ART.shield, cls: "skfx-img skfx-img--aura-ring skfx-img--aura-ring-shield" });
+  } else if (preset === "buff") {
+    layers.push({ src: ART.buff, cls: "skfx-img skfx-img--empower" });
+    layers.push({ src: ART.buff, cls: "skfx-img skfx-img--empower-b" });
+    layers.push({ src: ART.shock, cls: "skfx-img skfx-img--aura-glow skfx-img--aura-glow-buff" });
+    layers.push({ src: ART.buff, cls: "skfx-img skfx-img--aura-ring skfx-img--aura-ring-buff" });
   } else if (preset === "hex") {
     layers.push({ src: ART.hex, cls: "skfx-img skfx-img--hex" });
   } else if (preset === "cast") {
@@ -394,13 +405,22 @@ function appendFxImg(wrap: HTMLElement, layer: SkfxLayer): void {
   scheduleFxDematte(img);
 }
 
+function supportAuraArt(preset: SkillVfxPreset): { glow: string; ring: string } {
+  if (preset === "heal") return { glow: ART.shock, ring: ART.heal };
+  if (preset === "shield") return { glow: ART.shock, ring: ART.shield };
+  return { glow: ART.shock, ring: ART.buff };
+}
+
 function spawnSupportAuraRings(wrap: HTMLElement, preset: SkillVfxPreset): void {
-  const glow = document.createElement("span");
-  glow.className = `skill-support-glow skill-support-glow--${preset}`;
-  wrap.appendChild(glow);
-  const ring = document.createElement("span");
-  ring.className = `skill-support-ring skill-support-ring--${preset}`;
-  wrap.appendChild(ring);
+  const art = supportAuraArt(preset);
+  appendFxImg(wrap, {
+    src: art.glow,
+    cls: `skfx-img skfx-img--aura-glow skfx-img--aura-glow-${preset}`,
+  });
+  appendFxImg(wrap, {
+    src: art.ring,
+    cls: `skfx-img skfx-img--aura-ring skfx-img--aura-ring-${preset}`,
+  });
 }
 
 function spawnSupportCasterCore(
@@ -408,17 +428,18 @@ function spawnSupportCasterCore(
   preset: SkillVfxPreset,
   element: CombatElement,
 ): void {
-  const core = document.createElement("span");
-  core.className = `skill-caster-core skill-caster-core--${preset} skill-caster-core--${element}`;
-  wrap.appendChild(core);
-  const sparkN = preset === "shield" ? 5 : 6;
-  for (let i = 0; i < sparkN; i++) {
-    const spark = document.createElement("span");
-    spark.className = `skill-caster-spark skill-caster-spark--${preset} skill-caster-spark--${element}`;
-    spark.style.setProperty("--spark-i", String(i));
-    spark.style.setProperty("--spark-n", String(sparkN));
-    wrap.appendChild(spark);
+  if (preset === "cast") {
+    appendFxImg(wrap, { src: ART.cast, cls: "skfx-img skfx-img--cast" });
+    appendFxImg(wrap, {
+      src: slashArt(element),
+      cls: "skfx-img skfx-img--rise skfx-img--soft",
+    });
+    return;
   }
+  const orbSrc =
+    preset === "heal" ? ART.orbHeal : preset === "shield" ? ART.orbShield : ART.orbBuff;
+  appendFxImg(wrap, { src: ART.cast, cls: "skfx-img skfx-img--cast" });
+  appendFxImg(wrap, { src: orbSrc, cls: "skfx-img skfx-img--rise" });
 }
 
 /** Offensive cast channel on the caster — distinct from hit burst / flinch. */
@@ -482,26 +503,12 @@ export function spawnSupportCasterFx(
 }
 
 function spawnFxMotes(
-  wrap: HTMLElement,
-  kind: "heal" | "buff" | "shield",
-  ms: number,
-  circular = false,
+  _wrap: HTMLElement,
+  _kind: "heal" | "buff" | "shield",
+  _ms: number,
+  _circular = false,
 ): void {
-  const n = kind === "heal" ? 10 : kind === "buff" ? 8 : 6;
-  const step = Math.max(0.04, (ms / 1000) * 0.07);
-  for (let i = 0; i < n; i++) {
-    const mote = document.createElement("span");
-    mote.className = `skfx-mote skfx-mote--${kind}${circular ? " is-perimeter" : ""}`;
-    if (circular) {
-      const angle = (360 / n) * i - 90;
-      mote.style.setProperty("--mote-angle", `${angle}deg`);
-      mote.style.setProperty("--mote-radius", kind === "shield" ? "52%" : "48%");
-    } else {
-      mote.style.setProperty("--mote-x", `${-46 + i * 10}%`);
-    }
-    mote.style.setProperty("--mote-delay", `${(i * step).toFixed(2)}s`);
-    wrap.appendChild(mote);
-  }
+  /* Painted aura layers replace CSS dot motes. */
 }
 
 export function spawnSupportAuraFx(
@@ -597,6 +604,11 @@ function spawnCasterChannelRelease(
   release.className = `skill-caster-release skill-caster-release--${element}`;
   release.setAttribute("aria-hidden", "true");
   release.style.setProperty("--release-ms", `${Math.max(80, ms)}ms`);
+  appendFxImg(release, { src: ART.flash, cls: "skfx-img skfx-img--flash" });
+  appendFxImg(release, {
+    src: hitArt(element),
+    cls: "skfx-img skfx-img--burst skfx-img--soft",
+  });
   unit.appendChild(release);
   window.setTimeout(() => release.remove(), Math.max(80, ms + 40));
 }
@@ -621,9 +633,14 @@ function spawnCastGatherVfx(
   const unit = queryUnit(root, unitId);
   if (!unit) return;
   const aura = document.createElement("span");
-  aura.className = `skill-cast-aura skill-cast-aura--${element}`;
+  aura.className = `skill-cast-gather skill-cast-gather--${element}`;
   aura.setAttribute("aria-hidden", "true");
-  aura.style.setProperty("--aura-ms", `${Math.max(120, ms)}ms`);
+  aura.style.setProperty("--skfx-ms", `${Math.max(120, ms)}ms`);
+  appendFxImg(aura, { src: ART.cast, cls: "skfx-img skfx-img--cast" });
+  appendFxImg(aura, {
+    src: ART.shock,
+    cls: "skfx-img skfx-img--aura-glow skfx-img--soft",
+  });
   unit.appendChild(aura);
   window.setTimeout(() => aura.remove(), Math.max(120, ms + 60));
 }
@@ -671,13 +688,14 @@ function spawnMeleeDashVfx(
 ): void {
   if (reduceMotion) return;
   if (fromId === toId) return;
-  spawnTravelBeam(root, fromId, toId, element, ms);
   const unit = queryUnit(root, fromId);
   if (!unit) return;
   const streak = document.createElement("span");
-  streak.className = `skill-melee-dash skill-melee-dash--${element}`;
+  streak.className = `skill-melee-trail skill-melee-trail--${element}`;
   streak.setAttribute("aria-hidden", "true");
   streak.style.setProperty("--dash-ms", `${Math.max(120, ms)}ms`);
+  appendFxImg(streak, { src: slashArt(element), cls: "skfx-img skfx-img--slash" });
+  appendFxImg(streak, { src: ART.slash3, cls: "skfx-img skfx-img--trail" });
   unit.appendChild(streak);
   window.setTimeout(() => streak.remove(), Math.max(120, ms + 60));
 }
@@ -695,11 +713,16 @@ function spawnTrapRingVfx(
   if (!anchor) return;
   const p = clientPointInElement(layer, anchor.x, anchor.y);
   const ring = document.createElement("span");
-  ring.className = `skill-trap-ring skill-trap-ring--${element}`;
+  ring.className = `skill-trap-hex skill-trap-hex--${element}`;
   ring.setAttribute("aria-hidden", "true");
   ring.style.left = `${Math.round(p.x)}px`;
   ring.style.top = `${Math.round(p.y)}px`;
   ring.style.setProperty("--trap-ms", `${Math.max(120, ms)}ms`);
+  appendFxImg(ring, { src: ART.hex, cls: "skfx-img skfx-img--hex" });
+  appendFxImg(ring, {
+    src: ART.shock,
+    cls: "skfx-img skfx-img--aura-ring skfx-img--soft",
+  });
   layer.appendChild(ring);
   window.setTimeout(
     () => ring.remove(),
@@ -773,14 +796,8 @@ function spawnBoltFlight(
   kind: SkillBoltKind,
   ms: number,
   orbBolt?: boolean,
-  element?: CombatElement,
+  _element?: CombatElement,
 ): void {
-  const beamEl =
-    element ??
-    (kind === "heal" || kind === "buff" || kind === "shield" || kind === "hex" || kind === "slash"
-      ? "light"
-      : (kind as CombatElement));
-  spawnTravelBeam(root, fromId, toId, beamEl, ms, orbBolt);
   spawnTravelBolt(root, fromId, toId, kind, ms, { orb: orbBolt });
   const volley = orbBolt ? 1 : boltVolley(kind);
   if (volley < 2) return;
@@ -851,28 +868,14 @@ function spawnCircleRite(
   rite.className = `circle-rite circle-rite--${power}`;
   rite.setAttribute("aria-hidden", "true");
   rite.style.setProperty("--rite-ms", `${Math.max(80, ms)}ms`);
-  const bloom = document.createElement("span");
-  bloom.className = "circle-rite-bloom";
-  rite.appendChild(bloom);
-  const sparkN =
-    power === "capture-large" || power === "shape"
-      ? 12
-      : power === "capture"
-        ? 10
-        : 8;
-  for (let i = 0; i < sparkN; i++) {
-    const spark = document.createElement("i");
-    spark.className = "circle-rite-spark";
-    spark.style.setProperty("--spark-i", String(i));
-    spark.style.setProperty("--spark-n", String(sparkN));
-    rite.appendChild(spark);
+  appendFxImg(rite, { src: ART.shock, cls: "skfx-img skfx-img--shock" });
+  appendFxImg(rite, { src: ART.cast, cls: "skfx-img skfx-img--cast skfx-img--soft" });
+  if (power === "capture" || power === "capture-large" || power === "shape") {
+    appendFxImg(rite, {
+      src: ART.debris,
+      cls: "skfx-img skfx-img--debris skfx-img--soft",
+    });
   }
-  const ringA = document.createElement("span");
-  ringA.className = "circle-rite-ring";
-  const ringB = document.createElement("span");
-  ringB.className = "circle-rite-ring is-inner";
-  rite.appendChild(ringA);
-  rite.appendChild(ringB);
   absorb.appendChild(rite);
   window.setTimeout(() => rite.remove(), Math.max(80, ms + 40));
 }
