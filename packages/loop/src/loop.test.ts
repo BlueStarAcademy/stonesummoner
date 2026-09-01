@@ -109,6 +109,10 @@ import {
   getDailyShopOffers,
   runRecipeFusion,
   ARENA_ATTACKS_DAILY,
+  ARENA_INVITATIONS_MAX,
+  ARENA_INVITATION_RECHARGE_MS,
+  arenaAttacksRemaining,
+  syncArenaAttackDay,
   RAID_BOSS_MAX_HP,
   RAID_ATTEMPTS_DAILY,
   RAID_DAMAGE_BASE,
@@ -253,6 +257,20 @@ describe("game loop", () => {
         "garen_1_5",
         "garen_1_6",
         "garen_1_7",
+        "tower_2_1",
+        "tower_2_2",
+        "tower_2_3",
+        "tower_2_4",
+        "tower_2_5",
+        "tower_2_6",
+        "tower_2_7",
+        "ruins_3_1",
+        "ruins_3_2",
+        "ruins_3_3",
+        "ruins_3_4",
+        "ruins_3_5",
+        "ruins_3_6",
+        "ruins_3_7",
       ],
       island: { ...save.island, mana: 8000, energy: 80, summonerLevel: 10 },
       gloryPoints: 100,
@@ -273,8 +291,20 @@ describe("game loop", () => {
       nextStageInProgression(
         { ...giantClear, clearedStages: [...giantClear.clearedStages, "giant_b10"] },
         getStage("giant_b10")!,
-      ),
-      null,
+      )?.id,
+      "giant_abyss_normal",
+    );
+    const abyssNormalClear = {
+      ...giantClear,
+      clearedStages: [
+        ...giantClear.clearedStages,
+        "giant_b10",
+        "giant_abyss_normal",
+      ],
+    };
+    assert.equal(
+      isStageUnlocked(abyssNormalClear, "giant_abyss_hard"),
+      true,
     );
 
     const arena = runSortie(save, "arena_rookie", { rng: () => 0.1 });
@@ -1343,14 +1373,14 @@ describe("game loop", () => {
     assert.match(insufficient.message, /부족/);
   });
 
-  it("reports a guaranteed Giant symbol blocked by a full bag", () => {
+  it("reports a rolled Giant symbol blocked by a full bag", () => {
     const base = createNewSave(0);
     const symbols = Array.from({ length: symbolBagCapacity(base) }, (_, index) => ({
       ...createSymbol("hwalro", 1, `full_${index}`),
       id: `full_${index}`,
     }));
     const full = { ...base, symbols };
-    const result = applyRewards(full, getStage("giant_b1")!, true, () => 0.99);
+    const result = applyRewards(full, getStage("giant_b1")!, true, () => 0);
     assert.equal(result.reward.symbol, undefined);
     assert.equal(result.reward.symbolBagFull, true);
     assert.equal(result.save.symbols.length, symbols.length);
@@ -1435,7 +1465,7 @@ describe("game loop", () => {
 
   it("raises energy max and unlocks buildings on account level-up", () => {
     let save = createNewSave(0);
-    assert.equal(save.island.energyMax, 100);
+    assert.equal(save.island.energyMax, 42);
     // Level active summoner from 6 → 7 to unlock wish_temple (+2 energy max).
     // SW curve: Lv.6→7 needs 3110 EXP; leave a little room so one Normal clear tips it.
     save = {
@@ -1447,7 +1477,7 @@ describe("game loop", () => {
       island: {
         ...save.island,
         summonerLevel: 6,
-        energyMax: 100 + (6 - 1) * 2,
+        energyMax: 42 + (6 - 1) * 2,
       },
     };
     const beforeMax = save.island.energyMax;
@@ -1470,18 +1500,27 @@ describe("game loop", () => {
       island: {
         ...next.island,
         summonerLevel: 10,
-        energyMax: 100 + (10 - 1) * 2,
+        energyMax: 42 + (10 - 1) * 2,
       },
     };
     const capped = applyRewards(save, stage, true, () => 0.99);
     assert.equal(capped.save.island.energyMax, save.island.energyMax);
   });
 
-  it("uses Summoners War account and monster EXP curves with difficulty scaling", () => {
+  it("uses explicit Summoners War account and monster EXP profiles", () => {
     const stage = getStage("garen_1_1")!;
-    assert.equal(expForStage(stage, "normal"), 68);
-    assert.equal(expForStage(stage, "hard"), Math.round(68 * 6.96));
-    assert.equal(expForStage(stage, "hell"), Math.round(68 * 14.61));
+    assert.equal(
+      expForStage(stage, "normal"),
+      stage.difficultyBalance!.normal!.accountExp,
+    );
+    assert.equal(
+      expForStage(stage, "hard"),
+      stage.difficultyBalance!.hard!.accountExp,
+    );
+    assert.equal(
+      expForStage(stage, "hell"),
+      stage.difficultyBalance!.hell!.accountExp,
+    );
 
     const mon = {
       uid: "t1",
@@ -2190,7 +2229,7 @@ describe("game loop", () => {
     );
   });
 
-  it("applies combat affixes to summoner mana and ally attack", () => {
+  it("keeps gear combat affixes and leader attack local to the summoner", () => {
     const stage = getStage("garen_1_1")!;
     const base = createNewSave(0);
     const plain = createStageBattle(stage, base, { rng: () => 0.5 });
@@ -2213,14 +2252,48 @@ describe("game loop", () => {
       withActiveGear(base, { ...createEmptyGear(), ring: roar.piece }),
       { rng: () => 0.5 },
     );
-    const allyAtk = (b: typeof plain) =>
+    const monsterAtk = (b: typeof plain) =>
       b.units
         .filter((u) => u.team === "ally" && u.kind === "monster")
         .reduce((n, u) => n + u.stats.atk, 0);
+    const summonerAtk = (b: typeof plain) =>
+      b.units.find((u) => u.team === "ally" && u.kind === "summoner")!.stats.atk;
+    assert.equal(monsterAtk(roarBattle), monsterAtk(plain));
     assert.ok(
-      allyAtk(roarBattle) > allyAtk(plain),
-      "leaderRoar raises ally ATK",
+      summonerAtk(roarBattle) > summonerAtk(plain),
+      "leaderRoar raises only summoner ATK",
     );
+
+    const commandBottom = {
+      ...base.gear.bottom!,
+      leaderAtkBonus: (base.gear.bottom?.leaderAtkBonus ?? 0) + 0.2,
+    };
+    const commandBattle = createStageBattle(
+      stage,
+      withActiveGear(base, { ...base.gear, bottom: commandBottom }),
+      { rng: () => 0.5 },
+    );
+    assert.equal(monsterAtk(commandBattle), monsterAtk(plain));
+    assert.ok(summonerAtk(commandBattle) > summonerAtk(plain));
+
+    const slayer = seekAffixPiece("weapon", "giantSlayer");
+    const bossStage = getStage("giant_b1")!;
+    const slayerSave = withActiveGear(base, {
+      ...createEmptyGear(),
+      weapon: slayer.piece,
+    });
+    const nonBossSlayerBattle = createStageBattle(
+      stage,
+      slayerSave,
+      { rng: () => 0.5 },
+    );
+    const slayerBattle = createStageBattle(
+      bossStage,
+      slayerSave,
+      { rng: () => 0.5 },
+    );
+    assert.equal(monsterAtk(slayerBattle), monsterAtk(nonBossSlayerBattle));
+    assert.ok(summonerAtk(slayerBattle) > summonerAtk(nonBossSlayerBattle));
 
     const bulwark = seekAffixPiece("necklace", "bulwark");
     const bulwarkBattle = createStageBattle(
@@ -2260,7 +2333,7 @@ describe("game loop", () => {
     assert.equal(save.gear.weapon?.id, lightWpn);
   });
 
-  it("sets arena defense and caps daily arena attacks", () => {
+  it("sets arena defense and spends rechargeable invitations", () => {
     let save = createNewSave(0);
     save = {
       ...save,
@@ -2270,12 +2343,36 @@ describe("game loop", () => {
     const def = runSetArenaDefense(save);
     assert.ok(def.save.arenaDefense);
     assert.equal(def.save.arenaDefense!.party.length, save.party.length);
-    save = { ...def.save, arenaAttacksToday: ARENA_ATTACKS_DAILY, arenaAttackDay: "2099-01-01" };
+    save = {
+      ...def.save,
+      arenaInvitations: 0,
+      arenaInvitationUpdatedAt: Date.parse("2099-01-01T12:00:00Z"),
+      arenaAttacksToday: ARENA_ATTACKS_DAILY,
+      arenaAttackDay: "2099-01-01",
+    };
     const blocked = runSortie(save, "arena_rookie", {
       rng: () => 0.1,
       now: Date.parse("2099-01-01T12:00:00Z"),
     });
-    assert.match(blocked.message, /한도/);
+    assert.match(blocked.message, /초대장/);
+  });
+
+  it("recharges one arena invitation every 30 minutes", () => {
+    const now = Date.parse("2099-01-01T12:00:00Z");
+    const save = {
+      ...createNewSave(now),
+      arenaInvitations: 4,
+      arenaInvitationUpdatedAt: now,
+      arenaAttacksToday: ARENA_INVITATIONS_MAX - 4,
+      arenaAttackDay: "2099-01-01",
+    };
+    assert.equal(arenaAttacksRemaining(save, now), 4);
+    const recharged = syncArenaAttackDay(
+      save,
+      now + ARENA_INVITATION_RECHARGE_MS * 2,
+    );
+    assert.equal(recharged.arenaInvitations, 6);
+    assert.equal(arenaAttacksRemaining(recharged, now), 6);
   });
 
   it("rotates daily shop offers and marks sold", () => {
@@ -2868,6 +2965,13 @@ describe("challenge tower", () => {
     assert.equal(isStageUnlocked(save, "toa_f2"), true);
     assert.equal(isStageClearedOnDifficulty(save, "toa_f1", "normal"), true);
     assert.equal(isStageClearedOnDifficulty(save, "toa_f2", "normal"), false);
+    assert.equal(isStageUnlocked(save, "toa_hard_f1"), true);
+    save = { ...save, challengeTowerHardFloor: 1 };
+    assert.equal(isStageUnlocked(save, "toa_hard_f2"), true);
+    assert.equal(
+      isStageClearedOnDifficulty(save, "toa_hard_f1", "normal"),
+      true,
+    );
   });
 
   it("resets progress on a new calendar month", async () => {
@@ -2876,14 +2980,18 @@ describe("challenge tower", () => {
     const { createNewSave } = await import("./loop.js");
     const aug = Date.parse("2026-08-15T12:00:00Z");
     const sep = Date.parse("2026-09-02T12:00:00Z");
-    let save = {
+    const save = {
       ...createNewSave(aug),
       challengeTowerMonthKey: "2026-08",
       challengeTowerFloor: 42,
+      challengeTowerHardMonthKey: "2026-08",
+      challengeTowerHardFloor: 17,
     };
-    save = syncChallengeTowerMonth(save, sep);
-    assert.equal(save.challengeTowerMonthKey, "2026-09");
-    assert.equal(challengeTowerFloor(save), 0);
+    const synced = syncChallengeTowerMonth(save, sep);
+    assert.equal(synced.challengeTowerMonthKey, "2026-09");
+    assert.equal(challengeTowerFloor(synced), 0);
+    assert.equal(synced.challengeTowerHardMonthKey, "2026-09");
+    assert.equal(challengeTowerFloor(synced, "hard"), 0);
   });
 
   it("grants a legend scroll on first 100F clear", async () => {
@@ -2901,5 +3009,36 @@ describe("challenge tower", () => {
     assert.equal(next.challengeTowerFloor, 100);
     assert.equal(next.scrollsLegend, 1);
     assert.equal(next.clearedStages.includes("toa_f100"), false);
+  });
+
+  it("tracks and rewards Hard 100F independently", async () => {
+    const { applyRewards } = await import("./loop.js");
+    const { getStage } = await import("stonesummoner-data");
+    const { createNewSave } = await import("./loop.js");
+    const stage = getStage("toa_hard_f100")!;
+    const save = {
+      ...createNewSave(),
+      clearedStages: ["tower_2_7"],
+      challengeTowerFloor: 12,
+      challengeTowerHardFloor: 99,
+      island: { ...createNewSave().island, crystal: 0 },
+    };
+    const { save: next } = applyRewards(save, stage, true, () => 0.99);
+    assert.equal(next.challengeTowerFloor, 12);
+    assert.equal(next.challengeTowerHardFloor, 100);
+    assert.equal(next.scrollsLegend, 1);
+    assert.equal(next.island.crystal, 20);
+  });
+
+  it("migrates legacy tower and arena progress without loss", () => {
+    const base = createNewSave(0);
+    const legacy = { ...base, challengeTowerFloor: 37, arenaAttacksToday: 3 };
+    delete (legacy as Partial<typeof legacy>).challengeTowerHardFloor;
+    delete (legacy as Partial<typeof legacy>).arenaInvitations;
+    delete (legacy as Partial<typeof legacy>).arenaInvitationUpdatedAt;
+    const migrated = migrateSave(legacy)!;
+    assert.equal(migrated.challengeTowerFloor, 37);
+    assert.equal(migrated.challengeTowerHardFloor, 0);
+    assert.equal(migrated.arenaInvitations, 7);
   });
 });

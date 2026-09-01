@@ -80,6 +80,113 @@ function roster(): Unit[] {
 }
 
 describe("Battle flow", () => {
+  it("applies modern Cairos Giant, Dragon, and Necro boss rules", () => {
+    const giantUnits = roster();
+    giantUnits.push(
+      makeUnit({
+        id: "a-m2",
+        name: "AllyTwo",
+        team: "ally",
+        kind: "monster",
+        element: "wind",
+        stats: { hp: 300, atk: 100, def: 30, spd: 80, critRate: 15, critDmg: 50 },
+        skillCoeff: 1,
+      }),
+    );
+    const giant = new Battle({
+      boardSize: 5,
+      units: giantUnits,
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+      dungeonBoss: { kind: "giant", unitId: "e-m1", abyss: true },
+    });
+    const hit = (
+      giant as unknown as {
+        applyHit: (
+          attacker: Unit,
+          target: Unit,
+          coeff: number,
+          summoner: boolean,
+        ) => unknown;
+      }
+    ).applyHit.bind(giant);
+    const attacker = giant.getUnit("a-m1")!;
+    const boss = giant.getUnit("e-m1")!;
+    const allyTwo = giant.getUnit("a-m2")!;
+    for (let n = 0; n < 7; n++) hit(attacker, boss, 0.01, false);
+    assert.ok(attacker.hp < attacker.stats.hp);
+    assert.ok(allyTwo.hp < allyTwo.stats.hp);
+
+    const necro = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+      dungeonBoss: { kind: "necro", unitId: "e-m1", abyss: true },
+    });
+    const necroHit = (
+      necro as unknown as {
+        applyHit: (
+          attacker: Unit,
+          target: Unit,
+          coeff: number,
+          summoner: boolean,
+        ) => unknown;
+      }
+    ).applyHit.bind(necro);
+    const necroBoss = necro.getUnit("e-m1")!;
+    const before = necroBoss.hp;
+    for (let n = 0; n < 7; n++) {
+      necroHit(necro.getUnit("a-m1")!, necroBoss, 0.4, false);
+    }
+    assert.equal(necroBoss.hp, before);
+    necroHit(necro.getUnit("a-m1")!, necroBoss, 0.4, false);
+    assert.ok(necroBoss.hp < before);
+
+    const dragon = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.99,
+      dungeonBoss: { kind: "dragon", unitId: "e-m1", abyss: true },
+    });
+    const dragonBoss = dragon.getUnit("e-m1")!;
+    dragonBoss.defDebuffPct = 0.5;
+    dragonBoss.defDebuffTicks = 2;
+    dragon.phase = "await_skill";
+    dragon.activeUnitId = dragonBoss.id;
+    dragon.useSkill({ targetId: "a-m1" });
+    assert.equal(dragonBoss.defDebuffPct, 0);
+    assert.equal(dragonBoss.defDebuffTicks, 0);
+  });
+
+  it("applies a Shield-set start shield only to its wearer", () => {
+    const units = roster();
+    units.find((u) => u.id === "a-m1")!.startShieldPct = 0.15;
+    units.push(
+      makeUnit({
+        id: "a-m2",
+        name: "UnshieldedAlly",
+        team: "ally",
+        kind: "monster",
+        element: "wind",
+        stats: { hp: 400, atk: 90, def: 30, spd: 80, critRate: 15, critDmg: 50 },
+        skillCoeff: 1,
+      }),
+    );
+    const b = new Battle({
+      boardSize: 5,
+      units,
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+    });
+    assert.equal(b.getUnit("a-m1")!.shieldHp, 45);
+    assert.equal(b.getUnit("a-m2")!.shieldHp ?? 0, 0);
+  });
+
   it("runs stone then skill on a turn", () => {
     const b = new Battle({
       boardSize: 5,
@@ -224,8 +331,11 @@ describe("Battle flow", () => {
     b.getUnit("a-m1")!.atb = 100;
     b.tickUntilReady();
     const mana0 = b.allySummoner.mana;
+    const amplify0 = b.currentAmplify();
     assert.equal(b.autoStone(), true);
     assert.ok(b.allySummoner.mana >= mana0 + 10);
+    assert.equal(b.currentAmplify(), amplify0);
+    assert.deepEqual(b.activeBoardBuffs("ally"), []);
     assert.match(b.log.join("\n"), /일반 소환: 마력/);
     const kinds = (b.lastStoneReport?.chips ?? []).map((c) => c.kind);
     assert.ok(kinds.includes("mana"));
@@ -240,6 +350,25 @@ describe("Battle flow", () => {
     b.getUnit("a-sum")!.atb = 100;
     b.tickUntilReady();
     assert.equal(b.phase, "await_skill");
+  });
+
+  it("does not turn shape completion into a combat buff", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      modules: { moduleB: true },
+      rng: () => 0.5,
+    });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    const amplify0 = b.currentAmplify();
+    assert.equal(b.playStone({ x: 0, y: 0 }), true);
+    assert.ok(b.lastStoneReport?.chips.some((chip) => chip.kind === "shape"));
+    assert.equal(b.currentAmplify(), amplify0);
+    assert.deepEqual(b.activeBoardBuffs("ally"), []);
+    assert.equal(b.getUnit("a-m1")!.shieldHp ?? 0, 0);
   });
 
   it("summoner skill when mana full hits all enemy summons", () => {
@@ -508,8 +637,7 @@ describe("Battle flow", () => {
       { id: "shield_core", x: 0, y: 0 },
     ];
     assert.equal(b.playStone({ x: 2, y: 2 }), true);
-    const mon = b.getUnit("a-m1")!;
-    assert.ok((mon.critCharm ?? 0) >= 55);
+    assert.equal(b.activeBoardBuffs("ally")[0]?.critRateBonus, 75);
     assert.match(b.log.join("\n"), /치명부적/);
     const critChips = b.lastStoneReport?.chips ?? [];
     assert.ok(critChips.some((c) => c.kind === "token" && c.id === "crit_charm"));
@@ -518,7 +646,9 @@ describe("Battle flow", () => {
     b.phase = "await_stone";
     b.activeUnitId = "a-m1";
     assert.equal(b.playStone({ x: 0, y: 0 }), true);
-    assert.ok((mon.shieldHp ?? 0) > 0);
+    const shieldBuff = b.activeBoardBuffs("ally")[0];
+    assert.ok((shieldBuff?.shieldByUnit?.["a-m1"] ?? 0) > 0);
+    assert.ok((shieldBuff?.shieldByUnit?.["a-sum"] ?? 0) > 0);
     assert.match(b.log.join("\n"), /실드핵/);
     const shieldChips = b.lastStoneReport?.chips ?? [];
     assert.ok(shieldChips.some((c) => c.kind === "token" && c.id === "shield_core"));
@@ -583,6 +713,7 @@ describe("Battle flow", () => {
     const before = b.allySummoner.mana;
     assert.equal(b.playStone({ x: 1, y: 1 }), true);
     assert.ok(b.allySummoner.mana > before + 20);
+    assert.equal(b.activeBoardBuffs("ally")[0]?.damageBonus, 0.14);
     assert.match(b.log.join("\n"), /사석자석/);
   });
 
@@ -614,7 +745,8 @@ describe("Battle flow", () => {
     const before = ally.atb;
     assert.equal(b.playStone({ x: 2, y: 1 }), true);
     assert.ok(ally.atb >= before + 45);
-    assert.equal(b.getUnit("a-m1")!.spdBoostTurns, 3);
+    assert.equal(b.activeBoardBuffs("ally")[0]?.spdPct, 0.4);
+    assert.ok(b.getUnit("a-sum")!.atb >= 50);
     assert.match(b.log.join("\n"), /행마모래/);
   });
 
@@ -638,7 +770,7 @@ describe("Battle flow", () => {
     assert.equal(sealed.remaining, 3);
   });
 
-  it("element ward boosts amplify on matching-element stones", () => {
+  it("element ward grants a team buff only until the next stone", () => {
     const b = new Battle({
       boardSize: 5,
       units: roster(),
@@ -651,18 +783,16 @@ describe("Battle flow", () => {
     b.tokens = [{ id: "element_ward", x: 1, y: 1 }];
     const amp0 = b.amplify;
     assert.equal(b.playStone({ x: 1, y: 1 }), true);
-    assert.ok(b.amplify > amp0);
-    assert.equal(b.allySummoner.elementWardElement, "fire");
-    assert.equal(b.allySummoner.elementWardCharges, 3);
+    assert.equal(b.amplify, amp0);
+    assert.equal(b.activeBoardBuffs("ally")[0]?.damageBonus, 0.08);
     assert.match(b.log.join("\n"), /속성의뢰/);
 
     b.phase = "await_stone";
     b.activeUnitId = "a-m1";
     const amp1 = b.amplify;
-    const charges = b.allySummoner.elementWardCharges!;
     assert.equal(b.playStone({ x: 3, y: 3 }), true);
-    assert.ok(b.amplify > amp1);
-    assert.equal(b.allySummoner.elementWardCharges, charges - 1);
+    assert.equal(b.amplify, amp1);
+    assert.deepEqual(b.activeBoardBuffs("ally"), []);
   });
 
   it("bait stone buffs picker and lures enemy AI", () => {
@@ -677,8 +807,9 @@ describe("Battle flow", () => {
     b.tickUntilReady();
     b.tokens = [{ id: "bait_stone", x: 2, y: 2 }];
     assert.equal(b.playStone({ x: 2, y: 2 }), true);
-    const mon = b.getUnit("a-m1")!;
-    assert.ok((mon.shieldHp ?? 0) > 0);
+    const buff = b.activeBoardBuffs("ally")[0];
+    assert.ok((buff?.shieldByUnit?.["a-m1"] ?? 0) > 0);
+    assert.ok((buff?.shieldByUnit?.["a-sum"] ?? 0) > 0);
     assert.ok(b.baitLure);
     assert.equal(b.baitLure!.targetTeam, "enemy");
     assert.match(b.log.join("\n"), /미끼돌/);
@@ -860,13 +991,25 @@ describe("Battle flow", () => {
     const before = b.allySummoner.mana;
     assert.equal(b.playStone({ x: 2, y: 3 }), true);
     assert.ok(b.allySummoner.mana > before);
-    // switch passive and re-test crit bonus path via direct assign after capture
-    const unit = b.getUnit("a-m1")!;
-    unit.stonePassive = "capture_crit";
-    unit.critDmgBonus = undefined;
-    // force another capture setup is heavy; simulate passive apply
-    unit.critDmgBonus = 10;
-    assert.equal(unit.critDmgBonus, 10);
+
+    const critUnits = roster();
+    critUnits.find((u) => u.id === "a-m1")!.stonePassive = "capture_crit";
+    const critBattle = new Battle({
+      boardSize: 5,
+      units: critUnits,
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    critBattle.board.play("white", { x: 2, y: 2 });
+    critBattle.board.play("black", { x: 1, y: 2 });
+    critBattle.board.play("black", { x: 3, y: 2 });
+    critBattle.board.play("black", { x: 2, y: 1 });
+    for (const u of critBattle.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    critBattle.tickUntilReady();
+    assert.equal(critBattle.playStone({ x: 2, y: 3 }), true);
+    assert.equal(critBattle.activeBoardBuffs("ally")[0]?.critDmgBonus, 10);
+    assert.equal(critBattle.getUnit("a-m1")!.critDmgBonus ?? 0, 0);
   });
 
   it("suggest_plus returns four stone candidates", () => {
@@ -1006,89 +1149,53 @@ describe("Battle flow", () => {
     b.lastStoneTeam = "enemy";
     b.tickUntilReady();
     const amp0 = b.amplify;
-    const mana0 = b.allySummoner.mana;
     assert.equal(b.playStone(top), true);
     assert.equal(b.openingBonusPending, false);
-    assert.ok(b.amplify >= amp0 + 0.03 - 1e-9);
-    assert.ok(b.allySummoner.mana >= mana0 + 8);
-    assert.match(b.log.join("\n"), /포석 보너스 \(중앙 국면\)/);
+    assert.equal(b.amplify, amp0);
+    assert.match(b.log.join("\n"), /포석 안내 종료/);
   });
 
-  it("capture grants N×damage next-monster bonus and manaMax×frac×N", () => {
+  it("keeps capture power for every ally action through the next placement", () => {
     const b = new Battle({
-      boardSize: 5,
-      units: roster(),
-      allySummoner: summonerState("a-sum"),
-      enemySummoner: summonerState("e-sum"),
-      rng: () => 0.5,
-    });
-    // Surround white stones so black capture yields 3
-    const board = b.board;
-    board.play("white", { x: 2, y: 1 });
-    board.play("white", { x: 1, y: 2 });
-    board.play("white", { x: 3, y: 2 });
-    board.play("black", { x: 2, y: 0 });
-    board.play("black", { x: 0, y: 2 });
-    board.play("black", { x: 4, y: 2 });
-    board.play("black", { x: 2, y: 3 });
-    // One more white in a group of 1 that we can capture with 1 move
-    // Simpler: play a capture of 1 via standard atari
-    const b2 = new Battle({
-      boardSize: 5,
-      units: roster(),
-      allySummoner: summonerState("a-sum"),
-      enemySummoner: summonerState("e-sum"),
-      rng: () => 0.5,
-    });
-    // White stone at (1,0) with liberties; black surrounds for capture of 1
-    b2.board.play("white", { x: 0, y: 0 });
-    b2.board.play("black", { x: 1, y: 0 });
-    b2.board.play("black", { x: 0, y: 1 });
-    // Capture at... white at corner has liberty? Actually (0,0) white needs (1,0) and (0,1) taken - already done, so white is already captured? play might have auto-captured.
-    // Reset approach: force capture count via direct pending + mana path unit test style
-    for (const u of b2.units) u.atb = u.id === "a-m1" ? 100 : 0;
-    b2.tickUntilReady();
-    const manaBefore = b2.allySummoner.mana;
-    // Place on empty that captures: after black at 1,0 and 0,1, white at 0,0 should already be dead
-    // Use playStone on a fresh isolated capture setup
-    const b3 = new Battle({
       boardSize: 7,
       units: roster(),
       allySummoner: summonerState("a-sum"),
       enemySummoner: summonerState("e-sum"),
       rng: () => 0.5,
     });
-    // Classic: white single at 2,2; black surrounds N/E/W, capture from south
-    b3.board.play("white", { x: 2, y: 2 });
-    b3.board.play("black", { x: 2, y: 1 });
-    b3.board.play("black", { x: 1, y: 2 });
-    b3.board.play("black", { x: 3, y: 2 });
-    for (const u of b3.units) u.atb = u.id === "a-m1" ? 100 : 0;
-    b3.tickUntilReady();
-    const m0 = b3.allySummoner.mana;
-    assert.equal(b3.playStone({ x: 2, y: 3 }), true);
-    assert.equal(b3.pendingCaptureDamageBonus.ally, 0.18);
-    assert.ok(b3.allySummoner.mana >= m0 + 20); // 20% of 100
-    assert.equal(b3.skillAmplifyBonus, 0);
-    assert.equal(b3.lastStoneReport?.showResultSheet, true);
-    const captureChips = (b3.lastStoneReport?.chips ?? []).filter(
+    b.getUnit("e-m1")!.stats.hp = 5000;
+    b.getUnit("e-m1")!.hp = 5000;
+    b.board.play("white", { x: 2, y: 2 });
+    b.board.play("black", { x: 2, y: 1 });
+    b.board.play("black", { x: 1, y: 2 });
+    b.board.play("black", { x: 3, y: 2 });
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    const mana0 = b.allySummoner.mana;
+    assert.equal(b.playStone({ x: 2, y: 3 }), true);
+    assert.equal(b.activeBoardBuffs("ally")[0]?.damageBonus, 0.18);
+    assert.ok(b.allySummoner.mana >= mana0 + 20);
+    const captureChips = (b.lastStoneReport?.chips ?? []).filter(
       (c) => c.kind === "atk" || c.kind === "spd" || c.kind === "crit" || c.kind === "capture",
     );
     assert.equal(captureChips.length, 1);
     assert.equal(captureChips[0]?.kind, "capture");
-    const monAfterCap = b3.getUnit("a-m1")!;
-    assert.equal(monAfterCap.atkBuffPct ?? 0, 0);
-    assert.equal(monAfterCap.critRateBuff ?? 0, 0);
-    const hp0 = b3.getUnit("e-m1")!.hp;
-    const hits = b3.useSkill({ targetId: "e-m1" });
-    assert.ok(hits[0]!.damage > 0);
-    assert.equal(b3.pendingCaptureDamageBonus.ally, 0);
-    assert.ok(b3.getUnit("e-m1")!.hp < hp0);
-    // Second hit should not keep the bonus
-    for (const u of b3.units) u.atb = u.id === "a-m1" ? 100 : 0;
-    b3.tickUntilReady();
-    b3.autoStone();
-    assert.equal(b3.pendingCaptureDamageBonus.ally, 0);
+    b.useSkill({ targetId: "e-m1" });
+    assert.equal(b.activeBoardBuffs("ally")[0]?.damageBonus, 0.18);
+
+    b.allySummoner.mana = 100;
+    for (const u of b.units) u.atb = u.id === "a-sum" ? 100 : 0;
+    assert.equal(b.tickUntilReady()?.id, "a-sum");
+    assert.equal(b.phase, "await_skill");
+    assert.ok(b.useSkill({ summonerSkill: "open" }).length > 0);
+    assert.equal(b.activeBoardBuffs("ally")[0]?.damageBonus, 0.18);
+
+    b.lastStoneTeam = "enemy";
+    for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
+    b.tickUntilReady();
+    assert.equal(b.phase, "await_stone");
+    assert.equal(b.autoStone(), true);
+    assert.deepEqual(b.activeBoardBuffs("ally"), []);
   });
 
   it("composed ult refunds mana and buffs when tree nodes unlocked", () => {

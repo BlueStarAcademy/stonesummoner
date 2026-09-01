@@ -9975,6 +9975,50 @@ button.battle-unit {
   box-shadow: 0 2px 8px #0006;
 }
 
+.battle-board-buffs {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.battle-board-buffs-team {
+  display: flex;
+  gap: 3px;
+}
+
+.battle-board-buff {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 1px solid #dbb55c88;
+  border-radius: 999px;
+  background: #181321e6;
+  color: #f6dfa3;
+  box-shadow: 0 1px 5px #0008;
+  font-size: 0.58rem;
+  white-space: nowrap;
+}
+
+.battle-board-buff.is-item {
+  border-color: #6ec6c688;
+  color: #c6ffff;
+}
+
+.battle-board-buff b {
+  font-size: inherit;
+}
+
+.battle-board-buffs-team.is-enemy .battle-board-buff {
+  filter: saturate(0.75);
+  opacity: 0.82;
+}
+
 .battle-hud-actions {
   display: flex;
   align-items: center;

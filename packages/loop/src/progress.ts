@@ -4,7 +4,8 @@ import {
   CAIROS_DRAGON_STAGES,
   CAIROS_GIANT_STAGES,
   CAIROS_NECRO_STAGES,
-  CHALLENGE_TOWER_STAGES,
+  CHALLENGE_TOWER_HARD_STAGES,
+  CHALLENGE_TOWER_NORMAL_STAGES,
   EQUIP_STAGES,
   MAIN_QUEST_AREA_COUNT,
   MAIN_QUEST_STAGES,
@@ -92,7 +93,9 @@ export function stageProgressionChain(stage: StageDef): StageDef[] | null {
     case "trial":
       return TRIAL_STAGES;
     case "challenge_tower":
-      return CHALLENGE_TOWER_STAGES;
+      return stage.challengeTowerDifficulty === "hard"
+        ? CHALLENGE_TOWER_HARD_STAGES
+        : CHALLENGE_TOWER_NORMAL_STAGES;
     case "equip":
       return EQUIP_STAGES;
     case "weekday":
@@ -190,7 +193,8 @@ export function isStageUnlockedForDifficulty(
       return chainUnlocked(save, stagesForMap(stage.map), stageId);
     }
     case "depth": {
-      if (!save.clearedStages.includes("garen_1_5")) return false;
+      // Modern Cairos opens after the third scenario area (Kabir equivalent).
+      if (!save.clearedStages.includes("ruins_3_7")) return false;
       const chain = cairosChainFor(stageId);
       if (!chain) return true;
       return chainUnlocked(save, chain, stageId);
@@ -252,6 +256,9 @@ export function expForStage(
   stage: StageDef,
   difficulty: ScenarioDifficulty = "normal",
 ): number {
+  const explicit = stage.difficultyBalance?.[difficulty]?.accountExp;
+  if (explicit != null) return explicit;
+  if (stage.accountExpReward != null) return stage.accountExpReward;
   const base = 40 + stage.map * 8 + stage.stage * 20;
   if (stage.mode === "scenario") {
     const multiplier =
@@ -266,6 +273,25 @@ export function expForStage(
   if (stage.mode === "world_arena") return base + 40;
   if (stage.mode === "guild_raid") return base + 80;
   return base;
+}
+
+/** Total monster EXP pool for a clear, divided among deployed monsters. */
+export function monsterExpPoolForStage(
+  stage: StageDef,
+  difficulty: ScenarioDifficulty = "normal",
+): number {
+  const explicit = stage.difficultyBalance?.[difficulty]?.monsterExpPool;
+  if (explicit != null) return explicit;
+  if (stage.monsterExpPool != null) return stage.monsterExpPool;
+  return Math.max(1, Math.round(expForStage(stage, difficulty) * 3));
+}
+
+/** Entry energy from the versioned profile, without formula multipliers. */
+export function energyCostForStage(
+  stage: StageDef,
+  difficulty: ScenarioDifficulty = "normal",
+): number {
+  return stage.difficultyBalance?.[difficulty]?.energyCost ?? stage.energyCost;
 }
 
 export function listAllStages(): StageDef[] {

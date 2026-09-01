@@ -57,6 +57,7 @@ import type {
   SummonerState,
   TeamId,
   Unit,
+  BoardTeamBuff,
 } from "./types.js";
 import {
   randomVictoryPoint,
@@ -136,6 +137,12 @@ export interface BattleConfig {
   modules?: BattleModules;
   /** Module E: affinity element for this battle. */
   circleElement?: Element;
+  /** Modern Cairos boss rules, independent of StoneSummoner board modules. */
+  dungeonBoss?: {
+    kind: "giant" | "dragon" | "necro";
+    unitId: string;
+    abyss: boolean;
+  };
 }
 
 export interface SkillResult {
@@ -222,13 +229,10 @@ export class Battle {
   enemySummoner: SummonerState;
   amplify = 1;
   skillAmplifyBonus = 0;
-  /**
-   * Next monster hit damage mul bonus per team (from captures: N×CAPTURE_DAMAGE_PER_STONE).
-   * Consumed on the next monster `applyHit` for that team.
-   */
-  pendingCaptureDamageBonus: Record<TeamId, number> = {
-    ally: 0,
-    enemy: 0,
+  /** Capture/item effects active until immediately before this team's next stone. */
+  boardTeamBuffs: Record<TeamId, BoardTeamBuff[]> = {
+    ally: [],
+    enemy: [],
   };
   phase: BattlePhase = "idle";
   activeUnitId: string | null = null;
@@ -244,6 +248,9 @@ export class Battle {
   victoryPoint: Point | null;
   manaSealed: boolean;
   victoryPointClaimed: boolean;
+  private readonly dungeonBoss: BattleConfig["dungeonBoss"];
+  private giantHitCounter = 0;
+  private necroBarrierHits = 0;
   /** Random 화점 seats for this fight (shown from turn 1). */
   hoshiPoints: Point[] = [];
   /** Module G: 묘수 hits toward mission. */
@@ -325,6 +332,7 @@ export class Battle {
     this.inscriptionItemSpawn = config.inscriptionItemSpawnBonus ?? 0;
     this.rng = config.rng ?? Math.random;
     this.modules = config.modules ?? {};
+    this.dungeonBoss = config.dungeonBoss;
     this.circleElement =
       config.circleElement ??
       (this.modules.moduleE ? pickCircleElement(this.rng) : null);
@@ -368,31 +376,96 @@ export class Battle {
       this.log.push(`쌍국: A국·B국 — ${DUAL_BOARD_SWITCH_INTERVAL}수마다 전환`);
     }
     this.applySymbolStartShields();
+    this.resetDungeonBossState();
   }
 
-  /** 보강: pool wearers' HP×pct onto every ally monster for N turns. */
+  private resetDungeonBossState(): void {
+    this.giantHitCounter = 0;
+    const boss = this.dungeonBoss
+      ? this.getUnit(this.dungeonBoss.unitId)
+      : undefined;
+    this.necroBarrierHits =
+      boss && this.dungeonBoss?.kind === "necro"
+        ? this.dungeonBoss.abyss
+          ? 7
+          : 5
+        : 0;
+  }
+
+  private applyDungeonBossTurnRule(unit: Unit): void {
+    if (!this.dungeonBoss || unit.id !== this.dungeonBoss.unitId) return;
+    if (this.dungeonBoss.kind !== "dragon") return;
+    unit.atkDebuffPct = 0;
+    unit.atkDebuffTicks = 0;
+    unit.defDebuffPct = 0;
+    unit.defDebuffTicks = 0;
+    unit.spdDebuffPct = 0;
+    unit.spdDebuffTicks = 0;
+    unit.dotAtkCoeff = 0;
+    unit.dotTicks = 0;
+    unit.stunnedTurns = 0;
+    unit.provokeTargetId = undefined;
+    unit.provokeTicks = 0;
+    this.log.push(`용의 정화`);
+  }
+
+  /** 보강: each completed set shields only the monster wearing it. */
   private applySymbolStartShields(): void {
     for (const team of ["ally", "enemy"] as const) {
       const mons = this.units.filter(
         (u) => u.alive && u.team === team && u.kind === "monster",
       );
-      const pool = mons.reduce(
-        (sum, u) => sum + Math.round((u.startShieldPct ?? 0) * u.stats.hp),
-        0,
-      );
-      if (pool <= 0) continue;
-      const turns = Math.max(
-        ...mons.map((u) => (u.startShieldPct ? 3 : 0)),
-        0,
-      );
       for (const u of mons) {
-        u.shieldHp = (u.shieldHp ?? 0) + pool;
-        u.shieldTurns = Math.max(u.shieldTurns ?? 0, turns);
+        const shield = Math.round((u.startShieldPct ?? 0) * u.stats.hp);
+        if (shield <= 0) continue;
+        u.shieldHp = (u.shieldHp ?? 0) + shield;
+        u.shieldTurns = Math.max(u.shieldTurns ?? 0, 3);
+        u.shieldStatusVisible = false;
+        this.log.push(`보강 실드 (${u.name} +${shield} · 3턴)`);
       }
-      this.log.push(
-        `보강 실드 (${team === "ally" ? "아군" : "적군"} +${pool} · ${turns}턴)`,
-      );
     }
+  }
+
+  activeBoardBuffs(team: TeamId): readonly BoardTeamBuff[] {
+    return this.boardTeamBuffs[team];
+  }
+
+  private addBoardTeamBuff(team: TeamId, buff: BoardTeamBuff): void {
+    this.boardTeamBuffs[team] = [
+      ...this.boardTeamBuffs[team].filter((item) => item.id !== buff.id),
+      buff,
+    ];
+  }
+
+  private clearBoardTeamBuffs(team: TeamId): void {
+    if (this.boardTeamBuffs[team].length === 0) return;
+    this.boardTeamBuffs[team] = [];
+    this.log.push(`보드 버프 종료 (${team})`);
+  }
+
+  private boardBuffTotals(team: TeamId): {
+    damageBonus: number;
+    critRateBonus: number;
+    critDmgBonus: number;
+    spdPct: number;
+  } {
+    return this.boardTeamBuffs[team].reduce(
+      (out, buff) => ({
+        damageBonus: out.damageBonus + (buff.damageBonus ?? 0),
+        critRateBonus: out.critRateBonus + (buff.critRateBonus ?? 0),
+        critDmgBonus: out.critDmgBonus + (buff.critDmgBonus ?? 0),
+        spdPct: out.spdPct + (buff.spdPct ?? 0),
+      }),
+      { damageBonus: 0, critRateBonus: 0, critDmgBonus: 0, spdPct: 0 },
+    );
+  }
+
+  private boardShieldForTeam(team: TeamId, pct: number): Record<string, number> {
+    return Object.fromEntries(
+      this.units
+        .filter((u) => u.alive && u.team === team)
+        .map((u) => [u.id, Math.round(u.stats.hp * pct)]),
+    );
   }
 
   get boardLabel(): string {
@@ -463,7 +536,8 @@ export class Battle {
       this.regenMana();
       for (const u of this.units) {
         if (!u.alive) continue;
-        const spdMul = (u.spdBoostTurns ?? 0) > 0 ? 1.4 : 1;
+        const boardSpd = this.boardBuffTotals(u.team).spdPct;
+        const spdMul = ((u.spdBoostTurns ?? 0) > 0 ? 1.4 : 1) * (1 + boardSpd);
         const spdBuff = 1 + (u.spdBuffPct ?? 0);
         u.atb += u.stats.spd * 0.1 * spdMul * spdBuff;
       }
@@ -668,7 +742,11 @@ export class Battle {
     const chips: StoneReportChip[] = [{ kind: "token", id: token.id }];
     if (token.id === "crit_charm") {
       const bonus = unit.stonePassive === "crit_charm_plus" ? 75 * 2 : 75;
-      unit.critCharm = (unit.critCharm ?? 0) + bonus;
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        critRateBonus: bonus,
+      });
       chips.push({ kind: "crit", n: bonus });
       this.log.push(
         `${unit.name} 획득 ${name} (치명↑${unit.stonePassive === "crit_charm_plus" ? "×2" : ""})`,
@@ -676,10 +754,15 @@ export class Battle {
       return chips;
     }
     if (token.id === "shield_core") {
-      const shield = Math.round(unit.stats.hp * 0.28);
-      unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+      const shieldByUnit = this.boardShieldForTeam(unit.team, 0.28);
+      const shield = Object.values(shieldByUnit).reduce((sum, n) => sum + n, 0);
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        shieldByUnit,
+      });
       chips.push({ kind: "shield", n: shield });
-      this.log.push(`${unit.name} 획득 ${name} (실드 +${shield})`);
+      this.log.push(`${unit.name} 획득 ${name} (아군 실드 +${shield})`);
       if (unit.stonePassive === "shield_core_heal") {
         const heal = Math.round(unit.stats.hp * 0.12);
         unit.hp = Math.min(unit.stats.hp, unit.hp + heal);
@@ -691,11 +774,15 @@ export class Battle {
     if (token.id === "stride_sand") {
       let boosted = 0;
       for (const u of this.units) {
-        if (!u.alive || u.team !== unit.team || u.kind !== "monster") continue;
+        if (!u.alive || u.team !== unit.team) continue;
         u.atb = Math.min(ATB_THRESHOLD, u.atb + 50);
         boosted++;
       }
-      unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) + 3;
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        spdPct: 0.4,
+      });
       chips.push({ kind: "spd", n: boosted });
       this.log.push(
         `${unit.name} 획득 ${name} (아군 ATB↑×${boosted} · 공속 2행동)`,
@@ -711,28 +798,26 @@ export class Battle {
       return chips;
     }
     if (token.id === "element_ward") {
-      const sm = this.summonerOf(unit.team);
-      sm.elementWardElement = unit.element;
-      sm.elementWardCharges = 3;
-      this.amplify = clampAmplify(
-        this.amplify + 0.08,
-        this.phaseAmplifyCap(),
-        this.powerGapCap,
-      );
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        damageBonus: 0.08,
+      });
       chips.push({ kind: "atk", n: 8 });
       this.log.push(
-        `${unit.name} 획득 ${name} (${unit.element} · 동속성 3수 Amp)`,
+        `${unit.name} 획득 ${name} (아군 피해 +8%)`,
       );
       return chips;
     }
     if (token.id === "bait_stone") {
-      const shield = Math.round(unit.stats.hp * 0.15);
-      unit.shieldHp = (unit.shieldHp ?? 0) + shield;
-      this.amplify = clampAmplify(
-        this.amplify + 0.05,
-        this.phaseAmplifyCap(),
-        this.powerGapCap,
-      );
+      const shieldByUnit = this.boardShieldForTeam(unit.team, 0.15);
+      const shield = Object.values(shieldByUnit).reduce((sum, n) => sum + n, 0);
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        damageBonus: 0.05,
+        shieldByUnit,
+      });
       const lure = this.placeBaitLure({ x: token.x, y: token.y }, unit.team);
       chips.push({ kind: "shield", n: shield });
       this.log.push(
@@ -742,11 +827,11 @@ export class Battle {
     }
     if (token.id === "transform_dust") {
       const flipped = this.applyTransformDust({ x: token.x, y: token.y });
-      this.amplify = clampAmplify(
-        this.amplify + 0.06 + flipped * 0.03,
-        this.phaseAmplifyCap(),
-        this.powerGapCap,
-      );
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        damageBonus: 0.06 + flipped * 0.03,
+      });
       chips.push({ kind: "dmg", n: flipped });
       this.log.push(
         `${unit.name} 획득 ${name} (인접 변환 ${flipped})`,
@@ -772,12 +857,11 @@ export class Battle {
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
       (1 + this.summonerOf(unit.team).boardSense);
     const gains = gainsForBoardEvent("item_magnet", 0, manaMul);
-    this.amplify = clampAmplify(
-      this.amplify + gains.amplifyDelta,
-      this.phaseAmplifyCap(),
-      this.powerGapCap,
-    );
-    this.skillAmplifyBonus += gains.skillAmplifyBonus;
+    this.addBoardTeamBuff(unit.team, {
+      id: token.id,
+      source: "item",
+      damageBonus: gains.skillAmplifyBonus,
+    });
     const sm = this.summonerOf(unit.team);
     const mana = Math.round(gains.mana);
     sm.mana = Math.min(sm.manaMax, sm.mana + gains.mana);
@@ -963,9 +1047,12 @@ export class Battle {
       return false;
     }
 
+    // The old cycle ends only once the team's next placement is known legal.
+    this.clearBoardTeamBuffs(unit.team);
     this.lastStoneReport = null;
     const chips: StoneReportChip[] = [];
     let claimedVictory = false;
+    const picked = this.tokenAt(point.x, point.y);
 
     const kind = classifyCapture(result.capturedCount);
     let manaMul =
@@ -983,44 +1070,32 @@ export class Battle {
 
     let ampDelta = gains.amplifyDelta;
     let manaGain = gains.mana;
+    let capturePassiveDamage = 0;
     if (unit.stonePassive === "capture_amp" && result.capturedCount > 0) {
-      ampDelta += 0.04;
+      capturePassiveDamage += 0.04;
     }
-    if (unit.stonePassive === "stone_amp_proc" && this.rng() < 0.15) {
-      ampDelta += 0.06;
+    if (
+      unit.stonePassive === "stone_amp_proc" &&
+      result.capturedCount > 0 &&
+      this.rng() < 0.15
+    ) {
+      capturePassiveDamage += 0.06;
       this.log.push(`스톤패시브: ${unit.name} 연타착수`);
     }
 
     if (this.modules.moduleE) {
       if (unit.kind === "summoner") {
         manaGain += 12;
-        ampDelta += 0.02;
         this.log.push(`소환사 착수 보너스`);
       }
       if (this.circleElement && unit.element === this.circleElement) {
-        ampDelta += 0.04;
         this.log.push(`속성 테두리 (${unit.element})`);
       }
       if (
         (unit.element === "light" || unit.element === "dark") &&
         this.circle.boardPhase >= 1
       ) {
-        ampDelta += 0.03;
         this.log.push(`이중층 (${unit.element})`);
-      }
-    }
-
-    {
-      const sm = this.summonerOf(unit.team);
-      if (
-        (sm.elementWardCharges ?? 0) > 0 &&
-        sm.elementWardElement === unit.element
-      ) {
-        ampDelta += 0.1;
-        sm.elementWardCharges = (sm.elementWardCharges ?? 0) - 1;
-        this.log.push(
-          `속성의뢰 (${unit.element}) 잔여 ${sm.elementWardCharges}`,
-        );
       }
     }
 
@@ -1036,7 +1111,6 @@ export class Battle {
       if (!this.brilliantDone && this.brilliantCount >= this.brilliantGoal) {
         this.brilliantDone = true;
         manaGain += 25;
-        ampDelta += 0.05;
         this.log.push(`묘수 미션 완료`);
       }
     }
@@ -1050,7 +1124,6 @@ export class Battle {
     ) {
       this.victoryPointClaimed = true;
       this.manaSealed = false;
-      ampDelta += 0.12;
       manaGain += 30;
       claimedVictory = true;
       chips.push({ kind: "victory", n: 30 });
@@ -1074,10 +1147,8 @@ export class Battle {
     }
 
     if (this.openingBonusPending) {
-      ampDelta += 0.03;
-      manaGain += 8;
       this.openingBonusPending = false;
-      this.log.push(`포석 보너스 (중앙 국면)`);
+      this.log.push(`포석 안내 종료`);
     }
 
     this.amplify = clampAmplify(
@@ -1085,19 +1156,23 @@ export class Battle {
       this.phaseAmplifyCap(),
       this.powerGapCap,
     );
-    // Capture no longer grants skillAmplifyBonus — N×10% goes to next monster hit.
-    this.skillAmplifyBonus = gains.skillAmplifyBonus;
+    this.skillAmplifyBonus = 0;
 
     const sm = this.summonerOf(unit.team);
     if (gains.captureDamageBonus > 0) {
-      // One capture payoff only: next monster hit damage (no stacked atk/crit auras).
-      this.pendingCaptureDamageBonus[unit.team] = gains.captureDamageBonus;
+      this.addBoardTeamBuff(unit.team, {
+        id: "capture",
+        source: "capture",
+        damageBonus: gains.captureDamageBonus + capturePassiveDamage,
+        critDmgBonus:
+          unit.stonePassive === "capture_crit" ? 10 : undefined,
+      });
       chips.push({
         kind: "capture",
         n: Math.round(gains.captureDamageBonus * 100),
       });
       this.log.push(
-        `따냄 버프: 다음 소환수 피해 +${Math.round(gains.captureDamageBonus * 100)}%`,
+        `따냄 버프: 아군 피해 +${Math.round(gains.captureDamageBonus * 100)}%`,
       );
     }
     if (gains.captureManaFrac > 0) {
@@ -1118,40 +1193,16 @@ export class Battle {
         this.hoshiPoints,
       );
       for (const sh of shapes) {
-        this.amplify = clampAmplify(
-          this.amplify + sh.amplifyDelta,
-          this.phaseAmplifyCap(),
-          this.powerGapCap,
-        );
-        if (sh.skillAmplifyBonus) {
-          this.skillAmplifyBonus += sh.skillAmplifyBonus;
-        }
         const shapeMana = sh.mana * manaMul;
         if (shapeMana > 0) manaGain += shapeMana;
         sm.mana = Math.min(sm.manaMax, sm.mana + shapeMana);
-        if (sh.shieldPct) {
-          const shield = Math.round(unit.stats.hp * sh.shieldPct);
-          unit.shieldHp = (unit.shieldHp ?? 0) + shield;
-          chips.push({ kind: "shape", id: sh.id });
-          chips.push({ kind: "shield", n: shield });
-          this.log.push(`형상 ${sh.labelKo}: 실드 +${shield}`);
-        } else {
-          chips.push({ kind: "shape", id: sh.id });
-          this.log.push(`형상 ${sh.labelKo}`);
-        }
-        // Shape amplify/mana/shield only — no stacked combat stat auras on place.
-        if (sh.id === "axis") {
-          unit.cutImmune = Math.max(unit.cutImmune ?? 0, 1);
-          this.log.push(`형상 축 연결: 절단 면역 1회`);
-        }
+        chips.push({ kind: "shape", id: sh.id });
+        this.log.push(`형상 ${sh.labelKo}`);
       }
     }
 
-    if (unit.stonePassive === "capture_crit" && result.capturedCount > 0) {
-      unit.critDmgBonus = (unit.critDmgBonus ?? 0) + 10;
-      this.log.push(`스톤패시브: ${unit.name} 치피 +10%`);
-    }
-    if (unit.stonePassive === "stone_ally_atb") {
+    const earnedBoardEffect = result.capturedCount > 0 || !!picked;
+    if (earnedBoardEffect && unit.stonePassive === "stone_ally_atb") {
       const ally = this.units.find(
         (u) =>
           u.alive &&
@@ -1164,7 +1215,7 @@ export class Battle {
         this.log.push(`스톤패시브: ${ally.name} ATB +5`);
       }
     }
-    if (unit.stonePassive === "stone_ally_heal") {
+    if (earnedBoardEffect && unit.stonePassive === "stone_ally_heal") {
       const ally =
         this.units
           .filter(
@@ -1177,7 +1228,6 @@ export class Battle {
       this.log.push(`스톤패시브: ${ally.name} 회복 +${heal}`);
     }
 
-    const picked = this.tokenAt(point.x, point.y);
     if (picked) {
       chips.push(...this.applyTokenPickup(unit, picked));
     }
@@ -1301,15 +1351,20 @@ export class Battle {
       sm.mana = Math.min(sm.manaMax, sm.mana + 40);
       this.log.push(`사석상점: 마나 충전 (+40)`);
     } else if (choice === "amplify") {
-      this.amplify = clampAmplify(
-        this.amplify + 0.08,
-        this.phaseAmplifyCap(),
-        this.powerGapCap,
-      );
+      this.addBoardTeamBuff(unit.team, {
+        id: "capture-shop-amplify",
+        source: "capture",
+        damageBonus: 0.08,
+      });
       this.log.push(`사석상점: Amplify 강화`);
     } else {
-      const shield = Math.round(unit.stats.hp * 0.12);
-      unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+      const shieldByUnit = this.boardShieldForTeam(unit.team, 0.12);
+      const shield = Object.values(shieldByUnit).reduce((sum, n) => sum + n, 0);
+      this.addBoardTeamBuff(unit.team, {
+        id: "capture-shop-clean",
+        source: "capture",
+        shieldByUnit,
+      });
       sm.mana = Math.min(sm.manaMax, sm.mana + 10);
       this.log.push(`사석상점: 청소 실드 +${shield}`);
     }
@@ -1550,6 +1605,7 @@ export class Battle {
         for (const u of aliveSummons(this.units, unit.team)) {
           const amount = Math.round(u.stats.hp * power);
           u.shieldHp = (u.shieldHp ?? 0) + amount;
+          u.shieldStatusVisible = true;
         }
         break;
       }
@@ -1733,6 +1789,7 @@ export class Battle {
     if (this.phase !== "await_skill" || !this.activeUnitId) return [];
     const unit = this.getUnit(this.activeUnitId);
     if (!unit) return [];
+    this.applyDungeonBossTurnRule(unit);
     this.lastSkillPresentation = null;
 
     const enemies = aliveSummons(
@@ -1811,6 +1868,7 @@ export class Battle {
         if (!u.alive || u.team !== unit.team || u.kind !== "monster") continue;
         const amount = Math.round(u.stats.hp * 0.18);
         u.shieldHp = (u.shieldHp ?? 0) + amount;
+        u.shieldStatusVisible = true;
         shielded += 1;
         totalShield += amount;
       }
@@ -2024,6 +2082,7 @@ export class Battle {
         for (const t of targets) {
           const amount = Math.round(t.stats.hp * effect.coeff);
           t.shieldHp = (t.shieldHp ?? 0) + amount;
+          t.shieldStatusVisible = true;
           this.log.push(`${t.name} 실드 +${amount}`);
           results.push({
             attackerId: unit.id,
@@ -2324,9 +2383,11 @@ export class Battle {
       };
     }
 
-    const critBonus = attacker.critCharm ?? 0;
+    const boardBuff = this.boardBuffTotals(attacker.team);
+    const critBonus = (attacker.critCharm ?? 0) + boardBuff.critRateBonus;
     if (critBonus > 0) attacker.critCharm = 0;
-    const critDmgExtra = attacker.critDmgBonus ?? 0;
+    const critDmgExtra =
+      (attacker.critDmgBonus ?? 0) + boardBuff.critDmgBonus;
     if (critDmgExtra > 0) attacker.critDmgBonus = 0;
 
     let incomingMul = target.damageTakenMul ?? 1;
@@ -2361,19 +2422,27 @@ export class Battle {
       rng: this.rng,
     });
 
-    let captureMul = 1;
-    if (attacker.kind === "monster") {
-      const bonus = this.pendingCaptureDamageBonus[attacker.team] ?? 0;
-      if (bonus > 0) {
-        captureMul = 1 + bonus;
-        this.pendingCaptureDamageBonus[attacker.team] = 0;
-        this.log.push(
-          `따냄 추가피해 ×${captureMul.toFixed(2)} (${attacker.name})`,
-        );
-      }
-    }
+    const captureMul = 1 + boardBuff.damageBonus;
 
     let remaining = Math.round(damage * incomingMul * captureMul);
+    const isDungeonBoss =
+      !!this.dungeonBoss && target.id === this.dungeonBoss.unitId;
+    if (
+      isDungeonBoss &&
+      this.dungeonBoss?.kind === "necro" &&
+      this.necroBarrierHits > 0
+    ) {
+      this.necroBarrierHits -= 1;
+      remaining = 0;
+      this.log.push(`영혼 방벽 (${this.necroBarrierHits})`);
+    }
+    for (const buff of this.boardTeamBuffs[target.team]) {
+      const shield = buff.shieldByUnit?.[target.id] ?? 0;
+      if (shield <= 0 || remaining <= 0 || !buff.shieldByUnit) continue;
+      const absorbed = Math.min(shield, remaining);
+      buff.shieldByUnit[target.id] = shield - absorbed;
+      remaining -= absorbed;
+    }
     if (target.shieldHp && target.shieldHp > 0) {
       const absorbed = Math.min(target.shieldHp, remaining);
       target.shieldHp -= absorbed;
@@ -2464,6 +2533,35 @@ export class Battle {
       this.applyHit(target, attacker, 0.75 * SKILL_DMG_MUL, false, {
         fromCounter: true,
       });
+    }
+
+    if (
+      isDungeonBoss &&
+      this.dungeonBoss?.kind === "giant" &&
+      target.alive &&
+      attacker.team !== target.team &&
+      !opts?.fromCounter
+    ) {
+      this.giantHitCounter += 1;
+      if (this.giantHitCounter >= 7) {
+        this.giantHitCounter = 0;
+        const victims = this.dungeonBoss?.abyss
+          ? this.units.filter(
+              (unit) =>
+                unit.alive &&
+                unit.team === attacker.team &&
+                unit.kind === "monster",
+            )
+          : attacker.alive
+            ? [attacker]
+            : [];
+        this.log.push(`거인의 7타 반격`);
+        for (const victim of victims) {
+          this.applyHit(target, victim, 0.55 * SKILL_DMG_MUL, false, {
+            fromCounter: true,
+          });
+        }
+      }
     }
 
     return {
@@ -2564,6 +2662,7 @@ export class Battle {
       ...spawned,
     ];
     this.currentWave = next;
+    this.resetDungeonBossState();
     this.log.push(`웨이브 ${this.currentWave}/${this.totalWaves} 출현`);
     // Soft reset ATB pressure: nudge ally ATB down slightly so wave isn't insta-cleared
     for (const u of this.units) {

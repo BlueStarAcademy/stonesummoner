@@ -204,7 +204,7 @@ import {
   SIDE_CONTENT_PIN_LAYOUT,
   STAGES_PER_AREA,
   TRIAL_STAGES,
-  CHALLENGE_TOWER_STAGES,
+  ALL_CHALLENGE_TOWER_STAGES,
   WEEKDAY_STAGES,
   WORLD_ARENA_STAGES,
   gloryBuffFromLevels,
@@ -271,7 +271,6 @@ import {
   SYMBOL_SETS,
   stagesForMap,
   summarizeGearSets,
-  gearLeaderAtkPct,
   gearPieces,
   SYMBOL_GRIND_MANA_COST,
   SYMBOL_GRIND_STONE_COST,
@@ -521,6 +520,7 @@ import {
   stageUnlockLabel,
   EQUIP_VAULT_WEEKLY_LIMIT,
   equipVaultRemaining,
+  energyCostForStage,
   syncEquipVaultWeek,
   CHALLENGE_TOWER_FLOORS,
   syncChallengeTowerMonth,
@@ -4777,7 +4777,6 @@ function stagePrepLeaderPassive(
   const pct =
     (leader.atkPct ?? 0) +
     awakenLeaderAtkPct(active.awaken) +
-    gearLeaderAtkPct(normalizeSummonerGear(saveRef.gear)) +
     tree.leaderAtkBonus;
   const title = leader.nameKo;
   const bits: string[] = [];
@@ -8541,6 +8540,37 @@ function renderUnit(
     ${showName ? `<span class="battle-unit-name">${u.name}</span>` : ""}
     ${renderActiveUnitSkills(u)}
   </${tag}>`;
+}
+
+function renderBoardTeamBuffHud(): string {
+  if (!battle) return "";
+  const renderTeam = (team: "ally" | "enemy") => {
+    const buffs = battle!.activeBoardBuffs(team);
+    if (!buffs.length) return "";
+    const chips = buffs
+      .map((buff) => {
+        const values = [
+          buff.damageBonus
+            ? `<b>ATK +${Math.round(buff.damageBonus * 100)}%</b>`
+            : "",
+          buff.critRateBonus
+            ? `<b>CRI +${Math.round(buff.critRateBonus)}%</b>`
+            : "",
+          buff.critDmgBonus
+            ? `<b>CDMG +${Math.round(buff.critDmgBonus)}%</b>`
+            : "",
+          buff.spdPct ? `<b>SPD +${Math.round(buff.spdPct * 100)}%</b>` : "",
+          buff.shieldByUnit ? `<b>SHIELD</b>` : "",
+        ].filter(Boolean);
+        return `<span class="battle-board-buff is-${buff.source}"><i aria-hidden="true">${buff.source === "capture" ? "&#9673;" : "&#9670;"}</i>${values.join("")}</span>`;
+      })
+      .join("");
+    return `<div class="battle-board-buffs-team is-${team}">${chips}</div>`;
+  };
+  const html = renderTeam("enemy") + renderTeam("ally");
+  return html
+    ? `<div class="battle-board-buffs" aria-hidden="true">${html}</div>`
+    : "";
 }
 
 
@@ -13464,7 +13494,7 @@ function renderHome(): string {
                   tone: "gate",
                   locked: !towerOk,
                   sub: towerOk
-                    ? `${challengeTowerFloor(syncChallengeTowerMonth(save))}/${CHALLENGE_TOWER_FLOORS}`
+                    ? `${challengeTowerFloor(syncChallengeTowerMonth(save)) + challengeTowerFloor(syncChallengeTowerMonth(save), "hard")}/${CHALLENGE_TOWER_FLOORS * 2}`
                     : undefined,
                 })}
         ${spot("mana_pond", islandSpotTitle("mana_pond"), 19, 62.2, {
@@ -16005,6 +16035,7 @@ function symbolArtSrc(setId: string, _slot?: number): string {
 }
 
 function symbolArtFallbackSrc(setId: string, slot: number): string {
+  if (setId === "muhyeong") return "/art/ui/symbol/muhyeong.svg";
   return `/art/ui/symbol/${setId}-${slot}.svg`;
 }
 
@@ -22172,9 +22203,7 @@ const STAGE_DIFFICULTIES: {
 ];
 
 function stageEnergyCost(stage: StageDef): number {
-  const mul =
-    STAGE_DIFFICULTIES.find((d) => d.id === effectiveDiff(stage))?.energyMul ?? 1;
-  return Math.max(0, Math.ceil(stage.energyCost * mul));
+  return Math.max(0, energyCostForStage(stage, effectiveDiff(stage)));
 }
 
 function stageDropSlots(stage: StageDef): Array<1 | 2 | 3 | 4 | 5 | 6> {
@@ -22205,7 +22234,7 @@ function stageDropPreview(stage: StageDef, opts?: { equipWeekly?: boolean; keySe
       if (opts?.keySets) {
         return [
           `<span class="stage-drop-piece" title="${escapeHtml(name)}">
-        <img class="stage-drop-piece-ico" src="/art/ui/symbol/${setId}-2.svg" width="28" height="28" alt="${escapeHtml(name)}" draggable="false" />
+        <img class="stage-drop-piece-ico" src="${symbolArtFallbackSrc(setId, 2)}" width="28" height="28" alt="${escapeHtml(name)}" draggable="false" />
       </span>`,
         ];
       }
@@ -22213,7 +22242,7 @@ function stageDropPreview(stage: StageDef, opts?: { equipWeekly?: boolean; keySe
       return slots.map((slot) => {
         const label = `${name}${slot}`;
         return `<span class="stage-drop-piece" title="${label}">
-        <img class="stage-drop-piece-ico" src="/art/ui/symbol/${setId}-${slot}.svg" width="28" height="28" alt="${label}" draggable="false" />
+        <img class="stage-drop-piece-ico" src="${symbolArtFallbackSrc(setId, slot)}" width="28" height="28" alt="${label}" draggable="false" />
         <span class="stage-drop-piece-label">${label}</span>
       </span>`;
       });
@@ -22272,6 +22301,8 @@ function stageAppearingMons(stage: StageDef): string {
 
 function stageListMarker(stage: StageDef, idx: number): string {
   if (stage.mode === "scenario") return `${stage.map}-${stage.stage}`;
+  if (stage.cairosTier === "abyss_normal") return "AN";
+  if (stage.cairosTier === "abyss_hard") return "AH";
   if (stage.mode === "depth" || stage.mode === "equip" || stage.mode === "challenge_tower") return String(stage.stage);
   return String(stage.stage > 0 ? stage.stage : idx + 1);
 }
@@ -22390,7 +22421,7 @@ function stagesRegions(): StagesRegion[] {
     challenge_tower: {
       name: t("stages.challengeTower"),
       blurb: t("stages.challengeTowerBlurb"),
-      stages: CHALLENGE_TOWER_STAGES,
+      stages: ALL_CHALLENGE_TOWER_STAGES,
     },
     guild: {
       name: t("stages.guildRaid"),
@@ -22425,10 +22456,11 @@ function regionProgress(stages: StageDef[]): {
 } {
   if (stages[0]?.mode === "challenge_tower") {
     const synced = syncChallengeTowerMonth(save);
-    const cleared = challengeTowerFloor(synced);
-    const unlocked =
-      isChallengeTowerContentUnlocked(save) && cleared < CHALLENGE_TOWER_FLOORS;
-    return { unlocked: unlocked || cleared > 0, cleared, total: CHALLENGE_TOWER_FLOORS };
+    const cleared =
+      challengeTowerFloor(synced) + challengeTowerFloor(synced, "hard");
+    const total = CHALLENGE_TOWER_FLOORS * 2;
+    const unlocked = isChallengeTowerContentUnlocked(save) && cleared < total;
+    return { unlocked: unlocked || cleared > 0, cleared, total };
   }
   const cleared = stages.filter((s) => save.clearedStages.includes(s.id)).length;
   const unlocked = stages.some((s) => isStageUnlocked(save, s.id));
@@ -23476,8 +23508,10 @@ function renderStagesRegionSheet(region: StagesRegion): string {
     extras = `<div class="season-panel"><span class="guild-chip">${escapeHtml(t("ui.9cbaf58b88"))}<strong>${equipVaultRemaining(syncEquipVaultWeek(save))}/${EQUIP_VAULT_WEEKLY_LIMIT}</strong></span></div>`;
   }
   if (region.id === "challenge_tower") {
-    const floor = challengeTowerFloor(syncChallengeTowerMonth(save));
-    extras = `<div class="season-panel"><span class="guild-chip">${escapeHtml(t("stages.challengeTowerProgress"))}<strong>${floor}/${CHALLENGE_TOWER_FLOORS}</strong></span></div>`;
+    const synced = syncChallengeTowerMonth(save);
+    const floor =
+      challengeTowerFloor(synced) + challengeTowerFloor(synced, "hard");
+    extras = `<div class="season-panel"><span class="guild-chip">${escapeHtml(t("stages.challengeTowerProgress"))}<strong>${floor}/${CHALLENGE_TOWER_FLOORS * 2}</strong></span></div>`;
   }
   if (region.arena || region.warena) {
     extras = "";
@@ -23827,6 +23861,7 @@ function renderBattle(manaPct: number): string {
     ${utilRow}
     <div class="battle-hud battle-hud--stage">
       ${navBackBtn({ id: "btn-back", label: t('ui.1a7f31cadb') })}
+      ${renderBoardTeamBuffHud()}
       <div class="battle-hud-actions">
         ${battleSkipAllowedForStage(currentStage) ? `<button type="button" class="secondary${battleSkipReady ? " is-ready" : ""}" id="btn-battle-skip"${battleSkipReady ? "" : " disabled"}>${escapeHtml(t("ui.battleSkip"))}</button>` : ""}
         <button type="button" class="secondary" id="btn-speed">x${battleSpeed}</button>

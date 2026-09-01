@@ -59,4 +59,19 @@ describe("listUnitStatuses", () => {
     const icons = listUnitStatuses(unit({ shieldHp: 12 }));
     assert.deepEqual(icons, [{ id: "shield", ticks: 0, polarity: "buff" }]);
   });
+
+  it("does not expose permanent equipment passives as unit icons", () => {
+    const icons = listUnitStatuses(
+      unit({
+        shieldHp: 12,
+        shieldTurns: 3,
+        shieldStatusVisible: false,
+        statusImmuneTurns: 1,
+        statusImmuneIsPassive: true,
+        counterChance: 15,
+        lifestealPct: 35,
+      }),
+    );
+    assert.deepEqual(icons, []);
+  });
 });

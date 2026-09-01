@@ -82,6 +82,8 @@ export { pickExpertStone, scoreExpertStone } from "./stoneTactic.js";
 export type { StoneEval, StoneSuggestion } from "./ai.js";
 export type {
   BattlePhase,
+  BoardTeamBuff,
+  BoardTeamBuffSource,
   Element,
   FinishReason,
   SummonerState,
