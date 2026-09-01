@@ -49,6 +49,7 @@ import {
   rawRgbaToTransparentWebp,
 } from "./lib/dematte-webp.mjs";
 import { writePortraitDerivatives } from "./lib/portrait-derivatives.mjs";
+import { computeBustRegion, DEFAULT_BUST_CROP } from "./lib/bust-crop.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -94,8 +95,14 @@ const MONSTER_ALIAS = {
   thunder_lancer: "thunder_spear_light",
 };
 
-const BUST_ZOOM = 0.44;
-const BUST_TOP_RATIO = 0.03;
+/** Match process-all-portraits inventory bust (head + upper torso). */
+const BUST_OPTS = {
+  ...DEFAULT_BUST_CROP,
+  bustHeightRatio: 0.68,
+  padRatio: 0.1,
+  minZoom: 0.4,
+  maxZoom: 0.68,
+};
 
 function resolveImageSrc(name, kind = "battle") {
   const dirs =
@@ -120,14 +127,14 @@ function resolveImageSrc(name, kind = "battle") {
 }
 
 async function bustPortraitFromBattleFront(frontWebp, destWebp) {
-  const meta = await sharp(frontWebp).metadata();
-  const w = meta.width ?? PORTRAIT_DEMATTE.size;
-  const h = meta.height ?? PORTRAIT_DEMATTE.size;
-  const crop = Math.round(Math.min(w, h) * BUST_ZOOM);
-  const left = Math.max(0, Math.round((w - crop) / 2));
-  const top = Math.max(0, Math.min(Math.round(h * BUST_TOP_RATIO), h - crop));
+  const region = await computeBustRegion(frontWebp, BUST_OPTS);
   const { data, info } = await sharp(frontWebp)
-    .extract({ left, top, width: crop, height: crop })
+    .extract({
+      left: region.left,
+      top: region.top,
+      width: region.width,
+      height: region.height,
+    })
     .resize(PORTRAIT_DEMATTE.size, PORTRAIT_DEMATTE.size, {
       fit: "fill",
       kernel: sharp.kernel.lanczos3,
