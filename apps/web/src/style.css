@@ -35581,6 +35581,15 @@ img.is-awakened:not(.is-awakened-preview) {
   pointer-events: none;
 }
 
+/* Soft sheets keep a light dim; the rail must not sit on top of them. */
+#app.monster-mode > .guide-rail-layer,
+#app.party-modal-open > .guide-rail-layer,
+#app:has(> .settings-layer:not([hidden])) > .guide-rail-layer,
+#app:has(> .codex-layer) > .guide-rail-layer,
+#app:has(> #onboard-welcome) > .guide-rail-layer {
+  display: none;
+}
+
 .guide-rail-layer.is-collapsed {
   width: auto;
 }
