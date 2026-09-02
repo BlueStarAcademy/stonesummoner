@@ -15109,13 +15109,6 @@ body > .battle-settings-layer.settings-layer {
   display: none;
 }
 
-.result-stage {
-  margin: 4px 0 0;
-  font-size: 0.82rem;
-  letter-spacing: 0.02em;
-  color: #b8a878;
-}
-
 .result-sub {
   display: none;
 }

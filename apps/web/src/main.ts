@@ -6689,7 +6689,6 @@ function renderResult(): string {
   }
   const win = reward.victory;
   const title = win ? t("ui.resultVictory") : t("ui.resultDefeat");
-  const stageLine = escapeHtml(stage.nameKo);
   const firstRite =
     win &&
     stage.id === ONBOARD_FIRST_STAGE_ID &&
@@ -6924,7 +6923,6 @@ function renderResult(): string {
       ? `<p class="result-empty">${escapeHtml(t("ui.symbolBagFull"))}</p>`
       : "";
   const nextStage = win ? nextCampaignStage(stage) : null;
-  const stepTwoStage = nextStage ?? stage;
   const riteContinue =
     firstRite && onboard.step === "summon"
       ? `<button type="button" class="auth-btn-primary result-cta-primary result-onboard-cta" id="btn-result-onboard">${escapeHtml(t("ui.onboard.resultSummonCta"))}</button>`
@@ -6963,7 +6961,6 @@ function renderResult(): string {
       ${resultEnergyBadgeHtml()}
       <div class="result-banner result-banner--compact">
         <h2 class="result-title">${title}</h2>
-        <p class="result-stage">${resultStep === 2 ? escapeHtml(stepTwoStage.nameKo) : stageLine}</p>
       </div>
       ${resultStep === 1 ? stepOne : stepTwo}
     </div>
