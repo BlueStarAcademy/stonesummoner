@@ -132,7 +132,6 @@ import {
   deriveOnboardStep,
   fromOnboardRiteSave,
   guideRailShouldShow,
-  overlayHidesGuideRail,
   onboardFocusSpotId,
   onboardObjective,
   onboardStepIndex,
@@ -3720,14 +3719,15 @@ function renderGuideRailStepMarkers(
 
 function guideRailBlockingOverlayOpen(): boolean {
   if (onboardWelcomeOpen) return true;
-  for (const id of overlayBackStack) {
-    if (overlayHidesGuideRail(id)) return true;
+  if (resMoreOpen || islandLayoutEdit || islandSpotMenuId || gearBagFilterOpen) {
+    return true;
   }
+  if (codexOpen) return true;
+  if (view === "stages" && stageEntryId) return true;
   const layers = app.querySelectorAll<HTMLElement>(
     ".settings-layer, .codex-layer, #onboard-welcome",
   );
   for (const el of layers) {
-    if (!overlayHidesGuideRail(el.id)) continue;
     if (overlayDomIsOpen(el)) return true;
   }
   return false;
