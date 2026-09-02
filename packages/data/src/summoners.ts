@@ -840,6 +840,16 @@ export function defaultSummonerMagicLoadout(element: Element): [string, string] 
   return [kit.skills.A.id, kit.skills.B.id];
 }
 
+/** True when `id` is a real skill on this summoner's kit (not a legacy stub). */
+export function isSummonerMagicSkillId(
+  element: Element,
+  id: string | null | undefined,
+): id is string {
+  if (!id) return false;
+  const kit = SUMMONER_KITS[element];
+  return Object.values(kit.skills).some((skill) => skill.id === id);
+}
+
 export function tryUnlockMagicBranch(
   element: Element,
   progress: SummonerMagicProgress,

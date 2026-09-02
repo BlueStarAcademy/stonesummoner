@@ -63,6 +63,7 @@ import {
   ALL_STAGES,
   emptyMagicProgress,
   defaultSummonerMagicLoadout,
+  isSummonerMagicSkillId,
   getSummonerKit,
   getSummonerLeader,
   magicEnhanceCrystalCost,
@@ -807,14 +808,23 @@ function normalizeMagicLoadout(raw: unknown): SummonerMagicLoadout {
   ];
 }
 
-/** Fill empty magic slots with the summoner basic skills A + B. */
+/** Fill empty / unknown magic slots with the summoner basic skills A + B. */
 export function withDefaultSummonerMagicLoadout(
   element: SummonerElement,
   loadout: SummonerMagicLoadout | undefined,
 ): SummonerMagicLoadout {
   const normalized = normalizeMagicLoadout(loadout);
   const [defA, defB] = defaultSummonerMagicLoadout(element);
-  return [normalized[0] ?? defA, normalized[1] ?? defB];
+  const slot0 = isSummonerMagicSkillId(element, normalized[0])
+    ? normalized[0]
+    : defA;
+  let slot1 = isSummonerMagicSkillId(element, normalized[1])
+    ? normalized[1]
+    : defB;
+  if (slot1 === slot0) {
+    slot1 = slot0 === defA ? defB : defA;
+  }
+  return [slot0, slot1];
 }
 
 function ensureSummonerMagicLoadouts(

@@ -66,6 +66,7 @@ export {
   unlockedMagicSkills,
   magicTier2Unlocked,
   defaultSummonerMagicLoadout,
+  isSummonerMagicSkillId,
 } from "./summoners.js";
 export type {
   MagicBranch,

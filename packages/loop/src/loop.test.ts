@@ -2837,18 +2837,25 @@ describe("game loop", () => {
     );
     const filled = withDefaultSummonerMagicLoadout("light", [null, null]);
     assert.deepEqual(filled, defaultSummonerMagicLoadout("light"));
+    const repaired = withDefaultSummonerMagicLoadout("light", [
+      "light-bolt",
+      null,
+    ]);
+    assert.deepEqual(repaired, defaultSummonerMagicLoadout("light"));
   });
 
   it("saves summoner magic loadout with a party preset", () => {
     const base = createNewSave(0);
     const uid = base.roster[0]?.uid;
     assert.ok(uid);
+    const [defA, defB] = defaultSummonerMagicLoadout("light");
     const saved = runSavePartyPreset(base, 1, {
       summoner: "light",
       party: [uid],
       magic: ["light-bolt", "light-ward"],
     }).save;
-    assert.deepEqual(saved.partyPresets[1]?.magic, ["light-bolt", "light-ward"]);
+    // Legacy / unknown ids are replaced with kit defaults.
+    assert.deepEqual(saved.partyPresets[1]?.magic, [defA, defB]);
     const cleared = {
       ...saved,
       party: [] as string[],
@@ -2859,10 +2866,7 @@ describe("game loop", () => {
     };
     const loaded = runLoadPartyPreset(cleared, 1).save;
     assert.equal(loaded.party[0], uid);
-    assert.deepEqual(loaded.summonerMagicLoadouts.light, [
-      "light-bolt",
-      "light-ward",
-    ]);
+    assert.deepEqual(loaded.summonerMagicLoadouts.light, [defA, defB]);
   });
 
   it("renames the profile for free once, then spends crystal", () => {

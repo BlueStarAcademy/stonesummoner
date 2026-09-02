@@ -185,7 +185,6 @@ import {
   elementRelation,
   type Battle,
   type CaptureShopChoice,
-  type ElementRelation,
   type SkillResult,
   type SkillPresentation,
   type StoneReport,
@@ -5057,6 +5056,13 @@ function openStagePrep(stage: StageDef): void {
     ...save,
     partyPresets: presets,
     activePartyPreset: idx,
+    summonerMagicLoadouts: {
+      ...save.summonerMagicLoadouts,
+      [preset.summoner]: withDefaultSummonerMagicLoadout(
+        preset.summoner,
+        preset.magic ?? save.summonerMagicLoadouts?.[preset.summoner],
+      ),
+    },
   };
   if (preset.summoner !== (save.activeSummoner ?? "light")) {
     save = setActiveSummoner(save, preset.summoner);
@@ -6149,16 +6155,21 @@ function equipStagePrepMagicToSlot(index: number, summonerEl?: SummonerElement):
     return;
   }
   const loadout = [
-    ...(save.summonerMagicLoadouts?.[el] ?? [null, null]),
+    ...withDefaultSummonerMagicLoadout(
+      el,
+      save.summonerMagicLoadouts?.[el],
+    ),
   ] as [string | null, string | null];
   const existing = loadout.indexOf(skillId);
   if (existing >= 0) loadout[existing] = loadout[index];
   loadout[index] = skillId;
+  // Keep both slots filled with valid skills after a swap.
+  const next = withDefaultSummonerMagicLoadout(el, loadout);
   save = {
     ...save,
     summonerMagicLoadouts: {
       ...save.summonerMagicLoadouts,
-      [el]: loadout,
+      [el]: next,
     },
   };
   persist();
@@ -6339,6 +6350,115 @@ function clearBattleSkillSelection(): void {
   selectedSummonerSkill = null;
 }
 
+type BattleSkillAimMode = "enemy" | "ally" | "self";
+
+function effectTargetAimsEnemy(target: string | undefined): boolean {
+  return !target || target === "single" || target === "all_enemies";
+}
+
+function effectTargetAimsAlly(target: string | undefined): boolean {
+  return (
+    target === "self" ||
+    target === "ally_lowest" ||
+    target === "all_allies" ||
+    target === "single_ally" ||
+    target === "ally" ||
+    target === "dead_ally" ||
+    target === "ally_dead"
+  );
+}
+
+/** Where manual aim arrows / taps go for the currently selected skill. */
+function monsterSkillAimMode(
+  skill: { effects?: Array<{ kind: string; target?: string }> } | null | undefined,
+): BattleSkillAimMode {
+  const effects = skill?.effects ?? [];
+  if (!effects.length) return "enemy";
+  if (
+    effects.some(
+      (effect) =>
+        effectTargetAimsEnemy(effect.target) &&
+        (effect.kind === "damage" ||
+          effect.kind === "dot" ||
+          effect.kind === "ailment" ||
+          effect.kind === "debuff" ||
+          effect.kind === "provoke"),
+    )
+  ) {
+    return "enemy";
+  }
+  if (effects.some((effect) => effectTargetAimsEnemy(effect.target))) {
+    return "enemy";
+  }
+  if (effects.every((effect) => (effect.target ?? "self") === "self")) {
+    return "self";
+  }
+  if (effects.some((effect) => effectTargetAimsAlly(effect.target))) {
+    return "ally";
+  }
+  return "enemy";
+}
+
+function summonerSkillAimMode(
+  id: string,
+  unit?: Unit | null,
+): BattleSkillAimMode | "none" {
+  if (id === "open") return "enemy";
+  if (!battle || !unit) return "none";
+  const def = battle.summonerOf(unit.team).magicSkills?.find((s) => s.id === id);
+  if (!def) return "none";
+  if (
+    def.kind === "single_damage" ||
+    def.kind === "aoe_damage" ||
+    def.kind === "enemy_debuff"
+  ) {
+    return "enemy";
+  }
+  if (
+    def.kind === "ally_heal" ||
+    def.kind === "ally_shield" ||
+    def.kind.startsWith("ally_buff")
+  ) {
+    return "ally";
+  }
+  return "none";
+}
+
+function currentBattleSkillAimMode(): BattleSkillAimMode | "none" {
+  if (!battle || battle.phase !== "await_skill") return "none";
+  if (autoMode && battleAutoLive.combat) return "none";
+  const active = battle.activeUnitId
+    ? battle.getUnit(battle.activeUnitId)
+    : null;
+  if (!active || active.team !== "ally") return "none";
+  if (selectedSummonerSkill) {
+    return summonerSkillAimMode(selectedSummonerSkill, active);
+  }
+  if (selectedSkillIndex != null) {
+    return monsterSkillAimMode(active.skills?.[selectedSkillIndex]);
+  }
+  return "none";
+}
+
+function battleMonsterSkillLevel(unit: Unit, skillIndex: number): number {
+  const owned = save.roster.find((m) => m.uid === unit.id);
+  const lv = owned?.skillLevels?.[skillIndex] ?? 1;
+  return Math.max(1, Math.floor(lv));
+}
+
+/** Aim arrow color from selected skill: ally skills always green; enemy skills by element. */
+function battleAimArrowClass(target: Unit): string {
+  const aimMode = currentBattleSkillAimMode();
+  if (aimMode === "ally" || aimMode === "self") return "battle-aim-arrow--adv";
+  if (!battle?.activeUnitId) return "battle-aim-arrow--neutral";
+  const active = battle.getUnit(battle.activeUnitId);
+  if (!active) return "battle-aim-arrow--neutral";
+  const rel = elementRelation(active.element, target.element);
+  if (rel === "advantage") return "battle-aim-arrow--adv";
+  if (rel === "disadvantage") return "battle-aim-arrow--disadv";
+  return "battle-aim-arrow--neutral";
+}
+
 function ensureTarget(): string | undefined {
   if (!battle) return undefined;
   if (selectedTargetId) {
@@ -6365,12 +6485,24 @@ function requireSelectedEnemyTarget(): string | undefined {
   return undefined;
 }
 
+/** Manual cast: tapped ally (monster, or self for self-only skills). */
+function requireSelectedAllyTarget(opts?: {
+  selfOnly?: boolean;
+}): string | undefined {
+  if (!battle || !selectedTargetId) return undefined;
+  const t = battle.getUnit(selectedTargetId);
+  if (!t?.alive || t.team !== "ally") return undefined;
+  if (opts?.selfOnly && t.id !== battle.activeUnitId) return undefined;
+  if (t.kind === "monster" || opts?.selfOnly) return selectedTargetId;
+  return undefined;
+}
+
 function summonerSkillNeedsEnemyTarget(id: string, unit?: Unit | null): boolean {
-  if (id === "open") return true;
-  if (!battle || !unit) return false;
-  const def = battle.summonerOf(unit.team).magicSkills?.find((s) => s.id === id);
-  if (!def) return false;
-  return def.kind === "single_damage" || def.kind === "enemy_debuff";
+  return summonerSkillAimMode(id, unit) === "enemy";
+}
+
+function summonerSkillNeedsAllyTarget(id: string, unit?: Unit | null): boolean {
+  return summonerSkillAimMode(id, unit) === "ally";
 }
 
 function grantRewardIfNeeded(): void {
@@ -7777,16 +7909,43 @@ function battleLine(units: Unit[], side: "enemy" | "ally"): Unit[] {
 function renderBattleFront(
   units: Unit[],
   side: "enemy" | "ally",
-  opts?: { targetable?: boolean },
+  opts?: { targetable?: boolean; aim?: boolean },
 ): string {
   const line = battleLine(units, side);
   const bossId =
     side === "enemy" && isBossBattleWave(units)
       ? battleBossUnit(units)?.id
       : null;
+  const aimMode = currentBattleSkillAimMode();
   return `<div class="battle-formation ${side}">
     <div class="battle-front ${side}">${line
-      .map((u) => renderUnit(u, { ...opts, boss: u.id === bossId }))
+      .map((u) => {
+        const aim =
+          !!opts?.aim &&
+          u.alive &&
+          (aimMode === "enemy"
+            ? side === "enemy" && u.kind === "monster"
+            : aimMode === "ally"
+              ? side === "ally" && u.kind === "monster"
+              : aimMode === "self"
+                ? u.id === battle?.activeUnitId
+                : false);
+        const targetable =
+          !!opts?.targetable &&
+          u.alive &&
+          (aimMode === "enemy"
+            ? side === "enemy" && u.kind === "monster"
+            : aimMode === "ally"
+              ? side === "ally" && u.kind === "monster"
+              : aimMode === "self"
+                ? u.id === battle?.activeUnitId
+                : false);
+        return renderUnit(u, {
+          targetable,
+          aim,
+          boss: u.id === bossId,
+        });
+      })
       .join("")}</div>
   </div>`;
 }
@@ -8404,16 +8563,18 @@ async function castSkillAsync(
           render();
           return;
         }
-        const needsTarget =
-          def.kind === "single_damage" || def.kind === "enemy_debuff";
+        const needsEnemy = def.kind === "single_damage" || def.kind === "enemy_debuff";
+        const needsAlly =
+          def.kind === "ally_heal" ||
+          def.kind === "ally_shield" ||
+          def.kind.startsWith("ally_buff");
         let targetId: string | undefined;
-        if (needsTarget) {
+        if (needsEnemy) {
           targetId = requireSelectedEnemyTarget();
-          if (!targetId) {
-            flash(t("ui.battlePickEnemy"));
-            render();
-            return;
-          }
+          if (!targetId) return;
+        } else if (needsAlly) {
+          targetId = requireSelectedAllyTarget();
+          if (!targetId) return;
         }
         const hits = battle.useSkill({ summonerSkill: mode, targetId });
         await finish(hits, {
@@ -8434,11 +8595,7 @@ async function castSkillAsync(
           s.manaCostFrac >= 0.95 && battle!.canUseMagicSkill(unit, s.id),
       );
       const targetId = requireSelectedEnemyTarget();
-      if (!targetId) {
-        flash(t("ui.battlePickEnemy"));
-        render();
-        return;
-      }
+      if (!targetId) return;
       if (full) {
         const hits = battle.useSkill({
           summonerSkill: full.id,
@@ -8516,13 +8673,19 @@ async function castSkillAsync(
       render();
       return;
     }
+    const skill = unit.skills?.[skillIndex];
+    const aim = monsterSkillAimMode(skill);
     const targetId =
       mode === "smart"
         ? ensureTarget()
-        : requireSelectedEnemyTarget();
+        : aim === "enemy"
+          ? requireSelectedEnemyTarget()
+          : requireSelectedAllyTarget({ selfOnly: aim === "self" });
     if (!targetId) {
-      flash(t("ui.battlePickEnemy"));
-      render();
+      if (mode === "smart") {
+        flash(t("ui.battlePickEnemy"));
+        render();
+      }
       return;
     }
     const hits = battle.useSkill({ skillIndex, targetId });
@@ -8531,7 +8694,6 @@ async function castSkillAsync(
       render();
       return;
     }
-    const skill = unit.skills?.[skillIndex];
     await finish(hits, {
       sfxKind: kindFromEffects(skill?.effects),
       vfxFamily: skill?.vfxFamily,
@@ -8563,9 +8725,8 @@ function renderSkillButtons(active: Unit | null, awaitSkill: boolean): string {
       monId != null && sk
         ? monsterSkillArtImg(monId, i, sk, "skill-btn-ico", 40)
         : skillArtImg(sk?.vfxId, "skill-btn-ico", 40);
-    return `<button type="button" class="skill-btn${state}${selected}${disabled ? " is-disabled" : ""}" data-skill="${i}"${disabled ? ' aria-disabled="true"' : ""}>
+    return `<button type="button" class="skill-btn${state}${selected}${disabled ? " is-disabled" : ""}" data-skill="${i}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"${disabled ? ' aria-disabled="true"' : ""}>
       ${ico}
-      <span class="skill-btn-label">${label}</span>
       ${cd > 0 ? `<span class="skill-btn-cd">${cd}</span>` : ""}
     </button>`;
   });
@@ -8585,12 +8746,60 @@ function renderSummonerSkillButtons(
       const selected =
         selectedSummonerSkill === sk.id ? " is-selected" : "";
       const state = ready ? " ready" : "";
-      return `<button type="button" class="summoner-sk skill-btn mag-${escapeHtml(sk.id)}${state}${selected}${ready ? "" : " is-disabled"}" data-summoner-skill="${escapeHtml(sk.id)}"${ready ? "" : ' aria-disabled="true"'}>
+      return `<button type="button" class="summoner-sk skill-btn mag-${escapeHtml(sk.id)}${state}${selected}${ready ? "" : " is-disabled"}" data-summoner-skill="${escapeHtml(sk.id)}" title="${escapeHtml(sk.nameKo)}" aria-label="${escapeHtml(sk.nameKo)}"${ready ? "" : ' aria-disabled="true"'}>
         ${summonerSkillArtImg(sk.id, "skill-btn-ico", 40)}
-        <span class="skill-btn-label">${escapeHtml(sk.nameKo)}</span>
       </button>`;
     })
     .join("");
+}
+
+function renderBattleSkillSelectBubble(active: Unit): string {
+  if (selectedSummonerSkill) {
+    const magics = battle?.summonerOf(active.team).magicSkills ?? [];
+    const sk = magics.find((s) => s.id === selectedSummonerSkill);
+    if (!sk) return "";
+    const el =
+      battle?.summonerOf(active.team).summonerElement ??
+      save.activeSummoner ??
+      "light";
+    const prog = save.summonerMagic?.[el] ?? emptyMagicProgress();
+    const rank = magicRank(prog, sk.id);
+    const lines = magicSkillDescLines(sk, rank).filter(Boolean);
+    return `<div class="battle-skill-bubble" role="status">
+      <div class="battle-skill-bubble-hero">
+        ${summonerSkillArtImg(sk.id, "battle-skill-bubble-ico", 40)}
+        <div class="battle-skill-bubble-copy">
+          <strong>${escapeHtml(sk.nameKo)}</strong>
+          <small>${escapeHtml(t("chat.level", { n: Math.max(1, rank) }))}</small>
+        </div>
+      </div>
+      <ul class="battle-skill-bubble-effects">${lines
+        .map((line) => `<li>${escapeHtml(line)}</li>`)
+        .join("")}</ul>
+    </div>`;
+  }
+  if (selectedSkillIndex == null) return "";
+  const sk = active.skills?.[selectedSkillIndex];
+  if (!sk) return "";
+  const monId = active.kind === "monster" ? active.monsterId : null;
+  const ico =
+    monId != null
+      ? monsterSkillArtImg(monId, selectedSkillIndex, sk, "battle-skill-bubble-ico", 40)
+      : skillArtImg(sk.vfxId, "battle-skill-bubble-ico", 40);
+  const lv = battleMonsterSkillLevel(active, selectedSkillIndex);
+  const lines = monsterSkillDescLines(sk).filter(Boolean);
+  return `<div class="battle-skill-bubble" role="status">
+    <div class="battle-skill-bubble-hero">
+      ${ico}
+      <div class="battle-skill-bubble-copy">
+        <strong>${escapeHtml(sk.nameKo)}</strong>
+        <small>${escapeHtml(t("chat.level", { n: lv }))}</small>
+      </div>
+    </div>
+    <ul class="battle-skill-bubble-effects">${lines
+      .map((line) => `<li>${escapeHtml(line)}</li>`)
+      .join("")}</ul>
+  </div>`;
 }
 
 function renderActiveUnitSkills(u: Unit): string {
@@ -8603,7 +8812,11 @@ function renderActiveUnitSkills(u: Unit): string {
       ? renderSummonerSkillButtons(u, true)
       : renderSkillButtons(u, true);
   if (!body) return "";
-  return `<div class="battle-unit-skills" role="toolbar" aria-label="${escapeHtml(t("ui.battleUnitSkills"))}">${body}</div>`;
+  const bubble = renderBattleSkillSelectBubble(u);
+  return `<div class="battle-unit-skills-wrap">
+    ${bubble}
+    <div class="battle-unit-skills" role="toolbar" aria-label="${escapeHtml(t("ui.battleUnitSkills"))}">${body}</div>
+  </div>`;
 }
 
 function skillBtnIsBlocked(btn: HTMLButtonElement): boolean {
@@ -8854,21 +9067,6 @@ function bindBattleSkillInspect(): void {
   bindBattleSkillInfo();
 }
 
-/** Affinity of the current turn unit toward `target` (SW HP-bar tint). */
-function battleHpAffinityToward(target: Unit): ElementRelation | null {
-  if (!battle?.activeUnitId) return null;
-  const active = battle.getUnit(battle.activeUnitId);
-  if (!active || active.id === target.id) return null;
-  return elementRelation(active.element, target.element);
-}
-
-function battleHpAffinityClass(target: Unit): string {
-  const rel = battleHpAffinityToward(target);
-  if (rel === "advantage") return " hp-aff--weak";
-  if (rel === "disadvantage") return " hp-aff--resist";
-  return "";
-}
-
 function renderBattleUnitElementBadge(u: Unit): string {
   const src = monsterElementArtSrc(u.element);
   if (!src) return "";
@@ -8878,12 +9076,13 @@ function renderBattleUnitElementBadge(u: Unit): string {
 
 function renderUnit(
   u: Unit,
-  opts?: { targetable?: boolean; boss?: boolean },
+  opts?: { targetable?: boolean; boss?: boolean; aim?: boolean },
 ): string {
   const isActive = battle?.activeUnitId === u.id;
   const isTargeted = !!(opts?.targetable && selectedTargetId === u.id);
   const active = isActive ? " active" : "";
   const targeted = isTargeted ? " targeted" : "";
+  const aim = opts?.aim && u.alive ? " is-skill-aim" : "";
   const hpPct = Math.round((u.hp / u.stats.hp) * 100);
   const atbPct = Math.min(100, Math.round(u.atb));
   const shield = u.shieldHp && u.shieldHp > 0 ? Math.round(u.shieldHp) : 0;
@@ -8915,8 +9114,11 @@ function renderUnit(
         ? ""
         : u.monsterId ?? ""
       : `summoner-${u.element}`;
-  const affClass = battleHpAffinityClass(u);
   const elBadge = renderBattleUnitElementBadge(u);
+  const aimArrow =
+    opts?.aim && u.alive
+      ? `<span class="battle-aim-arrow ${battleAimArrowClass(u)}" aria-hidden="true"></span>`
+      : "";
 
   let barsHtml = "";
   if (isSummoner && battle) {
@@ -8943,13 +9145,13 @@ function renderUnit(
         ${elBadge}
         <span class="battle-unit-hp-num">${Math.max(0, Math.round(u.hp + shield))}</span>
       </div>
-      <div class="bar hp${affClass}"><i style="width:${hpPct}%"></i></div>
+      <div class="bar hp"><i style="width:${hpPct}%"></i></div>
       <div class="bar atb"><i style="width:${atbPct}%"></i></div>
     </div>`;
   }
 
-  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" data-stature="${stature.toFixed(2)}" style="--unit-stature:${stature}"${u.kind === "monster" && u.monsterId ? monsterSlotFamilyAttr(u.monsterId) : ""} ${attrs} title="${escapeHtml(`${u.name} · ${elementLabel(u.element as SummonerElement)}`)}">
-    ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${aim}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" data-stature="${stature.toFixed(2)}" style="--unit-stature:${stature}"${u.kind === "monster" && u.monsterId ? monsterSlotFamilyAttr(u.monsterId) : ""} ${attrs} title="${escapeHtml(`${u.name} · ${elementLabel(u.element as SummonerElement)}`)}">
+    ${aimArrow}
     ${renderUnitStatusIcons(u)}
     <span class="battle-unit-glow" aria-hidden="true"></span>
     <span class="battle-unit-art" aria-hidden="true">${art}</span>
@@ -24374,10 +24576,9 @@ function renderBattle(manaPct: number): string {
     : 0;
   const raidHp = save.raidBossHp ?? RAID_BOSS_MAX_HP;
   const raidPct = RAID_BOSS_MAX_HP ? (raidHp / RAID_BOSS_MAX_HP) * 100 : 0;
-  const bossAff = boss ? battleHpAffinityClass(boss) : "";
   const bossEl = boss ? renderBattleUnitElementBadge(boss) : "";
   const bossBar = boss
-    ? `<div class="battle-boss-hp${bossAff}">
+    ? `<div class="battle-boss-hp">
         ${bossEl}
         <span class="battle-boss-hp-fill" style="width:${bossHpPct}%"></span>
         <strong>${fmtRes(boss.hp)} / ${fmtRes(boss.stats.hp)}</strong>
@@ -24425,13 +24626,13 @@ function renderBattle(manaPct: number): string {
     <div class="battle-lane enemy${waveEnterIds.size ? " is-wave-spawning" : ""}">
       ${bossSilhouette}
       ${bossBar}
-      ${renderBattleFront(enemyUnits, "enemy", { targetable: awaitSkill })}
+      ${renderBattleFront(enemyUnits, "enemy", { targetable: awaitSkill, aim: awaitSkill })}
     </div>
     <div class="board-wrap board-wrap--stage${canPlaceStone ? " is-live" : ""}">
       ${renderBoardTabs()}${renderBoard()}${renderCaptureShop()}
     </div>
     <div class="battle-lane ally">
-      ${renderBattleFront(allyUnits, "ally")}
+      ${renderBattleFront(allyUnits, "ally", { targetable: awaitSkill, aim: awaitSkill })}
     </div>
     ${renderStonePickLayer()}
     ${renderStoneResultLayer()}
@@ -24687,6 +24888,10 @@ function bindBattleInteractive(): void {
         castSkill(selectedSummonerSkill, selectedTargetId ?? undefined);
         return;
       }
+      if (selectedSummonerSkill && summonerSkillNeedsAllyTarget(selectedSummonerSkill, unit)) {
+        castSkill(selectedSummonerSkill, selectedTargetId ?? undefined);
+        return;
+      }
       if (selectedSkillIndex != null) {
         castSkill(selectedSkillIndex, selectedTargetId ?? undefined);
         return;
@@ -24719,7 +24924,8 @@ function bindBattleInteractive(): void {
         : null;
       if (!active || !battle.canUseSkill(active, idx)) return;
       selectedSummonerSkill = null;
-      selectedSkillIndex = selectedSkillIndex === idx ? null : idx;
+      selectedTargetId = null;
+      selectedSkillIndex = idx;
       render();
     });
   });
@@ -24745,16 +24951,16 @@ function bindBattleInteractive(): void {
         const id = btn.dataset.summonerSkill;
         if (!id) return;
         selectedSkillIndex = null;
+        selectedTargetId = null;
         const active = battle.activeUnitId
           ? battle.getUnit(battle.activeUnitId)
           : null;
-        if (summonerSkillNeedsEnemyTarget(id, active)) {
-          selectedSummonerSkill =
-            selectedSummonerSkill === id ? null : id;
+        const aim = summonerSkillAimMode(id, active);
+        if (aim === "enemy" || aim === "ally") {
+          selectedSummonerSkill = id;
           render();
           return;
         }
-        // Buff / board skills: cast immediately (no enemy tap).
         selectedSummonerSkill = id;
         castSkill(id);
       });
@@ -24788,7 +24994,7 @@ function bindBattleInteractive(): void {
 function syncActiveUnitSkillPosition(): void {
   requestAnimationFrame(() => {
     const skills = app.querySelector<HTMLElement>(
-      ".battle-unit.active .battle-unit-skills",
+      ".battle-unit.active .battle-unit-skills-wrap, .battle-unit.active .battle-unit-skills",
     );
     if (!skills) return;
     skills.style.removeProperty("--battle-skill-shift");
@@ -27226,6 +27432,13 @@ function bind(): void {
         castSkill(selectedSummonerSkill, selectedTargetId ?? undefined);
         return;
       }
+      if (
+        selectedSummonerSkill &&
+        summonerSkillNeedsAllyTarget(selectedSummonerSkill, unit)
+      ) {
+        castSkill(selectedSummonerSkill, selectedTargetId ?? undefined);
+        return;
+      }
       if (selectedSkillIndex != null) {
         castSkill(selectedSkillIndex, selectedTargetId ?? undefined);
         return;
@@ -27258,7 +27471,8 @@ function bind(): void {
         : null;
       if (!active || !battle.canUseSkill(active, idx)) return;
       selectedSummonerSkill = null;
-      selectedSkillIndex = selectedSkillIndex === idx ? null : idx;
+      selectedTargetId = null;
+      selectedSkillIndex = idx;
       render();
     });
   });
@@ -27284,12 +27498,13 @@ function bind(): void {
         const id = btn.dataset.summonerSkill;
         if (!id) return;
         selectedSkillIndex = null;
+        selectedTargetId = null;
         const active = battle.activeUnitId
           ? battle.getUnit(battle.activeUnitId)
           : null;
-        if (summonerSkillNeedsEnemyTarget(id, active)) {
-          selectedSummonerSkill =
-            selectedSummonerSkill === id ? null : id;
+        const aim = summonerSkillAimMode(id, active);
+        if (aim === "enemy" || aim === "ally") {
+          selectedSummonerSkill = id;
           render();
           return;
         }
