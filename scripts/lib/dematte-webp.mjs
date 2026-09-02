@@ -527,17 +527,6 @@ export function fillInteriorHoles(rgba, w, h, minNeighbors = 4, passes = 4) {
 }
 
 export async function finishDematteRgba(rgba, w, h, opts = {}) {
-  // Clear residual flat white plate pockets (wing gaps etc.) before seal/fill.
-  if (opts.punchEnclosedWhite) {
-    punchEnclosedBrightMatte(rgba, w, h, {
-      lumMin: opts.whiteLumMin,
-      chromaMax: opts.whiteChromaMax,
-      flatRange: opts.whiteFlatRange,
-      minSize: opts.whiteMinSize,
-      minFlatPct: opts.whiteMinFlatPct,
-      minAvgLum: opts.whiteMinAvgLum,
-    });
-  }
   if (opts.defringe) {
     defringeMatteResidue(rgba, opts.defringeLim ?? 40);
   }
@@ -558,6 +547,18 @@ export async function finishDematteRgba(rgba, w, h, opts = {}) {
       opts.fillHoleNeighbors ?? 4,
       opts.fillHolePasses ?? 4,
     );
+  }
+  // After hole-fill: clear residual flat white plate (wing gaps etc.).
+  // Running before fillHoles lets neighbor white fringe re-seal punched pockets.
+  if (opts.punchEnclosedWhite) {
+    punchEnclosedBrightMatte(rgba, w, h, {
+      lumMin: opts.whiteLumMin,
+      chromaMax: opts.whiteChromaMax,
+      flatRange: opts.whiteFlatRange,
+      minSize: opts.whiteMinSize,
+      minFlatPct: opts.whiteMinFlatPct,
+      minAvgLum: opts.whiteMinAvgLum,
+    });
   }
   zeroClearRgb(rgba);
 }
