@@ -364,6 +364,7 @@ import {
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
   MAX_SKILL_LEVEL,
+  SKILL_LEVEL_POWER_PCT,
   MAX_SUMMONER_AWAKEN,
   monsterAwakenCrystalCost,
   monsterAwakenManaCost,
@@ -15451,7 +15452,7 @@ function monsterSkillFlavorText(
 }
 
 function monsterSkillLevelPowerMult(level: number): number {
-  return 1 + (Math.max(1, Math.floor(level)) - 1) * 0.08;
+  return 1 + (Math.max(1, Math.floor(level)) - 1) * SKILL_LEVEL_POWER_PCT;
 }
 
 function monsterSkillCooldownAtLevel(
@@ -15599,7 +15600,7 @@ function monsterSkillLevelLine(
   if (level >= MAX_SKILL_LEVEL && (skill?.cooldown ?? 0) > 0) {
     return t("ui.skillLvCd");
   }
-  return t("ui.skillLvDmgPct", { pct: 8 });
+  return t("ui.skillLvDmgPct", { pct: Math.round(SKILL_LEVEL_POWER_PCT * 100) });
 }
 
 function monsterSkillLevelEffect(

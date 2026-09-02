@@ -1,17 +1,22 @@
 import type { BalanceArchetype, Stats } from "./types.js";
 
 /**
- * Lv1 bases aligned to Summoners War, so SW-scale symbol flats (HP+ 2448)
- * stay meaningful. Level/evolve multipliers in roster.ts still apply on top.
+ * Lv1 bases by natural stars — Summoners War–style gap.
+ *
+ * Power difference between nat 1★ and 5★ must survive evolving both to 6★.
+ * Evolve multipliers in roster.ts are intentionally modest so low-nat
+ * fodder cannot erase the base-stat gap.
+ *
+ * Scale stays SW-like so symbol flats (HP+ 2448) remain meaningful.
  */
 export function baseStatsFor(stars: number, role: BalanceArchetype): Stats {
   const s = Math.max(1, Math.min(5, stars));
   const tier = {
-    1: { hp: 3000, atk: 155, def: 140, spd: 96 },
-    2: { hp: 3400, atk: 180, def: 160, spd: 98 },
-    3: { hp: 4000, atk: 210, def: 180, spd: 100 },
-    4: { hp: 4600, atk: 250, def: 210, spd: 102 },
-    5: { hp: 5300, atk: 290, def: 240, spd: 104 },
+    1: { hp: 2600, atk: 135, def: 120, spd: 95 },
+    2: { hp: 3200, atk: 170, def: 145, spd: 97 },
+    3: { hp: 3900, atk: 215, def: 175, spd: 100 },
+    4: { hp: 4800, atk: 270, def: 215, spd: 102 },
+    5: { hp: 5900, atk: 340, def: 260, spd: 105 },
   }[s as 1 | 2 | 3 | 4 | 5]!;
 
   const bias: Record<BalanceArchetype, Partial<Stats>> = {

@@ -33,6 +33,7 @@ export {
   monsterGrade,
   monsterMaxLevel,
   MAX_SKILL_LEVEL,
+  SKILL_LEVEL_POWER_PCT,
   MONSTER_EXP_PER_LEVEL,
   MAX_SUMMONER_AWAKEN,
   MAX_GEAR_BAG,

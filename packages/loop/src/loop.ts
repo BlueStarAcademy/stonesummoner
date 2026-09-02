@@ -151,6 +151,7 @@ import {
   monsterExpToNext,
   monsterMaxLevel,
   MAX_SKILL_LEVEL,
+  SKILL_LEVEL_POWER_PCT,
   nextUid,
   normalizeSkillLevels,
   pickRandomSkillUpIndex,
@@ -277,6 +278,7 @@ export {
   monsterGrade,
   monsterMaxLevel,
   MAX_SKILL_LEVEL,
+  SKILL_LEVEL_POWER_PCT,
   displayedMonsterStars,
   monsterAwakenCrystalCost,
   monsterAwakenManaCost,
@@ -1763,13 +1765,13 @@ function enemySummonerProfile(stage: StageDef): {
 
 export function skillsForMonster(
   m: NonNullable<ReturnType<typeof getMonster>>,
-  evolve = 0,
+  _evolve = 0,
   skillLevels: [number, number, number] = defaultSkillLevels(),
 ) {
-  const evoBump = evolve * 0.05;
+  // Summoners War: evolving raises base stats only — skill % grows via skill-ups.
   return m.skills.map((sk, i) => {
     const lv = skillLevels[i] ?? 1;
-    const skBump = (lv - 1) * 0.08;
+    const skBump = (lv - 1) * SKILL_LEVEL_POWER_PCT;
     const cdCut = sk.cooldown > 0 && lv >= MAX_SKILL_LEVEL ? 1 : 0;
     return {
       ...sk,
@@ -1781,7 +1783,7 @@ export function skillsForMonster(
           e.kind === "hot" ||
           e.kind === "shield"
         ) {
-          return { ...e, coeff: e.coeff * (1 + evoBump + skBump) };
+          return { ...e, coeff: e.coeff * (1 + skBump) };
         }
         if (e.kind === "mana") {
           return { ...e, amount: Math.round(e.amount * (1 + skBump)) };
@@ -1838,8 +1840,7 @@ function unitFromOwned(
       resistance: stats.resistance,
     },
     skillCoeff:
-      m.skillCoeff *
-      (1 + (owned.evolve ?? 0) * 0.05 + (skillLevels[0]! - 1) * 0.08),
+      m.skillCoeff * (1 + (skillLevels[0]! - 1) * SKILL_LEVEL_POWER_PCT),
     skills: skillsForMonster(m, owned.evolve ?? 0, skillLevels),
     stonePassive: m.stonePassiveId,
     startShieldPct: mods.startShieldPct || undefined,
