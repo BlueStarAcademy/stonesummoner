@@ -3522,6 +3522,7 @@ function closeAttendanceSoft(): void {
   }
   cueModalSfx("mailbox", false);
   showNextFeatureUnlock();
+  applyGuideRailOpen();
 }
 
 function openAttendanceSoft(): void {
@@ -3718,7 +3719,7 @@ function renderGuideRailStepMarkers(
 }
 
 function guideRailBlockingOverlayOpen(): boolean {
-  if (onboardWelcomeOpen) return true;
+  if (app.querySelector("#onboard-welcome")) return true;
   if (resMoreOpen || islandLayoutEdit || islandSpotMenuId || gearBagFilterOpen) {
     return true;
   }
@@ -3915,6 +3916,7 @@ function bindOnboardUi(): void {
     refreshOnboardChrome();
     maybePromptAttendance();
     showNextFeatureUnlock();
+    applyGuideRailOpen();
   });
   app.querySelector("#btn-onboard-welcome-veil")?.addEventListener("click", () => {
     app.querySelector<HTMLButtonElement>("#btn-onboard-welcome")?.click();
