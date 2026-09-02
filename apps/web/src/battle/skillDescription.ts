@@ -190,6 +190,10 @@ function effectLine(
         source: scalingSource(effect, "atk"),
         pct: pct(scaledCoeff * powerMultiplier),
       });
+      const hits = numberFrom(effect, "hits");
+      if (hits != null && hits > 1) {
+        line = t("ui.skillFxMultiHit", { text: line, hits: Math.round(hits) });
+      }
       if (
         effect.ignoreDefense === true ||
         effect.ignoreDef === true ||
@@ -245,15 +249,31 @@ function effectLine(
         effect,
       );
     case "dot":
-    case "hot":
+    case "hot": {
+      const dotKind = stringFrom(effect, "dotKind", "dot_kind");
+      const dotKey =
+        kind === "hot"
+          ? "ui.skillFxHot"
+          : dotKind === "burn"
+            ? "ui.skillFxBurn"
+            : dotKind === "poison"
+              ? "ui.skillFxPoison"
+              : "ui.skillFxDot";
+      const source =
+        kind === "hot"
+          ? scalingSource(effect, "max_hp")
+          : dotKind === "poison"
+            ? scalingSource(effect, "max_hp")
+            : scalingSource(effect, "atk");
       return withTurnsAndChance(
-        t(kind === "dot" ? "ui.skillFxDot" : "ui.skillFxHot", {
+        t(dotKey, {
           target,
-          source: scalingSource(effect, kind === "dot" ? "atk" : "max_hp"),
+          source,
           pct: pct(scaledCoeff * powerMultiplier),
         }),
         effect,
       );
+    }
     case "strip":
     case "cleanse":
       return withTurnsAndChance(
@@ -269,6 +289,8 @@ function effectLine(
       return withTurnsAndChance(t("ui.skillFxHealBlock", { target }), effect);
     case "silence":
       return withTurnsAndChance(t("ui.skillFxSilence", { target }), effect);
+    case "immunity":
+      return withTurnsAndChance(t("ui.skillFxImmunity", { target }), effect);
     case "atb":
     case "attack_bar":
     case "atb_gain":

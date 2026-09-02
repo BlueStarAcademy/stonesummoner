@@ -1692,6 +1692,49 @@ export class Battle {
     return chosen.slice(0, n);
   }
 
+  private applyMagicAilment(
+    source: Unit,
+    target: Unit,
+    ailment: {
+      kind: "burn" | "poison" | "stun" | "freeze" | "sleep" | "silence";
+      turns: number;
+      chance: number;
+    },
+  ): void {
+    if (!this.effectLands(source, target, ailment.chance)) return;
+    if (ailment.kind === "burn" || ailment.kind === "poison") {
+      const value =
+        ailment.kind === "poison"
+          ? target.stats.hp * 0.05
+          : source.stats.atk *
+            Math.max(
+              0.3,
+              (1 + (source.atkBuffPct ?? 0)) * (1 - (source.atkDebuffPct ?? 0)),
+            ) *
+            0.12;
+      addStatus(target, {
+        kind: ailment.kind,
+        sourceUnitId: source.id,
+        polarity: "debuff",
+        turns: ailment.turns,
+        stacking: "stack",
+        dispellable: true,
+        amount: ailment.kind === "poison" ? 0.05 : 0.12,
+        value,
+      });
+    } else {
+      addStatus(target, {
+        kind: ailment.kind,
+        sourceUnitId: source.id,
+        polarity: "debuff",
+        turns: ailment.turns,
+        stacking: "replace",
+        dispellable: true,
+      });
+    }
+    this.log.push(`${target.name} ${ailment.kind} ${ailment.turns}턴`);
+  }
+
   private castMagicSkill(
     unit: Unit,
     skillId: string,
@@ -1707,7 +1750,9 @@ export class Battle {
     const targetIds = this.presentationTargetIds(
       unit,
       [
-        ...(def.kind === "aoe_damage" || def.kind === "enemy_debuff"
+        ...(def.kind === "aoe_damage" ||
+          def.kind === "enemy_debuff" ||
+          def.kind === "enemy_ailment"
           ? [{ kind: "damage", target: "all_enemies", coeff: 0 } as const]
           : def.kind === "single_damage"
             ? [{ kind: "damage", target: "single", coeff: 0 } as const]
@@ -1741,8 +1786,13 @@ export class Battle {
           def.hitCount,
           targetId,
         );
+        const hits = Math.max(1, Math.min(5, def.hits ?? 1));
+        const perHit = power / hits;
         for (const t of foes) {
-          results.push(this.applyHit(unit, t, power, true));
+          for (let hit = 0; hit < hits; hit += 1) {
+            results.push(this.applyHit(unit, t, perHit, true));
+            if (def.ailment) this.applyMagicAilment(unit, t, def.ailment);
+          }
         }
         break;
       }
@@ -1755,8 +1805,48 @@ export class Battle {
           def.hitCount && def.hitCount > 1 ? def.hitCount : 1,
           targetId,
         );
+        const hits = Math.max(1, Math.min(5, def.hits ?? 1));
+        const perHit = power / hits;
         for (const t of foes) {
-          results.push(this.applyHit(unit, t, power, true));
+          for (let hit = 0; hit < hits; hit += 1) {
+            results.push(this.applyHit(unit, t, perHit, true));
+            if (def.ailment) this.applyMagicAilment(unit, t, def.ailment);
+          }
+        }
+        break;
+      }
+      case "enemy_ailment": {
+        const foes = this.pickLivingTargets(
+          aliveSummons(
+            this.units,
+            unit.team === "ally" ? "enemy" : "ally",
+          ),
+          def.hitCount,
+          targetId,
+        );
+        const ailment = def.ailment ?? {
+          kind: "burn" as const,
+          turns: def.turns ?? 2,
+          chance: 1,
+        };
+        for (const t of foes) {
+          this.applyMagicAilment(unit, t, ailment);
+        }
+        break;
+      }
+      case "ally_cleanse": {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const ally of allies) {
+          const removed = removeStatuses(
+            ally,
+            "debuff",
+            def.cleanseCount ?? Infinity,
+          );
+          this.log.push(`${ally.name} 약화 해제 ${removed.length}`);
         }
         break;
       }
@@ -2376,14 +2466,18 @@ export class Battle {
               );
 
       if (effect.kind === "damage") {
+        const hits = Math.max(1, Math.min(5, effect.hits ?? 1));
+        const perHit = effect.coeff / hits;
         for (const target of enemyTargets) {
-          results.push(
-            this.applyHit(unit, target, effect.coeff, false, {
-              source: effect.source,
-              sourceFactor: effect.sourceFactor,
-              ignoreDef: effect.ignoreDef,
-            }),
-          );
+          for (let hit = 0; hit < hits; hit += 1) {
+            results.push(
+              this.applyHit(unit, target, perHit, false, {
+                source: effect.source,
+                sourceFactor: effect.sourceFactor,
+                ignoreDef: effect.ignoreDef,
+              }),
+            );
+          }
         }
       } else if (effect.kind === "heal") {
         for (const target of allyTargets) {
@@ -2457,39 +2551,74 @@ export class Battle {
           );
         }
       } else if (effect.kind === "dot") {
+        const damageHits = Math.max(
+          1,
+          ...skill.effects
+            .filter((entry): entry is Extract<SkillDef["effects"][number], { kind: "damage" }> =>
+              entry.kind === "damage",
+            )
+            .map((entry) => entry.hits ?? 1),
+        );
+        const rolls =
+          effect.chance != null && damageHits > 1 ? damageHits : 1;
+        const statusKind =
+          effect.dotKind === "burn"
+            ? "burn"
+            : effect.dotKind === "poison"
+              ? "poison"
+              : "dot";
         for (const target of enemyTargets) {
-          if (!this.effectLands(unit, target, this.effectChance(effect))) continue;
-          addStatus(target, {
-            kind: "dot",
-            sourceUnitId: unit.id,
-            polarity: "debuff",
-            turns: effect.turns,
-            stacking: "stack",
-            dispellable: true,
-            amount: effect.coeff,
-            value:
+          for (let roll = 0; roll < rolls; roll += 1) {
+            if (!this.effectLands(unit, target, this.effectChance(effect))) continue;
+            const atkSnapshot =
               unit.stats.atk *
               Math.max(
                 0.3,
                 (1 + (unit.atkBuffPct ?? 0)) *
                   (1 - (unit.atkDebuffPct ?? 0)),
-              ) *
-              effect.coeff,
-          });
-          this.log.push(`${target.name} 지속피해 ${effect.turns}턴`);
+              );
+            const value =
+              statusKind === "poison"
+                ? target.stats.hp * effect.coeff
+                : atkSnapshot * effect.coeff;
+            addStatus(target, {
+              kind: statusKind,
+              sourceUnitId: unit.id,
+              polarity: "debuff",
+              turns: effect.turns,
+              stacking: "stack",
+              dispellable: true,
+              amount: effect.coeff,
+              value,
+            });
+            this.log.push(`${target.name} ${statusKind} ${effect.turns}턴`);
+          }
         }
       } else if (effect.kind === "cc") {
+        const damageHits = Math.max(
+          1,
+          ...skill.effects
+            .filter((entry): entry is Extract<SkillDef["effects"][number], { kind: "damage" }> =>
+              entry.kind === "damage",
+            )
+            .map((entry) => entry.hits ?? 1),
+        );
+        const rolls =
+          effect.chance != null && damageHits > 1 ? damageHits : 1;
         for (const target of enemyTargets) {
-          if (!this.effectLands(unit, target, effect.chance ?? 1)) continue;
-          addStatus(target, {
-            kind: effect.cc,
-            sourceUnitId: unit.id,
-            polarity: "debuff",
-            turns: effect.turns,
-            stacking: "replace",
-            dispellable: true,
-          });
-          this.log.push(`${target.name} ${effect.cc} ${effect.turns}턴`);
+          for (let roll = 0; roll < rolls; roll += 1) {
+            if (!this.effectLands(unit, target, effect.chance ?? 1)) continue;
+            addStatus(target, {
+              kind: effect.cc,
+              sourceUnitId: unit.id,
+              polarity: "debuff",
+              turns: effect.turns,
+              stacking: "replace",
+              dispellable: true,
+            });
+            this.log.push(`${target.name} ${effect.cc} ${effect.turns}턴`);
+            break;
+          }
         }
       } else if (effect.kind === "strip") {
         for (const target of enemyTargets) {
@@ -2506,16 +2635,29 @@ export class Battle {
           this.log.push(`${target.name} 약화 해제 ${removed.length}`);
         }
       } else if (effect.kind === "heal_block" || effect.kind === "silence") {
+        const damageHits = Math.max(
+          1,
+          ...skill.effects
+            .filter((entry): entry is Extract<SkillDef["effects"][number], { kind: "damage" }> =>
+              entry.kind === "damage",
+            )
+            .map((entry) => entry.hits ?? 1),
+        );
+        const rolls =
+          effect.chance != null && damageHits > 1 ? damageHits : 1;
         for (const target of enemyTargets) {
-          if (!this.effectLands(unit, target, effect.chance ?? 1)) continue;
-          addStatus(target, {
-            kind: effect.kind,
-            sourceUnitId: unit.id,
-            polarity: "debuff",
-            turns: effect.turns,
-            stacking: "replace",
-            dispellable: true,
-          });
+          for (let roll = 0; roll < rolls; roll += 1) {
+            if (!this.effectLands(unit, target, effect.chance ?? 1)) continue;
+            addStatus(target, {
+              kind: effect.kind,
+              sourceUnitId: unit.id,
+              polarity: "debuff",
+              turns: effect.turns,
+              stacking: "replace",
+              dispellable: true,
+            });
+            break;
+          }
         }
       } else if (effect.kind === "atb") {
         const targets = effect.target === "single" || effect.target === "all_enemies"
@@ -2601,6 +2743,25 @@ export class Battle {
             dispellable: true,
           });
           this.log.push(`${target.name} 도발 ${effect.turns}턴`);
+        }
+      } else if (effect.kind === "immunity") {
+        for (const target of allyTargets) {
+          if (effect.kinds && effect.kinds.length > 0) {
+            const blocked = effect.kinds as import("./types.js").StatusKind[];
+            target.immuneStatusKinds = [
+              ...new Set([...(target.immuneStatusKinds ?? []), ...blocked]),
+            ];
+          } else {
+            addStatus(target, {
+              kind: "immunity",
+              sourceUnitId: unit.id,
+              polarity: "buff",
+              turns: effect.turns,
+              stacking: "replace",
+              dispellable: true,
+            });
+          }
+          this.log.push(`${target.name} 면역 ${effect.turns}턴`);
         }
       }
     }

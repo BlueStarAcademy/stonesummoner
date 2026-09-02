@@ -481,8 +481,8 @@ const messages: MessageDict = {
   "ui.c04eb2ef10": "W",
   "ui.9f329dea90": "A",
   "ui.173366486b": "Hell",
-  "ui.ab309da205": "Enemy +4 · much better rewards",
-  "ui.7be5aa7542": "Enemy +2 · better rewards",
+  "ui.ab309da205": "Enemy +10 · much better rewards",
+  "ui.7be5aa7542": "Enemy +5 · better rewards",
   "ui.956f2f4243": "Locked",
   "ui.94b7dba159": "Close",
   "ui.c6953a607b": "Awaiting summon",
@@ -1480,7 +1480,12 @@ const messages: MessageDict = {
   "ui.growthResultMagicFail": "Magic enhance failed",
   "ui.growthMagicSuccessBadge": "Success",
   "ui.growthMagicFailBadge": "Failed",
-  "ui.growthPlayingMagicRate": "Success rate {pct}%"
-};
+  "ui.growthPlayingMagicRate": "Success rate {pct}%",
+  "ui.skillFxBurn": "{target} · Burn {pct}% ATK each turn",
+  "ui.skillFxPoison": "{target} · Poison {pct}% max HP each turn",
+  "ui.skillFxMultiHit": "{text} · {hits} hits",
+  "ui.skillFxImmunity": "{target} · Status immunity",
+  "ui.statusBurn": "Burn",
+  "ui.statusPoison": "Poison"};
 
 export default messages;

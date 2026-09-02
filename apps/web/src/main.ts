@@ -214,6 +214,12 @@ import {
   MAIN_QUEST_PIN_LAYOUT,
   MAIN_QUEST_STAGES,
   SIDE_CONTENT_PIN_LAYOUT,
+  STAGES_LANDMARK_LAYOUT,
+  STAGES_MQ_LANDMARK_LAYOUT,
+  STAGES_MAP_HOME_REGION_ID,
+  STAGES_MAP_NATURAL as STAGES_MAP_NATURAL_DATA,
+  STAGES_TERRAIN_ART_PATH,
+  stagesLandmarkArtPath,
   STAGES_PER_AREA,
   TRIAL_STAGES,
   ALL_CHALLENGE_TOWER_STAGES,
@@ -354,9 +360,11 @@ import {
   isStageUnlockedForDifficulty,
   isDifficultyOpen,
   nextStageInProgression,
+  SCENARIO_DIFF_ENERGY_MUL,
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
   MAX_SKILL_LEVEL,
+  SKILL_LEVEL_POWER_PCT,
   MAX_SUMMONER_AWAKEN,
   monsterAwakenCrystalCost,
   monsterAwakenManaCost,
@@ -803,7 +811,6 @@ let sessionUser: SessionUser | null = null;
 const authUi = {
   pane: "gate" as "gate" | "login" | "register" | "privacy" | "terms",
 };
-let islandPreloadProgress: IslandPreloadProgress | null = null;
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -908,6 +915,9 @@ let cloudTimer: ReturnType<typeof setTimeout> | null = null;
 /** False after cloud 401 — keep local play, stop PUT spam. */
 let cloudSyncOk = true;
 let cloudAuthWarned = false;
+/** False when /api is unreachable (local dev without `npm run api`, etc.). */
+let apiReachable = false;
+let chatPollBackoffMs = 1600;
 let ephemeralStore = false;
 
 let save: PlayerSave = createNewSave();
@@ -1945,7 +1955,7 @@ let chatLineNick: string | null = null;
 let chatLineText: string | null = null;
 /** True while the one-line dock has unseen messages. */
 let chatLineUnread = false;
-let chatPollTimer: ReturnType<typeof setInterval> | null = null;
+let chatPollTimer: ReturnType<typeof setTimeout> | null = null;
 let chatWanted = false;
 let chatAfter = 0;
 let chatSendBusy = false;
@@ -3214,12 +3224,15 @@ let stagesPanDrag: {
   moved: boolean;
 } | null = null;
 /** Atlas pixel size — pin x/y% are fractions of this image, not the viewport crop. */
-const STAGES_MAP_NATURAL = { w: 1080, h: 1920 } as const;
+const STAGES_MAP_NATURAL = {
+  w: STAGES_MAP_NATURAL_DATA.w,
+  h: STAGES_MAP_NATURAL_DATA.h,
+} as const;
 const STAGES_MAP_ASPECT = STAGES_MAP_NATURAL.w / STAGES_MAP_NATURAL.h;
-/** World larger than viewport so the full atlas can be panned. */
-const STAGES_WORLD_OVERSCAN = 1.55;
+/** World larger than viewport so the full atlas can be panned widely. */
+const STAGES_WORLD_OVERSCAN = 2.35;
 /** Bump when atlas fit metrics change so the next bind re-centers once. */
-const STAGES_MAP_FIT_VERSION = 1;
+const STAGES_MAP_FIT_VERSION = 3;
 let stagesMapFitApplied = 0;
 let stagesWorldResizeObs: ResizeObserver | null = null;
 
@@ -3266,10 +3279,41 @@ async function apiJson<T>(
       return null;
     }
     if (!res.ok) return null;
+    noteApiReachable();
     return (await res.json()) as T;
   } catch {
+    noteApiUnreachable();
     return null;
   }
+}
+
+function noteApiReachable(): void {
+  apiReachable = true;
+  chatPollBackoffMs = 1600;
+}
+
+function noteApiUnreachable(): void {
+  if (apiReachable) apiReachable = false;
+  chatPollBackoffMs = Math.min(60_000, Math.max(1600, chatPollBackoffMs * 2));
+}
+
+function chatPollDelayMs(): number {
+  return apiReachable ? 1600 : chatPollBackoffMs;
+}
+
+function scheduleChatPoll(): void {
+  if (!chatWanted) return;
+  if (chatPollTimer) clearTimeout(chatPollTimer);
+  chatPollTimer = setTimeout(() => {
+    chatPollTimer = null;
+    void tickChatLive();
+  }, chatPollDelayMs());
+}
+
+function clearChatPoll(): void {
+  if (!chatPollTimer) return;
+  clearTimeout(chatPollTimer);
+  chatPollTimer = null;
 }
 
 function noteCloudUnauthorized(): void {
@@ -3314,7 +3358,7 @@ function loadLocalSave(key = localSaveKey()): PlayerSave | null {
 }
 
 function scheduleCloudSave(): void {
-  if (!cloudSyncOk) return;
+  if (!cloudSyncOk || !apiReachable) return;
   if (!sessionUser || sessionUser.id.startsWith("local-")) return;
   if (cloudTimer) clearTimeout(cloudTimer);
   cloudTimer = setTimeout(() => {
@@ -3337,7 +3381,7 @@ function persist(opts?: { flushCloud?: boolean }): void {
 }
 
 function flushCloudSave(): void {
-  if (!cloudSyncOk) return;
+  if (!cloudSyncOk || !apiReachable) return;
   if (!sessionUser || sessionUser.id.startsWith("local-")) return;
   if (cloudTimer) {
     clearTimeout(cloudTimer);
@@ -4161,8 +4205,12 @@ async function enterWithUser(
       opts?.fresh === true ||
       readAuthPrefs().autoLogin);
   if (enterGame) {
-    await prepareIslandAssets();
     view = "home";
+    if (user.kind === "demo") {
+      flash(t("ui.0b00025fb4"));
+    } else if (user.kind === "guest") {
+      flash(t("ui.02f932d2cd"));
+    }
   } else {
     view = "auth";
     flash(
@@ -4243,11 +4291,15 @@ async function prepareIslandAssets(): Promise<void> {
 
 async function startGameFromAuth(): Promise<void> {
   if (!sessionUser) return;
+  view = "home";
   syncOnboardFromSave({
     offerWelcome: !onboard.welcomeSeen && onboard.step !== "done",
   });
-  await prepareIslandAssets();
-  view = "home";
+  if (sessionUser.kind === "demo") {
+    flash(t("ui.0b00025fb4"));
+  } else if (sessionUser.kind === "guest") {
+    flash(t("ui.02f932d2cd"));
+  }
   render();
   window.requestAnimationFrame(() => {
     maybePromptAttendance();
@@ -8691,7 +8743,7 @@ function renderUnit(
     </div>`;
   }
 
-  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" data-stature="${stature.toFixed(2)}" style="--unit-stature:${stature}" ${attrs} title="${escapeHtml(`${u.name} · ${elementLabel(u.element as SummonerElement)}`)}">
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" data-stature="${stature.toFixed(2)}" style="--unit-stature:${stature}"${u.kind === "monster" && u.monsterId ? monsterSlotFamilyAttr(u.monsterId) : ""} ${attrs} title="${escapeHtml(`${u.name} · ${elementLabel(u.element as SummonerElement)}`)}">
     ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
     ${renderUnitStatusIcons(u)}
     <span class="battle-unit-glow" aria-hidden="true"></span>
@@ -8959,7 +9011,7 @@ function renderBoard(): string {
   </div>`;
 }
 
-/** Always-mounted right-side Go readout; stowed (not display:none) while the pick overlay is open. */
+/** Always-mounted Go readout; stowed (not display:none) while the pick overlay is open. */
 function renderBoardMini(): string {
   if (!battle) return "";
   const size = battle.board.size;
@@ -9412,25 +9464,6 @@ function renderAuth(): string {
         : ""
     }
   </div>`;
-}
-
-function renderIslandPreload(): string {
-  const progress = islandPreloadProgress ?? {
-    completed: 0,
-    total: 1,
-    percent: 0,
-  };
-  const label = escapeHtml(t("boot.loading"));
-  return `${authHeroLayer()}
-    <div class="auth-screen auth-screen--form auth-island-preload">
-      ${authBrand()}
-      <div class="island-preload-card" aria-live="polite">
-        <strong class="island-preload-percent">${progress.percent}%</strong>
-        <div class="island-preload-bar" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.percent}">
-          <span class="island-preload-fill" style="width:${progress.percent}%"></span>
-        </div>
-      </div>
-    </div>`;
 }
 
 function isFacilityView(v: View = view): boolean {
@@ -12280,6 +12313,7 @@ async function doJoinChat(): Promise<boolean> {
     profile: chatProfilePayload(),
   });
   if (r.ok) {
+    noteApiReachable();
     applyChatSnapshot(r.data);
     chatConnected = true;
     chatFailFlashed = false;
@@ -12296,13 +12330,16 @@ async function doJoinChat(): Promise<boolean> {
       profile: chatProfilePayload(),
     });
     if (again.ok) {
+      noteApiReachable();
       applyChatSnapshot(again.data);
       chatConnected = true;
       chatFailFlashed = false;
       persistChatChannel();
       return true;
     }
+    if (again.status === 0) noteApiUnreachable();
   }
+  if (r.status === 0) noteApiUnreachable();
   chatFlashError(r.error);
   return false;
 }
@@ -12355,32 +12392,35 @@ async function sendChatLive(text: string): Promise<boolean> {
 
 async function tickChatLive(): Promise<void> {
   if (!chatWanted || !canUseLiveChat()) return;
-  if (!chatConnected) {
-    await joinChatLive();
-    return;
-  }
-  const r = await chatPoll(chatAfter, { tab: chatTab, peer: chatPeerUid });
-  if (!r.ok) {
-    if (r.error === "not_joined" || r.status === 409) {
-      chatConnected = false;
+  try {
+    if (!chatConnected) {
       await joinChatLive();
       return;
     }
-    if (r.status === 401) {
-      chatConnected = false;
-      chatWanted = false;
-      if (chatPollTimer) {
-        clearInterval(chatPollTimer);
-        chatPollTimer = null;
+    const r = await chatPoll(chatAfter, { tab: chatTab, peer: chatPeerUid });
+    if (!r.ok) {
+      if (r.status === 0) noteApiUnreachable();
+      if (r.error === "not_joined" || r.status === 409) {
+        chatConnected = false;
+        await joinChatLive();
+        return;
       }
-      chatFlashError("unauthorized");
+      if (r.status === 401) {
+        chatConnected = false;
+        chatWanted = false;
+        clearChatPoll();
+        chatFlashError("unauthorized");
+        return;
+      }
+      chatFlashError(r.error);
       return;
     }
-    chatFlashError(r.error);
-    return;
+    noteApiReachable();
+    chatFailFlashed = false;
+    applyChatSnapshot(r.data);
+  } finally {
+    if (chatWanted) scheduleChatPoll();
   }
-  chatFailFlashed = false;
-  applyChatSnapshot(r.data);
 }
 
 function startChatLive(): void {
@@ -12388,18 +12428,12 @@ function startChatLive(): void {
   chatWanted = true;
   if (chatPollTimer) return;
   ensureChatChannels();
-  chatPollTimer = setInterval(() => {
-    void tickChatLive();
-  }, 1600);
   void tickChatLive();
 }
 
 function stopChatLive(): void {
   chatWanted = false;
-  if (chatPollTimer) {
-    clearInterval(chatPollTimer);
-    chatPollTimer = null;
-  }
+  clearChatPoll();
   const was = chatConnected;
   chatConnected = false;
   chatAfter = 0;
@@ -13120,7 +13154,7 @@ function render(): void {
     const next = app.querySelector<HTMLElement>(".home-island");
     if (next && next !== keepIsland) next.replaceWith(keepIsland);
   }
-  setBackHistoryTrapWanted(view !== "auth" || !!islandPreloadProgress);
+  setBackHistoryTrapWanted(view !== "auth");
 }
 
 /** Full re-render; island DOM is preserved by render() when staying on the island. */
@@ -13150,20 +13184,6 @@ function renderScreen(): void {
       </div>
       ${authFooter()}
     </main>`;
-    return;
-  }
-  if (islandPreloadProgress) {
-    app.classList.add("auth-mode");
-    app.classList.remove(
-      "home-mode",
-      "expedition-mode",
-      "combat-mode",
-      "monster-mode",
-      "summoner-mode",
-      "facility-modal-open",
-      "party-modal-open",
-    );
-    app.innerHTML = `<main class="auth-main auth-main--center">${renderIslandPreload()}</main>`;
     return;
   }
 
@@ -15441,7 +15461,7 @@ function monsterSkillFlavorText(
 }
 
 function monsterSkillLevelPowerMult(level: number): number {
-  return 1 + (Math.max(1, Math.floor(level)) - 1) * 0.08;
+  return 1 + (Math.max(1, Math.floor(level)) - 1) * SKILL_LEVEL_POWER_PCT;
 }
 
 function monsterSkillCooldownAtLevel(
@@ -15589,7 +15609,7 @@ function monsterSkillLevelLine(
   if (level >= MAX_SKILL_LEVEL && (skill?.cooldown ?? 0) > 0) {
     return t("ui.skillLvCd");
   }
-  return t("ui.skillLvDmgPct", { pct: 8 });
+  return t("ui.skillLvDmgPct", { pct: Math.round(SKILL_LEVEL_POWER_PCT * 100) });
 }
 
 function monsterSkillLevelEffect(
@@ -22485,9 +22505,24 @@ const STAGE_DIFFICULTIES: {
   blurb: string;
   energyMul: number;
 }[] = [
-  { id: "normal", labelKo: t('ui.aef1a1e70e'), blurb: t('ui.2387a8e0b0'), energyMul: 1 },
-  { id: "hard", labelKo: t('ui.3dfdef02ab'), blurb: t('ui.7be5aa7542'), energyMul: 1.5 },
-  { id: "hell", labelKo: t('ui.173366486b'), blurb: t('ui.ab309da205'), energyMul: 2 },
+  {
+    id: "normal",
+    labelKo: t("ui.aef1a1e70e"),
+    blurb: t("ui.2387a8e0b0"),
+    energyMul: SCENARIO_DIFF_ENERGY_MUL.normal,
+  },
+  {
+    id: "hard",
+    labelKo: t("ui.3dfdef02ab"),
+    blurb: t("ui.7be5aa7542"),
+    energyMul: SCENARIO_DIFF_ENERGY_MUL.hard,
+  },
+  {
+    id: "hell",
+    labelKo: t("ui.173366486b"),
+    blurb: t("ui.ab309da205"),
+    energyMul: SCENARIO_DIFF_ENERGY_MUL.hell,
+  },
 ];
 
 function stageEnergyCost(stage: StageDef): number {
@@ -23944,19 +23979,30 @@ function renderStages(): string {
       </button>`;
     })
     .join("");
+  const landmarks = [
+    ...STAGES_MQ_LANDMARK_LAYOUT.map((lm) => {
+      const scale = lm.scale ?? 1;
+      return `<img class="stages-landmark stages-landmark--mq" src="${stagesLandmarkArtPath(lm.artKey)}" alt="" draggable="false" decoding="async" style="left:${lm.x}%;top:${lm.y}%;--lm-scale:${scale}" data-landmark="mq${lm.map}" data-mq-map="${lm.map}" aria-hidden="true" />`;
+    }),
+    ...STAGES_LANDMARK_LAYOUT.map((lm) => {
+      const scale = lm.scale ?? 1;
+      return `<img class="stages-landmark${lm.id === "challenge_tower" ? " stages-landmark--hero" : ""}" src="${stagesLandmarkArtPath(lm.artKey)}" alt="" draggable="false" decoding="async" style="left:${lm.x}%;top:${lm.y}%;--lm-scale:${scale}" data-landmark="${lm.id}" aria-hidden="true" />`;
+    }),
+  ].join("");
   return `<div class="stages-hub stages-hub--map">
     <div class="stages-viewport" id="stages-viewport">
       <div class="stages-world" id="stages-world" style="transform:translate(${stagesPan.x}px,${stagesPan.y}px)">
         <img
           class="stages-map-img"
-          src="/art/stages/stages-world-map.png"
-          width="1080"
-          height="1920"
+          src="${STAGES_TERRAIN_ART_PATH}"
+          width="${STAGES_MAP_NATURAL.w}"
+          height="${STAGES_MAP_NATURAL.h}"
           alt=""
           decoding="async"
           draggable="false"
         />
         <div class="stages-map-veil" aria-hidden="true"></div>
+        <div class="stages-landmarks" aria-hidden="true">${landmarks}</div>
         <div class="stages-mq-nodes">${mqNodes}</div>
         <div class="stages-map-pins">${pins}</div>
       </div>
@@ -24552,7 +24598,7 @@ function bindAuth(): void {
 
 
   app.querySelector("#auth-start")?.addEventListener("click", () => {
-    void startGameFromAuth();
+    startGameFromAuth();
   });
 
   app.querySelector("#auth-logout")?.addEventListener("click", () => {
@@ -24854,7 +24900,7 @@ function applyStagesPan(): void {
 
 /**
  * Size the pannable world to the atlas aspect ratio so pin left%/top% map 1:1
- * onto stages-world-map.png on every device (no object-fit cover crop drift).
+ * onto stages-world-terrain.webp on every device (no object-fit cover crop drift).
  */
 function sizeStagesWorld(viewport: HTMLElement, world: HTMLElement): void {
   const vw = viewport.clientWidth;
@@ -24955,13 +25001,11 @@ function bindStagesPan(): void {
   const finishClamp = () => {
     sizeStagesWorld(viewport, world);
     if (stagesMapFitApplied !== STAGES_MAP_FIT_VERSION) {
-      stagesPanCentered = false;
       stagesMapFitApplied = STAGES_MAP_FIT_VERSION;
     }
-    if (!stagesPanCentered && world.offsetWidth > 0) {
-      // Bias toward the MQ corridor start (lower-center of the atlas).
-      stagesPan.x = (viewport.clientWidth - world.offsetWidth) * 0.42;
-      stagesPan.y = (viewport.clientHeight - world.offsetHeight) * 0.72;
+    if (world.offsetWidth > 0) {
+      // Always open framed on stage 1 so the expedition starts at mq1.
+      focusStagesRegion(STAGES_MAP_HOME_REGION_ID);
       stagesPanCentered = true;
     }
     clampStagesPan(viewport, world);
@@ -25892,7 +25936,6 @@ function handleAuthHardwareBack(): void {
 }
 
 function handleHardwareBack(): void {
-  if (islandPreloadProgress) return;
   if (closeTopOverlay()) return;
   if (closeLeftoverTransientUi()) return;
   if (view === "auth") {

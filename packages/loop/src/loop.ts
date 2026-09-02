@@ -151,6 +151,7 @@ import {
   monsterExpToNext,
   monsterMaxLevel,
   MAX_SKILL_LEVEL,
+  SKILL_LEVEL_POWER_PCT,
   nextUid,
   normalizeSkillLevels,
   pickRandomSkillUpIndex,
@@ -202,6 +203,8 @@ import {
   isStageUnlocked,
   isStageUnlockedForDifficulty,
   monsterExpPoolForStage,
+  scenarioDiffEnemyLevelBonus,
+  scenarioDiffEnemyStatMul,
   stageUnlockLabel,
   type ScenarioDifficulty,
 } from "./progress.js";
@@ -275,6 +278,7 @@ export {
   monsterGrade,
   monsterMaxLevel,
   MAX_SKILL_LEVEL,
+  SKILL_LEVEL_POWER_PCT,
   displayedMonsterStars,
   monsterAwakenCrystalCost,
   monsterAwakenManaCost,
@@ -300,11 +304,20 @@ export {
   energyCostForStage,
   expForStage,
   isDifficultyOpen,
+  isScenarioTrackFullyCleared,
   isStageClearedOnDifficulty,
   isStageUnlocked,
   isStageUnlockedForDifficulty,
   monsterExpPoolForStage,
   nextStageInProgression,
+  scenarioDiffEnemyLevelBonus,
+  scenarioDiffEnemyStatMul,
+  scenarioDiffEnergyMul,
+  scenarioDiffExpMul,
+  SCENARIO_DIFF_ENERGY_MUL,
+  SCENARIO_DIFF_ENEMY_LEVEL_BONUS,
+  SCENARIO_DIFF_ENEMY_STAT_MUL,
+  SCENARIO_DIFF_EXP_MUL,
   stageUnlockLabel,
 } from "./progress.js";
 export type { ScenarioDifficulty } from "./progress.js";
@@ -1752,13 +1765,13 @@ function enemySummonerProfile(stage: StageDef): {
 
 export function skillsForMonster(
   m: NonNullable<ReturnType<typeof getMonster>>,
-  evolve = 0,
+  _evolve = 0,
   skillLevels: [number, number, number] = defaultSkillLevels(),
 ) {
-  const evoBump = evolve * 0.05;
+  // Summoners War: evolving raises base stats only — skill % grows via skill-ups.
   return m.skills.map((sk, i) => {
     const lv = skillLevels[i] ?? 1;
-    const skBump = (lv - 1) * 0.08;
+    const skBump = (lv - 1) * SKILL_LEVEL_POWER_PCT;
     const cdCut = sk.cooldown > 0 && lv >= MAX_SKILL_LEVEL ? 1 : 0;
     return {
       ...sk,
@@ -1770,7 +1783,7 @@ export function skillsForMonster(
           e.kind === "hot" ||
           e.kind === "shield"
         ) {
-          return { ...e, coeff: e.coeff * (1 + evoBump + skBump) };
+          return { ...e, coeff: e.coeff * (1 + skBump) };
         }
         if (e.kind === "mana") {
           return { ...e, amount: Math.round(e.amount * (1 + skBump)) };
@@ -1827,14 +1840,14 @@ function unitFromOwned(
       resistance: stats.resistance,
     },
     skillCoeff:
-      m.skillCoeff *
-      (1 + (owned.evolve ?? 0) * 0.05 + (skillLevels[0]! - 1) * 0.08),
+      m.skillCoeff * (1 + (skillLevels[0]! - 1) * SKILL_LEVEL_POWER_PCT),
     skills: skillsForMonster(m, owned.evolve ?? 0, skillLevels),
     stonePassive: m.stonePassiveId,
     startShieldPct: mods.startShieldPct || undefined,
     counterChance: mods.counterChance || undefined,
     statusImmuneTurns: mods.statusImmuneTurns || undefined,
     statusImmuneIsPassive: mods.statusImmuneTurns > 0 || undefined,
+    immuneStatusKinds: m.passiveImmunity ? [...m.passiveImmunity] : undefined,
     lifestealPct: mods.lifestealPct || undefined,
     stunOnHitChance: mods.stunChance || undefined,
     violentChance: mods.violentChance || undefined,
@@ -1864,6 +1877,9 @@ function unitFromMonsterId(
     skillCoeff: m.skillCoeff,
     skills: skillsForMonster(m, 0),
     stonePassive: m.stonePassiveId,
+    immuneStatusKinds: m.passiveImmunity
+      ? [...m.passiveImmunity]
+      : undefined,
   });
 }
 
@@ -1872,6 +1888,17 @@ function scaleScenarioEnemyHp(unit: Unit, stage: StageDef): Unit {
   if (mul === 1) return unit;
   const hp = Math.max(1, Math.round(unit.stats.hp * mul));
   unit.stats = { ...unit.stats, hp };
+  unit.hp = hp;
+  if (unit.originalMaxHp != null) unit.originalMaxHp = hp;
+  return unit;
+}
+
+function applyScenarioDiffStatMul(unit: Unit, mul: number): Unit {
+  if (mul === 1) return unit;
+  const hp = Math.max(1, Math.round(unit.stats.hp * mul));
+  const atk = Math.max(1, Math.round(unit.stats.atk * mul));
+  const def = Math.max(1, Math.round(unit.stats.def * mul));
+  unit.stats = { ...unit.stats, hp, atk, def };
   unit.hp = hp;
   if (unit.originalMaxHp != null) unit.originalMaxHp = hp;
   return unit;
@@ -4889,10 +4916,15 @@ export function createStageBattle(
     enemyIds = filtered.length > 0 ? filtered : enemyIds.slice(0, 1);
   }
 
-  const diffBonus =
-    opts?.difficulty === "hell" ? 4 : opts?.difficulty === "hard" ? 2 : 0;
+  const difficulty = opts?.difficulty ?? "normal";
+  const diffBonus = scenarioDiffEnemyLevelBonus(difficulty);
+  // Prefer versioned difficultyBalance levels; fall back to SW mul when absent.
+  const diffStatMul =
+    stage.difficultyBalance?.[difficulty] != null
+      ? 1
+      : scenarioDiffEnemyStatMul(difficulty);
   const explicitEnemyLevel =
-    stage.difficultyBalance?.[opts?.difficulty ?? "normal"]?.enemyLevel ??
+    stage.difficultyBalance?.[difficulty]?.enemyLevel ??
     stage.enemyLevel;
   const enemyLevel = () =>
     explicitEnemyLevel ??
@@ -4903,8 +4935,11 @@ export function createStageBattle(
       ? enemyIds
       : stage.enemyWaves?.[wave - 1] ?? stage.enemyMonsterIds;
 
+  const scaleEnemy = (unit: Unit): Unit =>
+    applyScenarioDiffStatMul(unit, diffStatMul);
+
   const enemyMonsters = enemyIds.map((id, i) =>
-    stageEnemyUnit(id, stage, 1, i, enemyLevel()),
+    scaleEnemy(stageEnemyUnit(id, stage, 1, i, enemyLevel())),
   );
 
   const enemyUnits: Unit[] = [
@@ -4915,9 +4950,9 @@ export function createStageBattle(
       kind: "summoner",
       element: "dark",
       stats: {
-        hp: 4800 + diffBonus * 400,
-        atk: 145 + diffBonus * 14,
-        def: 210 + diffBonus * 20,
+        hp: Math.round((4800 + diffBonus * 400) * diffStatMul),
+        atk: Math.round((145 + diffBonus * 14) * diffStatMul),
+        def: Math.round((210 + diffBonus * 20) * diffStatMul),
         spd: 88,
         critRate: 12,
         critDmg: 50,
@@ -5015,12 +5050,14 @@ export function createStageBattle(
         : undefined,
     spawnWave: (wave) =>
       enemyIdsForWave(wave).map((id, i) =>
-        stageEnemyUnit(
-          id,
-          stage,
-          wave,
-          i,
-          enemyLevel() + (wave - 1),
+        scaleEnemy(
+          stageEnemyUnit(
+            id,
+            stage,
+            wave,
+            i,
+            enemyLevel() + (wave - 1),
+          ),
         ),
       ),
   });

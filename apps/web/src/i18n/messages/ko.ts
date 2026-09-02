@@ -481,8 +481,8 @@ const messages: MessageDict = {
   "ui.c04eb2ef10": "수",
   "ui.9f329dea90": "풍",
   "ui.173366486b": "지옥",
-  "ui.ab309da205": "적 강화 +4 · 보상 대폭 증가",
-  "ui.7be5aa7542": "적 강화 +2 · 보상 증가",
+  "ui.ab309da205": "적 강화 +10 · 보상 대폭 증가",
+  "ui.7be5aa7542": "적 강화 +5 · 보상 증가",
   "ui.956f2f4243": "잠김",
   "ui.94b7dba159": "닫기",
   "ui.c6953a607b": "소환 대기",
@@ -1480,7 +1480,12 @@ const messages: MessageDict = {
   "ui.growthResultMagicFail": "마법 강화 실패",
   "ui.growthMagicSuccessBadge": "성공",
   "ui.growthMagicFailBadge": "실패",
-  "ui.growthPlayingMagicRate": "성공률 {pct}%"
-};
+  "ui.growthPlayingMagicRate": "성공률 {pct}%",
+  "ui.skillFxBurn": "{target} · 매 턴 공격력 {pct}% 화상",
+  "ui.skillFxPoison": "{target} · 매 턴 최대 체력 {pct}% 중독",
+  "ui.skillFxMultiHit": "{text} · {hits}회 공격",
+  "ui.skillFxImmunity": "{target} · 상태이상 면역",
+  "ui.statusBurn": "화상",
+  "ui.statusPoison": "중독"};
 
 export default messages;

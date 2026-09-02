@@ -10,7 +10,9 @@
 ```bash
 npm install
 npm run build && npm start   # PWA+API http://localhost:8080
-# 개발 시 (터미널 2개):
+# 개발 시 (한 터미널):
+npm run dev:all              # API :8080 + Vite :5173 (/api 프록시)
+# 또는 터미널 2개:
 npm run api -w stonesummoner-web   # API :8080 (메모리 DB 또는 DATABASE_URL)
 npm run dev                        # Vite :5173 → /api 프록시
 npm run cli:demo                   # 홈→출정→전투→보상 루프

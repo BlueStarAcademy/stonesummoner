@@ -53,6 +53,8 @@ export type StatusKind =
   | "crit_dmg_down"
   | "accuracy_down"
   | "dot"
+  | "burn"
+  | "poison"
   | "provoke"
   | "stun"
   | "freeze"
@@ -162,6 +164,8 @@ export interface Unit {
   counterChance?: number;
   /** 쌍립: remaining turns of status immunity. */
   statusImmuneTurns?: number;
+  /** Specific status kinds this unit cannot receive. */
+  immuneStatusKinds?: StatusKind[];
   /** Equipment-provided immunity is not rendered as a unit status icon. */
   statusImmuneIsPassive?: boolean;
   /** 타개: % of damage dealt healed. */

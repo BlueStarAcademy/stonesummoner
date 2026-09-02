@@ -9708,6 +9708,43 @@ button.battle-unit {
   image-rendering: high-quality;
 }
 
+/* Compact battle stills (e.g. dew_slime) — smaller on field, full silhouette visible. */
+.battle-unit[data-art-family="dew_slime"] {
+  --battle-compact-scale: 0.72;
+}
+
+.battle-unit[data-art-family="dew_slime"] .battle-unit-art {
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  height: clamp(70px, 11.2dvh, 92px);
+}
+
+.battle-unit[data-art-family="dew_slime"] .battle-unit-img {
+  object-position: center center;
+  transform-origin: center center;
+  animation-name: battle-unit-idle-compact;
+}
+
+@keyframes battle-unit-idle-compact {
+  0%, 100% { transform: scale(var(--battle-compact-scale)) translateY(0); }
+  50% { transform: scale(var(--battle-compact-scale)) translateY(-1.5px); }
+}
+
+.battle-unit.active[data-art-family="dew_slime"] .battle-unit-img {
+  transform: scale(var(--battle-compact-scale));
+}
+
+.battle-unit.dead[data-art-family="dew_slime"] .battle-unit-img {
+  transform: scale(var(--battle-compact-scale)) translateY(8px) rotate(-8deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .battle-unit[data-art-family="dew_slime"] .battle-unit-img {
+    transform: scale(var(--battle-compact-scale));
+  }
+}
+
 /* Spine owns character motion once ready; keep the painted still as fallback only. */
 .battle-unit-art.has-spine > .battle-unit-img {
   animation: none !important;
@@ -12090,7 +12127,11 @@ body > .battle-settings-layer.settings-layer {
   right: auto;
   flex: 0 0 auto;
   z-index: 1;
-  width: min(132px, 34vw);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: min(100px, 26vw);
   pointer-events: none;
 }
 
@@ -12166,15 +12207,16 @@ body > .battle-settings-layer.settings-layer {
 .board.board-mini-grid {
   width: 100%;
   margin: 0;
-  padding: 5px;
-  gap: 2px;
-  border-radius: 12px;
+  padding: 4px;
+  gap: 1px;
+  border-radius: 10px;
   border: 1px solid #c9a22799;
   background: radial-gradient(circle at 50% 45%, #2a1f4ed0 0%, #120e1ce8 78%);
   box-shadow:
     inset 0 0 0 1px #f0d87844,
     0 8px 18px #0008;
 }
+
 
 .board.board-mini-grid button.cell {
   pointer-events: none;
@@ -12567,6 +12609,17 @@ body > .battle-settings-layer.settings-layer {
   overflow: visible;
 }
 
+.skill-caster-fx img,
+.skill-support-aura img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
 .skill-caster-core {
   position: absolute;
   left: 50%;
@@ -12677,29 +12730,69 @@ body > .battle-settings-layer.settings-layer {
   transform: translate(-50%, 0);
   pointer-events: none;
   z-index: 2;
-  border-radius: 50%;
-  opacity: 0;
-  animation: skill-caster-release var(--release-ms, 320ms) ease-out both;
+  overflow: visible;
 }
 
-.skill-caster-release--fire {
-  box-shadow: 0 0 20px #ff703066, inset 0 0 14px #ff582833;
+.skill-caster-release img {
+  mix-blend-mode: screen;
 }
 
-.skill-caster-release--water {
-  box-shadow: 0 0 20px #40d0ff66, inset 0 0 14px #28c8ff33;
+.skill-cast-gather {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  width: 72%;
+  height: 72%;
+  margin: 0;
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  z-index: 4;
+  overflow: visible;
 }
 
-.skill-caster-release--wind {
-  box-shadow: 0 0 20px #60f09866, inset 0 0 14px #48e88833;
+.skill-cast-gather img {
+  mix-blend-mode: screen;
 }
 
-.skill-caster-release--light {
-  box-shadow: 0 0 20px #ffe85066, inset 0 0 14px #ffe83833;
+.skill-trap-hex {
+  position: absolute;
+  width: 88px;
+  height: 88px;
+  margin: 0;
+  transform: translate(-50%, -58%);
+  pointer-events: none;
+  z-index: 7;
+  overflow: visible;
+  animation: skill-trap-ring-pop var(--trap-ms, 560ms) ease-out both;
 }
 
-.skill-caster-release--dark {
-  box-shadow: 0 0 20px #c098ff66, inset 0 0 14px #9878f833;
+.skill-trap-hex img {
+  mix-blend-mode: screen;
+}
+
+.skill-melee-trail {
+  position: absolute;
+  inset: -8% -18%;
+  pointer-events: none;
+  z-index: 3;
+  overflow: visible;
+  animation: skill-melee-dash-sweep var(--dash-ms, 320ms) ease-out both;
+}
+
+.skill-melee-trail img {
+  mix-blend-mode: screen;
+}
+
+.circle-rite {
+  position: absolute;
+  inset: -10%;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+
+.circle-rite img {
+  mix-blend-mode: screen;
 }
 
 .skill-fx.is-cast {
@@ -15843,9 +15936,9 @@ body > .battle-settings-layer.settings-layer {
   position: absolute;
   left: 0;
   top: 0;
-  /* Width/height set in JS to atlas aspect (1080×1920) so pin % == image %. */
+  /* Width/height set in JS to atlas aspect (2880×3840) so pin % == image %. */
   width: 100%;
-  aspect-ratio: 1080 / 1920;
+  aspect-ratio: 2880 / 3840;
   height: auto;
   will-change: transform;
   user-select: none;
@@ -15862,22 +15955,54 @@ body > .battle-settings-layer.settings-layer {
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
-  filter: brightness(1.18) contrast(1.04) saturate(1.06);
+  filter: brightness(1.06) contrast(1.02) saturate(1.04);
 }
 
 .stages-map-veil {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 1;
   background:
-    linear-gradient(180deg, #0e0b1699 0%, transparent 16%, transparent 68%, #0e0b16cc 100%),
-    radial-gradient(ellipse at 50% 45%, transparent 48%, #0e0b1638 100%);
+    linear-gradient(180deg, #1a284022 0%, transparent 14%, transparent 72%, #12201844 100%),
+    radial-gradient(ellipse at 50% 45%, transparent 52%, #0e1a2430 100%);
+}
+
+.stages-landmarks {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.stages-landmark {
+  position: absolute;
+  width: min(22%, 118px);
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+  transform: translate(-50%, -72%) scale(var(--lm-scale, 1));
+  transform-origin: center bottom;
+  filter: drop-shadow(0 6px 10px #0006);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.stages-landmark--hero {
+  width: min(28%, 148px);
+  z-index: 1;
+}
+
+.stages-landmark--mq {
+  width: min(24%, 132px);
+  z-index: 0;
 }
 
 .stages-mq-nodes {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
 }
 
@@ -15973,7 +16098,7 @@ body > .battle-settings-layer.settings-layer {
 .stages-map-pins {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 4;
 }
 
 .stages-pin {
@@ -24962,8 +25087,7 @@ img.el-tint-dark {
   image-rendering: high-quality;
 }
 
-/* Low-framed inventory portraits — mild nudge only; bust crop now
-   keeps squat silhouettes mostly in-frame already. */
+/* Compact inventory portraits (e.g. dew_slime) — shrink so the full body stays in frame. */
 .mon-slot[data-art-family="dew_slime"] .mon-slot-img,
 .stage-prep-slot[data-art-family="dew_slime"] .stage-prep-slot-img,
 .arena-defense-slot[data-art-family="dew_slime"] .arena-defense-slot-img,
@@ -24971,9 +25095,9 @@ img.el-tint-dark {
 .fusion-recipe-mat[data-art-family="dew_slime"] .fusion-recipe-mat-img,
 .codex-cell[data-art-family="dew_slime"] .codex-cell-img,
 .stage-prep-info-art-wrap[data-art-family="dew_slime"] .stage-prep-info-art {
-  object-position: center 70%;
-  transform: scale(1.06);
-  transform-origin: center 75%;
+  object-position: center center;
+  transform: scale(0.74);
+  transform-origin: center center;
 }
 
 .mon-slot-stars {

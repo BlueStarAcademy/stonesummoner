@@ -18,6 +18,11 @@ import {
   MAIN_QUEST_AREA_COUNT,
   MAIN_QUEST_PIN_LAYOUT,
   MAIN_QUEST_STAGES,
+  SIDE_CONTENT_PIN_LAYOUT,
+  STAGES_LANDMARK_LAYOUT,
+  STAGES_MQ_LANDMARK_LAYOUT,
+  STAGES_MAP_HOME_REGION_ID,
+  STAGES_MAP_NATURAL,
   STAGES_PER_AREA,
   bumpGearEnhance,
   canEquipGearOnElement,
@@ -80,26 +85,28 @@ import {
 } from "./index.js";
 
 describe("phase1 data", () => {
-  it("has 50 families x 5 elements and 17 symbol sets", () => {
-    assert.equal(MONSTERS.length, 250);
+  it("has 75 families x 5 elements and 17 symbol sets", () => {
+    assert.equal(MONSTERS.length, 375);
     assert.equal(SYMBOL_SETS.length, 17);
     assert.ok(getMonster("wolf_fighter_fire"));
     assert.ok(getMonster("lotus_dancer_wind"));
     assert.ok(getMonster("abyss_priest_dark"));
     assert.ok(getMonster("magic_archer_fire"));
     assert.ok(getMonster("cinder_imp_fire"));
+    assert.ok(getMonster("ember_wisp_fire"));
+    assert.ok(getMonster("sanctuary_oracle_light"));
     // Legacy ids still resolve
     assert.equal(getMonster("fire_fang")?.id, "wolf_fighter_fire");
     assert.equal(getMonster("seokrang_fire")?.id, "wolf_fighter_fire");
     const families = new Set(MONSTERS.map((m) => m.familyId));
-    assert.equal(families.size, 50);
+    assert.equal(families.size, 75);
     const byStars = [1, 2, 3, 4, 5].map(
       (s) =>
         new Set(
           MONSTERS.filter((m) => m.naturalStars === s).map((m) => m.familyId),
         ).size,
     );
-    assert.deepEqual(byStars, [10, 10, 12, 12, 6]);
+    assert.deepEqual(byStars, [15, 15, 17, 17, 11]);
     for (const fam of families) {
       const variants = MONSTERS.filter((m) => m.familyId === fam);
       assert.equal(variants.length, 5);
@@ -134,11 +141,11 @@ describe("phase1 data", () => {
       ]),
     );
     assert.deepEqual(counts, {
-      attacker: 10,
-      hp: 10,
-      defense: 10,
-      speed: 10,
-      support: 10,
+      attacker: 15,
+      hp: 15,
+      defense: 15,
+      speed: 15,
+      support: 15,
     });
     assert.equal(new Set(families.map((family) => family.role)).size, 5);
     for (const family of families) {
@@ -150,8 +157,8 @@ describe("phase1 data", () => {
     assert.equal(getMonster("doom_oracle_fire")?.familyIdentity, "debuffer");
   });
 
-  it("defines distinct profiles for all 50 families", () => {
-    assert.equal(Object.keys(FAMILY_KIT_PROFILES).length, 50);
+  it("defines distinct profiles for all 75 families", () => {
+    assert.equal(Object.keys(FAMILY_KIT_PROFILES).length, 75);
     const familyIds = new Set(MONSTERS.map((monster) => monster.familyId));
     assert.deepEqual(
       new Set(Object.keys(FAMILY_KIT_PROFILES)),
@@ -160,7 +167,7 @@ describe("phase1 data", () => {
     const allSignatures = Object.values(FAMILY_KIT_PROFILES).map((profile) =>
       JSON.stringify({ s2: profile.s2, s3: profile.s3 }),
     );
-    assert.equal(new Set(allSignatures).size, 50);
+    assert.equal(new Set(allSignatures).size, 75);
     for (const role of ["attacker", "hp", "defense", "speed", "support"] as const) {
       const signatures = Object.values(FAMILY_KIT_PROFILES)
         .filter((profile) => profile.role === role)
@@ -170,7 +177,7 @@ describe("phase1 data", () => {
             s3: profile.s3,
           }),
         );
-      assert.equal(signatures.length, 10);
+      assert.equal(signatures.length, 15);
       assert.equal(new Set(signatures).size, signatures.length);
     }
   });
@@ -211,6 +218,7 @@ describe("phase1 data", () => {
       "damage_share",
       "reflect",
       "provoke",
+      "immunity",
     ]) {
       assert.ok(represented.has(kind), `missing effect kind ${kind}`);
     }
@@ -235,7 +243,7 @@ describe("phase1 data", () => {
             ),
           ).size,
       ),
-      [10, 10, 12, 12, 6],
+      [15, 15, 17, 17, 11],
     );
     assert.deepEqual(getMonster("stone_golem_fire")?.baseStats, {
       hp: 3800,
@@ -304,8 +312,8 @@ describe("phase1 data", () => {
     const monsterVfxIds = MONSTERS.flatMap((m) =>
       m.skills.map((skill) => skill.vfxId),
     );
-    assert.equal(monsterVfxIds.length, 750);
-    assert.equal(new Set(monsterVfxIds).size, 750);
+    assert.equal(monsterVfxIds.length, 1125);
+    assert.equal(new Set(monsterVfxIds).size, 1125);
 
     const summonerVfxIds = Object.values(
       ["fire", "water", "wind", "light", "dark"] as const,
@@ -371,6 +379,31 @@ describe("phase1 data", () => {
     assert.ok(s1.coeff >= 3.4 && s1.coeff <= 4.2);
   });
 
+  it("keeps S1 ATK% identical across natural stars (SW-style)", () => {
+    const coeffs = [1, 2, 3, 4, 5].map((stars) => {
+      const m = MONSTERS.find(
+        (x) => x.naturalStars === stars && x.role === "attacker",
+      );
+      assert.ok(m, `missing attacker nat ${stars}`);
+      const s1 = m.skills[0]!.effects.find((e) => e.kind === "damage");
+      assert.ok(s1 && s1.kind === "damage");
+      return s1.coeff;
+    });
+    assert.ok(coeffs.every((c) => c === coeffs[0]));
+    assert.equal(coeffs[0], 3.7);
+  });
+
+  it("gives natural 5★ a clear base ATK edge over natural 1★", () => {
+    const n1 = MONSTERS.find(
+      (m) => m.naturalStars === 1 && m.role === "attacker",
+    )!;
+    const n5 = MONSTERS.find(
+      (m) => m.naturalStars === 5 && m.role === "attacker",
+    )!;
+    assert.ok(n5.baseStats.atk / n1.baseStats.atk >= 1.8);
+    assert.ok(n5.baseStats.hp / n1.baseStats.hp >= 1.8);
+  });
+
   it("chapter1 boards progress 5 → 7", () => {
     assert.equal(CHAPTER1_STAGES.length, 7);
     assert.equal(getStage("garen_1_1")?.boardSize, 5);
@@ -401,6 +434,33 @@ describe("phase1 data", () => {
       ),
       true,
     );
+  });
+
+  it("stages map landmarks share coords with side pins on the expansive atlas", () => {
+    assert.equal(STAGES_MAP_NATURAL.w, 2880);
+    assert.equal(STAGES_MAP_NATURAL.h, 3840);
+    assert.equal(STAGES_LANDMARK_LAYOUT.length, SIDE_CONTENT_PIN_LAYOUT.length);
+    assert.ok(STAGES_LANDMARK_LAYOUT.some((l) => l.id === "challenge_tower"));
+    for (const pin of SIDE_CONTENT_PIN_LAYOUT) {
+      const lm = STAGES_LANDMARK_LAYOUT.find((l) => l.id === pin.id);
+      assert.ok(lm, pin.id);
+      assert.equal(lm!.x, pin.x);
+      assert.equal(lm!.y, pin.y);
+      assert.ok(lm!.artKey.length > 0);
+    }
+  });
+
+  it("main quest landmarks match pin coords and battle map themes", () => {
+    assert.equal(STAGES_MQ_LANDMARK_LAYOUT.length, 13);
+    assert.equal(STAGES_MAP_HOME_REGION_ID, "mq1");
+    for (const lm of STAGES_MQ_LANDMARK_LAYOUT) {
+      const pin = MAIN_QUEST_PIN_LAYOUT.find((p) => p.map === lm.map);
+      assert.ok(pin, `mq${lm.map}`);
+      assert.equal(pin!.x, lm.x);
+      assert.equal(pin!.y, lm.y);
+      assert.equal(lm.battleBgId, `map-${String(lm.map).padStart(2, "0")}`);
+      assert.equal(lm.artKey, `mq-${String(lm.map).padStart(2, "0")}`);
+    }
   });
 
   it("maps each scenario area to SW-order symbol set", () => {

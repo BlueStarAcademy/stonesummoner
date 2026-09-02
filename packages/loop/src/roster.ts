@@ -32,8 +32,17 @@ export const MAX_MONSTER_AWAKEN = 1;
 export const MAX_SKILL_LEVEL = 3;
 export const MONSTER_AWAKEN_EXP_GOAL = 100;
 export const WEEKDAY_AWAKEN_EXP_DROP = 25;
-/** ATK/HP multiplier when awaken >= 1. */
-export const MONSTER_AWAKEN_STAT_PCT = 0.08;
+/** ATK/HP multiplier when awaken >= 1 — closer to Summoners War awaken bumps. */
+export const MONSTER_AWAKEN_STAT_PCT = 0.15;
+
+/** Per-evolve step HP/ATK/DEF — kept modest so nat-star gaps survive to 6★. */
+export const EVOLVE_STAT_PCT = 0.06;
+
+/**
+ * Per skill-level damage/heal/shield growth (SW skill-ups are typically +5%).
+ * With MAX_SKILL_LEVEL=3 this is +5% / +10% from base at Lv2 / Lv3.
+ */
+export const SKILL_LEVEL_POWER_PCT = 0.05;
 
 const MONSTER_EXP_TABLE: readonly (readonly number[])[] = [
   [460, 516, 579, 650, 728, 818, 918, 1029, 1155, 1296, 1455, 1631, 1831, 2054],
@@ -299,7 +308,7 @@ export function levelStatMult(level: number): number {
 }
 
 export function evolveStatMult(evolve: number): number {
-  return 1 + Math.max(0, evolve) * 0.12;
+  return 1 + Math.max(0, evolve) * EVOLVE_STAT_PCT;
 }
 
 export function awakenStatMult(awaken: number): number {

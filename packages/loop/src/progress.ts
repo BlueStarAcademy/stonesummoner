@@ -27,6 +27,65 @@ import { accountLevelOf } from "./summonerLevel.js";
 
 export type ScenarioDifficulty = "normal" | "hard" | "hell";
 
+/**
+ * Summoners War mid/late scenario XP ratios (e.g. Faimon / Aiden):
+ * Normal : Hard : Hell ≈ 1 : 1.7 : 3.5.
+ * Early-map player XP (Garen ~1 : 7 : 15) is an outlier — do not use it.
+ */
+export const SCENARIO_DIFF_EXP_MUL: Record<ScenarioDifficulty, number> = {
+  normal: 1,
+  hard: 1.7,
+  hell: 3.5,
+};
+
+/** SW scenario energy costs are 3 / 4 / 5 → relative to Normal. */
+export const SCENARIO_DIFF_ENERGY_MUL: Record<ScenarioDifficulty, number> = {
+  normal: 1,
+  hard: 4 / 3,
+  hell: 5 / 3,
+};
+
+/** Enemy level bonus vs Normal (SW mid-map ≈ +5 Hard, +10 Hell). */
+export const SCENARIO_DIFF_ENEMY_LEVEL_BONUS: Record<
+  ScenarioDifficulty,
+  number
+> = {
+  normal: 0,
+  hard: 5,
+  hell: 10,
+};
+
+/**
+ * Extra combat stat mul on top of level.
+ * Normal stays a softer story clear; Hell is clearly tougher than Hard.
+ */
+export const SCENARIO_DIFF_ENEMY_STAT_MUL: Record<ScenarioDifficulty, number> =
+  {
+    normal: 0.85,
+    hard: 1.15,
+    hell: 1.5,
+  };
+
+export function scenarioDiffExpMul(difficulty: ScenarioDifficulty): number {
+  return SCENARIO_DIFF_EXP_MUL[difficulty];
+}
+
+export function scenarioDiffEnergyMul(difficulty: ScenarioDifficulty): number {
+  return SCENARIO_DIFF_ENERGY_MUL[difficulty];
+}
+
+export function scenarioDiffEnemyLevelBonus(
+  difficulty: ScenarioDifficulty,
+): number {
+  return SCENARIO_DIFF_ENEMY_LEVEL_BONUS[difficulty];
+}
+
+export function scenarioDiffEnemyStatMul(
+  difficulty: ScenarioDifficulty,
+): number {
+  return SCENARIO_DIFF_ENEMY_STAT_MUL[difficulty];
+}
+
 function clearedForDifficulty(
   save: PlayerSave,
   difficulty: ScenarioDifficulty,
@@ -139,7 +198,21 @@ export function isStageClearedOnDifficulty(
   return clearedForDifficulty(save, difficulty).includes(stageId);
 }
 
-/** Hard/Hell for a scenario map open only after every stage on that map is cleared. */
+/** True when every main-quest stage (maps 1–13) is cleared on that track. */
+export function isScenarioTrackFullyCleared(
+  save: PlayerSave,
+  difficulty: ScenarioDifficulty,
+): boolean {
+  if (MAIN_QUEST_STAGES.length === 0) return false;
+  const cleared = clearedForDifficulty(save, difficulty);
+  return MAIN_QUEST_STAGES.every((s) => cleared.includes(s.id));
+}
+
+/**
+ * Scenario Hard/Hell unlock globally after the previous track is fully cleared
+ * through map 13 (종언의 신전) — Hard after all Normal, Hell after all Hard.
+ * Non-scenario content still unlocks per-stage.
+ */
 export function isDifficultyOpen(
   save: PlayerSave,
   stage: StageDef,
@@ -147,14 +220,10 @@ export function isDifficultyOpen(
 ): boolean {
   if (difficulty === "normal") return true;
   if (stage.mode === "scenario") {
-    const mapStages = stagesForMap(stage.map);
-    if (!mapStages.length) return false;
     if (difficulty === "hard") {
-      return mapStages.every((s) => save.clearedStages.includes(s.id));
+      return isScenarioTrackFullyCleared(save, "normal");
     }
-    return mapStages.every((s) =>
-      (save.clearedHardStages ?? []).includes(s.id),
-    );
+    return isScenarioTrackFullyCleared(save, "hard");
   }
   if (difficulty === "hard") return save.clearedStages.includes(stage.id);
   return (save.clearedHardStages ?? []).includes(stage.id);
@@ -262,9 +331,7 @@ export function expForStage(
   if (stage.accountExpReward != null) return stage.accountExpReward;
   const base = 40 + stage.map * 8 + stage.stage * 20;
   if (stage.mode === "scenario") {
-    const multiplier =
-      difficulty === "hell" ? 14.61 : difficulty === "hard" ? 6.96 : 1;
-    return Math.round(base * multiplier);
+    return Math.round(base * scenarioDiffExpMul(difficulty));
   }
   if (stage.mode === "depth") return base + 30;
   if (stage.mode === "arena") return Math.floor(base * 0.5);

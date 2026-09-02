@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createEmptyGear, createStarterGear, createSymbol, getMonster, getStage, CHAPTER1_STAGES, EQUIP_STAGES, GEAR_BAG_BASE_SLOTS, GEAR_BAG_EXPAND_STEP, GEAR_BAG_MAX_SLOTS, getGearAffix, normalizeGearPiece, MONSTERS } from "stonesummoner-data";
+import { createEmptyGear, createStarterGear, createSymbol, getMonster, getStage, CHAPTER1_STAGES, EQUIP_STAGES, GEAR_BAG_BASE_SLOTS, GEAR_BAG_EXPAND_STEP, GEAR_BAG_MAX_SLOTS, getGearAffix, MAIN_QUEST_STAGES, normalizeGearPiece, MONSTERS } from "stonesummoner-data";
 import {
   createNewSave,
   createStageBattle,
@@ -152,7 +152,11 @@ import {
   runClaimMainQuest,
 } from "./mainQuest.js";
 import { migrateSave, pickPreferredSave } from "./migrateSave.js";
-import { expForStage } from "./progress.js";
+import {
+  expForStage,
+  SCENARIO_DIFF_ENERGY_MUL,
+  SCENARIO_DIFF_ENEMY_LEVEL_BONUS,
+} from "./progress.js";
 import { FUSION_RECIPES, isFusionOnlyFamily } from "stonesummoner-data";
 
 describe("game loop", () => {
@@ -1554,10 +1558,30 @@ describe("game loop", () => {
     assert.ok((hardClear.reward.summonerExp ?? 0) > (hardLocked.reward.summonerExp ?? 0));
   });
 
-  it("opens scenario hard only after every stage on the map is cleared on normal", () => {
+  it("scales scenario energy and enemy power like Summoners War Normal/Hard/Hell", () => {
+    const stage = getStage("garen_1_1")!;
+    assert.equal(SCENARIO_DIFF_ENERGY_MUL.hard, 4 / 3);
+    assert.equal(SCENARIO_DIFF_ENERGY_MUL.hell, 5 / 3);
+    assert.equal(SCENARIO_DIFF_ENEMY_LEVEL_BONUS.hard, 5);
+    assert.equal(SCENARIO_DIFF_ENEMY_LEVEL_BONUS.hell, 10);
+
+    const save = createNewSave(0);
+    const normal = createStageBattle(stage, save, { difficulty: "normal" });
+    const hard = createStageBattle(stage, save, { difficulty: "hard" });
+    const hell = createStageBattle(stage, save, { difficulty: "hell" });
+    const normalEnemy = normal.units.find((u) => u.team === "enemy" && u.kind === "monster")!;
+    const hardEnemy = hard.units.find((u) => u.team === "enemy" && u.kind === "monster")!;
+    const hellEnemy = hell.units.find((u) => u.team === "enemy" && u.kind === "monster")!;
+    assert.ok(hardEnemy.stats.hp > normalEnemy.stats.hp);
+    assert.ok(hellEnemy.stats.hp > hardEnemy.stats.hp);
+    assert.ok(hellEnemy.stats.atk > hardEnemy.stats.atk);
+  });
+
+  it("opens scenario hard only after all main-quest stages through map 13 are cleared on normal", () => {
     const first = getStage("garen_1_1")!;
-    const boss = getStage("garen_1_7")!;
+    const endMap = getStage("end_13_1")!;
     const map2 = getStage("tower_2_1")!;
+    const allMqIds = MAIN_QUEST_STAGES.map((s) => s.id);
     let save = createNewSave(0);
     save = { ...save, island: { ...save.island, energy: 50 } };
 
@@ -1569,25 +1593,30 @@ describe("game loop", () => {
     });
     assert.match(blocked.message, /난이도/);
 
-    save = { ...save, clearedStages: ["garen_1_1"] };
-    assert.equal(isDifficultyOpen(save, first, "hard"), false);
-
     const chapter1Ids = CHAPTER1_STAGES.map((s) => s.id);
     save = { ...save, clearedStages: chapter1Ids };
-    assert.equal(isDifficultyOpen(save, first, "hard"), true);
-    assert.equal(isDifficultyOpen(save, boss, "hard"), true);
+    assert.equal(isDifficultyOpen(save, first, "hard"), false);
     assert.equal(isDifficultyOpen(save, map2, "hard"), false);
+
+    save = { ...save, clearedStages: allMqIds };
+    assert.equal(isDifficultyOpen(save, first, "hard"), true);
+    assert.equal(isDifficultyOpen(save, endMap, "hard"), true);
+    assert.equal(isDifficultyOpen(save, map2, "hard"), true);
     assert.equal(isDifficultyOpen(save, first, "hell"), false);
 
     save = { ...save, clearedHardStages: chapter1Ids };
+    assert.equal(isDifficultyOpen(save, first, "hell"), false);
+
+    save = { ...save, clearedHardStages: allMqIds };
     assert.equal(isDifficultyOpen(save, first, "hell"), true);
-    assert.equal(isDifficultyOpen(save, map2, "hell"), false);
+    assert.equal(isDifficultyOpen(save, endMap, "hell"), true);
   });
 
   it("scenario hard and hell unlock stages sequentially on their own track", () => {
     const chapter1Ids = CHAPTER1_STAGES.map((s) => s.id);
+    const allMqIds = MAIN_QUEST_STAGES.map((s) => s.id);
     let save = createNewSave(0);
-    save = { ...save, clearedStages: chapter1Ids };
+    save = { ...save, clearedStages: allMqIds };
 
     assert.equal(isStageUnlockedForDifficulty(save, "garen_1_1", "hard"), true);
     assert.equal(isStageUnlockedForDifficulty(save, "garen_1_2", "hard"), false);
@@ -1597,12 +1626,17 @@ describe("game loop", () => {
     assert.equal(isStageUnlockedForDifficulty(save, "garen_1_2", "hard"), true);
     assert.equal(isStageUnlockedForDifficulty(save, "garen_1_3", "hard"), false);
 
-    save = { ...save, clearedHardStages: chapter1Ids };
+    save = { ...save, clearedHardStages: allMqIds };
     assert.equal(isStageUnlockedForDifficulty(save, "garen_1_1", "hell"), true);
     assert.equal(isStageUnlockedForDifficulty(save, "garen_1_2", "hell"), false);
 
     save = { ...save, clearedHellStages: ["garen_1_1"] };
     assert.equal(isStageUnlockedForDifficulty(save, "garen_1_2", "hell"), true);
+
+    // Hard track still progresses map-by-map after the global unlock.
+    save = { ...save, clearedHardStages: chapter1Ids };
+    assert.equal(isStageUnlockedForDifficulty(save, "tower_2_1", "hard"), true);
+    assert.equal(isStageUnlockedForDifficulty(save, "tower_2_2", "hard"), false);
   });
 
   it("scenario normal drops almost only ★1 symbols (rare ★2)", () => {

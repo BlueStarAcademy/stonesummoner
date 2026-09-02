@@ -69,7 +69,7 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         navigateFallbackDenylist: [/^\/api\//],
-        // stages-world-map.png (~3.3 MB) and auth heroes exceed Workbox's 2 MiB default
+        // stages terrain / world-map and auth heroes can exceed Workbox's 2 MiB default
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
