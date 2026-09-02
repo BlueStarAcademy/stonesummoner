@@ -72,8 +72,16 @@ app.use(
 );
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) return next();
+  const indexHtml = path.join(dist, "index.html");
+  if (!fs.existsSync(indexHtml)) {
+    res
+      .status(503)
+      .type("text/plain")
+      .send("Web build missing — run `npm run dev` (Vite :5173) or `npm run build`.");
+    return;
+  }
   res.setHeader("Cache-Control", cacheControlForAssetPath("/index.html"));
-  res.sendFile(path.join(dist, "index.html"));
+  res.sendFile(indexHtml);
 });
 
 app.listen(port, "0.0.0.0", () => {

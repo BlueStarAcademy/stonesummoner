@@ -1,0 +1,14 @@
+{
+  "name": "stonesummoner",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "npm run api"
+    },
+    {
+      "name": "web",
+      "command": "npm run dev"
+    }
+  ]
+}
