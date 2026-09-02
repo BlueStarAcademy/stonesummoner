@@ -31,5 +31,5 @@ Premium stylized 2.5D mobile RPG hooded apocalypse warlock debuffer,
 pale face hood glowing element eyes, black-burgundy robes gold trim gem pauldrons,
 raised hand floating element tablets with arcane symbols, staff with circular orb frame,
 dark smoke wisps, high-end hand-painted dark fantasy, eye-level front three-quarter,
-grounded feet, clean white plate, element accents in eyes gems tablets orb smoke only, no global recolor
+grounded feet, transparent alpha background or solid magenta #FF00FF plate, element accents in eyes gems tablets orb smoke only, no global recolor
 ```

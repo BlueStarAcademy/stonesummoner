@@ -44,7 +44,7 @@ Premium stylized 2.5D mobile RPG elf archer attacker,
 long hair pointed ears, ornate plate armor flowing embroidered cape,
 oversized magical crystalline recurve bow with element arrow nocked,
 dynamic archer stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in bow eyes and gems only,
 no global recolor, no text, no cropped bow or feet
 ```

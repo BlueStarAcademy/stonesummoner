@@ -30,6 +30,6 @@ Premium stylized 2.5D mobile RPG young spear warrior attacker,
 white-green plate gold filigree feather pauldrons, flowing element cape scarf,
 ornate double-ended spear with energy wisps, dynamic diagonal stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-grounded feet, clean white plate, element accents in eyes cape spear wisps only,
+grounded feet, transparent alpha background or solid magenta #FF00FF plate, element accents in eyes cape spear wisps only,
 no global recolor, no text, no cropped spear or feet
 ```

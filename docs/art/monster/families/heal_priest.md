@@ -51,7 +51,7 @@ tall winged circular healing staff with central crystal,
 rigid sun-halo frame mounted behind shoulders, visible leather boots,
 high-end hand-painted dark fantasy over dimensional 3D-like forms,
 physically believable silk leather and metal, eye-level front three-quarter camera,
-grounded full-body support stance, safe margin, clean white plate,
+grounded full-body support stance, safe margin, transparent alpha background or solid magenta #FF00FF plate,
 element accents only on crystal eyes embroidery trim and healing particles,
 no global robe recolor, no attack pose, no text, no cropped staff or feet
 ```

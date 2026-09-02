@@ -34,6 +34,6 @@ long white hair serene face element eyes, white gown gold filigree bodice thigh 
 flowing white-gold ribbons, massive star-spike golden halo,
 ornate staff with diamond crystal frame, open palm heal gesture,
 graceful grounded stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes halo staff crystal ribbons only, no global recolor, no text
 ```

@@ -32,6 +32,6 @@ Premium stylized 2.5D mobile RPG hooded assassin attacker,
 shadowed face element eye glow, jagged black-silver armor chest gem,
 dual curved serrated element daggers, tattered cape smoke aura,
 crouched ready stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes gems blades aura only, no global recolor, no text
 ```

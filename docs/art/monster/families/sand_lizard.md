@@ -47,7 +47,7 @@ Premium stylized 2.5D mobile RPG bipedal lizardman warrior attacker,
 sandy tan scales serrated frills, tattered patterned tunic, leather belt emblem,
 curved falchion and round wooden shield, leather wraps clawed feet,
 grounded wide battle stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, clean white plate,
+eye-level front three-quarter, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes emblem blade edge and wisps only,
 no global recolor, no text, no cropped sword shield or feet
 ```

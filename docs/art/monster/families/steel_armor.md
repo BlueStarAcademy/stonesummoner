@@ -30,7 +30,7 @@
 Premium stylized 2.5D mobile RPG spiky death knight tank,
 chrome-dark plate skull motifs glowing element panels, spiked kite shield and mace,
 tattered cape, wide grounded tank stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, clean white plate,
+eye-level front three-quarter, transparent alpha background or solid magenta #FF00FF plate,
 element accents in visor panels shield glow only,
 no global recolor, no text, no cropped shield mace or feet
 ```

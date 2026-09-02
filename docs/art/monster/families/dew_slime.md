@@ -45,7 +45,7 @@ Premium stylized 2.5D mobile RPG cute translucent slime support,
 round jelly blob with internal bubbles, large shiny eyes, tiny smile,
 single leaf sprout on head, sitting on elemental puddle with ripples,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-grounded puddle base fully visible, clean white plate,
+grounded puddle base fully visible, transparent alpha background or solid magenta #FF00FF plate,
 element accents in body glow sprout and puddle only,
 no global recolor, no text, no cropped base
 ```

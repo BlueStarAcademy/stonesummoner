@@ -45,6 +45,6 @@ Premium stylized 2.5D mobile RPG hooded assassin debuffer,
 masked face glowing eyes, wing pauldrons chest gem, tattered cloak,
 dual curved element daggers, shadow flame wisps, crouched ready stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-grounded feet, clean white plate, element accents in eyes gems blades wisps only,
+grounded feet, transparent alpha background or solid magenta #FF00FF plate, element accents in eyes gems blades wisps only,
 no global recolor, no text, no cropped daggers or feet
 ```

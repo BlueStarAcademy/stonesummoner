@@ -4695,6 +4695,7 @@ function renderStagePrepDock(): string {
           <span class="mon-slot-art" aria-hidden="true">${art}</span>
           <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
           <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
+          ${monSlotPartyMarkHtml(m.uid)}
         </button>`;
       })
       .join("");
@@ -14856,6 +14857,7 @@ function renderPartyDock(mode: "party" | "arena-defense" = "party"): string {
           <span class="mon-slot-art" aria-hidden="true">${art}</span>
           <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
           <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
+          ${monSlotPartyMarkHtml(m.uid)}
         </button>`;
       })
       .join("");
@@ -15570,6 +15572,12 @@ function ownedMonsterArtImg(
   const preferAwakened =
     forceAwakened || ownedMonsterAwakened(owned);
   return monsterArtImg(owned.monsterId, className, size, preferAwakened);
+}
+
+function monSlotPartyMarkHtml(uid: string): string {
+  return save.party.includes(uid)
+    ? `<span class="mon-slot-party-mark" aria-hidden="true">P</span>`
+    : "";
 }
 
 function ownedMonsterBattleArtImg(
@@ -16442,7 +16450,6 @@ function powerUpSlotsHtml(): string {
       const element = def?.element ?? "dark";
       const stars = Math.max(1, def?.naturalStars ?? 1);
       const grade = invGradeFromStars(stars);
-      const inParty = save.party.includes(monster.uid);
       const selected = powerUpFodderUids.has(monster.uid);
       const skillMark =
         canSkill && target && ownedMonstersSameFamily(target, monster);
@@ -16452,10 +16459,11 @@ function powerUpSlotsHtml(): string {
       const title = `${describeOwned(monster)} · EXP +${monsterPowerUpExp(monster)}${
         skillMark ? ` · ${t("ui.powerUpSkillMark")}` : ""
       }`;
-      return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${element}${inParty ? " is-party" : ""}${selected ? " is-on" : ""}${skillMark ? " is-skill-fodder" : ""}"${monsterSlotFamilyAttr(monster.monsterId)} data-power-up-fodder="${monster.uid}" role="option" aria-selected="${selected}" title="${escapeHtml(title)}">
+      return `<button type="button" class="mon-slot mon-slot--portrait inv-grade--${grade} el-${element}${selected ? " is-on" : ""}${skillMark ? " is-skill-fodder" : ""}"${monsterSlotFamilyAttr(monster.monsterId)} data-power-up-fodder="${monster.uid}" role="option" aria-selected="${selected}" title="${escapeHtml(title)}">
         <span class="mon-slot-art" aria-hidden="true">${art}</span>
         <span class="mon-slot-stars-overlay" aria-label="${stars}">${monStarsHtml(stars)}</span>
         <span class="mon-slot-lv-overlay">Lv.${monster.level}</span>
+        ${monSlotPartyMarkHtml(monster.uid)}
         ${skillMark ? `<span class="mon-slot-skill-mark">${skillLabel}</span>` : ""}
         ${selected ? `<span class="mon-slot-check" aria-hidden="true"></span>` : ""}
       </button>`;
@@ -16683,6 +16691,7 @@ function evolveSlotsHtml(): string {
         <span class="mon-slot-art" aria-hidden="true">${art}</span>
         <span class="mon-slot-stars-overlay" aria-label="${stars}">${monStarsHtml(stars)}</span>
         <span class="mon-slot-lv-overlay">Lv.${monster.level}</span>
+        ${monSlotPartyMarkHtml(monster.uid)}
         ${skillMark ? `<span class="mon-slot-skill-mark">${skillLabel}</span>` : ""}
         ${selected ? `<span class="mon-slot-check" aria-hidden="true"></span>` : ""}
       </button>`;
@@ -20757,6 +20766,7 @@ function renderEnhanceRosterDockHtml(): string {
         <span class="mon-slot-art" aria-hidden="true">${art}</span>
         <span class="mon-slot-stars-overlay" aria-label="${starN}">${starsHtml}</span>
         <span class="mon-slot-lv-overlay">Lv.${m.level}</span>
+        ${monSlotPartyMarkHtml(m.uid)}
       </button>`;
         })
         .join("")}

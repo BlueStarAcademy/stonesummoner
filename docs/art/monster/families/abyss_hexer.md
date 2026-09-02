@@ -29,6 +29,6 @@
 Premium stylized 2.5D mobile RPG hooded necromancer debuffer,
 tattered robes skull chains ornaments, skull scythe staff element flames,
 raised hand element fire orb, shoulder ghost flames, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes flames orb only, no global recolor, no text, no cropped staff or feet
 ```

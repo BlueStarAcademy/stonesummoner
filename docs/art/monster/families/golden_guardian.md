@@ -31,6 +31,6 @@ Premium stylized 2.5D mobile RPG holy golden knight tank,
 white-gold plate wing pauldrons glowing visor diamond chest gem,
 massive glowing mace and sunburst kite shield, white tabard, tattered cape,
 wide grounded tank stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, clean white plate,
+eye-level front three-quarter, transparent alpha background or solid magenta #FF00FF plate,
 element accents in visor gem mace shield glow only, no global recolor, no text
 ```

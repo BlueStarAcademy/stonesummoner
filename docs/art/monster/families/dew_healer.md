@@ -31,6 +31,6 @@ Premium stylized 2.5D mobile RPG elegant water priestess support,
 long flowing hair crystal flowers forehead gem, layered translucent gown teardrop jewels,
 tall staff with glowing wreath teardrop crystal, regal graceful stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-clean white plate, element accents in eyes hair crystal gown gems only,
+transparent alpha background or solid magenta #FF00FF plate, element accents in eyes hair crystal gown gems only,
 no global recolor, no text, no cropped staff or gown
 ```

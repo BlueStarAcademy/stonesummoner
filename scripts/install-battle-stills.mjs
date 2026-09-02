@@ -38,10 +38,12 @@ import {
 import {
   PAINTED_BATTLE_DEMATTE,
   PORTRAIT_DEMATTE,
+  WHITE_PLATE_PORTRAIT_DEMATTE,
   TRANSPARENT_PORTRAIT_INSTALL,
   processChromaBattleRgba,
   featherAlphaEdges,
   detectPreAlpha,
+  detectWhitePlate,
   imageToInstalledBattleWebp,
   imageToDematteWebp,
   imageToTransparentWebp,
@@ -158,6 +160,10 @@ async function installPortraitSource(src, dest) {
   if (await detectPreAlpha(src)) {
     await imageToTransparentWebp(src, dest, TRANSPARENT_PORTRAIT_INSTALL);
     return "painted";
+  }
+  if (await detectWhitePlate(src)) {
+    await imageToDematteWebp(src, dest, WHITE_PLATE_PORTRAIT_DEMATTE);
+    return "white-plate";
   }
   await imageToDematteWebp(src, dest, PORTRAIT_DEMATTE);
   return "painted";

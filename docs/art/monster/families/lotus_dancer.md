@@ -31,6 +31,6 @@ Premium stylized 2.5D mobile RPG elegant lotus dancer support,
 elaborate updo lotus ornaments, black-pink lotus armor flowing silk panels,
 dual ornate petal fans with element glow, dynamic dance stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-grounded feet, clean white plate, element accents in eyes fan glow lotus petals only,
+grounded feet, transparent alpha background or solid magenta #FF00FF plate, element accents in eyes fan glow lotus petals only,
 no global recolor, no text, no cropped fans or feet
 ```

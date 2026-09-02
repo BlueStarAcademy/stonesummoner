@@ -33,6 +33,6 @@ Premium stylized 2.5D mobile RPG draconic humanoid dragon knight tank,
 white dragon head golden horn crest element eyes, white-gold plate armor element gems,
 ethereal feathered wings dark blue cape, ornate spear with energy swirl kite shield dragon crest,
 clawed armored feet wide tank stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes gems spear shield wings only, no global recolor, no text
 ```

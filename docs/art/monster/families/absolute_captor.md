@@ -33,6 +33,6 @@ Premium stylized 2.5D mobile RPG void armored capturer knight,
 spiky black plate crown helm shadow face element eyes, glowing chest core,
 floating element chains with hook-spear tips, void flame aura billowing,
 commanding wide stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes core chains void flames only, no global recolor, no text
 ```

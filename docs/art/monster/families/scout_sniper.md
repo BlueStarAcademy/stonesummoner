@@ -29,7 +29,7 @@
 Premium stylized 2.5D mobile RPG female forest sniper debuffer,
 leafy ghillie cloak element energy wisps, leather armor, ornate magical rifle with scope,
 floating leaves energy trails, aiming ready stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes rifle glow energy trails only,
 no global recolor, no text, no cropped rifle or feet
 ```

@@ -45,7 +45,7 @@ Premium stylized 2.5D mobile RPG dark armored lancer attacker,
 spiky charcoal plate gold filigree, angular helm glowing eyes hair plume,
 massive ornate polearm spear with element energy blade and crackle,
 tattered waist cape, heroic lancer stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes spear energy and crackle only,
 no global recolor, no text, no cropped spear or feet
 ```
