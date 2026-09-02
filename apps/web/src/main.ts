@@ -1,5 +1,6 @@
 import "./style.css";
 import { apiUrl } from "./api/url";
+import { registerPwaAutoUpdate } from "./pwa";
 import {
   CHAT_CHANNEL_CAP,
   CHAT_CHANNEL_COUNT,
@@ -26784,4 +26785,5 @@ async function boot(): Promise<void> {
 
 initI18n();
 installHardwareBack(handleHardwareBack);
+registerPwaAutoUpdate();
 void boot();

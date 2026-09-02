@@ -31,6 +31,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: false,
       includeAssets: ["favicon.svg", "icons/*.svg", "icons/*.png"],
       manifest: {
         name: "StoneSummoner",
@@ -64,6 +65,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,ico,png,woff2}"],
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        navigateFallbackDenylist: [/^\/api\//],
         // stages-world-map.png (~3.3 MB) and auth heroes exceed Workbox's 2 MiB default
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
