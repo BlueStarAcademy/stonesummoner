@@ -1826,6 +1826,8 @@ let waveEnterIds = new Set<string>();
 let waveBannerText: string | null = null;
 /** Brief manual-placement beat between choosing a cell and placing its stone. */
 let stoneSummonFx: { element: string; x: number; y: number } | null = null;
+/** Keep the pick plate open through stone paint + buff float (manual only). */
+let stonePickHoldOpen = false;
 /** Result chips shown after a stone lands (soft overlay, no full render). */
 let stoneResultFx: StoneReport | null = null;
 /** Full result sheet for token / victory / large capture. */
@@ -4752,6 +4754,7 @@ function skipBattleToResult(): void {
   battleFxBusy = false;
   dmgFloats = [];
   stoneSummonFx = null;
+  stonePickHoldOpen = false;
   stoneResultFx = null;
   stoneResultSheetReport = null;
   stoneResultSheetOpen = false;
@@ -4856,6 +4859,7 @@ function startBattle(stage: StageDef): void {
   pageTransitionFx = null;
   winVanishPlayed = false;
   stoneSummonFx = null;
+  stonePickHoldOpen = false;
   stoneResultFx = null;
   stoneResultSheetReport = null;
   stoneResultSheetOpen = false;
@@ -7436,37 +7440,45 @@ function stoneBuffChipLabel(chip: StoneReportChip): string | null {
   return null;
 }
 
-function stoneBuffUntilLine(report: StoneReport): string | null {
-  const parts = report.chips
-    .map(stoneBuffChipLabel)
-    .filter((s): s is string => !!s);
-  if (!parts.length) return null;
-  return t("ui.stoneBuffUntilNext", { buff: parts.join(` ${MIDDOT} `) });
+function stoneBuffEffectChips(report: StoneReport): StoneReportChip[] {
+  return report.chips.filter((c) => stoneBuffChipLabel(c) != null);
 }
 
-/** Center rising line for stone buffs (not a toast). */
-function spawnStoneBuffUntilFloat(report: StoneReport | null | undefined): number {
-  const line = report ? stoneBuffUntilLine(report) : null;
-  if (!line) return 0;
+/**
+ * Horizontal rising buff chips. Host on the pick plate when open (manual),
+ * otherwise battle center (auto / no plate).
+ */
+function spawnStoneBuffUntilFloat(
+  report: StoneReport | null | undefined,
+  opts?: { host?: HTMLElement | null },
+): number {
+  if (!report) return 0;
+  const chips = stoneBuffEffectChips(report);
+  if (!chips.length) return 0;
   const host =
+    opts?.host ??
+    app.querySelector<HTMLElement>("#stone-pick-layer:not([hidden])") ??
     app.querySelector<HTMLElement>(".battle-layout") ??
     app.querySelector<HTMLElement>(".battle-screen");
   if (!host) return 0;
   host.querySelectorAll(".stone-buff-float").forEach((el) => el.remove());
   const el = document.createElement("div");
-  el.className = `stone-buff-float${report!.team === "enemy" ? " is-enemy" : ""}`;
+  el.className = `stone-buff-float${report.team === "enemy" ? " is-enemy" : ""}`;
   el.setAttribute("aria-live", "polite");
-  el.textContent = line;
+  el.innerHTML = chips.map(stoneResultChipHtml).join("");
   host.appendChild(el);
-  const ms = fxDurationMs(2000, battleSpeed);
+  const ms = fxDurationMs(1600, battleSpeed);
   el.style.setProperty("--stone-buff-ms", `${ms}ms`);
-  window.setTimeout(() => el.remove(), ms);
+  window.setTimeout(() => el.remove(), ms + 40);
   return ms;
 }
 
-async function presentStoneOutcome(report: StoneReport | null): Promise<void> {
+async function presentStoneOutcome(
+  report: StoneReport | null,
+  opts?: { skipBuffFloat?: boolean },
+): Promise<void> {
   if (!report) return;
-  const buffMs = spawnStoneBuffUntilFloat(report);
+  const buffMs = opts?.skipBuffFloat ? 0 : spawnStoneBuffUntilFloat(report);
   // AUTO must never wait on the confirm sheet — use the brief chip FX instead.
   if (report.showResultSheet && !autoMode) {
     await presentStoneResultSheet(report);
@@ -7485,7 +7497,40 @@ async function presentStoneOutcome(report: StoneReport | null): Promise<void> {
     await presentStoneResult({ ...report, chips });
     return;
   }
-  if (buffMs > 0) await waitFx(Math.min(buffMs, fxDurationMs(900, battleSpeed)));
+  if (buffMs > 0) await waitFx(buffMs);
+}
+
+/** Soft-update pick grid cells without remounting the plate (keeps fade state). */
+function softRefreshStonePickBoard(canClick: boolean): boolean {
+  const layer = app.querySelector<HTMLElement>("#stone-pick-layer");
+  const board = layer?.querySelector<HTMLElement>(".stone-pick-board");
+  if (!layer || layer.hidden || !board || !battle) return false;
+  board.innerHTML = renderBoardCells(canClick);
+  const layout = app.querySelector<HTMLElement>(".battle-layout");
+  layout?.classList.toggle("is-stone-summoning", !!stoneSummonFx);
+  layout?.classList.add("is-stone-pick");
+  return true;
+}
+
+async function fadeStonePickWithBuffs(buffMs: number): Promise<void> {
+  const layer = app.querySelector<HTMLElement>("#stone-pick-layer");
+  const fadeMs =
+    buffMs > 0
+      ? Math.max(buffMs, fxDurationMs(1200, battleSpeed))
+      : fxDurationMs(480, battleSpeed);
+  if (layer && !layer.hidden) {
+    layer.style.setProperty("--stone-pick-fade-ms", `${fadeMs}ms`);
+    layer.classList.add("is-fading");
+    await waitFx(fadeMs);
+    layer.classList.remove("is-fading");
+    layer.style.removeProperty("--stone-pick-fade-ms");
+  } else if (buffMs > 0) {
+    await waitFx(buffMs);
+  }
+  stonePickHoldOpen = false;
+  stoneSummonFx = null;
+  app.querySelector(".battle-layout")?.classList.remove("is-stone-summoning");
+  if (!refreshBattleView()) render();
 }
 
 /** Dismiss forge result + symbol detail when leaving the current monster context. */
@@ -7503,21 +7548,31 @@ function clearEnhanceSymbolUi(opts?: { keepDock?: boolean }): void {
 
 async function onCellClickAsync(x: number, y: number): Promise<void> {
   if (!battle || battle.phase !== "await_stone") return;
-  if ((autoMode && battleAutoLive.stone) || battleFxBusy || stoneSummonFx) return;
+  if (
+    (autoMode && battleAutoLive.stone) ||
+    battleFxBusy ||
+    stoneSummonFx ||
+    stonePickHoldOpen
+  ) {
+    return;
+  }
   const unit = battle.activeUnitId
     ? battle.getUnit(battle.activeUnitId)
     : null;
   if (!unit || unit.team !== "ally") return;
 
-    battleFxBusy = true;
+  battleFxBusy = true;
   try {
-    // Close the pick grid, absorb from the map circle, then continue.
+    // Hold the pick plate open so the player sees the seal → magic stone → buffs.
+    stonePickHoldOpen = true;
     stoneSummonFx = {
       element: battle.allySummoner.summonerElement ?? unit.element,
       x,
       y,
     };
-    if (!refreshBattleView()) render();
+    if (!softRefreshStonePickBoard(false)) {
+      if (!refreshBattleView()) render();
+    }
     await waitPaintFrame();
 
     const allySum = battle.units.find(
@@ -7534,30 +7589,38 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     if (!battle.playStone({ x, y })) {
       const reason = battle.log[battle.log.length - 1] ?? t("ui.b72f5a4752");
       stoneSummonFx = null;
+      stonePickHoldOpen = false;
       flash(reason);
       if (!refreshBattleView()) render();
       return;
     }
     const report = battle.lastStoneReport;
     refreshLegal();
-    if (!refreshBattleView()) render();
+    stoneSummonFx = null;
+    if (!softRefreshStonePickBoard(false)) {
+      if (!refreshBattleView()) render();
+    }
     await waitPaintFrame();
     const kind = arenaStoneBurstKind(report);
     const appearMs = arenaStoneAppearMs("ally", kind);
     pulseArenaStonePlace("ally", report, appearMs);
     const shapeMs = pulseShapeBonusesAfterStone(x, y, "black");
-    stoneSummonFx = null;
-    app.querySelector(".battle-layout")?.classList.remove("is-stone-summoning");
-    // Manual: show the confirm sheet immediately after the stone lands.
-    if (report?.showResultSheet && !autoMode) {
-      await presentStoneOutcome(report);
-    } else {
-      await waitFx(Math.max(appearMs, shapeMs));
-      await presentStoneOutcome(report);
-    }
+    // Let the magic stone register on the plate before buffs rise.
+    await waitFx(
+      Math.max(
+        fxDurationMs(320, battleSpeed),
+        Math.min(appearMs, fxDurationMs(520, battleSpeed)),
+      ),
+    );
+    const pick = app.querySelector<HTMLElement>("#stone-pick-layer");
+    const buffMs = spawnStoneBuffUntilFloat(report, { host: pick });
+    await fadeStonePickWithBuffs(Math.max(buffMs, shapeMs));
+    await presentStoneOutcome(report, { skipBuffFloat: true });
     await resolveCombatUntilAllyInput({ holdBusy: true });
     cueOnboardFirstSkills();
   } finally {
+    stonePickHoldOpen = false;
+    stoneSummonFx = null;
     battleFxBusy = false;
   }
 }
@@ -9090,6 +9153,7 @@ function renderBoardCells(canClick: boolean): string {
 
 function pickOverlayOpen(): boolean {
   if (!battle) return false;
+  if (stonePickHoldOpen) return true;
   return (
     battle.phase === "await_stone" &&
     !!battle.activeUnitId &&
@@ -9381,6 +9445,11 @@ function renderStonePickLayer(): string {
   const open = pickOverlayOpen();
   const circleId = battleCircleIdForStage(currentStage);
   const circleSrc = battleCircleSrc(circleId);
+  const canClick =
+    open &&
+    !stoneSummonFx &&
+    !stonePickHoldOpen &&
+    battle.phase === "await_stone";
   return `<div class="stone-pick-layer" id="stone-pick-layer"${open ? "" : ' hidden aria-hidden="true"'} data-circle="${circleId}">
     <div class="stone-pick-card">
       <div class="stone-pick-head">
@@ -9391,7 +9460,7 @@ function renderStonePickLayer(): string {
         <div class="stone-pick-circle">
           <div class="stone-pick-plate-rim" aria-hidden="true"></div>
           <img class="stone-pick-circle-art" src="${circleSrc}" width="512" height="512" alt="" draggable="false" decoding="async" aria-hidden="true" />
-          <div class="board magic-circle stone-pick-board size-${size}" data-size="${size}" data-circle="${circleId}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${open ? renderBoardCells(true) : ""}</div>
+          <div class="board magic-circle stone-pick-board size-${size}" data-size="${size}" data-circle="${circleId}" style="grid-template-columns:repeat(${size},minmax(0,1fr))">${open ? renderBoardCells(canClick) : ""}</div>
         </div>
       </div>
     </div>
@@ -24277,9 +24346,10 @@ function renderBattle(manaPct: number): string {
     active?.team === "ally" &&
     (!autoMode || !battleAutoLive.combat);
   const canPlaceStone =
-    battle.phase === "await_stone" &&
-    active?.team === "ally" &&
-    (!autoMode || !battleAutoLive.stone);
+    stonePickHoldOpen ||
+    (battle.phase === "await_stone" &&
+      active?.team === "ally" &&
+      (!autoMode || !battleAutoLive.stone));
 
   const showBoardSwitch =
     battle.boards.length > 1 && canPlaceStone;
@@ -24482,7 +24552,7 @@ function bindStonePickTaps(): void {
   hit.addEventListener("pointerup", (ev) => {
     if (ev.button != null && ev.button !== 0) return;
     const layer = hit.closest(".stone-pick-layer");
-    if (layer instanceof HTMLElement && layer.hidden) return;
+    if (layer instanceof HTMLElement && (layer.hidden || layer.classList.contains("is-fading"))) return;
     const target = ev.target;
     if (!(target instanceof Element)) return;
     const btn = target.closest<HTMLButtonElement>("button.cell.is-placeable");
@@ -24501,6 +24571,8 @@ function leaveBattleOrResultScreen(): void {
   stoneResultSheetReport = null;
   stoneResultSheetResolve?.();
   stoneResultSheetResolve = null;
+  stonePickHoldOpen = false;
+  stoneSummonFx = null;
   stonePickHelpOpen = false;
   stonePickPlaceCued = false;
   findStonePickHelpLayer()?.remove();

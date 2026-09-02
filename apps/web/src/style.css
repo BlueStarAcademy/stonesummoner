@@ -8760,27 +8760,33 @@ main {
   left: 50%;
   top: 48%;
   z-index: 24;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   transform: translate(-50%, -50%);
-  max-width: min(92vw, 380px);
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid #c9a22788;
-  background: #140e28e8;
-  box-shadow: 0 8px 20px #000a, inset 0 1px 0 #ffffff22;
+  max-width: min(96vw, 420px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
   color: #f3e6b8;
-  font-size: 0.82rem;
-  font-weight: 750;
-  letter-spacing: 0.02em;
-  line-height: 1.25;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   pointer-events: none;
-  animation: stone-buff-float-rise var(--stone-buff-ms, 2s) ease-out forwards;
+  animation: stone-buff-float-rise var(--stone-buff-ms, 1.6s) ease-out forwards;
+}
+
+.stone-buff-float .stone-result-chip {
+  flex: 0 0 auto;
+  box-shadow: 0 6px 16px #000a;
 }
 
 .stone-buff-float.is-enemy {
+  border-color: transparent;
+  color: #f0d0d0;
+}
+
+.stone-buff-float.is-enemy .stone-result-chip {
   border-color: #c0707088;
   color: #f0d0d0;
 }
@@ -8788,19 +8794,19 @@ main {
 @keyframes stone-buff-float-rise {
   0% {
     opacity: 0;
-    transform: translate(-50%, -40%);
+    transform: translate(-50%, -30%);
   }
-  12% {
+  14% {
     opacity: 1;
-    transform: translate(-50%, -55%);
+    transform: translate(-50%, -50%);
   }
-  70% {
+  62% {
     opacity: 1;
-    transform: translate(-50%, -120%);
+    transform: translate(-50%, -110%);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -160%);
+    transform: translate(-50%, -155%);
   }
 }
 
@@ -8810,6 +8816,11 @@ main {
     opacity: 1;
     transform: translate(-50%, -80%);
   }
+}
+
+.stone-pick-layer .stone-buff-float {
+  top: 42%;
+  z-index: 6;
 }
 
 .stone-result-layer[hidden] {
@@ -11871,7 +11882,7 @@ body > .battle-settings-layer.settings-layer {
 
 /*
  * Manual turn: a large flat grid layer over the stage. Taps here place the
- * stone on the tilted map circle underneath, so the layer closes on pick.
+ * stone; the plate stays up through magic-stone paint + buff float, then fades.
  */
 .stone-pick-layer {
   position: absolute;
@@ -11891,6 +11902,11 @@ body > .battle-settings-layer.settings-layer {
 
 .stone-pick-layer[hidden] {
   display: none;
+}
+
+.stone-pick-layer.is-fading {
+  animation: stone-pick-out var(--stone-pick-fade-ms, 1.2s) ease-in forwards;
+  pointer-events: none;
 }
 
 .stone-pick-card {
@@ -12249,6 +12265,12 @@ body > .battle-settings-layer.settings-layer {
 @keyframes stone-pick-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes stone-pick-out {
+  0% { opacity: 1; }
+  45% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .board-mini {
