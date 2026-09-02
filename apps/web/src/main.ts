@@ -193,6 +193,7 @@ import {
   type StoneSuggestion,
   type Unit,
   detectShapeBonuses,
+  BOARD_ITEMS,
 } from "stonesummoner-combat";
 import {
   ARENA_STAGES,
@@ -6999,22 +7000,47 @@ function stonePickHelpLines(): string[] {
     .filter(Boolean);
 }
 
-function renderStonePickHelpLayer(): string {
-  const open = stonePickHelpOpen;
+function boardTokenDesc(id: string): string {
+  return t(`ui.boardTokenDesc.${id}` as Parameters<typeof t>[0]);
+}
+
+function renderStonePickHelpItem(id: string): string {
+  const src = battleBoardMarkSrc(id);
+  const svg = battleBoardMarkFallbackSrc(id);
+  const name = boardTokenLabel(id);
+  const desc = boardTokenDesc(id);
+  return `<li class="stone-pick-help-item">
+    <img class="stone-pick-help-item-img" src="${src}" data-svg="${svg}" width="40" height="40" alt="" draggable="false" decoding="async" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src=this.dataset.svg||'';return;}" />
+    <span class="stone-pick-help-item-copy">
+      <strong>${escapeHtml(name)}</strong>
+      <span>${escapeHtml(desc)}</span>
+    </span>
+  </li>`;
+}
+
+function renderStonePickHelpBody(): string {
   const lines = stonePickHelpLines();
-  const body =
+  const rules =
     lines.length > 0
       ? `<ul class="building-info-list stone-pick-help-list">${lines
           .map((line) => `<li>${escapeHtml(line)}</li>`)
           .join("")}</ul>`
       : "";
+  const items = BOARD_ITEMS.map((item) => renderStonePickHelpItem(item.id)).join("");
+  return `${rules}
+    <h3 class="stone-pick-help-items-title">${escapeHtml(t("ui.stonePick.helpItems"))}</h3>
+    <ul class="stone-pick-help-items">${items}</ul>`;
+}
+
+function renderStonePickHelpLayer(): string {
+  const open = stonePickHelpOpen;
   return `<div class="settings-layer stone-pick-help-layer" id="stone-pick-help-layer"${open ? "" : " hidden"} aria-hidden="${open ? "false" : "true"}">
     <button type="button" class="settings-backdrop" id="btn-stone-pick-help-backdrop" aria-label="${escapeHtml(t("ui.stonePick.helpConfirm"))}"></button>
     <div class="settings-sheet stone-pick-help-sheet" role="dialog" aria-modal="true" aria-labelledby="stone-pick-help-title">
       <div class="settings-sheet-handle" aria-hidden="true"></div>
       ${modalCloseX(t("ui.stonePick.helpConfirm"), "btn-stone-pick-help-close")}
       <h2 class="settings-title" id="stone-pick-help-title">${escapeHtml(t("ui.stonePick.helpTitle"))}</h2>
-      <div class="building-info-body stone-pick-help-body">${body}</div>
+      <div class="building-info-body stone-pick-help-body">${renderStonePickHelpBody()}</div>
       <button type="button" class="primary stone-pick-help-ok" id="btn-stone-pick-help-ok">${escapeHtml(t("ui.stonePick.helpConfirm"))}</button>
     </div>
   </div>`;
@@ -7056,6 +7082,8 @@ function applyStonePickHelpOpen(): void {
     rememberOverlayClose("stone-pick-help-layer");
     return;
   }
+  const body = layer.querySelector(".stone-pick-help-body");
+  if (body) body.innerHTML = renderStonePickHelpBody();
   promoteOverlayToAppRoot(layer);
   replayModalPop(layer);
   rememberOverlayOpen("stone-pick-help-layer");
