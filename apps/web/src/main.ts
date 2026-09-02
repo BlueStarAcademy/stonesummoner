@@ -8702,7 +8702,7 @@ function renderUnit(
     </div>`;
   }
 
-  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" data-stature="${stature.toFixed(2)}" style="--unit-stature:${stature}" ${attrs} title="${escapeHtml(`${u.name} · ${elementLabel(u.element as SummonerElement)}`)}">
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" data-stature="${stature.toFixed(2)}" style="--unit-stature:${stature}"${u.kind === "monster" && u.monsterId ? monsterSlotFamilyAttr(u.monsterId) : ""} ${attrs} title="${escapeHtml(`${u.name} · ${elementLabel(u.element as SummonerElement)}`)}">
     ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
     ${renderUnitStatusIcons(u)}
     <span class="battle-unit-glow" aria-hidden="true"></span>
