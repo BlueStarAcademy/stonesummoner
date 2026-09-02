@@ -40,7 +40,6 @@ import {
   PORTRAIT_DEMATTE,
   WHITE_PLATE_PORTRAIT_DEMATTE,
   TRANSPARENT_PORTRAIT_INSTALL,
-  processChromaBattleRgba,
   featherAlphaEdges,
   detectPreAlpha,
   detectWhitePlate,
@@ -145,7 +144,7 @@ async function bustPortraitFromBattleFront(frontWebp, destWebp) {
     .raw()
     .toBuffer({ resolveWithObject: true });
   const rgba = new Uint8ClampedArray(data);
-  await processChromaBattleRgba(rgba, info.width, info.height, TRANSPARENT_PORTRAIT_INSTALL);
+  /* Cropped battle fronts are already dematted — do not re-chroma / punch. */
   featherAlphaEdges(rgba, info.width, info.height, 2);
   await rawRgbaToTransparentWebp(
     rgba,

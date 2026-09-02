@@ -24,7 +24,6 @@ import {
   zeroClearRgb,
   writeWebpAtomic,
   TRANSPARENT_PORTRAIT_INSTALL,
-  processChromaBattleRgba,
   featherAlphaEdges,
   rawRgbaToTransparentWebp,
   PORTRAIT_DEMATTE,
@@ -165,12 +164,7 @@ async function refreshPortraitFromBattle(artKey, awaken) {
     .raw()
     .toBuffer({ resolveWithObject: true });
   const rgba = new Uint8ClampedArray(data);
-  await processChromaBattleRgba(
-    rgba,
-    info.width,
-    info.height,
-    TRANSPARENT_PORTRAIT_INSTALL,
-  );
+  /* Already-dematted battle fronts — crop + feather only, no enclosed punch. */
   featherAlphaEdges(rgba, info.width, info.height, 2);
   await rawRgbaToTransparentWebp(
     rgba,

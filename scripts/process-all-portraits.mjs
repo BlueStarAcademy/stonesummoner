@@ -175,6 +175,7 @@ async function writePortrait(srcPath, destWebp) {
     (await detectChromaPlate(srcPath)) ||
     (await detectInteriorChromaPlate(srcPath));
   if (hasChromaPlate) {
+    /* Edge/chroma plate only — TRANSPARENT_PORTRAIT_INSTALL no longer punches enclosed white. */
     await processChromaBattleRgba(
       rgba,
       info.width,

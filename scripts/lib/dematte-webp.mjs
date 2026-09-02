@@ -1509,13 +1509,12 @@ export const TRANSPARENT_PORTRAIT_INSTALL = {
   defringe: true,
   defringeLim: 28,
   defringeSilhouette: true,
-  punchEnclosedWhite: true,
-  sealInterior: true,
-  sealGrid: true,
-  sealGridSpread: 0.14,
-  sealYEndRatio: 0.55,
-  fillHoles: true,
-  fillHolePasses: 6,
+  /* Enclosed white punch hollows pale armor / highlights into ghost shapes. */
+  punchEnclosedWhite: false,
+  sealInterior: false,
+  sealGrid: false,
+  fillHoles: false,
+  fillHolePasses: 0,
 };
 
 /** Near-white studio plate — edge + enclosed flat plate punch. */

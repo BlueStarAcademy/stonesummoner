@@ -16391,9 +16391,8 @@ function monsterInventoryArtImg(
   );
   if (!fallbacks.length) return "";
   const src = fallbacks[0]!;
-  const src128 = src.replace("/inventory/256/", "/inventory/128/");
   const awakenCls = preferAwakened ? " is-awakened" : "";
-  return `<img class="${className}${awakenCls}" src="${src}" srcset="${src128} 128w, ${src} 256w" sizes="${Math.max(1, size)}px" width="${size}" height="${size}" alt="" draggable="false" decoding="async" loading="lazy"${imgSrcOnerrorChain(fallbacks, true)} />`;
+  return `<img class="${className}${awakenCls}" src="${src}" srcset="${src} 256w" sizes="${Math.max(1, size * 2)}px" width="${size}" height="${size}" alt="" draggable="false" decoding="async" loading="lazy"${imgSrcOnerrorChain(fallbacks, true)} />`;
 }
 
 /** Art used in battle / book hero: Spine still when available, else WebP. */

@@ -369,20 +369,13 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 export function dematteArtImg(img: HTMLImageElement): void {
   const src = img.getAttribute("src") || img.currentSrc || img.src;
   if (!src || src.startsWith("blob:") || src.startsWith("data:")) return;
-  const isCharacterArt =
-    /\/art\/(?:monster|summoner)\//.test(src) && !/\/skill\//.test(src);
-  if (isCharacterArt) {
-    if (img.dataset.dematteWhiteSrc === src) return;
-    img.dataset.dematteWhiteSrc = src;
-    void dematteWhiteSrc(src).then((next) => {
-      if (!next || next === src) return;
-      if (img.dataset.dematteWhiteSrc === src) img.src = next;
-    });
-    return;
-  }
-  // Painted character art is already finished. Runtime dark dematte punches
-  // dark armor/hair to alpha and leaves a half-drawn silhouette.
-  if (img.hasAttribute("data-still-front") || /\/skill\//.test(src)) {
+  // Painted monster/summoner art is finished at install time. Runtime white
+  // dematte re-punches pale armor/highlights into ghost silhouettes.
+  if (
+    img.hasAttribute("data-still-front") ||
+    /\/skill\//.test(src) ||
+    (/\/art\/(?:monster|summoner)\//.test(src) && !/\/skill\//.test(src))
+  ) {
     return;
   }
   if (img.dataset.dematteSrc === src) return;
