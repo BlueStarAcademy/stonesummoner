@@ -131,6 +131,8 @@ import {
   defaultOnboardSnapshot,
   deriveOnboardStep,
   fromOnboardRiteSave,
+  guideRailShouldShow,
+  overlayHidesGuideRail,
   onboardFocusSpotId,
   onboardObjective,
   onboardStepIndex,
@@ -3716,8 +3718,39 @@ function renderGuideRailStepMarkers(
   }).join("");
 }
 
+function guideRailBlockingOverlayOpen(): boolean {
+  if (onboardWelcomeOpen) return true;
+  for (const id of overlayBackStack) {
+    if (overlayHidesGuideRail(id)) return true;
+  }
+  const layers = app.querySelectorAll<HTMLElement>(
+    ".settings-layer, .codex-layer, #onboard-welcome",
+  );
+  for (const el of layers) {
+    if (!overlayHidesGuideRail(el.id)) continue;
+    if (overlayDomIsOpen(el)) return true;
+  }
+  return false;
+}
+
+function guideRailIsVisible(): boolean {
+  return guideRailShouldShow({
+    step: onboard.step,
+    view,
+    blockingOverlay: guideRailBlockingOverlayOpen(),
+  });
+}
+
 function renderGuideRail(): string {
-  if (onboard.step === "done" || view === "auth" || view === "battle") return "";
+  if (
+    !guideRailShouldShow({
+      step: onboard.step,
+      view,
+      blockingOverlay: false,
+    })
+  ) {
+    return "";
+  }
   const obj = onboardObjective(onboard.step);
   if (!obj) return "";
   const collapsed = guideRailCollapsed;
@@ -3775,8 +3808,7 @@ function applyGuideRailOpen(collapsed?: boolean): void {
   if (typeof collapsed === "boolean") guideRailCollapsed = collapsed;
   const layer = app.querySelector<HTMLElement>("#guide-rail-layer");
   if (!layer) return;
-  const show =
-    onboard.step !== "done" && view !== "auth" && view !== "battle";
+  const show = guideRailIsVisible();
   layer.hidden = !show;
   layer.setAttribute("aria-hidden", show ? "false" : "true");
   if (!show) return;
@@ -10160,11 +10192,13 @@ function rememberOverlayOpen(id: string): void {
   if (!id) return;
   overlayBackStack = overlayBackStack.filter((item) => item !== id);
   overlayBackStack.push(id);
+  applyGuideRailOpen();
 }
 
 function rememberOverlayClose(id: string): void {
   if (!id) return;
   overlayBackStack = overlayBackStack.filter((item) => item !== id);
+  applyGuideRailOpen();
 }
 
 function overlayDomIsOpen(el: HTMLElement): boolean {
@@ -13456,12 +13490,7 @@ function renderScreen(): void {
     ${renderBuildingInfoModal()}
     ${renderBuildingUnlockModal()}
     ${
-      onIsland ||
-      isStages ||
-      view === "summon" ||
-      view === "enhance" ||
-      view === "party" ||
-      view === "result"
+      onIsland || isStages || view === "summon" || view === "result"
         ? renderGuideRail()
         : ""
     }
@@ -26861,6 +26890,7 @@ function bind(): void {
   if (gloryUpgradeId && !app.querySelector(`#${GLORY_UP_LAYER_ID}`)) {
     remountGloryUpgradeOverlay();
   }
+  applyGuideRailOpen();
 }
 
 async function boot(): Promise<void> {

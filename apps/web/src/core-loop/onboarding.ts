@@ -38,6 +38,40 @@ export function onboardStepTotal(): number {
   return ONBOARD_GUIDE_STEPS.length;
 }
 
+/**
+ * Screens where the guide rail must stay off so it does not cover the host UI.
+ * `enhance` / `party` / `summoner` are the 소환수·소환사 books.
+ */
+export const GUIDE_RAIL_HIDDEN_VIEWS = [
+  "auth",
+  "battle",
+  "enhance",
+  "party",
+  "summoner",
+] as const;
+
+export function isGuideRailHiddenView(view: string): boolean {
+  return (GUIDE_RAIL_HIDDEN_VIEWS as readonly string[]).includes(view);
+}
+
+/** Region atlas sheet — the stages rite still needs the rail on top. */
+export const GUIDE_RAIL_PASS_OVERLAY_IDS = ["stages-region"] as const;
+
+export function overlayHidesGuideRail(overlayId: string): boolean {
+  return !(GUIDE_RAIL_PASS_OVERLAY_IDS as readonly string[]).includes(overlayId);
+}
+
+export function guideRailShouldShow(opts: {
+  step: OnboardStep;
+  view: string;
+  blockingOverlay?: boolean;
+}): boolean {
+  if (opts.step === "done") return false;
+  if (isGuideRailHiddenView(opts.view)) return false;
+  if (opts.blockingOverlay) return false;
+  return true;
+}
+
 /** Side expedition pins on the stages atlas (not main-quest maps). */
 export type SideContentRegionId =
   | "depth"
