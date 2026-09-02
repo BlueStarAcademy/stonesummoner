@@ -8555,8 +8555,6 @@ main {
 
 /* Rim portraits must not steal stone taps while the board is live. */
 .battle-layout--stage.is-stone-pick .battle-lane button.battle-unit,
-.battle-layout--stage.is-stone-pick .battle-lane .battle-unit-skills-wrap,
-.battle-layout--stage.is-stone-pick .battle-lane .battle-unit-skills-wrap *,
 .battle-layout--stage.is-stone-pick .battle-lane .battle-unit-skills,
 .battle-layout--stage.is-stone-pick .battle-lane .battle-unit-skills * {
   pointer-events: none !important;
@@ -8691,8 +8689,6 @@ main {
 }
 
 .battle-lane button.battle-unit,
-.battle-lane .battle-unit-skills-wrap,
-.battle-lane .battle-unit-skills-wrap *,
 .battle-lane .battle-unit-skills,
 .battle-lane .battle-unit-skills * {
   pointer-events: auto;
@@ -9140,9 +9136,9 @@ main {
     scale(var(--battle-depth-scale));
   transform-origin: center bottom;
   overflow: visible;
-  /* Skill strip + select bubble sit above the unit head. */
+  /* Skills sit above the unit head. */
   padding-bottom: 8px;
-  padding-top: 108px;
+  padding-top: 52px;
 }
 
 .battle-formation {
@@ -9207,112 +9203,20 @@ main {
   z-index: 2;
 }
 
-.battle-unit-skills-wrap {
+.battle-unit-skills {
   position: absolute;
   left: 50%;
+  /* Anchor just above the unit head. */
   top: 0;
   bottom: auto;
   transform: translate(calc(-50% + var(--battle-skill-shift, 0px)), calc(-100% - 4px));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  z-index: 8;
-  pointer-events: auto;
-  max-width: min(96vw, 420px);
-}
-
-.battle-skill-bubble {
-  position: relative;
-  width: max-content;
-  max-width: min(88vw, 280px);
-  padding: 8px 10px 10px;
-  border: 1px solid #c9a22788;
-  border-radius: 12px;
-  background: linear-gradient(165deg, #241c36f2, #14101cf8);
-  box-shadow: 0 6px 16px #000a, inset 0 1px 0 #ffffff12;
-  color: #f2e8c8;
-  text-align: left;
-  pointer-events: none;
-}
-
-.battle-skill-bubble::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  width: 12px;
-  height: 12px;
-  border-right: 1px solid #c9a22788;
-  border-bottom: 1px solid #c9a22788;
-  background: #14101cf8;
-  transform: translateX(-50%) rotate(45deg);
-}
-
-.battle-skill-bubble-hero {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.battle-skill-bubble-ico,
-.battle-skill-bubble .skill-btn-ico,
-.battle-skill-bubble .sk-ico {
-  flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  object-fit: contain;
-  filter: drop-shadow(0 1px 2px #000a);
-}
-
-.battle-skill-bubble-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.battle-skill-bubble-copy strong {
-  font-size: 13px;
-  line-height: 1.15;
-  font-weight: 800;
-  color: #f7efd4;
-}
-
-.battle-skill-bubble-copy small {
-  font-size: 11px;
-  line-height: 1.1;
-  color: #d8c98a;
-}
-
-.battle-skill-bubble-effects {
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.battle-skill-bubble-effects li {
-  font-size: 11px;
-  line-height: 1.25;
-  color: #e8dfc4;
-}
-
-.battle-unit-skills {
-  position: relative;
-  left: auto;
-  top: auto;
-  bottom: auto;
-  transform: none;
   display: flex;
   flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-end;
   gap: 4px;
   padding: 0 2px 2px;
-  z-index: 1;
+  z-index: 8;
   pointer-events: auto;
   max-width: min(96vw, 420px);
 }
@@ -9895,19 +9799,7 @@ button.battle-unit {
 }
 
 .battle-unit-turn {
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  z-index: 3;
-  width: 0;
-  height: 0;
-  margin-left: -6px;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 8px solid #5fd87a;
-  filter: drop-shadow(0 1px 2px #000a);
-  animation: battle-turn-bob 0.9s ease-in-out infinite;
-  pointer-events: none;
+  display: none;
 }
 
 .battle-unit-statuses {
@@ -10083,9 +9975,8 @@ button.battle-unit {
 }
 
 .battle-unit.active {
-  transform: translateY(-4px) scale(1.06);
+  transform: translateY(-4px);
   z-index: 6;
-  max-width: 112px;
 }
 
 .battle-unit.active .battle-unit-glow {
@@ -10096,7 +9987,7 @@ button.battle-unit {
 
 .battle-unit.active .battle-unit-img {
   animation: none;
-  filter: drop-shadow(0 3px 8px #000c);
+  filter: drop-shadow(0 3px 8px #000c) drop-shadow(0 0 10px #c9a22755);
 }
 
 .battle-unit.targeted {
@@ -13873,17 +13764,17 @@ body > .battle-settings-layer.settings-layer {
 
 @keyframes unit-lunge {
   0% { transform: translateY(0) scale(1); }
-  16% { transform: translateY(-12%) scale(0.94, 1.06); }
-  34% { transform: translateY(-50%) scale(1.1, 0.9); }
-  58% { transform: translateY(-46%) scale(1.08, 0.92); }
+  16% { transform: translateY(-10%) scale(0.98, 1.02); }
+  34% { transform: translateY(-42%) scale(1.03, 0.97); }
+  58% { transform: translateY(-38%) scale(1.02, 0.98); }
   100% { transform: translateY(0) scale(1); }
 }
 
 @keyframes unit-lunge-enemy {
   0% { transform: translateY(0) scale(1); }
-  16% { transform: translateY(12%) scale(0.94, 1.06); }
-  34% { transform: translateY(50%) scale(1.1, 0.9); }
-  58% { transform: translateY(46%) scale(1.08, 0.92); }
+  16% { transform: translateY(10%) scale(0.98, 1.02); }
+  34% { transform: translateY(42%) scale(1.03, 0.97); }
+  58% { transform: translateY(38%) scale(1.02, 0.98); }
   100% { transform: translateY(0) scale(1); }
 }
 
@@ -13912,8 +13803,8 @@ body > .battle-settings-layer.settings-layer {
 
 @keyframes unit-cast-skill {
   0% { transform: translateY(0) scale(1); filter: brightness(1); }
-  28% { transform: translateY(-10%) scale(1.05); filter: brightness(1.18) drop-shadow(0 0 10px #c9a22788); }
-  62% { transform: translateY(-8%) scale(1.04); filter: brightness(1.22) drop-shadow(0 0 12px #f0d87866); }
+  28% { transform: translateY(-8%) scale(1.02); filter: brightness(1.18) drop-shadow(0 0 10px #c9a22788); }
+  62% { transform: translateY(-6%) scale(1.015); filter: brightness(1.22) drop-shadow(0 0 12px #f0d87866); }
   100% { transform: translateY(0) scale(1); filter: brightness(1); }
 }
 

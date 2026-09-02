@@ -445,17 +445,15 @@ function spawnCasterBodyFx(
   unitId: string,
   element: CombatElement,
   ms: number,
-  opts?: { vfxId?: string; pulseMs?: number },
+  opts?: { vfxId?: string; pulseMs?: number; skipPulse?: boolean },
 ): void {
   const pulseMs = opts?.pulseMs ?? ms;
-  pulseUnitClass(root, unitId, "fx-cast-skill", pulseMs);
+  /* Charge aura + sparks only — never paint hit/cast burst sprites on the caster. */
+  if (!opts?.skipPulse) {
+    pulseUnitClass(root, unitId, "fx-cast-skill", pulseMs);
+  }
   spawnCastGatherVfx(root, unitId, element, ms);
   spawnOffensiveCasterFx(root, unitId, element, ms);
-  spawnSkillFx(root, unitId, "cast", ms, {
-    element,
-    role: "cast",
-    vfxId: opts?.vfxId,
-  });
 }
 
 export function spawnSupportCasterFx(
@@ -1093,12 +1091,13 @@ export async function playSkillVfx(
     const lungeMs = fxDurationMs(480, opts.speed);
     const impactMs = fxDurationMs(560, opts.speed);
     pulse(attackerId, "fx-lunge", lungeMs);
+    /* Lunge owns body motion — skip cast-skill pulse so scale fights don't pop. */
     spawnCasterBodyFx(
       root,
       attackerId,
       opts.element,
       Math.floor(lungeMs * 0.7),
-      { vfxId: opts.vfxId, pulseMs: lungeMs },
+      { vfxId: opts.vfxId, skipPulse: true },
     );
     opts.playCasterClip?.(attackerId, "run", { loop: false });
     const hitAt = Math.floor(lungeMs * 0.42);

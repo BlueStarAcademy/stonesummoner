@@ -86,7 +86,10 @@ export function pulseUnitClass(
   if (art) art.style.animationDuration = `${Math.max(40, ms)}ms`;
   window.setTimeout(() => {
     el.classList.remove(className);
-    if (art) art.style.animationDuration = "";
+    if (art) {
+      const stillFx = [...el.classList].some((c) => c.startsWith("fx-"));
+      if (!stillFx) art.style.animationDuration = "";
+    }
   }, ms);
 }
 
