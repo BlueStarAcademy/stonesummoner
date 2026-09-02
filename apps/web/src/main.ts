@@ -8970,7 +8970,7 @@ function renderBoard(): string {
   </div>`;
 }
 
-/** Always-mounted right-side Go readout; stowed (not display:none) while the pick overlay is open. */
+/** Always-mounted Go readout; stowed (not display:none) while the pick overlay is open. */
 function renderBoardMini(): string {
   if (!battle) return "";
   const size = battle.board.size;
