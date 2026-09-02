@@ -13,6 +13,10 @@ import {
   SW_CAIROS_B1_B10,
   SW_SCENARIO_DIFFICULTY,
 } from "./balance/swModern.js";
+import {
+  STAGES_LANDMARK_LAYOUT,
+  type StagesLandmarkId,
+} from "./stagesMap.js";
 
 export type ContentMode =
   | "scenario"
@@ -109,21 +113,25 @@ type MainQuestAreaDef = {
   y: number;
 };
 
-/** SW scenario order: Energy → Destroy (maps 1–13). */
+/**
+ * SW scenario order: Energy → Destroy (maps 1–13).
+ * Pin % coords match STAGES_MQ_LANDMARK_LAYOUT on the expansive atlas —
+ * winding south→north path with left/right travel for panning.
+ */
 const MAIN_QUEST_AREAS: MainQuestAreaDef[] = [
-  { map: 1, slug: "garen", areaKo: "월영숲", tone: "forest", dropSetId: "hwalro", x: 47, y: 88 },
-  { map: 2, slug: "tower", areaKo: "용맹의 탑", tone: "tower", dropSetId: "yongmaeng", x: 40, y: 77 },
-  { map: 3, slug: "ruins", areaKo: "고대 유적", tone: "ruins", dropSetId: "mussang", x: 51, y: 69 },
-  { map: 4, slug: "mist", areaKo: "안개 습지", tone: "cadence", dropSetId: "haengma", x: 44, y: 65 },
-  { map: 5, slug: "flame", areaKo: "화염 협곡", tone: "arena", dropSetId: "jipjung", x: 61, y: 58 },
-  { map: 6, slug: "frost", areaKo: "서리 고원", tone: "cadence", dropSetId: "gunhim", x: 38, y: 53 },
-  { map: 7, slug: "thunder", areaKo: "천둥 산맥", tone: "tower", dropSetId: "yeongyeol", x: 42, y: 48 },
-  { map: 8, slug: "abyss", areaKo: "심연 해안", tone: "depth", dropSetId: "bogang", x: 30, y: 45 },
-  { map: 9, slug: "seal", areaKo: "봉인 성채", tone: "ruins", dropSetId: "hwangyeok", x: 50, y: 44 },
-  { map: 10, slug: "dune", areaKo: "황금 사막", tone: "equip", dropSetId: "ssangnip", x: 60, y: 42 },
-  { map: 11, slug: "star", areaKo: "별빛 정글", tone: "forest", dropSetId: "eungjing", x: 34, y: 41 },
-  { map: 12, slug: "obsidian", areaKo: "흑요 지하", tone: "depth", dropSetId: "tagae", x: 52, y: 37 },
-  { map: 13, slug: "end", areaKo: "종언의 신전", tone: "warena", dropSetId: "pamyeol", x: 50, y: 33 },
+  { map: 1, slug: "garen", areaKo: "월영숲", tone: "forest", dropSetId: "hwalro", x: 52, y: 90 },
+  { map: 2, slug: "tower", areaKo: "용맹의 탑", tone: "tower", dropSetId: "yongmaeng", x: 28, y: 84 },
+  { map: 3, slug: "ruins", areaKo: "고대 유적", tone: "ruins", dropSetId: "mussang", x: 68, y: 78 },
+  { map: 4, slug: "mist", areaKo: "안개 습지", tone: "cadence", dropSetId: "haengma", x: 38, y: 72 },
+  { map: 5, slug: "flame", areaKo: "화염 협곡", tone: "arena", dropSetId: "jipjung", x: 74, y: 66 },
+  { map: 6, slug: "frost", areaKo: "서리 고원", tone: "cadence", dropSetId: "gunhim", x: 22, y: 60 },
+  { map: 7, slug: "thunder", areaKo: "천둥 산맥", tone: "tower", dropSetId: "yeongyeol", x: 58, y: 54 },
+  { map: 8, slug: "abyss", areaKo: "심연 해안", tone: "depth", dropSetId: "bogang", x: 18, y: 48 },
+  { map: 9, slug: "seal", areaKo: "봉인 성채", tone: "ruins", dropSetId: "hwangyeok", x: 62, y: 42 },
+  { map: 10, slug: "dune", areaKo: "황금 사막", tone: "equip", dropSetId: "ssangnip", x: 78, y: 36 },
+  { map: 11, slug: "star", areaKo: "별빛 정글", tone: "forest", dropSetId: "eungjing", x: 26, y: 30 },
+  { map: 12, slug: "obsidian", areaKo: "흑요 지하", tone: "depth", dropSetId: "tagae", x: 64, y: 24 },
+  { map: 13, slug: "end", areaKo: "종언의 신전", tone: "warena", dropSetId: "pamyeol", x: 48, y: 16 },
 ];
 
 /** Low → high: early maps only unlock the front of the pool. */
@@ -321,27 +329,18 @@ export const MAIN_QUEST_PIN_LAYOUT: {
   tone: area.tone,
 }));
 
+/** Side pins share landmark x/y so buildings and UI stay aligned. */
 export const SIDE_CONTENT_PIN_LAYOUT: {
-  id:
-    | "depth"
-    | "arena"
-    | "cadence"
-    | "equip"
-    | "warena"
-    | "guild"
-    | "challenge_tower";
+  id: StagesLandmarkId;
   x: number;
   y: number;
   landmarkKo: string;
-}[] = [
-  { id: "challenge_tower", x: 18, y: 28, landmarkKo: "도전의 탑" },
-  { id: "cadence", x: 12, y: 50, landmarkKo: "룬스톤 시련림" },
-  { id: "depth", x: 85, y: 39, landmarkKo: "카이로스 심층" },
-  { id: "warena", x: 87, y: 57, landmarkKo: "의식 투기 칼데라" },
-  { id: "equip", x: 74, y: 47, landmarkKo: "황금 금고 유적" },
-  { id: "arena", x: 86, y: 74, landmarkKo: "콜로세움" },
-  { id: "guild", x: 87, y: 86, landmarkKo: "길드 요새" },
-];
+}[] = STAGES_LANDMARK_LAYOUT.map((lm) => ({
+  id: lm.id,
+  x: lm.x,
+  y: lm.y,
+  landmarkKo: lm.landmarkKo,
+}));
 
 const CAIROS_GIANT_POOL: SymbolSetId[] = [
   "hwalro",

@@ -15843,9 +15843,9 @@ body > .battle-settings-layer.settings-layer {
   position: absolute;
   left: 0;
   top: 0;
-  /* Width/height set in JS to atlas aspect (1080×1920) so pin % == image %. */
+  /* Width/height set in JS to atlas aspect (2880×3840) so pin % == image %. */
   width: 100%;
-  aspect-ratio: 1080 / 1920;
+  aspect-ratio: 2880 / 3840;
   height: auto;
   will-change: transform;
   user-select: none;
@@ -15862,22 +15862,54 @@ body > .battle-settings-layer.settings-layer {
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
-  filter: brightness(1.18) contrast(1.04) saturate(1.06);
+  filter: brightness(1.06) contrast(1.02) saturate(1.04);
 }
 
 .stages-map-veil {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 1;
   background:
-    linear-gradient(180deg, #0e0b1699 0%, transparent 16%, transparent 68%, #0e0b16cc 100%),
-    radial-gradient(ellipse at 50% 45%, transparent 48%, #0e0b1638 100%);
+    linear-gradient(180deg, #1a284022 0%, transparent 14%, transparent 72%, #12201844 100%),
+    radial-gradient(ellipse at 50% 45%, transparent 52%, #0e1a2430 100%);
+}
+
+.stages-landmarks {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.stages-landmark {
+  position: absolute;
+  width: min(22%, 118px);
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+  transform: translate(-50%, -72%) scale(var(--lm-scale, 1));
+  transform-origin: center bottom;
+  filter: drop-shadow(0 6px 10px #0006);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.stages-landmark--hero {
+  width: min(28%, 148px);
+  z-index: 1;
+}
+
+.stages-landmark--mq {
+  width: min(24%, 132px);
+  z-index: 0;
 }
 
 .stages-mq-nodes {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
 }
 
@@ -15973,7 +16005,7 @@ body > .battle-settings-layer.settings-layer {
 .stages-map-pins {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 4;
 }
 
 .stages-pin {

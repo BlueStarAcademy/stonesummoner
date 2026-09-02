@@ -276,7 +276,21 @@ export type {
   StageDef,
   StageDifficultyBalance,
 } from "./scenario.js";
+export {
+  STAGES_MAP_NATURAL,
+  STAGES_LANDMARK_LAYOUT,
+  STAGES_MQ_LANDMARK_LAYOUT,
+  STAGES_TERRAIN_ART_PATH,
+  STAGES_MAP_HOME_REGION_ID,
+  stagesLandmarkArtPath,
+} from "./stagesMap.js";
 export type { CombatBoardSize } from "./scenarioTypes.js";
+export type {
+  StagesLandmarkId,
+  StagesLandmarkDef,
+  StagesMqLandmarkDef,
+  StagesSideLandmarkId,
+} from "./stagesMap.js";
 export {
   SW_ABYSS_PROFILES,
   SW_CAIROS_B1_B10,
