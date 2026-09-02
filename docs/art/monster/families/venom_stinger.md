@@ -49,7 +49,7 @@ symmetrical insect anatomy, purple-bronze chitin with gold trim,
 four translucent elemental wings, glowing compound eyes, curved antennae,
 side orb sensors, pincer forelegs, segmented abdomen with chevron glow and long stinger,
 hovering grounded combat stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, safe margin, clean white plate,
+eye-level front three-quarter, safe margin, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes wings stinger and mist only,
 no global recolor, no text, no cropped wings or stinger
 ```

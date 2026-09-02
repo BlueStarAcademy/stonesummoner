@@ -43,7 +43,7 @@ Premium stylized 2.5D mobile RPG stone golem martial artist tank,
 cracked dark rock body element fissure glow, spiral forehead shoulder glyphs,
 prayer bead necklace gold tassel, frayed yellow waist sash, spiked wrist gauntlets,
 wide clenched-fist stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded stone feet, clean white plate,
+eye-level front three-quarter, grounded stone feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in fissure glow eyes and glyphs only,
 no global recolor, no text, no cropped fists or feet
 ```

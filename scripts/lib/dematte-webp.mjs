@@ -108,9 +108,20 @@ export async function dematteBuffer(rgba, w, h, lim = 36, opts = {}) {
     // Painted #000 plate: every plate pixel can be punched (no tunneling through fur).
     if (!plateOnly && !plateCheckerboard && a >= 8) {
       const lum = (r + g + b) / 3;
-      const opaqueCap = opts.opaqueMatteLum ?? Math.min(lim, 28);
-      if (lum > opaqueCap) return;
-      if (!isFlat(x, y)) return;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      const brightMatteMin = opts.brightMatteLumMin ?? 248;
+      const isBrightMatte =
+        opts.allowBrightMatte !== false &&
+        lum >= brightMatteMin &&
+        chroma <= chromaMax;
+      if (isBrightMatte) {
+        // Near-white studio plate — flatness only (opaqueCap would reject #fff).
+        if (!isFlat(x, y)) return;
+      } else {
+        const opaqueCap = opts.opaqueMatteLum ?? Math.min(lim, 28);
+        if (lum > opaqueCap) return;
+        if (!isFlat(x, y)) return;
+      }
     }
     visited[i] = 1;
     q.push(i);
@@ -186,6 +197,299 @@ export function defringeMatteResidue(rgba, lim = 40) {
 }
 
 /**
+ * Punch edge-reachable and enclosed flat near-white plate regions.
+ * Wing / limb gaps often keep studio #fff after outer dematte; textured pale
+ * fur/armor fails the flatness gate and is left alone.
+ *
+ * @param {Uint8ClampedArray} rgba
+ * @param {number} w
+ * @param {number} h
+ * @param {object} [opts]
+ * @returns {{ edgePunched: number, enclosedPunched: number }}
+ */
+export function punchEnclosedBrightMatte(rgba, w, h, opts = {}) {
+  const lumMin = opts.lumMin ?? 228;
+  const chromaMax = opts.chromaMax ?? 18;
+  const flatRange = opts.flatRange ?? 8;
+  const minSize = opts.minSize ?? 3;
+  const minFlatPct = opts.minFlatPct ?? 0.25;
+  const minAvgLum = opts.minAvgLum ?? 232;
+
+  const lumAt = (x, y) => {
+    const o = (y * w + x) * 4;
+    return (rgba[o] + rgba[o + 1] + rgba[o + 2]) / 3;
+  };
+
+  const isFlat = (x, y) => {
+    let lo = 255;
+    let hi = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx;
+        const yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const L = lumAt(xx, yy);
+        if (L < lo) lo = L;
+        if (L > hi) hi = L;
+      }
+    }
+    return hi - lo <= flatRange;
+  };
+
+  const isBright = (i) => {
+    const o = i * 4;
+    if (rgba[o + 3] < 8) return false;
+    const r = rgba[o];
+    const g = rgba[o + 1];
+    const b = rgba[o + 2];
+    const lum = (r + g + b) / 3;
+    const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+    return lum >= lumMin && chroma <= chromaMax;
+  };
+
+  const clearPixel = (i) => {
+    const o = i * 4;
+    rgba[o] = 0;
+    rgba[o + 1] = 0;
+    rgba[o + 2] = 0;
+    rgba[o + 3] = 0;
+  };
+
+  // Flood from image edges through clear + flat bright plate.
+  const edgeReach = new Uint8Array(w * h);
+  const q = [];
+  const pushEdge = (x, y) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const i = y * w + x;
+    if (edgeReach[i]) return;
+    if (rgba[i * 4 + 3] < 8) {
+      edgeReach[i] = 1;
+      q.push(i);
+      return;
+    }
+    if (!isBright(i) || !isFlat(x, y)) return;
+    edgeReach[i] = 1;
+    q.push(i);
+  };
+
+  for (let x = 0; x < w; x++) {
+    pushEdge(x, 0);
+    pushEdge(x, h - 1);
+  }
+  for (let y = 0; y < h; y++) {
+    pushEdge(0, y);
+    pushEdge(w - 1, y);
+  }
+
+  let edgePunched = 0;
+  while (q.length) {
+    const i = q.pop();
+    if (rgba[i * 4 + 3] >= 8) {
+      clearPixel(i);
+      edgePunched += 1;
+    }
+    const x = i % w;
+    const y = (i / w) | 0;
+    pushEdge(x - 1, y);
+    pushEdge(x + 1, y);
+    pushEdge(x, y - 1);
+    pushEdge(x, y + 1);
+  }
+
+  // Also flood from any interior transparent pocket into adjacent plate.
+  for (let i = 0; i < w * h; i++) {
+    if (edgeReach[i]) continue;
+    if (rgba[i * 4 + 3] >= 8) continue;
+    edgeReach[i] = 1;
+    q.push(i);
+  }
+  while (q.length) {
+    const i = q.pop();
+    const x = i % w;
+    const y = (i / w) | 0;
+    for (const [dx, dy] of [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const ni = ny * w + nx;
+      if (edgeReach[ni]) continue;
+      if (rgba[ni * 4 + 3] < 8) {
+        edgeReach[ni] = 1;
+        q.push(ni);
+        continue;
+      }
+      if (!isBright(ni) || !isFlat(nx, ny)) continue;
+      edgeReach[ni] = 1;
+      clearPixel(ni);
+      edgePunched += 1;
+      q.push(ni);
+    }
+  }
+
+  // Label remaining flat bright components (fully enclosed plate pockets).
+  const label = new Int32Array(w * h).fill(-1);
+  const comps = [];
+  for (let i = 0; i < w * h; i++) {
+    if (edgeReach[i] || label[i] >= 0 || !isBright(i)) continue;
+    const x0 = i % w;
+    const y0 = (i / w) | 0;
+    if (!isFlat(x0, y0)) continue;
+    const id = comps.length;
+    const qq = [i];
+    label[i] = id;
+    let size = 0;
+    let flatN = 0;
+    let sumLum = 0;
+    while (qq.length) {
+      const cur = qq.pop();
+      size += 1;
+      const x = cur % w;
+      const y = (cur / w) | 0;
+      const o = cur * 4;
+      sumLum += (rgba[o] + rgba[o + 1] + rgba[o + 2]) / 3;
+      if (isFlat(x, y)) flatN += 1;
+      for (const [dx, dy] of [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const ni = ny * w + nx;
+        if (edgeReach[ni] || label[ni] >= 0 || !isBright(ni)) continue;
+        if (!isFlat(nx, ny)) continue;
+        label[ni] = id;
+        qq.push(ni);
+      }
+    }
+    comps.push({
+      id,
+      size,
+      flatPct: flatN / size,
+      avgLum: sumLum / size,
+    });
+  }
+
+  let enclosedPunched = 0;
+  const punchIds = new Set();
+  for (const c of comps) {
+    if (c.size < minSize || c.flatPct < minFlatPct || c.avgLum < minAvgLum) {
+      continue;
+    }
+    punchIds.add(c.id);
+  }
+  if (punchIds.size) {
+    for (let i = 0; i < w * h; i++) {
+      if (!punchIds.has(label[i])) continue;
+      clearPixel(i);
+      enclosedPunched += 1;
+    }
+  }
+
+  // Second pass: tiny / soft-edged enclosed near-pure #fff pockets that fail
+  // the flatness gate (anti-aliased wing gaps, energy-ring holes).
+  if (opts.punchPureEnclosed !== false) {
+    const pureLumMin = opts.pureLumMin ?? 238;
+    const pureChromaMax = opts.pureChromaMax ?? 16;
+    const pureMinSize = opts.pureMinSize ?? 2;
+    const isPure = (i) => {
+      const o = i * 4;
+      if (rgba[o + 3] < 8) return false;
+      const r = rgba[o];
+      const g = rgba[o + 1];
+      const b = rgba[o + 2];
+      const lum = (r + g + b) / 3;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      return lum >= pureLumMin && chroma <= pureChromaMax;
+    };
+
+    const reach = new Uint8Array(w * h);
+    const rq = [];
+    const pushReach = (x, y) => {
+      if (x < 0 || y < 0 || x >= w || y >= h) return;
+      const i = y * w + x;
+      if (reach[i]) return;
+      if (rgba[i * 4 + 3] < 8 || isPure(i)) {
+        reach[i] = 1;
+        rq.push(i);
+      }
+    };
+    for (let x = 0; x < w; x++) {
+      pushReach(x, 0);
+      pushReach(x, h - 1);
+    }
+    for (let y = 0; y < h; y++) {
+      pushReach(0, y);
+      pushReach(w - 1, y);
+    }
+    while (rq.length) {
+      const i = rq.pop();
+      if (rgba[i * 4 + 3] >= 8 && isPure(i)) {
+        clearPixel(i);
+        enclosedPunched += 1;
+      }
+      const x = i % w;
+      const y = (i / w) | 0;
+      pushReach(x - 1, y);
+      pushReach(x + 1, y);
+      pushReach(x, y - 1);
+      pushReach(x, y + 1);
+    }
+
+    const pureLabel = new Int32Array(w * h).fill(-1);
+    const pureComps = [];
+    for (let i = 0; i < w * h; i++) {
+      if (reach[i] || pureLabel[i] >= 0 || !isPure(i)) continue;
+      const id = pureComps.length;
+      const qq = [i];
+      pureLabel[i] = id;
+      let size = 0;
+      while (qq.length) {
+        const cur = qq.pop();
+        size += 1;
+        const x = cur % w;
+        const y = (cur / w) | 0;
+        for (const [dx, dy] of [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const ni = ny * w + nx;
+          if (reach[ni] || pureLabel[ni] >= 0 || !isPure(ni)) continue;
+          pureLabel[ni] = id;
+          qq.push(ni);
+        }
+      }
+      pureComps.push({ id, size });
+    }
+    const purePunch = new Set();
+    for (const c of pureComps) {
+      if (c.size >= pureMinSize) purePunch.add(c.id);
+    }
+    if (purePunch.size) {
+      for (let i = 0; i < w * h; i++) {
+        if (!purePunch.has(pureLabel[i])) continue;
+        clearPixel(i);
+        enclosedPunched += 1;
+      }
+    }
+  }
+
+  return { edgePunched, enclosedPunched };
+}
+
+/**
  * Fill small transparent holes surrounded by opaque silhouette (dematte punch-through).
  */
 export function fillInteriorHoles(rgba, w, h, minNeighbors = 4, passes = 4) {
@@ -243,6 +547,18 @@ export async function finishDematteRgba(rgba, w, h, opts = {}) {
       opts.fillHoleNeighbors ?? 4,
       opts.fillHolePasses ?? 4,
     );
+  }
+  // After hole-fill: clear residual flat white plate (wing gaps etc.).
+  // Running before fillHoles lets neighbor white fringe re-seal punched pockets.
+  if (opts.punchEnclosedWhite) {
+    punchEnclosedBrightMatte(rgba, w, h, {
+      lumMin: opts.whiteLumMin,
+      chromaMax: opts.whiteChromaMax,
+      flatRange: opts.whiteFlatRange,
+      minSize: opts.whiteMinSize,
+      minFlatPct: opts.whiteMinFlatPct,
+      minAvgLum: opts.whiteMinAvgLum,
+    });
   }
   zeroClearRgb(rgba);
 }
@@ -386,6 +702,43 @@ export function punchRoundedRect(rgba, w, h, inset = 0.12, radius = 0.08) {
   }
 }
 
+/**
+ * Detect near-white opaque delivery plates (#fff / light gray studio backdrop).
+ * @param {import("sharp").Sharp|string|Buffer} srcImage
+ * @param {object} [opts]
+ */
+export async function detectWhitePlate(srcImage, opts = {}) {
+  const probe = opts.probeSize ?? 256;
+  const lumMin = opts.lumMin ?? 235;
+  const chromaMax = opts.chromaMax ?? 12;
+  const { data, info } = await sharp(srcImage)
+    .resize(probe, probe, { fit: "inside" })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const w = info.width;
+  const h = info.height;
+  let borderBright = 0;
+  let borderTotal = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const onEdge = y === 0 || y === h - 1 || x === 0 || x === w - 1;
+      if (!onEdge) continue;
+      borderTotal += 1;
+      const o = (y * w + x) * 4;
+      const r = data[o];
+      const g = data[o + 1];
+      const b = data[o + 2];
+      const a = data[o + 3];
+      if (a < 200) continue;
+      const lum = (r + g + b) / 3;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      if (lum >= lumMin && chroma <= chromaMax) borderBright += 1;
+    }
+  }
+  return borderTotal > 0 && borderBright / borderTotal >= 0.55;
+}
+
 export async function detectPreAlpha(srcImage, opts = {}) {
   const probe = opts.probeSize ?? 256;
   const { data, info } = await sharp(srcImage)
@@ -443,6 +796,13 @@ export async function imageToTransparentWebp(srcImage, dstWebp, opts = {}) {
     fillHoles: opts.fillHoles ?? true,
     fillHoleNeighbors: opts.fillHoleNeighbors ?? 4,
     fillHolePasses: opts.fillHolePasses ?? 3,
+    punchEnclosedWhite: opts.punchEnclosedWhite ?? true,
+    whiteLumMin: opts.whiteLumMin,
+    whiteChromaMax: opts.whiteChromaMax,
+    whiteFlatRange: opts.whiteFlatRange,
+    whiteMinSize: opts.whiteMinSize,
+    whiteMinFlatPct: opts.whiteMinFlatPct,
+    whiteMinAvgLum: opts.whiteMinAvgLum,
   });
   featherAlphaEdges(rgba, w, h, 2);
   zeroClearRgb(rgba);
@@ -1025,6 +1385,14 @@ export async function imageToInstalledBattleWebp(srcImage, dstWebp, opts = {}) {
     await imageToChromaBattleWebp(srcImage, dstWebp, transparentOpts);
     return "chroma";
   }
+  if (await detectWhitePlate(srcImage)) {
+    await imageToDematteWebp(
+      srcImage,
+      dstWebp,
+      opts.whitePlate ?? WHITE_PLATE_BATTLE_DEMATTE,
+    );
+    return "white-plate";
+  }
   await imageToDematteWebp(srcImage, dstWebp, paintedOpts);
   return "dematte";
 }
@@ -1060,6 +1428,7 @@ export async function imageToDematteWebp(srcImage, dstWebp, opts = {}) {
     chromaMax,
     flatRange,
     allowBrightMatte: opts.allowBrightMatte,
+    brightMatteLumMin: opts.brightMatteLumMin,
     opaqueMatteLum,
     plateOnly: opts.plateOnly,
     plateMax: opts.plateMax,
@@ -1127,6 +1496,7 @@ export const TRANSPARENT_BATTLE_INSTALL = {
   defringe: true,
   defringeLim: 28,
   defringeSilhouette: true,
+  punchEnclosedWhite: true,
   fillHoles: true,
   fillHolePasses: 3,
 };
@@ -1139,12 +1509,29 @@ export const TRANSPARENT_PORTRAIT_INSTALL = {
   defringe: true,
   defringeLim: 28,
   defringeSilhouette: true,
+  punchEnclosedWhite: true,
   sealInterior: true,
   sealGrid: true,
   sealGridSpread: 0.14,
   sealYEndRatio: 0.55,
   fillHoles: true,
   fillHolePasses: 6,
+};
+
+/** Near-white studio plate — edge + enclosed flat plate punch. */
+export const WHITE_PLATE_BATTLE_DEMATTE = {
+  ...BATTLE_STILL_DEMATTE,
+  allowBrightMatte: true,
+  brightMatteLumMin: 240,
+  flatRange: 4,
+  defringe: true,
+  defringeLim: 248,
+  defringeSilhouette: true,
+  punchEnclosedWhite: true,
+  fillHoles: false,
+  sealInterior: false,
+  nearLossless: true,
+  lossless: true,
 };
 
 /** Hand-painted battle stills on pure black — strict #000 plate-only dematte. */
@@ -1155,6 +1542,7 @@ export const PAINTED_BATTLE_DEMATTE = {
   defringe: true,
   defringeLim: 32,
   defringeSilhouette: true,
+  punchEnclosedWhite: true,
   sealInterior: true,
   sealGrid: true,
   sealGridSpread: 0.16,
@@ -1175,6 +1563,7 @@ export const PORTRAIT_DEMATTE = {
   defringe: true,
   defringeLim: 32,
   defringeSilhouette: true,
+  punchEnclosedWhite: true,
   sealInterior: true,
   sealGrid: true,
   sealGridSpread: 0.14,
@@ -1183,6 +1572,18 @@ export const PORTRAIT_DEMATTE = {
   fillHolePasses: 5,
   nearLossless: true,
   lossless: true,
+};
+
+/** Portrait bust on near-white plate (same bright-matte rules as battle). */
+export const WHITE_PLATE_PORTRAIT_DEMATTE = {
+  ...PORTRAIT_DEMATTE,
+  plateOnly: false,
+  allowBrightMatte: true,
+  brightMatteLumMin: 240,
+  flatRange: 4,
+  fillHoles: false,
+  sealInterior: false,
+  punchEnclosedWhite: true,
 };
 
 export async function writeWebpAtomic(dstWebp, buf) {
@@ -1267,6 +1668,7 @@ export async function rawRgbaToDematteWebp(rgba, w, h, dstWebp, opts = {}) {
     chromaMax,
     flatRange,
     allowBrightMatte,
+    brightMatteLumMin: opts.brightMatteLumMin,
     opaqueMatteLum: opts.opaqueMatteLum,
     plateOnly: opts.plateOnly,
     plateMax: opts.plateMax,

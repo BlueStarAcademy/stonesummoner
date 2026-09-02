@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "tsx --test src/loop.test.ts"
+    "test": "tsx --test src/loop.test.ts src/summonerLevel.test.ts"
   },
   "dependencies": {
     "stonesummoner-combat": "*",

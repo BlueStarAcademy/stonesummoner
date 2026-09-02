@@ -1,5 +1,5 @@
 import type { SkillDef } from "../skills.js";
-import type { Element, MonsterRole } from "./types.js";
+import type { BalanceArchetype, Element } from "./types.js";
 
 export const EL_PREFIX: Record<Element, { s1: string; s2: string; s3: string }> = {
   fire: { s1: "화염", s2: "작열", s3: "폭염" },
@@ -69,6 +69,31 @@ export const FAMILY_STEMS: Record<string, { s2: string; s3: string }> = {
   sky_warden: { s2: "천공방벽", s3: "수호룡격" },
   eternal_healer: { s2: "영원한빛", s3: "생명의파동" },
   absolute_captor: { s2: "절대포획", s3: "공간속박" },
+  ember_wisp: { s2: "잔불연타", s3: "불씨난무" },
+  toxin_mite: { s2: "약독침", s3: "독무분출" },
+  ward_totem: { s2: "수호의벽", s3: "면역결계" },
+  rime_dart: { s2: "서리침투", s3: "빙결사격" },
+  purify_finch: { s2: "정화깃털", s3: "정화노래" },
+  blaze_hound: { s2: "작열이빨", s3: "화염추적" },
+  plague_toad: { s2: "역독안개", s3: "전염점액" },
+  iron_ward: { s2: "철벽면역", s3: "수호연대" },
+  mute_owl: { s2: "침묵부리", s3: "봉인울음" },
+  cleanse_monk: { s2: "정화염주", s3: "치유경전" },
+  spark_raptor: { s2: "불꽃연격", s3: "작열난타" },
+  fang_hydra: { s2: "독니연참", s3: "다두맹독" },
+  aegis_scarab: { s2: "갑충방패", s3: "복합면역" },
+  slumber_moth: { s2: "수면가루", s3: "동면날개" },
+  sanctum_dove: { s2: "성역정화", s3: "치유의빛" },
+  inferno_colossus: { s2: "지옥작열", s3: "대화재" },
+  venom_tyrant: { s2: "맹독폭주", s3: "독왕강림" },
+  glacier_bastion: { s2: "빙하속박", s3: "절대동결" },
+  hex_mute: { s2: "치유봉인", s3: "침묵저주" },
+  purify_hierophant: { s2: "대정화", s3: "성역면역" },
+  flame_slaughter: { s2: "화염연살", s3: "학살난무" },
+  poison_overlord: { s2: "독군주의숨", s3: "최종맹독" },
+  absolute_frost: { s2: "절대빙결", s3: "동토결계" },
+  curse_catalyst: { s2: "저주촉매", s3: "파멸침묵" },
+  sanctuary_oracle: { s2: "성역예언", s3: "완전정화" },
 };
 
 export function familySkillName(
@@ -85,7 +110,7 @@ type VfxHint = {
   orbBolt?: boolean;
 };
 
-function s2Desc(el: Element, role: MonsterRole): string {
+function s2Desc(el: Element, role: BalanceArchetype): string {
   const e = ESSENCE[el];
   switch (role) {
     case "attacker":
@@ -141,7 +166,7 @@ function s2Desc(el: Element, role: MonsterRole): string {
   }
 }
 
-function s3Desc(el: Element, role: MonsterRole): string {
+function s3Desc(el: Element, role: BalanceArchetype): string {
   const e = ESSENCE[el];
   switch (role) {
     case "attacker":
@@ -179,7 +204,7 @@ function s3Desc(el: Element, role: MonsterRole): string {
 export function familySkillDescKo(
   el: Element,
   slot: "s2" | "s3",
-  role: MonsterRole,
+  role: BalanceArchetype,
 ): string {
   return slot === "s2" ? s2Desc(el, role) : s3Desc(el, role);
 }
@@ -189,7 +214,7 @@ function atkMelee(el: Element): boolean {
 }
 
 export function familySkillVfx(
-  role: MonsterRole,
+  role: BalanceArchetype,
   slot: "s2" | "s3",
   el: Element,
 ): VfxHint {

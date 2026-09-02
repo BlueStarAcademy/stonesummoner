@@ -4,6 +4,20 @@ export type Element = "fire" | "water" | "wind" | "light" | "dark";
 export type TeamId = "ally" | "enemy";
 export type UnitKind = "summoner" | "monster";
 
+export type BoardTeamBuffSource = "capture" | "item";
+
+/** Team-scoped effects created by captures and board items. */
+export interface BoardTeamBuff {
+  id: string;
+  source: BoardTeamBuffSource;
+  damageBonus?: number;
+  critRateBonus?: number;
+  critDmgBonus?: number;
+  spdPct?: number;
+  /** Separate from unit shields so it can expire with the board buff. */
+  shieldByUnit?: Record<string, number>;
+}
+
 export interface UnitStats {
   hp: number;
   atk: number;
@@ -15,6 +29,57 @@ export interface UnitStats {
   accuracy?: number;
   /** Effect resistance % (연결 등). */
   resistance?: number;
+}
+
+export type StatusPolarity = "buff" | "debuff";
+export type StatusStacking = "replace" | "extend" | "stack";
+export type StatusKind =
+  | "atk_up"
+  | "def_up"
+  | "spd_up"
+  | "crit_up"
+  | "crit_dmg_up"
+  | "accuracy_up"
+  | "immunity"
+  | "shield"
+  | "hot"
+  | "damage_reduction"
+  | "damage_share"
+  | "reflect"
+  | "atk_down"
+  | "def_down"
+  | "spd_down"
+  | "crit_down"
+  | "crit_dmg_down"
+  | "accuracy_down"
+  | "dot"
+  | "burn"
+  | "poison"
+  | "provoke"
+  | "stun"
+  | "freeze"
+  | "sleep"
+  | "heal_block"
+  | "silence";
+
+/** Turn-based, unit-scoped combat state. Board and equipment passives stay separate. */
+export interface StatusInstance {
+  /** Stable per-application identity; stacked DoTs have distinct ids. */
+  id: string;
+  kind: StatusKind;
+  sourceUnitId: string;
+  polarity: StatusPolarity;
+  turns: number;
+  stacking: StatusStacking;
+  dispellable: boolean;
+  stacks: number;
+  amount?: number;
+  /** Snapshot used by DoT/HoT and other source-scaled effects. */
+  value?: number;
+  /** Provoke or damage-share partner. */
+  linkedUnitId?: string;
+  /** Permanent equipment-derived effects never enter this collection. */
+  hidden?: boolean;
 }
 
 export interface Unit {
@@ -36,6 +101,8 @@ export interface Unit {
   skillCd?: number[];
   stonePassive?: StonePassiveId;
   alive: boolean;
+  /** Authoritative runtime statuses. Legacy fields below are mirrored during migration. */
+  statuses?: StatusInstance[];
   /** Next skill: flat critRate bonus (consumed on hit). */
   critCharm?: number;
   /** Next skill: flat critDmg bonus (consumed on hit). */
@@ -44,6 +111,8 @@ export interface Unit {
   shieldHp?: number;
   /** Remaining turns before set-shield expires (보강). */
   shieldTurns?: number;
+  /** False while shieldHp comes only from an equipment passive. */
+  shieldStatusVisible?: boolean;
   /** Remaining ATB ticks with 행마모래 SPD multiplier. */
   spdBoostTurns?: number;
   /** Stub: ignore next damaging hit (축 연결). */
@@ -74,6 +143,12 @@ export interface Unit {
   defDebuffTicks?: number;
   spdDebuffPct?: number;
   spdDebuffTicks?: number;
+  critRateDebuff?: number;
+  critRateDebuffTicks?: number;
+  critDmgDebuff?: number;
+  critDmgDebuffTicks?: number;
+  accuracyDebuff?: number;
+  accuracyDebuffTicks?: number;
   /** DoT: fraction of source ATK dealt each ATB-ready tick. */
   dotAtkCoeff?: number;
   dotTicks?: number;
@@ -83,18 +158,35 @@ export interface Unit {
   provokeTicks?: number;
   /** Damage taken multiplier (e.g. 0.92 = -8%). */
   damageTakenMul?: number;
-  /** 보강: fraction of max HP contributed to ally shield pool at battle start. */
+  /** 보강: fraction of this wearer's max HP granted as a start shield. */
   startShieldPct?: number;
   /** 환격: % chance to counter after taking a hit. */
   counterChance?: number;
   /** 쌍립: remaining turns of status immunity. */
   statusImmuneTurns?: number;
+  /** Specific status kinds this unit cannot receive. */
+  immuneStatusKinds?: StatusKind[];
+  /** Equipment-provided immunity is not rendered as a unit status icon. */
+  statusImmuneIsPassive?: boolean;
   /** 타개: % of damage dealt healed. */
   lifestealPct?: number;
   /** 묘수(Despair): % chance to stun on hit. */
   stunOnHitChance?: number;
   /** Remaining turns skipped (기절). */
   stunnedTurns?: number;
+  /** Distinct control states; stunnedTurns remains the aggregate compatibility view. */
+  frozenTurns?: number;
+  sleepingTurns?: number;
+  healBlockTurns?: number;
+  silenceTurns?: number;
+  hotTurns?: number;
+  hotAmount?: number;
+  damageReductionTurns?: number;
+  damageShareTurns?: number;
+  damageSharePct?: number;
+  damageShareTargetId?: string;
+  reflectTurns?: number;
+  reflectPct?: number;
   /** 격노(Violent): % chance for extra turn after skill. */
   violentChance?: number;
   /** 응징(Nemesis): ATB % per 7% HP lost when hit. */
@@ -133,6 +225,7 @@ export interface SummonerState {
     kind: string;
     power: number;
     turns?: number;
+    hitCount?: number;
     descKo?: string;
     vfxId?: string;
     vfxFamily?: "melee" | "bolt" | "nova" | "support";

@@ -13,6 +13,7 @@ import {
   createEmptySummonerMagicLoadouts,
   withDefaultSummonerMagicLoadout,
   createSummonerRoster,
+  ARENA_INVITATIONS_MAX,
   DEFAULT_ARENA_RATING,
   MAX_SUMMONER_AWAKEN,
   normalizePartyPresets,
@@ -25,6 +26,7 @@ import {
   type PlayerSave,
   type SummonerElement,
 } from "./loop.js";
+import { sharedSummonerProgress } from "./summonerLevel.js";
 import { normalizeDailyActivity } from "./dailyMissions.js";
 import { normalizeAwakenMats } from "./essences.js";
 
@@ -67,6 +69,7 @@ export function migrateSave(raw: unknown): PlayerSave | null {
   const p = raw as Partial<PlayerSave>;
   if (!p.island) return null;
   const base = createNewSave();
+  const migratedAt = Date.now();
   const roster = (p.roster?.length ? p.roster : base.roster).map((m) => ({
     ...m,
     monsterId: resolveMonsterId(m.monsterId),
@@ -129,6 +132,13 @@ export function migrateSave(raw: unknown): PlayerSave | null {
       gear: stripUnenhancedStarterGear(normalizeSummonerGear(seedGear, el)),
     };
   }
+  const shared = sharedSummonerProgress(island, summoners, activeSummoner);
+  for (const el of ["fire", "water", "wind", "light", "dark"] as const) {
+    const cur = summoners[el] ?? { level: 1, exp: 0, awaken: 0 };
+    summoners[el] = { ...cur, level: shared.level, exp: shared.exp };
+  }
+  island.summonerLevel = shared.level;
+  island.summonerExp = shared.exp;
   const mid: PlayerSave = {
     ...base,
     island,
@@ -295,6 +305,27 @@ export function migrateSave(raw: unknown): PlayerSave | null {
               .slice(0, 4),
           }
         : null,
+    arenaInvitations:
+      typeof p.arenaInvitations === "number"
+        ? Math.max(
+            0,
+            Math.min(
+              ARENA_INVITATIONS_MAX,
+              Math.floor(p.arenaInvitations),
+            ),
+          )
+        : Math.max(
+            0,
+            ARENA_INVITATIONS_MAX -
+              (typeof p.arenaAttacksToday === "number"
+                ? Math.floor(p.arenaAttacksToday)
+                : 0),
+          ),
+    arenaInvitationUpdatedAt:
+      typeof p.arenaInvitationUpdatedAt === "number" &&
+      Number.isFinite(p.arenaInvitationUpdatedAt)
+        ? Math.max(0, Math.floor(p.arenaInvitationUpdatedAt))
+        : migratedAt,
     arenaAttacksToday:
       typeof p.arenaAttacksToday === "number"
         ? Math.max(0, Math.floor(p.arenaAttacksToday))
@@ -412,6 +443,14 @@ export function migrateSave(raw: unknown): PlayerSave | null {
     challengeTowerFloor:
       typeof p.challengeTowerFloor === "number"
         ? Math.max(0, Math.min(100, Math.floor(p.challengeTowerFloor)))
+        : 0,
+    challengeTowerHardMonthKey:
+      typeof p.challengeTowerHardMonthKey === "string"
+        ? p.challengeTowerHardMonthKey
+        : null,
+    challengeTowerHardFloor:
+      typeof p.challengeTowerHardFloor === "number"
+        ? Math.max(0, Math.min(100, Math.floor(p.challengeTowerHardFloor)))
         : 0,
     seenFeatureUnlockIds: Array.isArray(p.seenFeatureUnlockIds)
       ? p.seenFeatureUnlockIds.filter(

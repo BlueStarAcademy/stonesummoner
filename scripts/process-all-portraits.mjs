@@ -37,6 +37,7 @@ import {
   PORTRAIT_DERIVATIVE_SIZES,
   writePortraitDerivatives,
 } from "./lib/portrait-derivatives.mjs";
+import { computeBustRegion, DEFAULT_BUST_CROP } from "./lib/bust-crop.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -60,8 +61,16 @@ const only = argVal("--only")
   .map((s) => s.trim())
   .filter(Boolean);
 
-const ZOOM = 0.44;
-const BUST_TOP_RATIO = 0.03;
+/** Inventory bust: head + upper torso from battle still alpha bbox. */
+const BUST_OPTS = {
+  ...DEFAULT_BUST_CROP,
+  bustHeightRatio: 0.68,
+  padRatio: 0.1,
+  minZoom: 0.4,
+  maxZoom: 0.68,
+};
+/** Transparent margin after bust extract (was 48 → character read small in slots). */
+const BUST_PAD = 28;
 const SIZE = PORTRAIT_DEMATTE.size;
 
 /** Legacy family aliases share one bust crop. */
@@ -78,20 +87,21 @@ const MONSTER_ALIAS = {
 const SUMMONER_ELEMENTS = ["fire", "water", "wind", "light", "dark"];
 
 async function bustCropRaw(srcPath) {
-  const meta = await sharp(srcPath).metadata();
-  const w = meta.width ?? SIZE;
-  const h = meta.height ?? SIZE;
-  const crop = Math.round(Math.min(w, h) * ZOOM);
-  const left = Math.max(0, Math.round((w - crop) / 2));
-  const top = Math.max(0, Math.min(Math.round(h * BUST_TOP_RATIO), h - crop));
+  const region = await computeBustRegion(srcPath, BUST_OPTS);
+  const inner = SIZE - BUST_PAD * 2;
   return sharp(srcPath)
-    .extract({ left, top, width: crop, height: crop })
-    .resize(SIZE - 96, SIZE - 96, { fit: "fill" })
+    .extract({
+      left: region.left,
+      top: region.top,
+      width: region.width,
+      height: region.height,
+    })
+    .resize(inner, inner, { fit: "fill", kernel: sharp.kernel.lanczos3 })
     .extend({
-      top: 48,
-      bottom: 48,
-      left: 48,
-      right: 48,
+      top: BUST_PAD,
+      bottom: BUST_PAD,
+      left: BUST_PAD,
+      right: BUST_PAD,
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     })
     .ensureAlpha()

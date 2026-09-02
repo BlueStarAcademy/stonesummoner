@@ -39,13 +39,21 @@ function clamp01(n: number): number {
 }
 
 /** BGM output lives entirely on a fresh GainNode so slider moves actually take effect. */
+function bgmSilenced(): boolean {
+  return prefs.muted || prefs.bgmMuted;
+}
+
+function sfxSilenced(): boolean {
+  return prefs.muted || prefs.sfxMuted;
+}
+
 function bgmOutValue(): number {
-  if (prefs.muted) return 0;
+  if (bgmSilenced()) return 0;
   return clamp01(prefs.master * prefs.bgm * (ducking ? DUCK_BGM : 1));
 }
 
 function sfxVoiceValue(extra = 1): number {
-  if (prefs.muted) return 0;
+  if (sfxSilenced()) return 0;
   return clamp01(prefs.master * prefs.sfx * extra);
 }
 
@@ -109,7 +117,7 @@ function applyGains(): void {
 
 /** Mute must actually stop the bed — GainNode.value is ignored in some WebViews. */
 function syncBgmMutePlayback(): void {
-  if (prefs.muted) {
+  if (bgmSilenced()) {
     if (bgmSource) stopBgmSource(true);
     return;
   }
@@ -245,7 +253,7 @@ function startBgmSource(buf: AudioBuffer, offsetSec: number): void {
   const offset = dur > 0 ? ((offsetSec % dur) + dur) % dur : 0;
   bgmOffset = offset;
   replaceBgmGain();
-  if (prefs.muted || !pageIsAudible()) {
+  if (bgmSilenced() || !pageIsAudible()) {
     clearMediaSession();
     return;
   }
@@ -278,6 +286,10 @@ export function setAudioPrefs(patch: Partial<AudioPrefs>): AudioPrefs {
         : prefs.master,
     bgm: patch.bgm != null ? Math.min(1, Math.max(0, patch.bgm)) : prefs.bgm,
     sfx: patch.sfx != null ? Math.min(1, Math.max(0, patch.sfx)) : prefs.sfx,
+    bgmMuted:
+      patch.bgmMuted != null ? Boolean(patch.bgmMuted) : prefs.bgmMuted,
+    sfxMuted:
+      patch.sfxMuted != null ? Boolean(patch.sfxMuted) : prefs.sfxMuted,
   };
   writeAudioPrefs(prefs);
   applyGains();
@@ -302,7 +314,7 @@ export async function unlockAudio(): Promise<void> {
   unlocked = true;
   await ensureCtx();
   applyGains();
-  if (prefs.muted || !pageIsAudible()) return;
+  if (bgmSilenced() || !pageIsAudible()) return;
   if (bgmSource && ctx?.state === "running") return;
   const want = pendingBgm ?? currentBgm;
   if (!want) return;
@@ -331,7 +343,7 @@ function onAudioForeground(): void {
   }
   void ctx.resume().catch(() => undefined);
   applyGains();
-  if (currentBgm && !prefs.muted && !bgmSource) {
+  if (currentBgm && !bgmSilenced() && !bgmSource) {
     void playBgm(currentBgm, { resumeOffset: bgmOffset });
   }
   hiddenPaused = false;
@@ -505,13 +517,13 @@ export async function playSfx(
   id: SfxId | StingId,
   opts?: { gain?: number },
 ): Promise<void> {
-  if (prefs.muted) return;
+  if (sfxSilenced()) return;
   const audio = await ensureCtx();
-  if (!audio || !sfxBus || prefs.muted) return;
+  if (!audio || !sfxBus || sfxSilenced()) return;
   const url = await firstExisting(sfxSrcCandidates(id));
-  if (!url || prefs.muted) return;
+  if (!url || sfxSilenced()) return;
   const buf = await decodeAudio(url);
-  if (!buf || prefs.muted) return;
+  if (!buf || sfxSilenced()) return;
   const voice = sfxVoiceValue(opts?.gain ?? 1);
   if (voice <= 0) return;
   try {

@@ -65,8 +65,44 @@ export function countSymbolSets(
   return out;
 }
 
-export function symbolCombatMods(equipped: SymbolInstance[]): SymbolCombatMods {
+/**
+ * Resolve Intangible pieces as missing pieces of equipped sets.
+ * A one-piece deficit is preferred; ties favor 4-piece sets, matching the
+ * common 3+Intangible use before 1+Intangible two-piece completion.
+ */
+export function effectiveSymbolSetCounts(
+  equipped: SymbolInstance[],
+): Partial<Record<SymbolSetId, number>> {
   const counts = countSymbolSets(equipped);
+  let wildcards = counts.muhyeong ?? 0;
+  delete counts.muhyeong;
+  while (wildcards > 0) {
+    const candidate = SYMBOL_SETS.filter((set) => !set.wildcard)
+      .map((set) => {
+        const count = counts[set.id] ?? 0;
+        const remainder = count % set.pieces;
+        const deficit = remainder === 0 ? set.pieces : set.pieces - remainder;
+        return { set, count, deficit };
+      })
+      .filter(({ count, deficit }) => count > 0 && deficit <= wildcards)
+      .sort(
+        (a, b) =>
+          a.deficit - b.deficit ||
+          b.set.pieces - a.set.pieces ||
+          b.count - a.count ||
+          a.set.id.localeCompare(b.set.id),
+      )[0];
+    if (!candidate) break;
+    counts[candidate.set.id] =
+      (counts[candidate.set.id] ?? 0) + candidate.deficit;
+    wildcards -= candidate.deficit;
+  }
+  if (wildcards > 0) counts.muhyeong = wildcards;
+  return counts;
+}
+
+export function symbolCombatMods(equipped: SymbolInstance[]): SymbolCombatMods {
+  const counts = effectiveSymbolSetCounts(equipped);
   const bogang = Math.floor((counts.bogang ?? 0) / 2);
   const hwangyeok = Math.floor((counts.hwangyeok ?? 0) / 2);
   const ssangnip = Math.floor((counts.ssangnip ?? 0) / 2);
@@ -155,7 +191,7 @@ export function applySymbolsToStats(
     }
   }
 
-  const counts = countSymbolSets(equipped);
+  const counts = effectiveSymbolSetCounts(equipped);
   const hwalroSets = Math.floor((counts.hwalro ?? 0) / 2);
   // 2-set bonuses stack additively (4 pieces = 2x the listed effect).
   if (hwalroSets > 0) stats.hp = Math.round(stats.hp * (1 + 0.15 * hwalroSets));
@@ -212,7 +248,7 @@ export function formatSymbolSetEffect(
     case "yeongyeol":
       return `효과저항 +${20 * n}%`;
     case "bogang":
-      return `아군 실드 3턴(체력의 ${15 * n}%)`;
+      return `착용자 실드 3턴(체력의 ${15 * n}%)`;
     case "hwangyeok":
       return `반격확률 +${15 * n}%`;
     case "ssangnip":
@@ -237,24 +273,31 @@ export function formatSymbolSetEffect(
 export function summarizeSymbolSets(
   equipped: SymbolInstance[],
 ): SymbolSetProgress[] {
-  const counts = countSymbolSets(equipped);
+  const rawCounts = countSymbolSets(equipped);
+  const counts = effectiveSymbolSetCounts(equipped);
   return SYMBOL_SETS.map((set) => {
+    const rawCount = rawCounts[set.id] ?? 0;
     const count = counts[set.id] ?? 0;
     const completions = symbolSetCompletions(count, set.pieces);
     return {
       setId: set.id,
       nameKo: set.nameKo,
-      count,
+      count: set.wildcard ? rawCount : count,
       pieces: set.pieces,
-      completions,
-      active: completions >= 1,
-      effectKo: formatSymbolSetEffect(set, completions),
+      completions: set.wildcard ? 0 : completions,
+      active: !set.wildcard && completions >= 1,
+      effectKo: set.wildcard
+        ? set.effectKo
+        : formatSymbolSetEffect(set, completions),
     };
-  }).filter((p) => p.count > 0);
+  }).filter((p) => p.count > 0 || (rawCounts[p.setId] ?? 0) > 0);
 }
 
+/** Gold cost to go from `enhance` → `enhance+1` (steeper past +8). */
 export function symbolEnhanceManaCost(enhance: number): number {
-  return 60 + enhance * 35;
+  const base = 150 + enhance * 85;
+  const late = Math.max(0, enhance - 8) * 70;
+  return base + late;
 }
 
 export const MAX_SYMBOL_ENHANCE = 15;

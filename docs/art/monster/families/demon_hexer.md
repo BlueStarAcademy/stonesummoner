@@ -31,5 +31,5 @@ Premium stylized 2.5D mobile RPG demonic warlock debuffer,
 horned crown pale face glowing eyes, black-crimson robes spiky armor gems chains,
 floating grimoire with eye symbol, raised hand element magic seal, dark smoke wisps,
 high-end hand-painted dark fantasy, eye-level front three-quarter, grounded feet,
-clean white plate, element accents in eyes gems grimoire seal smoke only, no global recolor
+transparent alpha background or solid magenta #FF00FF plate, element accents in eyes gems grimoire seal smoke only, no global recolor
 ```

@@ -4,6 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { mountApi } from "./server/api.mjs";
 import { createStore } from "./server/store.mjs";
+import {
+  PUBLIC_FILE_CACHE_CONTROL,
+  cacheControlForAssetPath,
+} from "./server/staticCache.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -51,15 +55,33 @@ mountApi(app, store);
 
 app.use(
   express.static(dist, {
-    maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
-    etag: false,
-    lastModified: false,
+    etag: true,
+    lastModified: true,
     index: false,
+    setHeaders(res, filePath) {
+      if (process.env.NODE_ENV !== "production") {
+        res.setHeader("Cache-Control", "no-store");
+        return;
+      }
+      res.setHeader(
+        "Cache-Control",
+        cacheControlForAssetPath(filePath) ?? PUBLIC_FILE_CACHE_CONTROL,
+      );
+    },
   }),
 );
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) return next();
-  res.sendFile(path.join(dist, "index.html"));
+  const indexHtml = path.join(dist, "index.html");
+  if (!fs.existsSync(indexHtml)) {
+    res
+      .status(503)
+      .type("text/plain")
+      .send("Web build missing — run `npm run dev` (Vite :5173) or `npm run build`.");
+    return;
+  }
+  res.setHeader("Cache-Control", cacheControlForAssetPath("/index.html"));
+  res.sendFile(indexHtml);
 });
 
 app.listen(port, "0.0.0.0", () => {

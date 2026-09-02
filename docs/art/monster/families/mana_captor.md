@@ -31,6 +31,6 @@ Premium stylized 2.5D mobile RPG dark sorceress capturer,
 hood spiked bronze crown, jagged pauldrons gem guards, flowing purple-black robes,
 raised element magic orb and starry mesh lantern, dark smoky aura, commanding stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-clean white plate, element accents in eyes orb gems smoke only,
+transparent alpha background or solid magenta #FF00FF plate, element accents in eyes orb gems smoke only,
 no global recolor, no text, no cropped orb lantern or feet
 ```

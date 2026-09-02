@@ -4,9 +4,19 @@ import type { PlayerSave } from "./loop.js";
 
 export const CHALLENGE_TOWER_FLOORS = TOWER_FLOORS;
 
-/** Floor number for a ToA stage id (`toa_f12` → 12), or null if not a tower stage. */
+export type ChallengeTowerDifficulty = "normal" | "hard";
+
+/** Floor number for a ToA stage id (`toa_f12` / `toa_hard_f12` → 12). */
 export function challengeTowerStageFloor(stageId: string): number | null {
   return stageFloorFromId(stageId);
+}
+
+export function challengeTowerStageDifficulty(
+  stageId: string,
+): ChallengeTowerDifficulty | null {
+  if (/^toa_f\d+$/.test(stageId)) return "normal";
+  if (/^toa_hard_f\d+$/.test(stageId)) return "hard";
+  return null;
 }
 
 /** Calendar month key (UTC), e.g. 2026-08. */
@@ -23,20 +33,35 @@ export function syncChallengeTowerMonth(
   now = Date.now(),
 ): PlayerSave {
   const key = monthKey(now);
-  if (save.challengeTowerMonthKey === key) return save;
+  const normalCurrent = save.challengeTowerMonthKey === key;
+  const hardCurrent = save.challengeTowerHardMonthKey === key;
+  if (normalCurrent && hardCurrent) return save;
   return {
     ...save,
-    challengeTowerMonthKey: key,
-    challengeTowerFloor: 0,
+    challengeTowerMonthKey: normalCurrent ? save.challengeTowerMonthKey : key,
+    challengeTowerFloor: normalCurrent ? save.challengeTowerFloor : 0,
+    challengeTowerHardMonthKey: hardCurrent
+      ? save.challengeTowerHardMonthKey
+      : key,
+    challengeTowerHardFloor: hardCurrent
+      ? save.challengeTowerHardFloor
+      : 0,
   };
 }
 
-export function challengeTowerFloor(save: PlayerSave): number {
+export function challengeTowerFloor(
+  save: PlayerSave,
+  difficulty: ChallengeTowerDifficulty = "normal",
+): number {
+  const raw =
+    difficulty === "hard"
+      ? save.challengeTowerHardFloor
+      : save.challengeTowerFloor;
   return Math.max(
     0,
     Math.min(
       CHALLENGE_TOWER_FLOORS,
-      Math.floor(save.challengeTowerFloor ?? 0),
+      Math.floor(raw ?? 0),
     ),
   );
 }
@@ -54,8 +79,9 @@ export function isChallengeTowerStageUnlocked(
   if (!isChallengeTowerContentUnlocked(save)) return false;
   const synced = syncChallengeTowerMonth(save, now);
   const floor = challengeTowerStageFloor(stageId);
-  if (floor == null) return false;
-  return floor === challengeTowerFloor(synced) + 1;
+  const difficulty = challengeTowerStageDifficulty(stageId);
+  if (floor == null || difficulty == null) return false;
+  return floor === challengeTowerFloor(synced, difficulty) + 1;
 }
 
 export function isChallengeTowerStageCleared(
@@ -65,6 +91,7 @@ export function isChallengeTowerStageCleared(
 ): boolean {
   const synced = syncChallengeTowerMonth(save, now);
   const floor = challengeTowerStageFloor(stageId);
-  if (floor == null) return false;
-  return challengeTowerFloor(synced) >= floor;
+  const difficulty = challengeTowerStageDifficulty(stageId);
+  if (floor == null || difficulty == null) return false;
+  return challengeTowerFloor(synced, difficulty) >= floor;
 }

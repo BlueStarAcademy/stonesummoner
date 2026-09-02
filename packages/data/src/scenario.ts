@@ -9,6 +9,11 @@ import {
 } from "./essences.js";
 import type { GearStars } from "./gear.js";
 import {
+  SW_ABYSS_PROFILES,
+  SW_CAIROS_B1_B10,
+  SW_SCENARIO_DIFFICULTY,
+} from "./balance/swModern.js";
+import {
   STAGES_LANDMARK_LAYOUT,
   type StagesLandmarkId,
 } from "./stagesMap.js";
@@ -25,6 +30,20 @@ export type ContentMode =
   | "equip";
 
 export type CairosDungeon = "giant" | "dragon" | "necro";
+export type CairosTier = "b" | "abyss_normal" | "abyss_hard";
+export type ScenarioDifficultyKey = "normal" | "hard" | "hell";
+export type ChallengeTowerDifficulty = "normal" | "hard";
+
+export interface StageDifficultyBalance {
+  energyCost: number;
+  enemyLevel: number;
+  /** Player/account EXP awarded on clear. */
+  accountExp: number;
+  /** Total monster EXP pool; divided across deployed monsters. */
+  monsterExpPool: number;
+  /** Fixed baseline mana reward before equipment economy modifiers. */
+  manaReward?: number;
+}
 
 export interface StageDef {
   id: string;
@@ -50,6 +69,25 @@ export interface StageDef {
   starWeights?: { value: SymbolStars; w: number }[];
   qualityWeights?: { value: SymbolQuality; w: number }[];
   cairosDungeon?: CairosDungeon;
+  cairosTier?: CairosTier;
+  /** Explicit balance data. Scenario entries provide all three difficulties. */
+  difficultyBalance?: Partial<
+    Record<ScenarioDifficultyKey, StageDifficultyBalance>
+  >;
+  /** Non-scenario enemy level, independent of synthetic map ids. */
+  enemyLevel?: number;
+  /** Non-scenario account EXP awarded on clear. */
+  accountExpReward?: number;
+  /** Non-scenario monster EXP pool, divided across deployed monsters. */
+  monsterExpPool?: number;
+  /** Fixed baseline mana reward before equipment economy modifiers. */
+  manaReward?: number;
+  /** Stable provenance key into the versioned SW balance snapshot. */
+  balanceProfile?: string;
+  /** Named reward table from the versioned SW balance snapshot. */
+  rewardTable?: string;
+  /** Challenge Tower track; the stage id remains the authoritative save key. */
+  challengeTowerDifficulty?: ChallengeTowerDifficulty;
   /** Optional per-wave enemy rosters. The first entry is wave 1. */
   enemyWaves?: string[][];
   /** Boss metadata. The matching monster is promoted only while present. */
@@ -123,13 +161,87 @@ function mqBoardSize(map: number, stage: number): CombatBoardSize {
 }
 
 function mqEnergy(map: number, stage: number): number {
-  return Math.min(12, 2 + map + Math.floor(stage / 2));
+  void map;
+  const profile = SW_SCENARIO_DIFFICULTY.normal;
+  return stage === STAGES_PER_AREA
+    ? profile.energyBossStage7
+    : profile.energyStages1To6;
 }
 
 function mqWaves(stage: number): number {
-  if (stage <= 1) return 1;
-  if (stage <= 3) return 2;
+  void stage;
   return 3;
+}
+
+const SCENARIO_ENEMY_LEVEL_START: Record<
+  ScenarioDifficultyKey,
+  readonly number[]
+> = {
+  normal: [1, 3, 8, 13, 16, 19, 22, 24, 27, 30, 32, 35, 37],
+  hard: [12, 18, 21, 24, 26, 28, 30, 32, 33, 35, 38, 40, 42],
+  hell: [30, 40, 40, 40, 40, 40, 40, 40, 40, 42, 43, 45, 47],
+};
+const SCENARIO_STAGE_LEVEL_OFFSET = [0, 1, 1, 2, 2, 3, 4] as const;
+const SCENARIO_STAGE_XP_MUL = [0.97, 0.98, 0.99, 1, 1, 1, 0.86] as const;
+
+/** Community-observed per-monster XP anchors near stage 6, by area. */
+const SCENARIO_MONSTER_XP_PER_SLOT: Record<
+  ScenarioDifficultyKey,
+  readonly number[]
+> = {
+  normal: [377, 392, 404, 450, 500, 560, 620, 680, 780, 826, 880, 950, 1020],
+  hard: [586, 608, 727, 800, 900, 1000, 1100, 1200, 1290, 1346, 1450, 1550, 1650],
+  hell: [1200, 1200, 1350, 1450, 1550, 1650, 1750, 1850, 2730, 2775, 2900, 3100, 3300],
+};
+
+/** Community account-EXP anchors; boss stages use the observed lower payout. */
+const SCENARIO_ACCOUNT_XP: Record<
+  ScenarioDifficultyKey,
+  readonly number[]
+> = {
+  normal: [241, 330, 351, 405, 462, 522, 580, 638, 700, 760, 820, 880, 940],
+  hard: [501, 516, 612, 715, 808, 918, 1020, 1092, 1180, 1270, 1360, 1450, 1540],
+  hell: [1008, 1008, 1134, 1260, 1386, 1512, 1638, 1638, 1764, 1890, 2016, 2142, 2268],
+};
+
+function scenarioDifficultyBalance(
+  map: number,
+  stage: number,
+): Record<ScenarioDifficultyKey, StageDifficultyBalance> {
+  const mapIndex = Math.max(1, Math.min(MAIN_QUEST_AREA_COUNT, map)) - 1;
+  const stageIndex = Math.max(1, Math.min(STAGES_PER_AREA, stage)) - 1;
+  const boss = stage === STAGES_PER_AREA;
+  const xpMul = SCENARIO_STAGE_XP_MUL[stageIndex]!;
+  const build = (
+    difficulty: ScenarioDifficultyKey,
+  ): StageDifficultyBalance => {
+    const observedFaimonOne =
+      map === 9 && stage === 1
+        ? ({ normal: 3024, hard: 5104, hell: 10920 } as const)[difficulty]
+        : null;
+    const energyProfile = SW_SCENARIO_DIFFICULTY[difficulty];
+    return {
+      energyCost: boss
+        ? energyProfile.energyBossStage7
+        : energyProfile.energyStages1To6,
+      enemyLevel:
+        SCENARIO_ENEMY_LEVEL_START[difficulty][mapIndex]! +
+        SCENARIO_STAGE_LEVEL_OFFSET[stageIndex]!,
+      accountExp: Math.round(
+        SCENARIO_ACCOUNT_XP[difficulty][mapIndex]! * xpMul,
+      ),
+      monsterExpPool:
+        observedFaimonOne ??
+        Math.round(
+          SCENARIO_MONSTER_XP_PER_SLOT[difficulty][mapIndex]! * xpMul * 4,
+        ),
+    };
+  };
+  return {
+    normal: build("normal"),
+    hard: build("hard"),
+    hell: build("hell"),
+  };
 }
 
 /** How far into MQ_ENEMY_POOL a map/stage may reach (inclusive index). */
@@ -160,11 +272,14 @@ function buildAreaStages(area: MainQuestAreaDef): StageDef[] {
       map: area.map,
       stage,
       boardSize: mqBoardSize(area.map, stage),
-      energyCost: mqEnergy(area.map, stage) + (boss ? 1 : 0),
+      energyCost: mqEnergy(area.map, stage),
       enemyMonsterIds: mqEnemies(area.map, stage),
       dropSetId: area.dropSetId,
       waves: mqWaves(stage),
       mode: "scenario" as const,
+      difficultyBalance: scenarioDifficultyBalance(area.map, stage),
+      balanceProfile: `sw-modern-scenario-${area.map}-${stage}`,
+      rewardTable: `sw-modern-scenario-${area.map}-${stage}`,
     };
   });
 }
@@ -256,8 +371,9 @@ type QualW = { value: SymbolQuality; w: number };
 export type ScenarioDropDifficulty = "normal" | "hard" | "hell";
 
 /**
- * Scenario rune tables (SWARFARM / wiki), then nudged a bit luckier.
- * Normal 1–2★ (tiny 3★), Hard 2–4★, Hell 3–5★. Boss (stage 7) leans higher.
+ * Scenario symbols: all difficulties cap at ★3.
+ * Higher ★ (4–6) come from depth/Cairos floors.
+ * Normal leans ★1, Hard ★2–3, Hell mostly ★3 (quality still scales).
  */
 export function scenarioSymbolDropTable(
   difficulty: ScenarioDropDifficulty,
@@ -268,14 +384,12 @@ export function scenarioSymbolDropTable(
     return {
       starWeights: boss
         ? [
-            { value: 3, w: 38 },
-            { value: 4, w: 44 },
-            { value: 5, w: 18 },
+            { value: 2, w: 18 },
+            { value: 3, w: 82 },
           ]
         : [
-            { value: 3, w: 50 },
-            { value: 4, w: 40 },
-            { value: 5, w: 10 },
+            { value: 2, w: 28 },
+            { value: 3, w: 72 },
           ],
       qualityWeights: [
         { value: "advanced", w: 22 },
@@ -290,14 +404,12 @@ export function scenarioSymbolDropTable(
     return {
       starWeights: boss
         ? [
-            { value: 2, w: 46 },
-            { value: 3, w: 40 },
-            { value: 4, w: 14 },
+            { value: 2, w: 42 },
+            { value: 3, w: 58 },
           ]
         : [
-            { value: 2, w: 60 },
-            { value: 3, w: 32 },
-            { value: 4, w: 8 },
+            { value: 2, w: 58 },
+            { value: 3, w: 42 },
           ],
       qualityWeights: [
         { value: "normal", w: 26 },
@@ -329,72 +441,176 @@ export function scenarioSymbolDropTable(
   };
 }
 
+/**
+ * Summoner gear from scenario still uses the older ★ curve (max ★5).
+ * Kept separate so the symbol ★3 stage cap does not nerf gear.
+ */
+export function scenarioGearStarWeights(
+  difficulty: ScenarioDropDifficulty,
+  stage = 1,
+): StarW[] {
+  const boss = stage >= 7;
+  if (difficulty === "hell") {
+    return boss
+      ? [
+          { value: 3, w: 38 },
+          { value: 4, w: 44 },
+          { value: 5, w: 18 },
+        ]
+      : [
+          { value: 3, w: 50 },
+          { value: 4, w: 40 },
+          { value: 5, w: 10 },
+        ];
+  }
+  if (difficulty === "hard") {
+    return boss
+      ? [
+          { value: 2, w: 46 },
+          { value: 3, w: 40 },
+          { value: 4, w: 14 },
+        ]
+      : [
+          { value: 2, w: 60 },
+          { value: 3, w: 32 },
+          { value: 4, w: 8 },
+        ];
+  }
+  return boss
+    ? [
+        { value: 1, w: 66 },
+        { value: 2, w: 28 },
+        { value: 3, w: 6 },
+      ]
+    : [
+        { value: 1, w: 80 },
+        { value: 2, w: 18 },
+        { value: 3, w: 2 },
+      ];
+}
+
 /** @deprecated use scenarioSymbolDropTable("normal") — kept for callers/tests */
 export const SCENARIO_NORMAL_STAR_WEIGHTS: StarW[] =
   scenarioSymbolDropTable("normal", 1).starWeights;
 
-/** SWARFARM Giant B1–B10 (2★–6★), then shifted toward the next star. */
+/** Modern compressed B1–B10: B1 starts at ★3; B10 only rolls ★6. */
 const CAIROS_STAR_BY_FLOOR: StarW[][] = [
+  // B1
   [
-    { value: 2, w: 42 },
-    { value: 3, w: 50 },
-    { value: 4, w: 8 },
+    { value: 3, w: 82 },
+    { value: 4, w: 18 },
   ],
+  // B2
   [
-    { value: 2, w: 32 },
-    { value: 3, w: 54 },
-    { value: 4, w: 14 },
-  ],
-  [
-    { value: 2, w: 8 },
-    { value: 3, w: 48 },
+    { value: 3, w: 64 },
     { value: 4, w: 36 },
-    { value: 5, w: 8 },
   ],
+  // B3
   [
-    { value: 3, w: 34 },
-    { value: 4, w: 52 },
-    { value: 5, w: 14 },
+    { value: 3, w: 40 },
+    { value: 4, w: 48 },
+    { value: 5, w: 12 },
   ],
+  // B4
   [
-    { value: 3, w: 12 },
-    { value: 4, w: 56 },
-    { value: 5, w: 26 },
-    { value: 6, w: 6 },
-  ],
-  [
-    { value: 3, w: 4 },
+    { value: 3, w: 22 },
     { value: 4, w: 54 },
+    { value: 5, w: 24 },
+  ],
+  // B5
+  [
+    { value: 3, w: 10 },
+    { value: 4, w: 48 },
     { value: 5, w: 34 },
     { value: 6, w: 8 },
   ],
+  // B6
   [
-    { value: 4, w: 46 },
+    { value: 3, w: 4 },
+    { value: 4, w: 40 },
     { value: 5, w: 44 },
-    { value: 6, w: 10 },
+    { value: 6, w: 12 },
   ],
+  // B7
   [
-    { value: 4, w: 32 },
-    { value: 5, w: 52 },
+    { value: 4, w: 36 },
+    { value: 5, w: 48 },
     { value: 6, w: 16 },
   ],
+  // B8
   [
-    { value: 4, w: 14 },
-    { value: 5, w: 64 },
-    { value: 6, w: 22 },
-  ],
-  [
-    { value: 5, w: 74 },
+    { value: 4, w: 22 },
+    { value: 5, w: 52 },
     { value: 6, w: 26 },
   ],
+  // B9
+  [
+    { value: 4, w: 10 },
+    { value: 5, w: 54 },
+    { value: 6, w: 36 },
+  ],
+  // B10
+  [
+    { value: 6, w: 100 },
+  ],
 ];
-
 /** Cairos rarity is Rare/Hero/Legend only (~70/25/5 in SW); we tilt to ~62/28/10. */
 const CAIROS_QUALITY: QualW[] = [
   { value: "rare", w: 62 },
   { value: "epic", w: 28 },
   { value: "legend", w: 10 },
 ];
+
+const CAIROS_ENERGY_BY_FLOOR = SW_CAIROS_B1_B10.map(
+  (profile) => profile.energy,
+);
+const CAIROS_GIANT_LEVELS = [12, 15, 20, 25, 30, 40, 50, 55, 60, 65] as const;
+const CAIROS_DRAGON_LEVELS = [20, 25, 30, 40, 50, 55, 60, 65, 70, 75] as const;
+const CAIROS_NECRO_LEVELS = CAIROS_GIANT_LEVELS;
+
+const ABYSS_QUALITY_NORMAL: QualW[] = [
+  { value: "rare", w: 50 },
+  { value: "epic", w: 35 },
+  { value: "legend", w: 15 },
+];
+const ABYSS_QUALITY_HARD: QualW[] = [
+  { value: "rare", w: 35 },
+  { value: "epic", w: 40 },
+  { value: "legend", w: 25 },
+];
+
+function cairosEnemyLevel(dungeon: CairosDungeon, floor: number): number {
+  const index = Math.max(1, Math.min(10, Math.floor(floor))) - 1;
+  if (dungeon === "dragon") return CAIROS_DRAGON_LEVELS[index]!;
+  if (dungeon === "necro") return CAIROS_NECRO_LEVELS[index]!;
+  return CAIROS_GIANT_LEVELS[index]!;
+}
+
+function cairosBossMeta(dungeon: CairosDungeon): {
+  id: string;
+  nameKo: string;
+  artId: string;
+} {
+  if (dungeon === "dragon") {
+    return {
+      id: "sky_warden_fire",
+      nameKo: "고대 화염룡",
+      artId: "cairos-dragon",
+    };
+  }
+  if (dungeon === "necro") {
+    return {
+      id: "abyss_priest_dark",
+      nameKo: "고대 리치왕",
+      artId: "cairos-necro",
+    };
+  }
+  return {
+    id: "stone_golem_dark",
+    nameKo: "봉인된 황금암 거신",
+    artId: "cairos-giant",
+  };
+}
 
 function cairosWeights(floor: number): {
   starWeights: StarW[];
@@ -417,36 +633,109 @@ function buildCairosDungeon(
   return Array.from({ length: 10 }, (_, i) => {
     const floor = i + 1;
     const w = cairosWeights(floor);
-    const waves = floor >= 8 ? 3 : 2;
+    const waves = 4;
     const encounterIds = mqEnemies(map % 10, floor);
-    const giantBoss = dungeon === "giant";
-    const bossMonsterId = giantBoss ? "stone_golem_dark" : undefined;
-    const enemyWaves = giantBoss
-      ? Array.from({ length: waves }, (_, waveIndex) =>
-          waveIndex === waves - 1 ? [bossMonsterId!] : [...encounterIds],
-        )
-      : undefined;
+    const boss = cairosBossMeta(dungeon);
+    const enemyWaves = Array.from({ length: waves }, (_, waveIndex) =>
+      waveIndex === waves - 1 ? [boss.id] : [...encounterIds],
+    );
     return {
       id: `${dungeon}_b${floor}`,
       nameKo: `${nameKo} B${floor}`,
       map,
       stage: floor,
       boardSize: 7 as CombatBoardSize,
-      energyCost: 5 + Math.floor(floor / 2),
-      enemyMonsterIds: giantBoss ? [bossMonsterId!] : encounterIds,
+      energyCost: CAIROS_ENERGY_BY_FLOOR[i]!,
+      enemyMonsterIds: encounterIds,
       dropSetId: primaryDrop,
       dropSetPool: pool,
       starWeights: w.starWeights,
       qualityWeights: w.qualityWeights,
       waves,
       mode: "depth" as const,
-      dropChance: giantBoss ? 1 : 0.9 + floor * 0.007,
+      dropChance: 0.9 + floor * 0.007,
       cairosDungeon: dungeon,
+      cairosTier: "b",
       enemyWaves,
-      bossMonsterId,
-      bossNameKo: giantBoss ? "봉인된 황금암 거신" : undefined,
-      bossArtId: giantBoss ? "cairos-giant" : undefined,
-      bossHpMultiplier: giantBoss ? 2 + floor * 0.25 : undefined,
+      bossMonsterId: boss.id,
+      bossNameKo: boss.nameKo,
+      bossArtId: boss.artId,
+      bossHpMultiplier: 2 + floor * 0.25,
+      enemyLevel: cairosEnemyLevel(dungeon, floor),
+      accountExpReward: 40 + floor * 12,
+      monsterExpPool: 400 + floor * 160,
+      balanceProfile: `sw-modern-${dungeon}-b${floor}`,
+      rewardTable: `sw-modern-${dungeon}-b${floor}`,
+    };
+  });
+}
+
+function buildCairosAbyssStages(
+  dungeon: CairosDungeon,
+  nameKo: string,
+  map: number,
+  pool: SymbolSetId[],
+  primaryDrop: SymbolSetId,
+): StageDef[] {
+  const boss = cairosBossMeta(dungeon);
+  return ([
+    {
+      suffix: "normal",
+      stage: 11,
+      tier: "abyss_normal",
+      hpMul: 4.6,
+      quality: ABYSS_QUALITY_NORMAL,
+      dropChance: 0.96,
+      label: "Normal",
+    },
+    {
+      suffix: "hard",
+      stage: 12,
+      tier: "abyss_hard",
+      hpMul: 6.2,
+      quality: ABYSS_QUALITY_HARD,
+      dropChance: 1,
+      label: "Hard",
+    },
+  ] as const).map((profile) => {
+    const encounterIds = mqEnemies(map % 10, 10);
+    const enemyWaves = Array.from({ length: 4 }, (_, waveIndex) =>
+      waveIndex === 3 ? [boss.id] : [...encounterIds],
+    );
+    return {
+      id: `${dungeon}_abyss_${profile.suffix}`,
+      nameKo: `${nameKo} 심연 ${profile.label}`,
+      map,
+      stage: profile.stage,
+      boardSize: 7 as CombatBoardSize,
+      energyCost:
+        profile.tier === "abyss_hard"
+          ? SW_ABYSS_PROFILES.hard.energy
+          : SW_ABYSS_PROFILES.normal.energy,
+      enemyMonsterIds: encounterIds,
+      dropSetId: primaryDrop,
+      dropSetPool: [...pool, "muhyeong"],
+      starWeights: [{ value: 6, w: 100 }],
+      qualityWeights: profile.quality,
+      waves: 4,
+      mode: "depth" as const,
+      dropChance: profile.dropChance,
+      gearDropChance: 0,
+      cairosDungeon: dungeon,
+      cairosTier: profile.tier,
+      enemyWaves,
+      bossMonsterId: boss.id,
+      bossNameKo: boss.nameKo,
+      bossArtId: boss.artId,
+      bossHpMultiplier: profile.hpMul,
+      enemyLevel:
+        profile.tier === "abyss_hard"
+          ? SW_ABYSS_PROFILES.hard.enemyLevelAnchor
+          : SW_ABYSS_PROFILES.normal.enemyLevelAnchor,
+      accountExpReward: profile.tier === "abyss_hard" ? 210 : 180,
+      monsterExpPool: profile.tier === "abyss_hard" ? 2200 : 1800,
+      balanceProfile: `sw-modern-${dungeon}-${profile.tier}`,
+      rewardTable: `sw-modern-${dungeon}-${profile.tier}`,
     };
   });
 }
@@ -457,21 +746,21 @@ export const CAIROS_GIANT_STAGES = buildCairosDungeon(
   91,
   CAIROS_GIANT_POOL,
   "myosu",
-);
+).concat(buildCairosAbyssStages("giant", "거인의 탑", 91, CAIROS_GIANT_POOL, "myosu"));
 export const CAIROS_DRAGON_STAGES = buildCairosDungeon(
   "dragon",
   "용의 둥지",
   92,
   CAIROS_DRAGON_POOL,
   "gyeongno",
-);
+).concat(buildCairosAbyssStages("dragon", "용의 둥지", 92, CAIROS_DRAGON_POOL, "gyeongno"));
 export const CAIROS_NECRO_STAGES = buildCairosDungeon(
   "necro",
   "네크로폴리스",
   93,
   CAIROS_NECRO_POOL,
   "chimtu",
-);
+).concat(buildCairosAbyssStages("necro", "네크로폴리스", 93, CAIROS_NECRO_POOL, "chimtu"));
 
 /** All Cairos floors (replaces per-set depth stub). */
 export const DEPTH_STAGES: StageDef[] = [
@@ -505,6 +794,11 @@ export const ARENA_STAGES: StageDef[] = [
     mode: "arena",
     dropChance: 0,
     gloryReward: 25,
+    enemyLevel: 10,
+    accountExpReward: 0,
+    monsterExpPool: 0,
+    balanceProfile: "sw-modern-arena-rookie",
+    rewardTable: "sw-modern-arena",
   },
   {
     id: "arena_veteran",
@@ -524,6 +818,11 @@ export const ARENA_STAGES: StageDef[] = [
     mode: "arena",
     dropChance: 0,
     gloryReward: 45,
+    enemyLevel: 20,
+    accountExpReward: 0,
+    monsterExpPool: 0,
+    balanceProfile: "sw-modern-arena-veteran",
+    rewardTable: "sw-modern-arena",
   },
   {
     id: "arena_challenger",
@@ -543,6 +842,11 @@ export const ARENA_STAGES: StageDef[] = [
     mode: "arena",
     dropChance: 0,
     gloryReward: 60,
+    enemyLevel: 30,
+    accountExpReward: 0,
+    monsterExpPool: 0,
+    balanceProfile: "sw-modern-arena-challenger",
+    rewardTable: "sw-modern-arena",
   },
   {
     id: "arena_legend",
@@ -562,6 +866,11 @@ export const ARENA_STAGES: StageDef[] = [
     mode: "arena",
     dropChance: 0,
     gloryReward: 80,
+    enemyLevel: 40,
+    accountExpReward: 0,
+    monsterExpPool: 0,
+    balanceProfile: "sw-modern-arena-legend",
+    rewardTable: "sw-modern-arena",
   },
 ];
 
@@ -584,14 +893,14 @@ export const WEEKDAY_STAGES: StageDef[] = [
   ...ELEMENT_AWAKEN_DUNGEONS.flatMap((dungeon) =>
     Array.from({ length: 10 }, (_, index): StageDef => {
       const floor = index + 1;
-      const waves = floor >= 8 ? 3 : 2;
+      const waves = 4;
       return {
         id: `weekday_awaken_${dungeon.element}_b${floor}`,
         nameKo: `${dungeon.nameKo} B${floor}`,
         map: 70,
         stage: floor,
         boardSize: 7,
-        energyCost: 4 + Math.floor(floor / 2),
+        energyCost: CAIROS_ENERGY_BY_FLOOR[index]!,
         enemyMonsterIds: [dungeon.bossMonsterId],
         enemyWaves: Array.from({ length: waves }, (_, waveIndex) =>
           waveIndex === waves - 1
@@ -610,6 +919,11 @@ export const WEEKDAY_STAGES: StageDef[] = [
         awakenElement: dungeon.element,
         awakenEssenceDrops: awakenEssenceDropsForFloor(floor),
         awakenExpReward: awakenExpForFloor(floor),
+        enemyLevel: CAIROS_GIANT_LEVELS[index]!,
+        accountExpReward: 0,
+        monsterExpPool: 0,
+        balanceProfile: `sw-modern-hall-${dungeon.element}-b${floor}`,
+        rewardTable: `sw-modern-hall-${dungeon.element}-b${floor}`,
       };
     }),
   ),
@@ -625,6 +939,11 @@ export const WEEKDAY_STAGES: StageDef[] = [
     waves: 2,
     mode: "weekday",
     dropChance: 0.35,
+    enemyLevel: 20,
+    accountExpReward: 0,
+    monsterExpPool: 0,
+    balanceProfile: "sw-modern-hall-magic-b3",
+    rewardTable: "stonesummoner-skill-material",
   },
 ];
 
@@ -683,18 +1002,18 @@ function toaEnemies(floor: number): string[] {
 }
 
 export function challengeTowerStageFloor(stageId: string): number | null {
-  const match = stageId.match(/^toa_f(\d+)$/);
+  const match = stageId.match(/^toa_(?:hard_)?f(\d+)$/);
   if (!match) return null;
   return parseInt(match[1]!, 10);
 }
 
-/** SW-style Trial of Ascension — 100 floors, monthly reset, legend scroll at 100F. */
-export const CHALLENGE_TOWER_STAGES: StageDef[] = Array.from(
-  { length: CHALLENGE_TOWER_FLOORS },
-  (_, i) => {
+function buildChallengeTowerStages(
+  difficulty: ChallengeTowerDifficulty,
+): StageDef[] {
+  return Array.from({ length: CHALLENGE_TOWER_FLOORS }, (_, i) => {
     const floor = i + 1;
     const isBoss = floor % 10 === 0;
-    const waves = floor >= 70 ? 3 : floor >= 30 ? 2 : 1;
+    const waves = 3;
     const encounterIds = toaEnemies(floor);
     const bossMonsterId = isBoss
       ? floor === 100
@@ -708,12 +1027,15 @@ export const CHALLENGE_TOWER_STAGES: StageDef[] = Array.from(
           )
         : undefined;
     return {
-      id: `toa_f${floor}`,
-      nameKo: `도전의 탑 ${floor}층`,
-      map: 95,
+      id: difficulty === "hard" ? `toa_hard_f${floor}` : `toa_f${floor}`,
+      nameKo:
+        difficulty === "hard"
+          ? `도전의 탑 Hard ${floor}층`
+          : `도전의 탑 ${floor}층`,
+      map: difficulty === "hard" ? 96 : 95,
       stage: floor,
       boardSize: 7 as CombatBoardSize,
-      energyCost: Math.min(12, 4 + Math.floor(floor / 10)),
+      energyCost: Math.min(8, 3 + Math.floor(floor / 20)),
       enemyMonsterIds: isBoss && bossMonsterId ? [bossMonsterId] : encounterIds,
       enemyWaves,
       dropSetId: "yongmaeng",
@@ -728,9 +1050,27 @@ export const CHALLENGE_TOWER_STAGES: StageDef[] = Array.from(
           : `시련 수호자 · ${floor}층`
         : undefined,
       bossHpMultiplier: isBoss ? 1.6 + floor * 0.04 : undefined,
+      enemyLevel:
+        difficulty === "hard"
+          ? Math.min(90, 15 + floor)
+          : Math.min(80, 5 + floor),
+      accountExpReward: 0,
+      monsterExpPool: 0,
+      balanceProfile: `sw-modern-toa-${difficulty}-${floor}`,
+      rewardTable: `sw-modern-toa-${difficulty}-${floor}`,
+      challengeTowerDifficulty: difficulty,
     };
-  },
-);
+  });
+}
+
+export const CHALLENGE_TOWER_NORMAL_STAGES =
+  buildChallengeTowerStages("normal");
+export const CHALLENGE_TOWER_HARD_STAGES = buildChallengeTowerStages("hard");
+export const CHALLENGE_TOWER_STAGES = [
+  ...CHALLENGE_TOWER_NORMAL_STAGES,
+  ...CHALLENGE_TOWER_HARD_STAGES,
+];
+export const ALL_CHALLENGE_TOWER_STAGES = CHALLENGE_TOWER_STAGES;
 
 export const TRIAL_STAGES: StageDef[] = [
   {
@@ -751,6 +1091,11 @@ export const TRIAL_STAGES: StageDef[] = [
     dropChance: 0.18,
     jinmunReward: 2,
     gloryReward: 6,
+    enemyLevel: 12,
+    accountExpReward: 52,
+    monsterExpPool: 560,
+    balanceProfile: "sw-modern-cairos-progression-b1",
+    rewardTable: "stonesummoner-trial-b1",
   },
   {
     id: "trial_b2",
@@ -771,6 +1116,11 @@ export const TRIAL_STAGES: StageDef[] = [
     dropChance: 0.2,
     jinmunReward: 3,
     gloryReward: 10,
+    enemyLevel: 30,
+    accountExpReward: 100,
+    monsterExpPool: 1200,
+    balanceProfile: "sw-modern-cairos-progression-b5",
+    rewardTable: "stonesummoner-trial-b2",
   },
   {
     id: "trial_b3",
@@ -791,6 +1141,11 @@ export const TRIAL_STAGES: StageDef[] = [
     dropChance: 0.25,
     jinmunReward: 5,
     gloryReward: 15,
+    enemyLevel: 55,
+    accountExpReward: 136,
+    monsterExpPool: 1680,
+    balanceProfile: "sw-modern-cairos-progression-b8",
+    rewardTable: "stonesummoner-trial-b3",
   },
 ];
 
@@ -813,6 +1168,11 @@ export const WORLD_ARENA_STAGES: StageDef[] = [
     mode: "world_arena",
     dropChance: 0,
     gloryReward: 80,
+    enemyLevel: 40,
+    accountExpReward: 0,
+    monsterExpPool: 0,
+    balanceProfile: "sw-modern-world-arena-qualifier",
+    rewardTable: "sw-modern-world-arena",
   },
   {
     id: "warena_final",
@@ -832,6 +1192,11 @@ export const WORLD_ARENA_STAGES: StageDef[] = [
     mode: "world_arena",
     dropChance: 0,
     gloryReward: 120,
+    enemyLevel: 50,
+    accountExpReward: 0,
+    monsterExpPool: 0,
+    balanceProfile: "sw-modern-world-arena-final",
+    rewardTable: "sw-modern-world-arena",
   },
 ];
 
@@ -855,6 +1220,11 @@ export const GUILD_RAID_STAGES: StageDef[] = [
     dropChance: 0.55,
     jinmunReward: 8,
     gloryReward: 30,
+    enemyLevel: 75,
+    accountExpReward: 210,
+    monsterExpPool: 2200,
+    balanceProfile: "sw-modern-abyss-hard",
+    rewardTable: "stonesummoner-guild-raid",
   },
 ];
 
@@ -883,6 +1253,11 @@ export const EQUIP_STAGES: StageDef[] = [
       { value: 2, w: 34 },
       { value: 3, w: 20 },
     ],
+    enemyLevel: 12,
+    accountExpReward: 52,
+    monsterExpPool: 560,
+    balanceProfile: "sw-modern-cairos-progression-b1",
+    rewardTable: "stonesummoner-equip-vault-1",
   },
   {
     id: "equip_vault_boss",
@@ -909,6 +1284,11 @@ export const EQUIP_STAGES: StageDef[] = [
       { value: 4, w: 11 },
       { value: 5, w: 3 },
     ],
+    enemyLevel: 20,
+    accountExpReward: 76,
+    monsterExpPool: 880,
+    balanceProfile: "sw-modern-cairos-progression-b3",
+    rewardTable: "stonesummoner-equip-vault-2",
   },
   {
     id: "equip_vault_3",
@@ -934,6 +1314,11 @@ export const EQUIP_STAGES: StageDef[] = [
       { value: 4, w: 22 },
       { value: 5, w: 10 },
     ],
+    enemyLevel: 30,
+    accountExpReward: 100,
+    monsterExpPool: 1200,
+    balanceProfile: "sw-modern-cairos-progression-b5",
+    rewardTable: "stonesummoner-equip-vault-3",
   },
   {
     id: "equip_vault_4",
@@ -960,6 +1345,11 @@ export const EQUIP_STAGES: StageDef[] = [
       { value: 4, w: 32 },
       { value: 5, w: 16 },
     ],
+    enemyLevel: 55,
+    accountExpReward: 136,
+    monsterExpPool: 1680,
+    balanceProfile: "sw-modern-cairos-progression-b8",
+    rewardTable: "stonesummoner-equip-vault-4",
   },
   {
     id: "equip_vault_5",
@@ -988,6 +1378,11 @@ export const EQUIP_STAGES: StageDef[] = [
     bossMonsterId: EQUIP_VAULT_BOSS_ID,
     bossNameKo: "황금 금고의 주인",
     bossHpMultiplier: 3.2,
+    enemyLevel: 75,
+    accountExpReward: 160,
+    monsterExpPool: 2000,
+    balanceProfile: "sw-modern-cairos-b10",
+    rewardTable: "stonesummoner-equip-vault-5",
   },
 ];
 
@@ -997,7 +1392,7 @@ export const ALL_STAGES: StageDef[] = [
   ...ARENA_STAGES,
   ...WEEKDAY_STAGES,
   ...TRIAL_STAGES,
-  ...CHALLENGE_TOWER_STAGES,
+  ...ALL_CHALLENGE_TOWER_STAGES,
   ...WORLD_ARENA_STAGES,
   ...GUILD_RAID_STAGES,
   ...EQUIP_STAGES,

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   applySymbolsToStats,
+  effectiveSymbolSetCounts,
   canGrindSymbol,
   symbolCombatMods,
   describeSkillVfx,
@@ -11,6 +12,8 @@ import {
   CAIROS_DRAGON_STAGES,
   CAIROS_GIANT_STAGES,
   CAIROS_NECRO_STAGES,
+  CHALLENGE_TOWER_HARD_STAGES,
+  CHALLENGE_TOWER_NORMAL_STAGES,
   DEPTH_STAGES,
   MAIN_QUEST_AREA_COUNT,
   MAIN_QUEST_PIN_LAYOUT,
@@ -44,6 +47,7 @@ import {
   gearEnhanceManaCost,
   gearSellCrystal,
   gearSellMana,
+  GEAR_SET_AFFIX_MANA,
   gearSetBonuses,
   gearStarsToInvGrade,
   gearStarsToQuality,
@@ -55,6 +59,7 @@ import {
   imprintSymbolMain,
   mainStatAtEnhance,
   MAX_GEAR_ENHANCE,
+  FAMILY_KIT_PROFILES,
   MONSTERS,
   normalizeSummonerGear,
   rollGearDrop,
@@ -62,37 +67,46 @@ import {
   SCENARIO_NORMAL_STAR_WEIGHTS,
   scenarioSymbolDropTable,
   magicEnhanceRequiredLevel,
+  magicEnhanceManaCost,
+  magicEnhanceCrystalCost,
+  magicEnhanceEssenceCost,
+  magicEnhanceSuccessRate,
   skillTreeBonuses,
   SKILL_TREE_NODES,
   stripUnenhancedStarterGear,
   summarizeGearSets,
+  SYMBOL_GRIND_MANA_COST,
   SYMBOL_SETS,
   summarizeSymbolSets,
+  symbolEnhanceManaCost,
   WEEKDAY_STAGES,
   isWeekdayStageOpenToday,
+  SKILL_DMG_MUL,
 } from "./index.js";
 
 describe("phase1 data", () => {
-  it("has 50 families x 5 elements and 16 symbol sets", () => {
-    assert.equal(MONSTERS.length, 250);
-    assert.equal(SYMBOL_SETS.length, 16);
+  it("has 75 families x 5 elements and 17 symbol sets", () => {
+    assert.equal(MONSTERS.length, 375);
+    assert.equal(SYMBOL_SETS.length, 17);
     assert.ok(getMonster("wolf_fighter_fire"));
     assert.ok(getMonster("lotus_dancer_wind"));
     assert.ok(getMonster("abyss_priest_dark"));
     assert.ok(getMonster("magic_archer_fire"));
     assert.ok(getMonster("cinder_imp_fire"));
+    assert.ok(getMonster("ember_wisp_fire"));
+    assert.ok(getMonster("sanctuary_oracle_light"));
     // Legacy ids still resolve
     assert.equal(getMonster("fire_fang")?.id, "wolf_fighter_fire");
     assert.equal(getMonster("seokrang_fire")?.id, "wolf_fighter_fire");
     const families = new Set(MONSTERS.map((m) => m.familyId));
-    assert.equal(families.size, 50);
+    assert.equal(families.size, 75);
     const byStars = [1, 2, 3, 4, 5].map(
       (s) =>
         new Set(
           MONSTERS.filter((m) => m.naturalStars === s).map((m) => m.familyId),
         ).size,
     );
-    assert.deepEqual(byStars, [10, 10, 12, 12, 6]);
+    assert.deepEqual(byStars, [15, 15, 17, 17, 11]);
     for (const fam of families) {
       const variants = MONSTERS.filter((m) => m.familyId === fam);
       assert.equal(variants.length, 5);
@@ -118,12 +132,188 @@ describe("phase1 data", () => {
     }
   });
 
+  it("keeps five display roles evenly distributed without changing balance identity", () => {
+    const families = MONSTERS.filter((monster) => monster.element === "fire");
+    const counts = Object.fromEntries(
+      ["attacker", "hp", "defense", "speed", "support"].map((role) => [
+        role,
+        families.filter((family) => family.role === role).length,
+      ]),
+    );
+    assert.deepEqual(counts, {
+      attacker: 15,
+      hp: 15,
+      defense: 15,
+      speed: 15,
+      support: 15,
+    });
+    assert.equal(new Set(families.map((family) => family.role)).size, 5);
+    for (const family of families) {
+      assert.equal(family.familyIdentity, family.balanceArchetype);
+      assert.ok(family.combatTags.includes(family.familyIdentity));
+    }
+    assert.equal(getMonster("seal_elder_fire")?.familyIdentity, "stonesage");
+    assert.equal(getMonster("capture_lord_fire")?.familyIdentity, "capturer");
+    assert.equal(getMonster("doom_oracle_fire")?.familyIdentity, "debuffer");
+  });
+
+  it("defines distinct profiles for all 75 families", () => {
+    assert.equal(Object.keys(FAMILY_KIT_PROFILES).length, 75);
+    const familyIds = new Set(MONSTERS.map((monster) => monster.familyId));
+    assert.deepEqual(
+      new Set(Object.keys(FAMILY_KIT_PROFILES)),
+      familyIds,
+    );
+    const allSignatures = Object.values(FAMILY_KIT_PROFILES).map((profile) =>
+      JSON.stringify({ s2: profile.s2, s3: profile.s3 }),
+    );
+    assert.equal(new Set(allSignatures).size, 75);
+    for (const role of ["attacker", "hp", "defense", "speed", "support"] as const) {
+      const signatures = Object.values(FAMILY_KIT_PROFILES)
+        .filter((profile) => profile.role === role)
+        .map((profile) =>
+          JSON.stringify({
+            s2: profile.s2,
+            s3: profile.s3,
+          }),
+        );
+      assert.equal(signatures.length, 15);
+      assert.equal(new Set(signatures).size, signatures.length);
+    }
+  });
+
+  it("keeps S1 offensive, varies later kits, and represents every planned mechanic", () => {
+    const allSkills = MONSTERS.flatMap((monster) => monster.skills);
+    for (const monster of MONSTERS) {
+      const [s1, s2, s3] = monster.skills;
+      assert.ok(s1.effects.some((effect) => effect.kind === "damage"));
+      assert.ok(s1.effects.some((effect) => effect.kind !== "damage"));
+      assert.equal(s1.cooldown, 0);
+      assert.ok(s2.cooldown >= 2 && s2.cooldown <= 6);
+      assert.ok(s3.cooldown >= 2 && s3.cooldown <= 6);
+    }
+    const damageShare =
+      allSkills.filter((skill) =>
+        skill.effects.some((effect) => effect.kind === "damage"),
+      ).length / allSkills.length;
+    assert.ok(damageShare <= 0.7, `damage skill share ${damageShare}`);
+
+    const represented = new Set(
+      allSkills.flatMap((skill) => skill.effects.map((effect) => effect.kind)),
+    );
+    for (const kind of [
+      "heal",
+      "buff",
+      "debuff",
+      "dot",
+      "strip",
+      "cleanse",
+      "cc",
+      "hot",
+      "heal_block",
+      "silence",
+      "atb",
+      "revive",
+      "cooldown",
+      "damage_share",
+      "reflect",
+      "provoke",
+      "immunity",
+    ]) {
+      assert.ok(represented.has(kind), `missing effect kind ${kind}`);
+    }
+    const damageEffects = allSkills.flatMap((skill) =>
+      skill.effects.filter((effect) => effect.kind === "damage"),
+    );
+    assert.deepEqual(
+      new Set(damageEffects.map((effect) => effect.source ?? "atk")),
+      new Set(["atk", "maxHp", "def", "spd", "targetMaxHp"]),
+    );
+    assert.ok(damageEffects.some((effect) => (effect.ignoreDef ?? 0) > 0));
+  });
+
+  it("preserves natural stars, stat curves, and established damage budgets", () => {
+    assert.equal(SKILL_DMG_MUL, 3.4);
+    assert.deepEqual(
+      [1, 2, 3, 4, 5].map(
+        (stars) =>
+          new Set(
+            MONSTERS.filter((monster) => monster.naturalStars === stars).map(
+              (monster) => monster.familyId,
+            ),
+          ).size,
+      ),
+      [15, 15, 17, 17, 11],
+    );
+    assert.deepEqual(getMonster("stone_golem_fire")?.baseStats, {
+      hp: 3800,
+      atk: 110,
+      def: 250,
+      spd: 92,
+      critRate: 20,
+      critDmg: 55,
+      accuracy: 0,
+      resistance: 25,
+    });
+    assert.deepEqual(getMonster("wolf_fighter_fire")?.baseStats, {
+      hp: 3750,
+      atk: 264,
+      def: 180,
+      spd: 102,
+      critRate: 28,
+      critDmg: 65,
+      accuracy: 0,
+      resistance: 15,
+    });
+    assert.deepEqual(getMonster("absolute_captor_wind")?.baseStats, {
+      hp: 5300,
+      atk: 290,
+      def: 240,
+      spd: 119,
+      critRate: 25,
+      critDmg: 55,
+      accuracy: 8,
+      resistance: 15,
+    });
+
+    const bases: Record<string, readonly [number, number?, number?]> = {
+      attacker: [1.15, 1.7, 1.2],
+      support: [0.9],
+      tank: [0.95, 1.2],
+      debuffer: [1, 1.35, 1.05],
+      stonesage: [1, 1.25, 1.1],
+      capturer: [1.1, 1.5, 1.6],
+    };
+    const expectedCoeff = (stars: number, base: number) =>
+      Math.round((base + (stars - 3) * 0.08) * SKILL_DMG_MUL * 100) / 100;
+    for (const monster of MONSTERS) {
+      for (const [slot, skill] of monster.skills.entries()) {
+        const damage = skill.effects.find((effect) => effect.kind === "damage");
+        if (!damage || damage.kind !== "damage") continue;
+        let base = bases[monster.balanceArchetype]![slot];
+        if (
+          slot === 2 &&
+          monster.balanceArchetype === "attacker" &&
+          (monster.element === "water" || monster.element === "dark")
+        ) {
+          base = 1.85;
+        }
+        assert.ok(base !== undefined, `${monster.id} gained a new damage budget`);
+        assert.equal(
+          damage.coeff,
+          expectedCoeff(monster.naturalStars, base),
+          `${monster.id} changed its legacy S${slot + 1} coefficient`,
+        );
+      }
+    }
+  });
+
   it("assigns unique visual identities to every runtime skill", () => {
     const monsterVfxIds = MONSTERS.flatMap((m) =>
       m.skills.map((skill) => skill.vfxId),
     );
-    assert.equal(monsterVfxIds.length, 750);
-    assert.equal(new Set(monsterVfxIds).size, 750);
+    assert.equal(monsterVfxIds.length, 1125);
+    assert.equal(new Set(monsterVfxIds).size, 1125);
 
     const summonerVfxIds = Object.values(
       ["fire", "water", "wind", "light", "dark"] as const,
@@ -163,10 +353,10 @@ describe("phase1 data", () => {
     assert.notEqual(impFire.skills[1]!.nameKo, impWater.skills[1]!.nameKo);
     assert.notEqual(impFire.skills[2]!.descKo, impWater.skills[2]!.descKo);
     assert.notEqual(impFire.skills[1]!.nameKo, lizardFire.skills[1]!.nameKo);
-    assert.equal(
+    assert.notEqual(
       impFire.skills[1]!.descKo,
       lizardFire.skills[1]!.descKo,
-      "same role+element share action-only desc",
+      "same-role families keep distinct mechanics",
     );
   });
 
@@ -187,6 +377,31 @@ describe("phase1 data", () => {
     const s1 = attacker.skills[0]!.effects.find((e) => e.kind === "damage");
     assert.ok(s1 && s1.kind === "damage");
     assert.ok(s1.coeff >= 3.4 && s1.coeff <= 4.2);
+  });
+
+  it("keeps S1 ATK% identical across natural stars (SW-style)", () => {
+    const coeffs = [1, 2, 3, 4, 5].map((stars) => {
+      const m = MONSTERS.find(
+        (x) => x.naturalStars === stars && x.role === "attacker",
+      );
+      assert.ok(m, `missing attacker nat ${stars}`);
+      const s1 = m.skills[0]!.effects.find((e) => e.kind === "damage");
+      assert.ok(s1 && s1.kind === "damage");
+      return s1.coeff;
+    });
+    assert.ok(coeffs.every((c) => c === coeffs[0]));
+    assert.equal(coeffs[0], 3.7);
+  });
+
+  it("gives natural 5★ a clear base ATK edge over natural 1★", () => {
+    const n1 = MONSTERS.find(
+      (m) => m.naturalStars === 1 && m.role === "attacker",
+    )!;
+    const n5 = MONSTERS.find(
+      (m) => m.naturalStars === 5 && m.role === "attacker",
+    )!;
+    assert.ok(n5.baseStats.atk / n1.baseStats.atk >= 1.8);
+    assert.ok(n5.baseStats.hp / n1.baseStats.hp >= 1.8);
   });
 
   it("chapter1 boards progress 5 → 7", () => {
@@ -270,15 +485,38 @@ describe("phase1 data", () => {
     }
   });
 
-  it("has Cairos giant/dragon/necro B1–B10 with set pools", () => {
-    assert.equal(CAIROS_GIANT_STAGES.length, 10);
-    assert.equal(CAIROS_DRAGON_STAGES.length, 10);
-    assert.equal(CAIROS_NECRO_STAGES.length, 10);
-    assert.equal(DEPTH_STAGES.length, 30);
+  it("uses explicit modern scenario difficulty profiles", () => {
+    for (const stage of MAIN_QUEST_STAGES) {
+      assert.equal(stage.waves, 3);
+      assert.ok(stage.balanceProfile?.startsWith("sw-modern-scenario-"));
+      const normal = stage.difficultyBalance?.normal;
+      const hard = stage.difficultyBalance?.hard;
+      const hell = stage.difficultyBalance?.hell;
+      assert.ok(normal && hard && hell);
+      assert.equal(normal.energyCost, stage.stage === 7 ? 4 : 3);
+      assert.equal(hard.energyCost, stage.stage === 7 ? 5 : 4);
+      assert.equal(hell.energyCost, stage.stage === 7 ? 6 : 5);
+      assert.ok(normal.enemyLevel < hard.enemyLevel);
+      assert.ok(hard.enemyLevel <= hell.enemyLevel);
+      assert.ok(normal.monsterExpPool > 0);
+      assert.ok(hell.monsterExpPool >= hard.monsterExpPool);
+    }
+  });
+
+  it("has modern Cairos B1–B10 plus Abyss Normal/Hard with set pools", () => {
+    assert.equal(CAIROS_GIANT_STAGES.length, 12);
+    assert.equal(CAIROS_DRAGON_STAGES.length, 12);
+    assert.equal(CAIROS_NECRO_STAGES.length, 12);
+    assert.equal(DEPTH_STAGES.length, 36);
     assert.ok(CAIROS_GIANT_STAGES[0]!.dropSetPool?.includes("myosu"));
     assert.ok(CAIROS_DRAGON_STAGES[0]!.dropSetPool?.includes("gyeongno"));
     assert.ok(CAIROS_NECRO_STAGES[0]!.dropSetPool?.includes("chimtu"));
     assert.ok(getStage("giant_b10")?.starWeights?.length);
+    assert.equal(getStage("giant_abyss_normal")?.cairosTier, "abyss_normal");
+    assert.equal(getStage("giant_abyss_hard")?.cairosTier, "abyss_hard");
+    assert.ok(
+      getStage("giant_abyss_hard")?.dropSetPool?.includes("muhyeong"),
+    );
   });
 
   it("builds five B1-B10 awakening boss dungeons with weekday rotation", () => {
@@ -294,7 +532,7 @@ describe("phase1 data", () => {
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       );
       for (const stage of floors) {
-        assert.equal(stage.enemyWaves?.length, stage.stage >= 8 ? 3 : 2);
+        assert.equal(stage.enemyWaves?.length, 4);
         assert.equal(stage.enemyWaves?.at(-1)?.[0], stage.bossMonsterId);
         assert.equal(stage.bossArtId, `awaken-${element}`);
         assert.ok(stage.awakenEssenceDrops?.length);
@@ -322,14 +560,46 @@ describe("phase1 data", () => {
     }
   });
 
-  it("builds every Giant floor as a guaranteed final-wave boss encounter", () => {
+  it("defines independent Normal and Hard tower ladders", () => {
+    assert.equal(CHALLENGE_TOWER_NORMAL_STAGES.length, 100);
+    assert.equal(CHALLENGE_TOWER_HARD_STAGES.length, 100);
+    assert.equal(CHALLENGE_TOWER_NORMAL_STAGES[0]!.id, "toa_f1");
+    assert.equal(CHALLENGE_TOWER_HARD_STAGES[0]!.id, "toa_hard_f1");
+    for (const stage of [
+      ...CHALLENGE_TOWER_NORMAL_STAGES,
+      ...CHALLENGE_TOWER_HARD_STAGES,
+    ]) {
+      assert.equal(stage.waves, 3);
+      assert.ok(stage.energyCost >= 3 && stage.energyCost <= 8);
+      assert.ok(stage.balanceProfile);
+      assert.ok(stage.rewardTable);
+    }
+  });
+
+  it("gives custom reward modes explicit non-synthetic balance fields", () => {
+    for (const stage of [
+      ...EQUIP_STAGES,
+      getStage("trial_b1")!,
+      getStage("trial_b2")!,
+      getStage("trial_b3")!,
+      getStage("guild_raid_boss")!,
+    ]) {
+      assert.equal(typeof stage.enemyLevel, "number");
+      assert.equal(typeof stage.accountExpReward, "number");
+      assert.equal(typeof stage.monsterExpPool, "number");
+      assert.ok(stage.balanceProfile);
+      assert.ok(stage.rewardTable);
+    }
+  });
+
+  it("builds every Giant floor as a four-wave final boss encounter", () => {
     for (const stage of CAIROS_GIANT_STAGES) {
-      assert.equal(stage.dropChance, 1);
+      assert.equal(stage.waves, 4);
       assert.equal(stage.enemyWaves?.length, stage.waves);
       assert.equal(stage.enemyWaves?.at(-1)?.[0], stage.bossMonsterId);
       assert.equal(stage.bossMonsterId, "stone_golem_dark");
       assert.equal(stage.bossArtId, "cairos-giant");
-      assert.ok((stage.bossHpMultiplier ?? 0) > 2);
+      assert.ok((stage.bossHpMultiplier ?? 0) >= 2);
       assert.ok(
         stage.qualityWeights?.every(
           ({ value }) => value === "rare" || value === "epic" || value === "legend",
@@ -639,6 +909,47 @@ describe("phase1 data", () => {
     assert.ok(gearEnhanceStepMul(0) < gearEnhanceStepMul(14));
   });
 
+  it("prices symbol and gear enhance as meaningful gold sinks", () => {
+    assert.equal(symbolEnhanceManaCost(0), 150);
+    assert.equal(symbolEnhanceManaCost(8), 830);
+    assert.equal(symbolEnhanceManaCost(14), 1760);
+    assert.equal(SYMBOL_GRIND_MANA_COST, 400);
+    assert.equal(gearEnhanceManaCost(0), 250);
+    assert.equal(gearEnhanceManaCost(8), 1450);
+    assert.equal(gearEnhanceManaCost(14), 2950);
+    assert.equal(gearEnhanceCrystalCost(11), 0);
+    assert.equal(gearEnhanceCrystalCost(12), 2);
+    assert.equal(gearEnhanceCrystalCost(13), 4);
+    assert.equal(gearEnhanceCrystalCost(14), 6);
+    assert.equal(GEAR_SET_AFFIX_MANA, 450);
+    let symbolTotal = 0;
+    let gearTotal = 0;
+    let crystalTotal = 0;
+    for (let e = 0; e < MAX_GEAR_ENHANCE; e++) {
+      symbolTotal += symbolEnhanceManaCost(e);
+      gearTotal += gearEnhanceManaCost(e);
+      crystalTotal += gearEnhanceCrystalCost(e);
+    }
+    assert.equal(symbolTotal, 12645);
+    assert.equal(gearTotal, 21600);
+    assert.equal(crystalTotal, 12);
+  });
+
+  it("refunds partial crystal on high-enhance gear sell", () => {
+    const piece = normalizeGearPiece({
+      id: "t_sell",
+      slot: "top",
+      nameKo: "t",
+      enhance: 15,
+      setId: "guardian",
+      stars: 3,
+      quality: "rare",
+      materialId: "plate",
+    });
+    assert.equal(gearSellCrystal(piece), 6);
+    assert.ok(gearSellMana(piece) >= 100 + 15 * 85);
+  });
+
   it("reapplies enhance bonuses when normalizing gear", () => {
     let piece = normalizeGearPiece({
       id: "t_norm_enh",
@@ -754,6 +1065,19 @@ describe("phase1 data", () => {
     assert.equal(prog[0]!.effectKo, "체력 +15%");
   });
 
+  it("uses an Intangible symbol to fill one missing equipped set piece", () => {
+    const violent = [1, 2, 3].map((slot) =>
+      createSymbol("gyeongno", slot as 1 | 2 | 3, `v${slot}`),
+    );
+    const intangible = createSymbol("muhyeong", 4, "intangible");
+    const counts = effectiveSymbolSetCounts([...violent, intangible]);
+    assert.equal(counts.gyeongno, 4);
+    assert.equal(symbolCombatMods([...violent, intangible]).violentChance, 22);
+    const progress = summarizeSymbolSets([...violent, intangible]);
+    assert.equal(progress.find((set) => set.setId === "gyeongno")?.active, true);
+    assert.equal(progress.find((set) => set.setId === "muhyeong")?.active, false);
+  });
+
   it("doubles 2-set bonuses at 4 pieces (hwalro +30% hp)", () => {
     const base = {
       hp: 1000,
@@ -802,7 +1126,7 @@ describe("phase1 data", () => {
     }));
     const mods = symbolCombatMods(fourBogang);
     assert.equal(mods.startShieldPct, 0.3);
-    assert.equal(summarizeSymbolSets(fourBogang)[0]!.effectKo, "아군 실드 3턴(체력의 30%)");
+    assert.equal(summarizeSymbolSets(fourBogang)[0]!.effectKo, "착용자 실드 3턴(체력의 30%)");
   });
 
   it("applies SW set bonuses (mussang/chimtu/jipjung)", () => {
@@ -976,21 +1300,24 @@ describe("phase1 data", () => {
     assert.ok(drop.stars >= 1 && drop.stars <= 3);
   });
 
-  it("aligns scenario and Cairos drops to SW-like tables (slightly better)", () => {
+  it("caps scenario symbols at ★3 and starts Cairos from ★3 upward by floor", () => {
     const normal = scenarioSymbolDropTable("normal", 1);
     const hard = scenarioSymbolDropTable("hard", 1);
     const hell = scenarioSymbolDropTable("hell", 7);
     assert.ok(normal.dropChance >= 0.4 && normal.dropChance < 0.5);
-    assert.ok(hard.starWeights.every((r) => r.value >= 2 && r.value <= 4));
-    assert.ok(hell.starWeights.some((r) => r.value === 5));
+    for (const table of [normal, hard, hell]) {
+      assert.ok(table.starWeights.every((r) => r.value >= 1 && r.value <= 3));
+      assert.ok(table.starWeights.some((r) => r.value === 3));
+    }
     assert.ok(hell.qualityWeights.some((r) => r.value === "legend"));
 
     const b1 = getStage("giant_b1")!;
+    const b5 = getStage("giant_b5")!;
     const b10 = getStage("giant_b10")!;
+    assert.ok(b1.starWeights!.every((r) => r.value >= 3));
     assert.ok(b1.starWeights!.every((r) => r.value <= 4));
-    const b10Five = b10.starWeights!.find((r) => r.value === 5)!.w;
-    const b10Six = b10.starWeights!.find((r) => r.value === 6)!.w;
-    assert.ok(b10Five > b10Six, "B10 should still be mostly ★5 like SW");
+    assert.ok(b5.starWeights!.some((r) => r.value === 6));
+    assert.deepEqual(b10.starWeights, [{ value: 6, w: 100 }]);
     assert.ok(b10.qualityWeights!.every((r) => r.value !== "normal"));
     assert.ok(
       (b10.qualityWeights!.find((r) => r.value === "rare")?.w ?? 0) >= 55,
@@ -1003,5 +1330,16 @@ describe("phase1 data", () => {
     assert.equal(magicEnhanceRequiredLevel(2), 10);
     assert.equal(magicEnhanceRequiredLevel(3), 15);
     assert.equal(magicEnhanceRequiredLevel(4), 20);
+  });
+
+  it("scales magic enhance costs, essence, and success rate", () => {
+    assert.equal(magicEnhanceManaCost(0), 500);
+    assert.equal(magicEnhanceManaCost(1), 950);
+    assert.equal(magicEnhanceCrystalCost(0), 0);
+    assert.equal(magicEnhanceCrystalCost(2), 1);
+    assert.deepEqual(magicEnhanceEssenceCost(0), { low: 6, mid: 0, high: 0 });
+    assert.deepEqual(magicEnhanceEssenceCost(4), { low: 6, mid: 8, high: 2 });
+    assert.equal(magicEnhanceSuccessRate(0), 1);
+    assert.equal(magicEnhanceSuccessRate(4), 0.4);
   });
 });

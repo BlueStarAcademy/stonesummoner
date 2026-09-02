@@ -42,7 +42,7 @@
 Premium stylized 2.5D mobile RPG heavy armored knight tank,
 massive dark spiked plate armor angular helm, oversized spiked morning-star mace,
 tattered waist cloth, wide grounded stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, clean white plate,
+eye-level front three-quarter, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eye slits armor cracks and mace aura only,
 no global recolor, no text, no cropped mace or feet
 ```

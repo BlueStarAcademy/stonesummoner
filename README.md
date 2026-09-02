@@ -10,7 +10,9 @@
 ```bash
 npm install
 npm run build && npm start   # PWA+API http://localhost:8080
-# 개발 시 (터미널 2개):
+# 개발 시 (한 터미널):
+npm run dev:all              # API :8080 + Vite :5173 (/api 프록시)
+# 또는 터미널 2개:
 npm run api -w stonesummoner-web   # API :8080 (메모리 DB 또는 DATABASE_URL)
 npm run dev                        # Vite :5173 → /api 프록시
 npm run cli:demo                   # 홈→출정→전투→보상 루프
@@ -61,6 +63,22 @@ npm test
    - Healthcheck: `/` · API: `/api/health` → `{ ok, db }`
 5. Public URL로 PWA 접속 · 「홈 화면에 추가」
 
+### main 푸시 → 자동 배포
+
+푸시할 때마다 바로 배포되게 하려면 Railway 서비스에서 아래를 맞춥니다.
+
+1. **Settings → Source**에서 리포 `BlueStarAcademy/stonesummoner` 연결
+2. **Trigger branch** = `main`
+3. **Autodeploy** = **ON** (꺼져 있으면 푸시해도 배포가 안 됨)
+4. **Wait for CI** = **OFF** (켜 두면 GitHub Actions가 끝날 때까지 대기 → “바로” 배포가 아님)
+5. Watch Paths가 비어 있거나 `railway.toml`의 `watchPatterns`와 맞게 — 앱 코드 변경이 스킵되지 않게
+
+백업(Autodeploy 웹훅이 깨졌을 때):
+
+1. Railway → 해당 서비스 → **Settings → Deploy Hooks** → 훅 생성
+2. GitHub 리포 **Settings → Secrets → Actions**에 `RAILWAY_DEPLOY_HOOK` = 훅 URL
+3. `main` 푸시 시 [`.github/workflows/deploy-railway.yml`](.github/workflows/deploy-railway.yml)이 훅을 POST해 재배포를 강제한다
+
 | 환경 변수 | 설명 |
 |-----------|------|
 | `PORT` | Railway 자동 주입 |
@@ -78,6 +96,8 @@ npm test
 
 프로덕션 빌드에 Service Worker + Web Manifest가 포함됩니다 (`vite-plugin-pwa`).  
 HTTPS(Railway 기본)에서 설치·오프라인 캐시가 동작합니다.
+
+`sw.js`와 `index.html`은 `Cache-Control: no-cache`로 내려가, 배포 후 설치된 PWA가 새 클라이언트를 받을 수 있습니다. 이미 열린 PWA는 다시 포그라운드로 올 때 서비스 워커를 갱신하고 새로고침합니다. 그래도 이전이면 앱을 완전히 종료한 뒤 다시 여세요.
 
 ## Google Play (Android)
 

@@ -46,6 +46,6 @@ Premium stylized 2.5D mobile RPG forest elf druid support,
 youthful slim body not chibi, pointed ears, leaf vine armor and layered leaf skirt,
 twin short vine wands with elemental glow, bare feet, white lotus flowers in hair,
 high-end hand-painted dark fantasy, eye-level front three-quarter, grounded stance,
-clean white plate, element accents in gem wands and motes only,
+transparent alpha background or solid magenta #FF00FF plate, element accents in gem wands and motes only,
 no global recolor, no text, no cropped wands or feet
 ```

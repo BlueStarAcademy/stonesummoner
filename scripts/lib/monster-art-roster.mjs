@@ -15,9 +15,15 @@ export const FAMILY_IDS = [
   "angel_healer", "demon_hexer", "rune_scholar", "golden_guardian", "shadow_assassin",
   "holy_judge", "abyss_priest", "wyrm_rider", "capture_lord", "dragon_knight",
   "primordial_hierophant", "doom_oracle", "sky_warden", "eternal_healer", "absolute_captor",
+  // Status-ailment showcase (25)
+  "ember_wisp", "toxin_mite", "ward_totem", "rime_dart", "purify_finch",
+  "blaze_hound", "plague_toad", "iron_ward", "mute_owl", "cleanse_monk",
+  "spark_raptor", "fang_hydra", "aegis_scarab", "slumber_moth", "sanctum_dove",
+  "inferno_colossus", "venom_tyrant", "glacier_bastion", "hex_mute", "purify_hierophant",
+  "flame_slaughter", "poison_overlord", "absolute_frost", "curse_catalyst", "sanctuary_oracle",
 ];
 
-/** All 250 monster art keys (family × element). */
+/** All 375 monster art keys (family × element). */
 export const MONSTER_ART_KEYS = FAMILY_IDS.flatMap((familyId) =>
   ELEMENTS.map((el) => `${familyId}_${el}`),
 );

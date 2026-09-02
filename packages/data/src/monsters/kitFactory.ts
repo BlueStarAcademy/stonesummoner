@@ -1,24 +1,38 @@
 import { SKILL_DMG_MUL } from "../combatTune.js";
-import type { SkillDef } from "../skills.js";
-import type { Element, ElementKit, FamilyRosterEntry, MonsterRole } from "./types.js";
+import type { SkillDef, SkillEffect, StatModAxis } from "../skills.js";
+import type {
+  BalanceArchetype,
+  Element,
+  ElementKit,
+  FamilyRosterEntry,
+  MonsterRole,
+} from "./types.js";
 import { basicStrike, dmg, ELEMENTS } from "./types.js";
 import {
   EL_PREFIX,
-  familySkillDescKo,
   familySkillName,
   familySkillVfx,
   familyStemsFor,
 } from "./familySkillCatalog.js";
+import {
+  familyKitProfile,
+  type FamilySkillProfile,
+  type KitMechanic,
+} from "./familyKitProfiles.js";
 import { skillDescForName } from "./skillDescKo.js";
 import { monsterSkillVfxId } from "../skillVisuals.js";
 
-function scale(stars: number, base: number): number {
-  return Math.round((base + (stars - 3) * 0.08) * 100) / 100;
+/**
+ * Summoners War–style ATK% coefficient (3.7 = 370%).
+ * Natural stars do **not** inflate skill % — star power comes from base stats.
+ */
+function dmgCoeff(_stars: number, atkPct: number): number {
+  return Math.round(atkPct * 100) / 100;
 }
 
-/** Damage coefficients only — heals/shields stay HP-relative. */
-function dmgCoeff(stars: number, base: number): number {
-  return Math.round(scale(stars, base) * SKILL_DMG_MUL * 100) / 100;
+/** Mild utility scale (heal/shield/mana) — keeps high-nat supports slightly stronger. */
+function utilScale(stars: number, base: number, perStar = 0.02): number {
+  return Math.round((base + (stars - 3) * perStar) * 100) / 100;
 }
 
 function autoDesc(sk: SkillDef, el: Element): SkillDef {
@@ -37,7 +51,7 @@ function atkMelee(el: Element): boolean {
   return el === "fire" || el === "wind";
 }
 
-function s1Suffix(role: MonsterRole): string {
+function s1Suffix(role: BalanceArchetype): string {
   switch (role) {
     case "attacker":
       return "타격";
@@ -54,19 +68,19 @@ function s1Suffix(role: MonsterRole): string {
   }
 }
 
-function buildS1(role: MonsterRole, el: Element, stars: number): SkillDef {
+function buildS1(role: BalanceArchetype, el: Element, stars: number): SkillDef {
   const p = EL_PREFIX[el];
   const suffix = s1Suffix(role);
   const coeff =
     role === "attacker"
-      ? dmgCoeff(stars, 1.15)
+      ? dmgCoeff(stars, 3.7)
       : role === "support"
-        ? dmgCoeff(stars, 0.9)
+        ? dmgCoeff(stars, 3.0)
         : role === "tank"
-          ? dmgCoeff(stars, 0.95)
+          ? dmgCoeff(stars, 3.2)
           : role === "capturer"
-            ? dmgCoeff(stars, 1.1)
-            : dmgCoeff(stars, 1.0);
+            ? dmgCoeff(stars, 3.8)
+            : dmgCoeff(stars, 3.4);
   const vfx =
     role === "capturer"
       ? skillVfx(autoDesc(basicStrike(`${p.s1}${suffix}`, coeff), el), "bolt", true)
@@ -76,7 +90,7 @@ function buildS1(role: MonsterRole, el: Element, stars: number): SkillDef {
   return vfx;
 }
 
-function kitsForRole(stars: number, role: MonsterRole): Record<Element, ElementKit> {
+function kitsForRole(stars: number, role: BalanceArchetype): Record<Element, ElementKit> {
   switch (role) {
     case "attacker":
       return attackerKits(stars);
@@ -93,9 +107,241 @@ function kitsForRole(stars: number, role: MonsterRole): Record<Element, ElementK
   }
 }
 
-/** Per-family kits: S1 = role basic attack; S2/S3 = family-unique per element. */
+function alliedTarget(stars: number): "ally_lowest" | "all_allies" {
+  return stars >= 4 ? "all_allies" : "ally_lowest";
+}
+
+function enemyTarget(
+  stars: number,
+  element: Element,
+): "single" | "all_enemies" {
+  return stars >= 4 && (element === "fire" || element === "dark")
+    ? "all_enemies"
+    : "single";
+}
+
+function elementAxis(element: Element): StatModAxis {
+  return {
+    fire: "atk",
+    water: "def",
+    wind: "spd",
+    light: "accuracy",
+    dark: "critRate",
+  }[element] as StatModAxis;
+}
+
+function mechanicEffects(
+  mechanic: KitMechanic,
+  role: MonsterRole,
+  element: Element,
+  stars: number,
+  light = false,
+): SkillEffect[] {
+  const ally = light ? "self" : alliedTarget(stars);
+  const enemy = enemyTarget(stars, element);
+  const turns = light ? 1 : stars >= 5 ? 3 : 2;
+  const chance = light ? 0.2 : stars >= 4 ? 0.75 : 0.6;
+  switch (mechanic) {
+    case "heal":
+      return [{ kind: "heal", target: ally, coeff: light ? 0.04 : 0.12 + stars * 0.015 }];
+    case "buff":
+      return [{ kind: "buff", target: ally === "self" ? "self" : "all_allies", axis: elementAxis(element), amount: light ? 0.08 : 0.2, turns }];
+    case "debuff":
+      return [{ kind: "debuff", target: enemy, axis: elementAxis(element), amount: light ? 0.08 : 0.2, turns }];
+    case "dot":
+      return [{ kind: "dot", target: enemy, coeff: light ? 0.06 : 0.12, turns }];
+    case "strip":
+      return [{ kind: "strip", target: enemy, count: light ? 1 : stars >= 5 ? 2 : 1 }];
+    case "cleanse":
+      return [{ kind: "cleanse", target: ally === "self" ? "self" : "all_allies", count: light ? 1 : stars >= 5 ? 2 : 1 }];
+    case "cc":
+      return [{ kind: "cc", target: enemy, cc: element === "water" ? "freeze" : element === "wind" ? "sleep" : "stun", turns: 1, chance }];
+    case "hot":
+      return [{ kind: "hot", target: ally, coeff: light ? 0.025 : 0.07 + stars * 0.005, turns }];
+    case "heal_block":
+      return [{ kind: "heal_block", target: enemy, turns, chance }];
+    case "silence":
+      return [{ kind: "silence", target: enemy, turns: light ? 1 : 2, chance }];
+    case "atb_gain":
+      return [{ kind: "atb", target: ally, amount: light ? 6 : 18 + stars }];
+    case "atb_drain":
+      return [{ kind: "atb", target: enemy, amount: light ? -5 : -18 - stars }];
+    case "revive":
+      return [{ kind: "revive", target: "ally_lowest", hpFraction: 0.2 + stars * 0.04 }];
+    case "cooldown_down":
+      return [{ kind: "cooldown", target: ally, direction: "decrease", amount: stars >= 5 ? 2 : 1 }];
+    case "cooldown_up":
+      return [{ kind: "cooldown", target: enemy, direction: "increase", amount: stars >= 5 ? 2 : 1 }];
+    case "damage_share":
+      return [{ kind: "damage_share", target: ally, fraction: light ? 0.08 : 0.2 + stars * 0.02, turns }];
+    case "reflect":
+      return [{ kind: "reflect", target: ally === "self" ? "self" : "all_allies", fraction: light ? 0.08 : 0.18 + stars * 0.02, turns }];
+    case "provoke":
+      return [{ kind: "provoke", target: "single", turns: 1, chance }];
+    case "shield":
+      return [{ kind: "shield", target: ally === "self" ? "self" : "all_allies", coeff: light ? 0.04 : 0.12 + stars * 0.01 }];
+    case "mana":
+      return [{ kind: "mana", amount: light ? 2 : 8 + stars * 2 }];
+    case "burn":
+      return [{
+        kind: "dot",
+        target: enemy,
+        coeff: light ? 0.06 : 0.12,
+        turns,
+        dotKind: "burn",
+        chance,
+      }];
+    case "poison":
+      return [{
+        kind: "dot",
+        target: enemy,
+        coeff: light ? 0.03 : 0.05 + stars * 0.005,
+        turns,
+        dotKind: "poison",
+        chance,
+      }];
+    case "multi_hit":
+      return [];
+    case "immunity":
+      return [{
+        kind: "immunity",
+        target: ally === "self" ? "self" : "all_allies",
+        turns,
+        ...(stars >= 4 ? {} : { kinds: ["burn", "poison"] as const }),
+      }];
+  }
+}
+
+
+function hitsForMechanic(mechanic: KitMechanic, stars: number): number | undefined {
+  if (mechanic === "multi_hit") {
+    return stars >= 5 ? 5 : stars >= 3 ? 4 : 3;
+  }
+  if (mechanic === "burn" || mechanic === "poison") {
+    return stars >= 4 ? 3 : 2;
+  }
+  return undefined;
+}
+
+function withDamageHits(
+  effects: SkillEffect[],
+  mechanic: KitMechanic,
+  stars: number,
+): SkillEffect[] {
+  const hits = hitsForMechanic(mechanic, stars);
+  if (!hits) return effects;
+  return effects.map((effect) =>
+    effect.kind === "damage" ? { ...effect, hits } : effect,
+  );
+}
+
+const EFFECT_DESC: Record<SkillEffect["kind"], string> = {
+  damage: "피해를 입힙니다",
+  heal: "체력을 회복합니다",
+  hot: "지속 회복을 부여합니다",
+  shield: "실드를 부여합니다",
+  mana: "마나를 얻습니다",
+  buff: "능력치를 높입니다",
+  debuff: "능력치를 낮춥니다",
+  dot: "지속 피해를 부여합니다",
+  cc: "행동을 방해합니다",
+  strip: "강화 효과를 제거합니다",
+  cleanse: "약화 효과를 해제합니다",
+  heal_block: "회복을 막습니다",
+  silence: "스킬 사용을 봉인합니다",
+  atb: "공격 게이지를 조정합니다",
+  revive: "쓰러진 아군을 되살립니다",
+  cooldown: "스킬 재사용 대기시간을 조정합니다",
+  damage_share: "받는 피해를 나눕니다",
+  reflect: "받은 피해를 반사합니다",
+  provoke: "적을 도발합니다",
+  immunity: "상태이상 면역을 부여합니다",
+};
+
+function effectsDesc(
+  effects: readonly SkillEffect[],
+  element: Element,
+): string {
+  const elementName = {
+    fire: "불",
+    water: "물",
+    wind: "바람",
+    light: "빛",
+    dark: "어둠",
+  }[element];
+  return `${elementName}의 힘으로 ` +
+    effects.map((effect) => EFFECT_DESC[effect.kind]).join(" 그리고 ") +
+    ".";
+}
+
+function damageEffect(
+  base: SkillDef,
+  entry: FamilyRosterEntry,
+  element: Element,
+): SkillEffect | undefined {
+  const original = base.effects.find(
+    (effect): effect is Extract<SkillEffect, { kind: "damage" }> =>
+      effect.kind === "damage",
+  );
+  if (!original) return undefined;
+  const source =
+    entry.familyId === "doom_oracle" || entry.familyId === "absolute_captor"
+      ? "targetMaxHp"
+      : entry.role === "hp"
+        ? "maxHp"
+        : entry.role === "defense"
+          ? "def"
+          : entry.role === "speed"
+            ? "spd"
+            : "atk";
+  const sourceFactor =
+    source === "maxHp"
+      ? 0.06
+      : source === "targetMaxHp"
+        ? 0.04
+        : source === "spd"
+          ? 3
+          : 1;
+  return {
+    ...original,
+    source,
+    sourceFactor,
+    ...(entry.role === "attacker" && element === "dark"
+      ? { ignoreDef: 0.2 }
+      : {}),
+  };
+}
+
+function buildProfileSkill(
+  slot: "s2" | "s3",
+  base: SkillDef,
+  profile: FamilySkillProfile,
+  entry: FamilyRosterEntry,
+  element: Element,
+  nameKo: string,
+): SkillDef {
+  const damage = profile.damage ? damageEffect(base, entry, element) : undefined;
+  const effects = withDamageHits(
+    [
+      ...(damage ? [damage] : []),
+      ...mechanicEffects(profile.mechanic, entry.role, element, entry.naturalStars),
+    ],
+    profile.mechanic,
+    entry.naturalStars,
+  );
+  return {
+    id: slot,
+    nameKo,
+    descKo: effectsDesc(effects, element),
+    cooldown: profile.cooldown,
+    effects,
+  };
+}
+
+/** Per-family kits composed from display role, family profile, and element. */
 export function kitsForFamily(entry: FamilyRosterEntry): Record<Element, ElementKit> {
-  const roleKit = kitsForRole(entry.naturalStars, entry.role);
+  const roleKit = kitsForRole(entry.naturalStars, entry.balanceArchetype);
+  const profile = familyKitProfile(entry.familyId);
   const stems = familyStemsFor(entry.familyId);
   const out = {} as Record<Element, ElementKit>;
 
@@ -103,44 +349,61 @@ export function kitsForFamily(entry: FamilyRosterEntry): Record<Element, Element
     const base = roleKit[el];
     const s2Base = base.skills[1];
     const s3Base = base.skills[2];
-    const s2Vfx = familySkillVfx(entry.role, "s2", el);
-    const s3Vfx = familySkillVfx(entry.role, "s3", el);
+    const s2Vfx = familySkillVfx(entry.familyIdentity, "s2", el);
+    const s3Vfx = familySkillVfx(entry.familyIdentity, "s3", el);
+    const s1Base = buildS1(entry.balanceArchetype, el, entry.naturalStars);
+    const s1Effects = withDamageHits(
+      [
+        ...s1Base.effects,
+        ...mechanicEffects(profile.s1, entry.role, el, entry.naturalStars, true),
+      ],
+      profile.s1,
+      entry.naturalStars,
+    );
 
     const skills = [
-      buildS1(entry.role, el, entry.naturalStars),
+      {
+        ...s1Base,
+        descKo: effectsDesc(s1Effects, el),
+        effects: s1Effects,
+      },
       skillVfx(
-        {
-          id: "s2",
-          nameKo: familySkillName(el, "s2", stems.s2),
-          descKo: familySkillDescKo(el, "s2", entry.role),
-          cooldown: s2Base.cooldown,
-          effects: s2Base.effects,
-        },
+        buildProfileSkill(
+          "s2",
+          s2Base,
+          profile.s2,
+          entry,
+          el,
+          familySkillName(el, "s2", stems.s2),
+        ),
         s2Vfx.vfxFamily,
         s2Vfx.orbBolt,
       ),
       skillVfx(
-        {
-          id: "s3",
-          nameKo: familySkillName(el, "s3", stems.s3),
-          descKo: familySkillDescKo(el, "s3", entry.role),
-          cooldown: s3Base.cooldown,
-          effects: s3Base.effects,
-        },
+        buildProfileSkill(
+          "s3",
+          s3Base,
+          profile.s3,
+          entry,
+          el,
+          familySkillName(el, "s3", stems.s3),
+        ),
         s3Vfx.vfxFamily,
         s3Vfx.orbBolt,
       ),
     ] as const;
+    const skillsWithVfx = skills.map((skill, index) => ({
+      ...skill,
+      vfxId: monsterSkillVfxId(
+        entry.familyId,
+        el,
+        (["s1", "s2", "s3"] as const)[index]!,
+      ),
+    })) as [SkillDef, SkillDef, SkillDef];
     out[el] = {
       ...base,
-      skills: skills.map((skill, index) => ({
-        ...skill,
-        vfxId: monsterSkillVfxId(
-          entry.familyId,
-          el,
-          (["s1", "s2", "s3"] as const)[index]!,
-        ),
-      })),
+      role: entry.role,
+      skills: skillsWithVfx,
     };
   }
   return out;
@@ -155,7 +418,7 @@ function attackerKits(stars: number): Record<Element, ElementKit> {
     const spdBias = el === "wind" ? 8 : 0;
     const melee = atkMelee(el);
     out[el] = {
-      skillCoeff: dmgCoeff(stars, 1.15),
+      skillCoeff: dmgCoeff(stars, 3.7),
       baseStats: {
         atk: atkBias || undefined,
         spd: spdBias || undefined,
@@ -164,24 +427,24 @@ function attackerKits(stars: number): Record<Element, ElementKit> {
       },
       skills: [
         skillVfx(
-          autoDesc(basicStrike(`${p.s1}타격`, dmgCoeff(stars, 1.15)), el),
+          autoDesc(basicStrike(`${p.s1}타격`, dmgCoeff(stars, 3.7)), el),
           melee ? "melee" : "bolt",
         ),
         skillVfx(
-          autoDesc(dmg(`${p.s2}일격`, 3, dmgCoeff(stars, 1.7)), el),
+          autoDesc(dmg(`${p.s2}일격`, 3, dmgCoeff(stars, 5.6)), el),
           melee ? "melee" : "bolt",
         ),
         el === "water" || el === "dark"
           ? skillVfx(
               autoDesc(
-                dmg(`${p.s3}일격`, 4, dmgCoeff(stars, 1.85), "single", "s3"),
+                dmg(`${p.s3}일격`, 4, dmgCoeff(stars, 7.2), "single", "s3"),
                 el,
               ),
               "bolt",
             )
           : skillVfx(
               autoDesc(
-                dmg(`${p.s3}난무`, 4, dmgCoeff(stars, 1.2), "all_enemies", "s3"),
+                dmg(`${p.s3}난무`, 4, dmgCoeff(stars, 4.0), "all_enemies", "s3"),
                 el,
               ),
               "nova",
@@ -196,16 +459,16 @@ function supportKits(stars: number): Record<Element, ElementKit> {
   const out = {} as Record<Element, ElementKit>;
   for (const el of ELEMENTS) {
     const p = EL_PREFIX[el];
-    const heal = scale(stars, 0.26);
+    const heal = utilScale(stars, 0.25);
     out[el] = {
-      skillCoeff: dmgCoeff(stars, 0.9),
+      skillCoeff: dmgCoeff(stars, 3.0),
       baseStats: {
         hp: el === "water" || el === "light" ? 200 : undefined,
         spd: el === "wind" ? 6 : undefined,
       },
       skills: [
         skillVfx(
-          autoDesc(basicStrike(`${p.s1}탄`, dmgCoeff(stars, 0.9)), el),
+          autoDesc(basicStrike(`${p.s1}탄`, dmgCoeff(stars, 3.0)), el),
           "bolt",
         ),
         skillVfx(
@@ -251,12 +514,11 @@ function tankKits(stars: number): Record<Element, ElementKit> {
   for (const el of ELEMENTS) {
     const p = EL_PREFIX[el];
     out[el] = {
-      skillCoeff: dmgCoeff(stars, 0.95),
-      role: "tank",
+      skillCoeff: dmgCoeff(stars, 3.2),
       baseStats: { def: el === "light" ? 40 : 20, hp: el === "water" ? 250 : 100 },
       skills: [
         skillVfx(
-          autoDesc(basicStrike(`${p.s1}강타`, dmgCoeff(stars, 0.95)), el),
+          autoDesc(basicStrike(`${p.s1}강타`, dmgCoeff(stars, 3.2)), el),
           "melee",
         ),
         skillVfx(
@@ -266,7 +528,7 @@ function tankKits(stars: number): Record<Element, ElementKit> {
               nameKo: `${p.s2}도발`,
               cooldown: 3,
               effects: [
-                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.2) },
+                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 4.0) },
                 { kind: "provoke", target: "single", turns: 1 },
               ],
             },
@@ -316,12 +578,11 @@ function debufferKits(stars: number): Record<Element, ElementKit> {
               ? ("accuracy" as const)
               : ("def" as const);
     out[el] = {
-      skillCoeff: dmgCoeff(stars, 1.05),
-      role: "debuffer",
+      skillCoeff: dmgCoeff(stars, 3.6),
       baseStats: { accuracy: 15 + stars * 2 },
       skills: [
         skillVfx(
-          autoDesc(basicStrike(`${p.s1}저주`, dmgCoeff(stars, 1.0)), el),
+          autoDesc(basicStrike(`${p.s1}저주`, dmgCoeff(stars, 3.4)), el),
           "bolt",
         ),
         skillVfx(
@@ -331,7 +592,7 @@ function debufferKits(stars: number): Record<Element, ElementKit> {
               nameKo: `${p.s2}약화`,
               cooldown: 3,
               effects: [
-                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.35) },
+                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 4.6) },
                 {
                   kind: "debuff",
                   target: "single",
@@ -355,7 +616,7 @@ function debufferKits(stars: number): Record<Element, ElementKit> {
                 {
                   kind: "damage",
                   target: "all_enemies",
-                  coeff: dmgCoeff(stars, 1.05),
+                  coeff: dmgCoeff(stars, 3.6),
                 },
                 {
                   kind: "debuff",
@@ -392,11 +653,10 @@ function stonesageKits(stars: number): Record<Element, ElementKit> {
   for (const el of ELEMENTS) {
     const p = EL_PREFIX[el];
     out[el] = {
-      skillCoeff: dmgCoeff(stars, 1.0),
-      role: "stonesage",
+      skillCoeff: dmgCoeff(stars, 3.4),
       skills: [
         skillVfx(
-          autoDesc(basicStrike(`${p.s1}각인`, dmgCoeff(stars, 1.0)), el),
+          autoDesc(basicStrike(`${p.s1}각인`, dmgCoeff(stars, 3.4)), el),
           "bolt",
         ),
         skillVfx(
@@ -406,7 +666,7 @@ function stonesageKits(stars: number): Record<Element, ElementKit> {
               nameKo: `${p.s2}착수`,
               cooldown: 3,
               effects: [
-                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.25) },
+                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 4.4) },
                 { kind: "mana", amount: 8 + stars * 2 },
               ],
             },
@@ -425,7 +685,7 @@ function stonesageKits(stars: number): Record<Element, ElementKit> {
                 {
                   kind: "damage",
                   target: "all_enemies",
-                  coeff: dmgCoeff(stars, 1.1),
+                  coeff: dmgCoeff(stars, 3.8),
                 },
                 { kind: "mana", amount: 12 + stars * 2 },
                 {
@@ -452,12 +712,11 @@ function capturerKits(stars: number): Record<Element, ElementKit> {
   for (const el of ELEMENTS) {
     const p = EL_PREFIX[el];
     out[el] = {
-      skillCoeff: dmgCoeff(stars, 1.1),
-      role: "capturer",
+      skillCoeff: dmgCoeff(stars, 3.8),
       baseStats: { spd: 4 + stars },
       skills: [
         skillVfx(
-          autoDesc(basicStrike(`${p.s1}포획`, dmgCoeff(stars, 1.1)), el),
+          autoDesc(basicStrike(`${p.s1}포획`, dmgCoeff(stars, 3.8)), el),
           "bolt",
           true,
         ),
@@ -468,7 +727,7 @@ function capturerKits(stars: number): Record<Element, ElementKit> {
               nameKo: `${p.s2}추적`,
               cooldown: 3,
               effects: [
-                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.5) },
+                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 5.1) },
                 { kind: "mana", amount: 10 + stars },
               ],
             },
@@ -484,7 +743,7 @@ function capturerKits(stars: number): Record<Element, ElementKit> {
               nameKo: `${p.s3}속박`,
               cooldown: 4,
               effects: [
-                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 1.6) },
+                { kind: "damage", target: "single", coeff: dmgCoeff(stars, 5.5) },
                 {
                   kind: "debuff",
                   target: "single",
@@ -508,7 +767,7 @@ function capturerKits(stars: number): Record<Element, ElementKit> {
 
 /** @deprecated Use kitsForFamily — kept for tests / internal role templates. */
 export function kitsForRoleExport(
-  role: MonsterRole,
+  role: BalanceArchetype,
   stars: number,
 ): Record<Element, ElementKit> {
   return kitsForRole(stars, role);

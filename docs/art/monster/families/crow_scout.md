@@ -48,7 +48,7 @@ Premium stylized 2.5D mobile RPG anthropomorphic raven capturer,
 black feathers sharp beak, hooded tattered cloak, leather straps and belt buckle,
 rune bracers greaves, large talons, crouched predatory stance,
 ethereal energy wisps, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded clawed feet, clean white plate,
+eye-level front three-quarter, grounded clawed feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes buckle runes and wisps only,
 no global recolor, no text, no cropped talons or feet
 ```

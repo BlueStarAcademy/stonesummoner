@@ -50,6 +50,17 @@ import {
   type SkillDef,
   type SkillEffect,
 } from "stonesummoner-data";
+import {
+  addStatus,
+  advanceUnitStatuses,
+  ensureStatuses,
+  hasStatus,
+  removeStatusKind,
+  removeStatuses,
+  statusesOf,
+  syncLegacyStatuses,
+  tickUnitStatuses,
+} from "./statuses.js";
 import type {
   BattlePhase,
   Element,
@@ -57,6 +68,7 @@ import type {
   SummonerState,
   TeamId,
   Unit,
+  BoardTeamBuff,
 } from "./types.js";
 import {
   randomVictoryPoint,
@@ -82,15 +94,29 @@ function tickSkillCooldowns(unit: Unit): void {
   unit.skillCd = unit.skillCd.map((c) => Math.max(0, c - 1));
 }
 
-/** Auto skill pick: S3→S2→S1; healers prefer heal when ally < 55% HP. */
+/** Utility AUTO: emergency recovery/control first, then highest ready skill. */
 export function pickAutoSkillIndex(unit: Unit, units: Unit[]): number {
   const skills = unit.skills;
   if (!skills?.length) return 0;
-  if ((unit.stunnedTurns ?? 0) > 0) return 0;
+  if (
+    hasStatus(unit, "stun") ||
+    hasStatus(unit, "freeze") ||
+    hasStatus(unit, "sleep") ||
+    hasStatus(unit, "silence") ||
+    hasStatus(unit, "provoke")
+  ) {
+    return 0;
+  }
   const cds = ensureSkillCd(unit);
 
   const allies = units.filter(
     (u) => u.alive && u.team === unit.team && u.kind === "monster",
+  );
+  const deadAllies = units.filter(
+    (u) => !u.alive && u.team === unit.team && u.kind === "monster",
+  );
+  const enemies = units.filter(
+    (u) => u.alive && u.team !== unit.team && u.kind === "monster",
   );
   const lowest = allies.reduce<Unit | null>((best, u) => {
     if (!best) return u;
@@ -98,16 +124,54 @@ export function pickAutoSkillIndex(unit: Unit, units: Unit[]): number {
   }, null);
   const needHeal = !!lowest && lowest.hp / lowest.stats.hp < 0.55;
 
-  if (needHeal) {
-    for (let i = 0; i < skills.length; i++) {
+  const firstReady = (predicate: (skill: SkillDef) => boolean): number => {
+    for (let i = skills.length - 1; i >= 0; i--) {
       if (cds[i]! > 0) continue;
-      if (skills[i]!.effects.some((e) => e.kind === "heal")) return i;
+      if (predicate(skills[i]!)) return i;
     }
+    return -1;
+  };
+
+  if (deadAllies.length) {
+    const revive = firstReady((skill) =>
+      skill.effects.some((effect) => effect.kind === "revive"),
+    );
+    if (revive >= 0) return revive;
+  }
+  if (needHeal) {
+    const heal = firstReady((skill) =>
+      skill.effects.some(
+        (effect) => effect.kind === "heal" || effect.kind === "hot",
+      ),
+    );
+    if (heal >= 0) return heal;
+  }
+  if (allies.some((ally) => statusesOf(ally, "debuff").length > 0)) {
+    const cleanse = firstReady((skill) =>
+      skill.effects.some((effect) => effect.kind === "cleanse"),
+    );
+    if (cleanse >= 0) return cleanse;
+  }
+  if (enemies.some((enemy) => statusesOf(enemy, "buff").length > 0)) {
+    const strip = firstReady((skill) =>
+      skill.effects.some((effect) => effect.kind === "strip"),
+    );
+    if (strip >= 0) return strip;
   }
 
-  for (let i = skills.length - 1; i >= 0; i--) {
-    if (cds[i]! <= 0) return i;
-  }
+  const useful = firstReady((skill) =>
+    skill.effects.some((effect) => {
+      if (effect.kind === "dot") {
+        return enemies.some((enemy) => !hasStatus(enemy, "dot"));
+      }
+      if (effect.kind === "silence") {
+        return enemies.some((enemy) => !hasStatus(enemy, "silence"));
+      }
+      return true;
+    }),
+  );
+  if (useful >= 0) return useful;
+
   return 0;
 }
 
@@ -136,6 +200,12 @@ export interface BattleConfig {
   modules?: BattleModules;
   /** Module E: affinity element for this battle. */
   circleElement?: Element;
+  /** Modern Cairos boss rules, independent of StoneSummoner board modules. */
+  dungeonBoss?: {
+    kind: "giant" | "dragon" | "necro";
+    unitId: string;
+    abyss: boolean;
+  };
 }
 
 export interface SkillResult {
@@ -222,13 +292,10 @@ export class Battle {
   enemySummoner: SummonerState;
   amplify = 1;
   skillAmplifyBonus = 0;
-  /**
-   * Next monster hit damage mul bonus per team (from captures: N×CAPTURE_DAMAGE_PER_STONE).
-   * Consumed on the next monster `applyHit` for that team.
-   */
-  pendingCaptureDamageBonus: Record<TeamId, number> = {
-    ally: 0,
-    enemy: 0,
+  /** Capture/item effects active until immediately before this team's next stone. */
+  boardTeamBuffs: Record<TeamId, BoardTeamBuff[]> = {
+    ally: [],
+    enemy: [],
   };
   phase: BattlePhase = "idle";
   activeUnitId: string | null = null;
@@ -244,6 +311,9 @@ export class Battle {
   victoryPoint: Point | null;
   manaSealed: boolean;
   victoryPointClaimed: boolean;
+  private readonly dungeonBoss: BattleConfig["dungeonBoss"];
+  private giantHitCounter = 0;
+  private necroBarrierHits = 0;
   /** Random 화점 seats for this fight (shown from turn 1). */
   hoshiPoints: Point[] = [];
   /** Module G: 묘수 hits toward mission. */
@@ -277,6 +347,8 @@ export class Battle {
   private inscriptionItemSpawn: number;
   private rng: () => number;
   private spawnWaveFn?: (wave: number) => Unit[];
+  private turnStatusUnitId: string | null = null;
+  private turnStatusIds = new Set<string>();
 
   get board(): Board {
     return this.boards[this.activeBoardIndex]!;
@@ -313,9 +385,11 @@ export class Battle {
       const copy: Unit = {
         ...u,
         stats: { ...u.stats },
+        statuses: u.statuses?.map((status) => ({ ...status })),
         skills: u.skills ? u.skills.map((s) => ({ ...s, effects: [...s.effects] })) : u.skills,
       };
       ensureSkillCd(copy);
+      ensureStatuses(copy);
       return copy;
     });
     this.allySummoner = { ...config.allySummoner };
@@ -325,6 +399,7 @@ export class Battle {
     this.inscriptionItemSpawn = config.inscriptionItemSpawnBonus ?? 0;
     this.rng = config.rng ?? Math.random;
     this.modules = config.modules ?? {};
+    this.dungeonBoss = config.dungeonBoss;
     this.circleElement =
       config.circleElement ??
       (this.modules.moduleE ? pickCircleElement(this.rng) : null);
@@ -368,31 +443,86 @@ export class Battle {
       this.log.push(`쌍국: A국·B국 — ${DUAL_BOARD_SWITCH_INTERVAL}수마다 전환`);
     }
     this.applySymbolStartShields();
+    this.resetDungeonBossState();
   }
 
-  /** 보강: pool wearers' HP×pct onto every ally monster for N turns. */
+  private resetDungeonBossState(): void {
+    this.giantHitCounter = 0;
+    const boss = this.dungeonBoss
+      ? this.getUnit(this.dungeonBoss.unitId)
+      : undefined;
+    this.necroBarrierHits =
+      boss && this.dungeonBoss?.kind === "necro"
+        ? this.dungeonBoss.abyss
+          ? 7
+          : 5
+        : 0;
+  }
+
+  private applyDungeonBossTurnRule(unit: Unit): void {
+    if (!this.dungeonBoss || unit.id !== this.dungeonBoss.unitId) return;
+    if (this.dungeonBoss.kind !== "dragon") return;
+    removeStatuses(unit, "debuff");
+    this.log.push(`용의 정화`);
+  }
+
+  /** 보강: each completed set shields only the monster wearing it. */
   private applySymbolStartShields(): void {
     for (const team of ["ally", "enemy"] as const) {
       const mons = this.units.filter(
         (u) => u.alive && u.team === team && u.kind === "monster",
       );
-      const pool = mons.reduce(
-        (sum, u) => sum + Math.round((u.startShieldPct ?? 0) * u.stats.hp),
-        0,
-      );
-      if (pool <= 0) continue;
-      const turns = Math.max(
-        ...mons.map((u) => (u.startShieldPct ? 3 : 0)),
-        0,
-      );
       for (const u of mons) {
-        u.shieldHp = (u.shieldHp ?? 0) + pool;
-        u.shieldTurns = Math.max(u.shieldTurns ?? 0, turns);
+        const shield = Math.round((u.startShieldPct ?? 0) * u.stats.hp);
+        if (shield <= 0) continue;
+        u.shieldHp = (u.shieldHp ?? 0) + shield;
+        u.shieldTurns = Math.max(u.shieldTurns ?? 0, 3);
+        u.shieldStatusVisible = false;
+        this.log.push(`보강 실드 (${u.name} +${shield} · 3턴)`);
       }
-      this.log.push(
-        `보강 실드 (${team === "ally" ? "아군" : "적군"} +${pool} · ${turns}턴)`,
-      );
     }
+  }
+
+  activeBoardBuffs(team: TeamId): readonly BoardTeamBuff[] {
+    return this.boardTeamBuffs[team];
+  }
+
+  private addBoardTeamBuff(team: TeamId, buff: BoardTeamBuff): void {
+    this.boardTeamBuffs[team] = [
+      ...this.boardTeamBuffs[team].filter((item) => item.id !== buff.id),
+      buff,
+    ];
+  }
+
+  private clearBoardTeamBuffs(team: TeamId): void {
+    if (this.boardTeamBuffs[team].length === 0) return;
+    this.boardTeamBuffs[team] = [];
+    this.log.push(`보드 버프 종료 (${team})`);
+  }
+
+  private boardBuffTotals(team: TeamId): {
+    damageBonus: number;
+    critRateBonus: number;
+    critDmgBonus: number;
+    spdPct: number;
+  } {
+    return this.boardTeamBuffs[team].reduce(
+      (out, buff) => ({
+        damageBonus: out.damageBonus + (buff.damageBonus ?? 0),
+        critRateBonus: out.critRateBonus + (buff.critRateBonus ?? 0),
+        critDmgBonus: out.critDmgBonus + (buff.critDmgBonus ?? 0),
+        spdPct: out.spdPct + (buff.spdPct ?? 0),
+      }),
+      { damageBonus: 0, critRateBonus: 0, critDmgBonus: 0, spdPct: 0 },
+    );
+  }
+
+  private boardShieldForTeam(team: TeamId, pct: number): Record<string, number> {
+    return Object.fromEntries(
+      this.units
+        .filter((u) => u.alive && u.team === team)
+        .map((u) => [u.id, Math.round(u.stats.hp * pct)]),
+    );
   }
 
   get boardLabel(): string {
@@ -426,6 +556,77 @@ export class Battle {
   /** True when this team must place a stone before the current ATB action. */
   needsStoneFor(team: TeamId): boolean {
     return this.lastStoneTeam !== team;
+  }
+
+  /**
+   * Remaining unit actions before `team` next places a stone.
+   * 0 means that team is placing now.
+   */
+  turnsUntilStone(team: TeamId): number {
+    if (this.finishReason) return 0;
+    const active = this.activeUnitId ? this.getUnit(this.activeUnitId) : null;
+    if (
+      this.phase === "await_stone" &&
+      active?.alive &&
+      active.team === team
+    ) {
+      return 0;
+    }
+
+    const atb = new Map<string, number>();
+    for (const u of this.units) atb.set(u.id, u.atb);
+    let last: TeamId | null = this.lastStoneTeam;
+    let actions = 0;
+    if (
+      active?.alive &&
+      (this.phase === "await_stone" ||
+        this.phase === "await_skill" ||
+        this.phase === "await_capture_shop")
+    ) {
+      atb.set(active.id, 0);
+      if (this.phase === "await_stone") last = active.team;
+      if (active.team !== team) actions += 1;
+    }
+
+    const spdMulOf = (u: Unit): number => {
+      const boardSpd = this.boardBuffTotals(u.team).spdPct;
+      const boost = ((u.spdBoostTurns ?? 0) > 0 ? 1.4 : 1) * (1 + boardSpd);
+      const buff =
+        (1 + (u.spdBuffPct ?? 0)) *
+        Math.max(0.3, 1 - (u.spdDebuffPct ?? 0));
+      return boost * buff;
+    };
+    const locked = (u: Unit): boolean =>
+      hasStatus(u, "stun") ||
+      hasStatus(u, "freeze") ||
+      hasStatus(u, "sleep");
+
+    for (let step = 0; step < 240; step++) {
+      for (const u of this.units) {
+        if (!u.alive) continue;
+        atb.set(
+          u.id,
+          (atb.get(u.id) ?? 0) + u.stats.spd * 0.1 * spdMulOf(u),
+        );
+      }
+      const ready = this.units
+        .filter((u) => u.alive && (atb.get(u.id) ?? 0) >= ATB_THRESHOLD)
+        .sort(
+          (a, b) =>
+            (atb.get(b.id) ?? 0) - (atb.get(a.id) ?? 0) ||
+            b.stats.spd - a.stats.spd,
+        );
+      const unit = ready[0];
+      if (!unit) continue;
+      atb.set(unit.id, 0);
+      if (locked(unit)) continue;
+      if (last !== unit.team) {
+        if (unit.team === team) return actions;
+        last = unit.team;
+      }
+      actions += 1;
+    }
+    return actions;
   }
 
   alive(team?: TeamId): Unit[] {
@@ -463,8 +664,11 @@ export class Battle {
       this.regenMana();
       for (const u of this.units) {
         if (!u.alive) continue;
-        const spdMul = (u.spdBoostTurns ?? 0) > 0 ? 1.4 : 1;
-        const spdBuff = 1 + (u.spdBuffPct ?? 0);
+        const boardSpd = this.boardBuffTotals(u.team).spdPct;
+        const spdMul = ((u.spdBoostTurns ?? 0) > 0 ? 1.4 : 1) * (1 + boardSpd);
+        const spdBuff =
+          (1 + (u.spdBuffPct ?? 0)) *
+          Math.max(0.3, 1 - (u.spdDebuffPct ?? 0));
         u.atb += u.stats.spd * 0.1 * spdMul * spdBuff;
       }
       const ready = this.units
@@ -473,15 +677,35 @@ export class Battle {
       if (ready[0]) {
         const unit = ready[0];
         unit.atb = 0;
+        this.beginStatusTurn(unit);
         if ((unit.spdBoostTurns ?? 0) > 0) {
           unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) - 1;
         }
-        if ((unit.statusImmuneTurns ?? 0) > 0) {
-          unit.statusImmuneTurns = (unit.statusImmuneTurns ?? 0) - 1;
+        const control = hasStatus(unit, "stun")
+          ? "기절"
+          : hasStatus(unit, "freeze")
+            ? "빙결"
+            : hasStatus(unit, "sleep")
+              ? "수면"
+              : null;
+        const periodic = tickUnitStatuses(unit);
+        if (periodic.hotHeal > 0 && !hasStatus(unit, "heal_block")) {
+          const before = unit.hp;
+          unit.hp = Math.min(unit.stats.hp, unit.hp + periodic.hotHeal);
+          this.log.push(`${unit.name} 지속회복 +${unit.hp - before}`);
         }
-        if ((unit.stunnedTurns ?? 0) > 0) {
-          unit.stunnedTurns = (unit.stunnedTurns ?? 0) - 1;
-          this.log.push(`${unit.name} 기절 — 행동 불가`);
+        if (periodic.dotDamage > 0) {
+          this.dealDirectDamage(unit, periodic.dotDamage);
+          this.log.push(`${unit.name} 지속피해 ${periodic.dotDamage}`);
+        }
+        if (!unit.alive) {
+          this.checkFinish();
+          if (this.finishReason || this.isPhase("await_wave")) return null;
+          continue;
+        }
+        if (control) {
+          this.log.push(`${unit.name} ${control} — 행동 불가`);
+          this.advanceStatusesAfterTurn(unit);
           tickSkillCooldowns(unit);
           continue;
         }
@@ -493,22 +717,6 @@ export class Battle {
           }
         }
         tickSkillCooldowns(unit);
-        if ((unit.dotTicks ?? 0) > 0 && (unit.dotSourceAtk ?? 0) > 0) {
-          const dotDmg = Math.round(
-            (unit.dotSourceAtk ?? 0) * (unit.dotAtkCoeff ?? 0),
-          );
-          if (dotDmg > 0 && unit.alive) {
-            unit.hp = Math.max(0, unit.hp - dotDmg);
-            this.log.push(`${unit.name} 지속피해 ${dotDmg}`);
-            if (unit.hp <= 0) {
-              unit.alive = false;
-              this.log.push(`${unit.name} defeated`);
-            }
-          }
-        }
-        for (const u of this.units) {
-          this.tickStatus(u);
-        }
         this.activeUnitId = unit.id;
         // Go-like stone by TEAM, not by summoner vs monster: if this side
         // already placed, skip stone (SPD / violent extras). Opponent monster
@@ -668,7 +876,11 @@ export class Battle {
     const chips: StoneReportChip[] = [{ kind: "token", id: token.id }];
     if (token.id === "crit_charm") {
       const bonus = unit.stonePassive === "crit_charm_plus" ? 75 * 2 : 75;
-      unit.critCharm = (unit.critCharm ?? 0) + bonus;
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        critRateBonus: bonus,
+      });
       chips.push({ kind: "crit", n: bonus });
       this.log.push(
         `${unit.name} 획득 ${name} (치명↑${unit.stonePassive === "crit_charm_plus" ? "×2" : ""})`,
@@ -676,10 +888,15 @@ export class Battle {
       return chips;
     }
     if (token.id === "shield_core") {
-      const shield = Math.round(unit.stats.hp * 0.28);
-      unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+      const shieldByUnit = this.boardShieldForTeam(unit.team, 0.28);
+      const shield = Object.values(shieldByUnit).reduce((sum, n) => sum + n, 0);
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        shieldByUnit,
+      });
       chips.push({ kind: "shield", n: shield });
-      this.log.push(`${unit.name} 획득 ${name} (실드 +${shield})`);
+      this.log.push(`${unit.name} 획득 ${name} (아군 실드 +${shield})`);
       if (unit.stonePassive === "shield_core_heal") {
         const heal = Math.round(unit.stats.hp * 0.12);
         unit.hp = Math.min(unit.stats.hp, unit.hp + heal);
@@ -691,11 +908,15 @@ export class Battle {
     if (token.id === "stride_sand") {
       let boosted = 0;
       for (const u of this.units) {
-        if (!u.alive || u.team !== unit.team || u.kind !== "monster") continue;
+        if (!u.alive || u.team !== unit.team) continue;
         u.atb = Math.min(ATB_THRESHOLD, u.atb + 50);
         boosted++;
       }
-      unit.spdBoostTurns = (unit.spdBoostTurns ?? 0) + 3;
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        spdPct: 0.4,
+      });
       chips.push({ kind: "spd", n: boosted });
       this.log.push(
         `${unit.name} 획득 ${name} (아군 ATB↑×${boosted} · 공속 2행동)`,
@@ -711,28 +932,26 @@ export class Battle {
       return chips;
     }
     if (token.id === "element_ward") {
-      const sm = this.summonerOf(unit.team);
-      sm.elementWardElement = unit.element;
-      sm.elementWardCharges = 3;
-      this.amplify = clampAmplify(
-        this.amplify + 0.08,
-        this.phaseAmplifyCap(),
-        this.powerGapCap,
-      );
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        damageBonus: 0.08,
+      });
       chips.push({ kind: "atk", n: 8 });
       this.log.push(
-        `${unit.name} 획득 ${name} (${unit.element} · 동속성 3수 Amp)`,
+        `${unit.name} 획득 ${name} (아군 피해 +8%)`,
       );
       return chips;
     }
     if (token.id === "bait_stone") {
-      const shield = Math.round(unit.stats.hp * 0.15);
-      unit.shieldHp = (unit.shieldHp ?? 0) + shield;
-      this.amplify = clampAmplify(
-        this.amplify + 0.05,
-        this.phaseAmplifyCap(),
-        this.powerGapCap,
-      );
+      const shieldByUnit = this.boardShieldForTeam(unit.team, 0.15);
+      const shield = Object.values(shieldByUnit).reduce((sum, n) => sum + n, 0);
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        damageBonus: 0.05,
+        shieldByUnit,
+      });
       const lure = this.placeBaitLure({ x: token.x, y: token.y }, unit.team);
       chips.push({ kind: "shield", n: shield });
       this.log.push(
@@ -742,11 +961,11 @@ export class Battle {
     }
     if (token.id === "transform_dust") {
       const flipped = this.applyTransformDust({ x: token.x, y: token.y });
-      this.amplify = clampAmplify(
-        this.amplify + 0.06 + flipped * 0.03,
-        this.phaseAmplifyCap(),
-        this.powerGapCap,
-      );
+      this.addBoardTeamBuff(unit.team, {
+        id: token.id,
+        source: "item",
+        damageBonus: 0.06 + flipped * 0.03,
+      });
       chips.push({ kind: "dmg", n: flipped });
       this.log.push(
         `${unit.name} 획득 ${name} (인접 변환 ${flipped})`,
@@ -772,12 +991,11 @@ export class Battle {
       manaBonusMultiplierForPhase(this.circle.boardPhase) *
       (1 + this.summonerOf(unit.team).boardSense);
     const gains = gainsForBoardEvent("item_magnet", 0, manaMul);
-    this.amplify = clampAmplify(
-      this.amplify + gains.amplifyDelta,
-      this.phaseAmplifyCap(),
-      this.powerGapCap,
-    );
-    this.skillAmplifyBonus += gains.skillAmplifyBonus;
+    this.addBoardTeamBuff(unit.team, {
+      id: token.id,
+      source: "item",
+      damageBonus: gains.skillAmplifyBonus,
+    });
     const sm = this.summonerOf(unit.team);
     const mana = Math.round(gains.mana);
     sm.mana = Math.min(sm.manaMax, sm.mana + gains.mana);
@@ -963,9 +1181,12 @@ export class Battle {
       return false;
     }
 
+    // The old cycle ends only once the team's next placement is known legal.
+    this.clearBoardTeamBuffs(unit.team);
     this.lastStoneReport = null;
     const chips: StoneReportChip[] = [];
     let claimedVictory = false;
+    const picked = this.tokenAt(point.x, point.y);
 
     const kind = classifyCapture(result.capturedCount);
     let manaMul =
@@ -983,44 +1204,32 @@ export class Battle {
 
     let ampDelta = gains.amplifyDelta;
     let manaGain = gains.mana;
+    let capturePassiveDamage = 0;
     if (unit.stonePassive === "capture_amp" && result.capturedCount > 0) {
-      ampDelta += 0.04;
+      capturePassiveDamage += 0.04;
     }
-    if (unit.stonePassive === "stone_amp_proc" && this.rng() < 0.15) {
-      ampDelta += 0.06;
+    if (
+      unit.stonePassive === "stone_amp_proc" &&
+      result.capturedCount > 0 &&
+      this.rng() < 0.15
+    ) {
+      capturePassiveDamage += 0.06;
       this.log.push(`스톤패시브: ${unit.name} 연타착수`);
     }
 
     if (this.modules.moduleE) {
       if (unit.kind === "summoner") {
         manaGain += 12;
-        ampDelta += 0.02;
         this.log.push(`소환사 착수 보너스`);
       }
       if (this.circleElement && unit.element === this.circleElement) {
-        ampDelta += 0.04;
         this.log.push(`속성 테두리 (${unit.element})`);
       }
       if (
         (unit.element === "light" || unit.element === "dark") &&
         this.circle.boardPhase >= 1
       ) {
-        ampDelta += 0.03;
         this.log.push(`이중층 (${unit.element})`);
-      }
-    }
-
-    {
-      const sm = this.summonerOf(unit.team);
-      if (
-        (sm.elementWardCharges ?? 0) > 0 &&
-        sm.elementWardElement === unit.element
-      ) {
-        ampDelta += 0.1;
-        sm.elementWardCharges = (sm.elementWardCharges ?? 0) - 1;
-        this.log.push(
-          `속성의뢰 (${unit.element}) 잔여 ${sm.elementWardCharges}`,
-        );
       }
     }
 
@@ -1036,7 +1245,6 @@ export class Battle {
       if (!this.brilliantDone && this.brilliantCount >= this.brilliantGoal) {
         this.brilliantDone = true;
         manaGain += 25;
-        ampDelta += 0.05;
         this.log.push(`묘수 미션 완료`);
       }
     }
@@ -1050,7 +1258,6 @@ export class Battle {
     ) {
       this.victoryPointClaimed = true;
       this.manaSealed = false;
-      ampDelta += 0.12;
       manaGain += 30;
       claimedVictory = true;
       chips.push({ kind: "victory", n: 30 });
@@ -1074,10 +1281,8 @@ export class Battle {
     }
 
     if (this.openingBonusPending) {
-      ampDelta += 0.03;
-      manaGain += 8;
       this.openingBonusPending = false;
-      this.log.push(`포석 보너스 (중앙 국면)`);
+      this.log.push(`포석 안내 종료`);
     }
 
     this.amplify = clampAmplify(
@@ -1085,19 +1290,23 @@ export class Battle {
       this.phaseAmplifyCap(),
       this.powerGapCap,
     );
-    // Capture no longer grants skillAmplifyBonus — N×10% goes to next monster hit.
-    this.skillAmplifyBonus = gains.skillAmplifyBonus;
+    this.skillAmplifyBonus = 0;
 
     const sm = this.summonerOf(unit.team);
     if (gains.captureDamageBonus > 0) {
-      // One capture payoff only: next monster hit damage (no stacked atk/crit auras).
-      this.pendingCaptureDamageBonus[unit.team] = gains.captureDamageBonus;
+      this.addBoardTeamBuff(unit.team, {
+        id: "capture",
+        source: "capture",
+        damageBonus: gains.captureDamageBonus + capturePassiveDamage,
+        critDmgBonus:
+          unit.stonePassive === "capture_crit" ? 10 : undefined,
+      });
       chips.push({
         kind: "capture",
         n: Math.round(gains.captureDamageBonus * 100),
       });
       this.log.push(
-        `따냄 버프: 다음 소환수 피해 +${Math.round(gains.captureDamageBonus * 100)}%`,
+        `따냄 버프: 아군 피해 +${Math.round(gains.captureDamageBonus * 100)}%`,
       );
     }
     if (gains.captureManaFrac > 0) {
@@ -1118,40 +1327,16 @@ export class Battle {
         this.hoshiPoints,
       );
       for (const sh of shapes) {
-        this.amplify = clampAmplify(
-          this.amplify + sh.amplifyDelta,
-          this.phaseAmplifyCap(),
-          this.powerGapCap,
-        );
-        if (sh.skillAmplifyBonus) {
-          this.skillAmplifyBonus += sh.skillAmplifyBonus;
-        }
         const shapeMana = sh.mana * manaMul;
         if (shapeMana > 0) manaGain += shapeMana;
         sm.mana = Math.min(sm.manaMax, sm.mana + shapeMana);
-        if (sh.shieldPct) {
-          const shield = Math.round(unit.stats.hp * sh.shieldPct);
-          unit.shieldHp = (unit.shieldHp ?? 0) + shield;
-          chips.push({ kind: "shape", id: sh.id });
-          chips.push({ kind: "shield", n: shield });
-          this.log.push(`형상 ${sh.labelKo}: 실드 +${shield}`);
-        } else {
-          chips.push({ kind: "shape", id: sh.id });
-          this.log.push(`형상 ${sh.labelKo}`);
-        }
-        // Shape amplify/mana/shield only — no stacked combat stat auras on place.
-        if (sh.id === "axis") {
-          unit.cutImmune = Math.max(unit.cutImmune ?? 0, 1);
-          this.log.push(`형상 축 연결: 절단 면역 1회`);
-        }
+        chips.push({ kind: "shape", id: sh.id });
+        this.log.push(`형상 ${sh.labelKo}`);
       }
     }
 
-    if (unit.stonePassive === "capture_crit" && result.capturedCount > 0) {
-      unit.critDmgBonus = (unit.critDmgBonus ?? 0) + 10;
-      this.log.push(`스톤패시브: ${unit.name} 치피 +10%`);
-    }
-    if (unit.stonePassive === "stone_ally_atb") {
+    const earnedBoardEffect = result.capturedCount > 0 || !!picked;
+    if (earnedBoardEffect && unit.stonePassive === "stone_ally_atb") {
       const ally = this.units.find(
         (u) =>
           u.alive &&
@@ -1164,7 +1349,7 @@ export class Battle {
         this.log.push(`스톤패시브: ${ally.name} ATB +5`);
       }
     }
-    if (unit.stonePassive === "stone_ally_heal") {
+    if (earnedBoardEffect && unit.stonePassive === "stone_ally_heal") {
       const ally =
         this.units
           .filter(
@@ -1177,7 +1362,6 @@ export class Battle {
       this.log.push(`스톤패시브: ${ally.name} 회복 +${heal}`);
     }
 
-    const picked = this.tokenAt(point.x, point.y);
     if (picked) {
       chips.push(...this.applyTokenPickup(unit, picked));
     }
@@ -1265,7 +1449,7 @@ export class Battle {
       }
     }
     this.checkFinish();
-    if (this.phase === "finished" || this.phase === "await_wave") {
+    if (this.isPhase("finished") || this.isPhase("await_wave")) {
       return true;
     }
     if (this.pendingCaptureShop) {
@@ -1301,15 +1485,20 @@ export class Battle {
       sm.mana = Math.min(sm.manaMax, sm.mana + 40);
       this.log.push(`사석상점: 마나 충전 (+40)`);
     } else if (choice === "amplify") {
-      this.amplify = clampAmplify(
-        this.amplify + 0.08,
-        this.phaseAmplifyCap(),
-        this.powerGapCap,
-      );
+      this.addBoardTeamBuff(unit.team, {
+        id: "capture-shop-amplify",
+        source: "capture",
+        damageBonus: 0.08,
+      });
       this.log.push(`사석상점: Amplify 강화`);
     } else {
-      const shield = Math.round(unit.stats.hp * 0.12);
-      unit.shieldHp = (unit.shieldHp ?? 0) + shield;
+      const shieldByUnit = this.boardShieldForTeam(unit.team, 0.12);
+      const shield = Object.values(shieldByUnit).reduce((sum, n) => sum + n, 0);
+      this.addBoardTeamBuff(unit.team, {
+        id: "capture-shop-clean",
+        source: "capture",
+        shieldByUnit,
+      });
       sm.mana = Math.min(sm.manaMax, sm.mana + 10);
       this.log.push(`사석상점: 청소 실드 +${shield}`);
     }
@@ -1414,6 +1603,10 @@ export class Battle {
       ).map((u) => u.id);
     const allies = () => aliveSummons(this.units, unit.team).map((u) => u.id);
     for (const effect of effects) {
+      if (!("target" in effect)) {
+        ids.add(unit.id);
+        continue;
+      }
       switch (effect.target) {
         case "single":
           ids.add(this.resolveSingleTarget(unit, targetId)?.id ?? unit.id);
@@ -1425,7 +1618,11 @@ export class Battle {
           ids.add(unit.id);
           break;
         case "ally_lowest":
-          ids.add(this.lowestAllyMonster(unit.team)?.id ?? unit.id);
+          ids.add(
+            (effect.kind === "revive"
+              ? this.resolveAllyTarget(unit, targetId, true)
+              : this.resolveAllyTarget(unit, targetId))?.id ?? unit.id,
+          );
           break;
         case "all_allies":
           allies().forEach((id) => ids.add(id));
@@ -1467,6 +1664,77 @@ export class Battle {
     }));
   }
 
+
+  /** Pick up to `count` living units; prefer `preferredId` when present. */
+  private pickLivingTargets(
+    pool: Unit[],
+    count: number | undefined,
+    preferredId?: string,
+  ): Unit[] {
+    const living = pool.filter((u) => u.alive);
+    if (!living.length) return [];
+    if (count == null || count <= 0 || count >= living.length) return living;
+    const n = Math.max(1, Math.min(5, Math.floor(count)));
+    const chosen: Unit[] = [];
+    const preferred = preferredId
+      ? living.find((u) => u.id === preferredId)
+      : undefined;
+    if (preferred) chosen.push(preferred);
+    const rest = living.filter((u) => u.id !== preferred?.id);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rest[i], rest[j]] = [rest[j]!, rest[i]!];
+    }
+    for (const u of rest) {
+      if (chosen.length >= n) break;
+      chosen.push(u);
+    }
+    return chosen.slice(0, n);
+  }
+
+  private applyMagicAilment(
+    source: Unit,
+    target: Unit,
+    ailment: {
+      kind: "burn" | "poison" | "stun" | "freeze" | "sleep" | "silence";
+      turns: number;
+      chance: number;
+    },
+  ): void {
+    if (!this.effectLands(source, target, ailment.chance)) return;
+    if (ailment.kind === "burn" || ailment.kind === "poison") {
+      const value =
+        ailment.kind === "poison"
+          ? target.stats.hp * 0.05
+          : source.stats.atk *
+            Math.max(
+              0.3,
+              (1 + (source.atkBuffPct ?? 0)) * (1 - (source.atkDebuffPct ?? 0)),
+            ) *
+            0.12;
+      addStatus(target, {
+        kind: ailment.kind,
+        sourceUnitId: source.id,
+        polarity: "debuff",
+        turns: ailment.turns,
+        stacking: "stack",
+        dispellable: true,
+        amount: ailment.kind === "poison" ? 0.05 : 0.12,
+        value,
+      });
+    } else {
+      addStatus(target, {
+        kind: ailment.kind,
+        sourceUnitId: source.id,
+        polarity: "debuff",
+        turns: ailment.turns,
+        stacking: "replace",
+        dispellable: true,
+      });
+    }
+    this.log.push(`${target.name} ${ailment.kind} ${ailment.turns}턴`);
+  }
+
   private castMagicSkill(
     unit: Unit,
     skillId: string,
@@ -1482,7 +1750,9 @@ export class Battle {
     const targetIds = this.presentationTargetIds(
       unit,
       [
-        ...(def.kind === "aoe_damage" || def.kind === "enemy_debuff"
+        ...(def.kind === "aoe_damage" ||
+          def.kind === "enemy_debuff" ||
+          def.kind === "enemy_ailment"
           ? [{ kind: "damage", target: "all_enemies", coeff: 0 } as const]
           : def.kind === "single_damage"
             ? [{ kind: "damage", target: "single", coeff: 0 } as const]
@@ -1490,8 +1760,9 @@ export class Battle {
       ],
       targetId,
     );
-    const finish = (): SkillResult[] =>
-      this.tagSkillResults(
+    const finish = (): SkillResult[] => {
+      this.advanceStatusesAfterTurn(unit);
+      return this.tagSkillResults(
         results,
         unit,
         {
@@ -1502,44 +1773,123 @@ export class Battle {
         },
         targetIds,
       );
+    };
     this.log.push(`${unit.name} ${def.nameKo}`);
 
     switch (def.kind) {
       case "aoe_damage": {
-        const foes = aliveSummons(
-          this.units,
-          unit.team === "ally" ? "enemy" : "ally",
+        const foes = this.pickLivingTargets(
+          aliveSummons(
+            this.units,
+            unit.team === "ally" ? "enemy" : "ally",
+          ),
+          def.hitCount,
+          targetId,
         );
+        const hits = Math.max(1, Math.min(5, def.hits ?? 1));
+        const perHit = power / hits;
         for (const t of foes) {
-          results.push(this.applyHit(unit, t, power, true));
+          for (let hit = 0; hit < hits; hit += 1) {
+            results.push(this.applyHit(unit, t, perHit, true));
+            if (def.ailment) this.applyMagicAilment(unit, t, def.ailment);
+          }
         }
         break;
       }
       case "single_damage": {
-        const target = this.resolveSingleTarget(unit, targetId);
-        if (target) results.push(this.applyHit(unit, target, power, true));
+        const foes = this.pickLivingTargets(
+          aliveSummons(
+            this.units,
+            unit.team === "ally" ? "enemy" : "ally",
+          ),
+          def.hitCount && def.hitCount > 1 ? def.hitCount : 1,
+          targetId,
+        );
+        const hits = Math.max(1, Math.min(5, def.hits ?? 1));
+        const perHit = power / hits;
+        for (const t of foes) {
+          for (let hit = 0; hit < hits; hit += 1) {
+            results.push(this.applyHit(unit, t, perHit, true));
+            if (def.ailment) this.applyMagicAilment(unit, t, def.ailment);
+          }
+        }
+        break;
+      }
+      case "enemy_ailment": {
+        const foes = this.pickLivingTargets(
+          aliveSummons(
+            this.units,
+            unit.team === "ally" ? "enemy" : "ally",
+          ),
+          def.hitCount,
+          targetId,
+        );
+        const ailment = def.ailment ?? {
+          kind: "burn" as const,
+          turns: def.turns ?? 2,
+          chance: 1,
+        };
+        for (const t of foes) {
+          this.applyMagicAilment(unit, t, ailment);
+        }
+        break;
+      }
+      case "ally_cleanse": {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const ally of allies) {
+          const removed = removeStatuses(
+            ally,
+            "debuff",
+            def.cleanseCount ?? Infinity,
+          );
+          this.log.push(`${ally.name} 약화 해제 ${removed.length}`);
+        }
         break;
       }
       case "ally_buff_atk": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           this.applyStatBuff(u, "atk", power, def.turns ?? 2);
         }
         break;
       }
       case "ally_buff_spd": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           this.applyStatBuff(u, "spd", power, def.turns ?? 2);
         }
         break;
       }
       case "ally_buff_crit": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           this.applyStatBuff(u, "critRate", power, def.turns ?? 2);
         }
         break;
       }
       case "ally_heal": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           const amount = Math.round(u.stats.hp * power);
           u.hp = Math.min(u.stats.hp, u.hp + amount);
           this.log.push(`${u.name} 회복 +${amount}`);
@@ -1547,17 +1897,37 @@ export class Battle {
         break;
       }
       case "ally_shield": {
-        for (const u of aliveSummons(this.units, unit.team)) {
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
           const amount = Math.round(u.stats.hp * power);
           u.shieldHp = (u.shieldHp ?? 0) + amount;
+          u.shieldStatusVisible = true;
+          addStatus(u, {
+            kind: "shield",
+            sourceUnitId: unit.id,
+            polarity: "buff",
+            turns: def.turns ?? 2,
+            stacking: "stack",
+            dispellable: true,
+            value: amount,
+          });
         }
         break;
       }
       case "enemy_debuff": {
-        for (const t of aliveSummons(
-          this.units,
-          unit.team === "ally" ? "enemy" : "ally",
-        )) {
+        const foes = this.pickLivingTargets(
+          aliveSummons(
+            this.units,
+            unit.team === "ally" ? "enemy" : "ally",
+          ),
+          def.hitCount,
+          targetId,
+        );
+        for (const t of foes) {
           this.applyStatDebuff(t, "atk", power, def.turns ?? 2);
           this.applyStatDebuff(t, "def", power * 0.8, def.turns ?? 2);
         }
@@ -1592,11 +1962,13 @@ export class Battle {
         break;
       }
       case "damage_reduce": {
-        for (const u of aliveSummons(this.units, unit.team)) {
-          u.damageTakenMul = Math.min(
-            u.damageTakenMul ?? 1,
-            1 - power,
-          );
+        const allies = this.pickLivingTargets(
+          aliveSummons(this.units, unit.team),
+          def.hitCount,
+          targetId,
+        );
+        for (const u of allies) {
+          this.applyStatBuff(u, "damageReduce", power, def.turns ?? 2);
         }
         break;
       }
@@ -1733,6 +2105,8 @@ export class Battle {
     if (this.phase !== "await_skill" || !this.activeUnitId) return [];
     const unit = this.getUnit(this.activeUnitId);
     if (!unit) return [];
+    this.beginStatusTurn(unit);
+    this.applyDungeonBossTurnRule(unit);
     this.lastSkillPresentation = null;
 
     const enemies = aliveSummons(
@@ -1811,6 +2185,16 @@ export class Battle {
         if (!u.alive || u.team !== unit.team || u.kind !== "monster") continue;
         const amount = Math.round(u.stats.hp * 0.18);
         u.shieldHp = (u.shieldHp ?? 0) + amount;
+        u.shieldStatusVisible = true;
+        addStatus(u, {
+          kind: "shield",
+          sourceUnitId: unit.id,
+          polarity: "buff",
+          turns: 2,
+          stacking: "stack",
+          dispellable: true,
+          value: amount,
+        });
         shielded += 1;
         totalShield += amount;
       }
@@ -1847,10 +2231,12 @@ export class Battle {
       if (ult.leaderAtkBuffTicks > 0 && ult.leaderAtkBuffPct > 0) {
         for (const u of this.units) {
           if (!u.alive || u.team !== unit.team || u.kind !== "monster") continue;
-          u.atkBuffPct = Math.max(u.atkBuffPct ?? 0, ult.leaderAtkBuffPct);
-          u.atkBuffTicks = Math.max(
-            u.atkBuffTicks ?? 0,
+          this.applyStatBuff(
+            u,
+            "atk",
+            ult.leaderAtkBuffPct,
             ult.leaderAtkBuffTicks,
+            unit.id,
           );
         }
       }
@@ -1874,9 +2260,16 @@ export class Battle {
     } else if (!summonerSkill) {
       let skillIndex =
         opts?.skillIndex ?? pickAutoSkillIndex(unit, this.units);
-      if ((unit.stunnedTurns ?? 0) > 0) {
+      if (
+        hasStatus(unit, "stun") ||
+        hasStatus(unit, "freeze") ||
+        hasStatus(unit, "sleep")
+      ) {
         this.log.push(`${unit.name} 기절 — 스킬 불가`);
         return [];
+      }
+      if (hasStatus(unit, "silence") || hasStatus(unit, "provoke")) {
+        skillIndex = 0;
       }
       if (!this.canUseSkill(unit, skillIndex) && unit.skills?.[skillIndex]) {
         this.log.push(`${unit.name} 스킬 쿨다운`);
@@ -1890,6 +2283,7 @@ export class Battle {
       } else {
         const target = this.resolveSingleTarget(unit, opts?.targetId);
         if (!target) {
+          this.advanceStatusesAfterTurn(unit);
           this.phase = "resolved";
           this.activeUnitId = null;
           this.checkFinish();
@@ -1928,6 +2322,7 @@ export class Battle {
         )
       : results;
     this.attackTurnCount += 1;
+    this.advanceStatusesAfterTurn(unit);
     this.skillAmplifyBonus = 0;
     // Violent: extra turn (not from counter)
     if (
@@ -1954,22 +2349,91 @@ export class Battle {
     unit: Unit,
     targetId?: string,
   ): Unit | null {
-    let target =
-      (targetId && this.getUnit(targetId)) ||
-      pickDefaultTarget(
-        this.units.filter(
-          (u) => u.team === (unit.team === "ally" ? "enemy" : "ally"),
-        ),
-      );
-    if (target?.kind === "summoner") {
-      target = pickDefaultTarget(
-        this.units.filter(
-          (u) => u.team === (unit.team === "ally" ? "enemy" : "ally"),
-        ),
-      );
+    const provoke = statusesOf(unit, "debuff").find(
+      (status) => status.kind === "provoke",
+    );
+    if (provoke?.linkedUnitId) {
+      const forced = this.getUnit(provoke.linkedUnitId);
+      if (forced?.alive && forced.team !== unit.team && forced.kind === "monster") {
+        return forced;
+      }
     }
+    const enemies = this.units.filter(
+      (candidate) =>
+        candidate.alive &&
+        candidate.team !== unit.team &&
+        candidate.kind === "monster",
+    );
+    let target =
+      (targetId && enemies.find((candidate) => candidate.id === targetId)) ||
+      enemies.sort((a, b) => {
+        const dangerA =
+          (a.stats.atk * a.stats.spd) / Math.max(1, a.hp / a.stats.hp);
+        const dangerB =
+          (b.stats.atk * b.stats.spd) / Math.max(1, b.hp / b.stats.hp);
+        return dangerB - dangerA || a.hp - b.hp;
+      })[0] ||
+      pickDefaultTarget(enemies);
     if (!target || !target.alive) return null;
     return target;
+  }
+
+  private resolveHostileEffectTarget(
+    unit: Unit,
+    effectKind: SkillEffect["kind"],
+    targetId?: string,
+  ): Unit | null {
+    if (targetId || hasStatus(unit, "provoke")) {
+      return this.resolveSingleTarget(unit, targetId);
+    }
+    const enemies = aliveSummons(
+      this.units,
+      unit.team === "ally" ? "enemy" : "ally",
+    );
+    if (effectKind === "strip") {
+      return (
+        enemies.sort(
+          (a, b) =>
+            statusesOf(b, "buff").length - statusesOf(a, "buff").length,
+        )[0] ?? null
+      );
+    }
+    if (
+      effectKind === "dot" ||
+      effectKind === "silence" ||
+      effectKind === "heal_block"
+    ) {
+      const kind =
+        effectKind === "heal_block" ? "heal_block" : effectKind;
+      const fresh = enemies.filter((enemy) => !hasStatus(enemy, kind));
+      if (fresh.length) {
+        return fresh.sort((a, b) => a.hp - b.hp)[0] ?? null;
+      }
+    }
+    return this.resolveSingleTarget(unit);
+  }
+
+  private resolveAllyTarget(
+    unit: Unit,
+    targetId?: string,
+    includeDead = false,
+  ): Unit | null {
+    const allies = this.units.filter(
+      (candidate) =>
+        candidate.team === unit.team &&
+        candidate.kind === "monster" &&
+        (includeDead || candidate.alive),
+    );
+    const explicit =
+      targetId && allies.find((candidate) => candidate.id === targetId);
+    if (explicit) return explicit;
+    return (
+      allies.sort(
+        (a, b) =>
+          Number(a.alive) - Number(b.alive) ||
+          a.hp / a.stats.hp - b.hp / b.stats.hp,
+      )[0] ?? null
+    );
   }
 
   private resolveSkill(
@@ -1982,52 +2446,86 @@ export class Battle {
     const targetIds = this.presentationTargetIds(unit, skill.effects, targetId);
     this.log.push(`${unit.name} ${skill.nameKo}`);
     for (const effect of skill.effects) {
+      const effectTarget = "target" in effect ? effect.target : "self";
+      const enemyTargets =
+        effectTarget === "all_enemies"
+          ? aliveSummons(
+              this.units,
+              unit.team === "ally" ? "enemy" : "ally",
+            )
+          : [this.resolveHostileEffectTarget(unit, effect.kind, targetId)].filter(
+              (target): target is Unit => !!target,
+            );
+      const allyTargets =
+        effectTarget === "self"
+          ? [unit]
+          : effectTarget === "all_allies"
+            ? aliveSummons(this.units, unit.team)
+            : [this.resolveAllyTarget(unit, targetId)].filter(
+                (target): target is Unit => !!target,
+              );
+
       if (effect.kind === "damage") {
-        if (effect.target === "all_enemies") {
-          const foes = aliveSummons(
-            this.units,
-            unit.team === "ally" ? "enemy" : "ally",
-          );
-          for (const t of foes) {
-            results.push(this.applyHit(unit, t, effect.coeff, false));
-          }
-        } else {
-          const target = this.resolveSingleTarget(unit, targetId);
-          if (target) {
-            results.push(this.applyHit(unit, target, effect.coeff, false));
+        const hits = Math.max(1, Math.min(5, effect.hits ?? 1));
+        const perHit = effect.coeff / hits;
+        for (const target of enemyTargets) {
+          for (let hit = 0; hit < hits; hit += 1) {
+            results.push(
+              this.applyHit(unit, target, perHit, false, {
+                source: effect.source,
+                sourceFactor: effect.sourceFactor,
+                ignoreDef: effect.ignoreDef,
+              }),
+            );
           }
         }
       } else if (effect.kind === "heal") {
-        const targets =
-          effect.target === "self"
-            ? [unit]
-            : effect.target === "all_allies"
-              ? aliveSummons(this.units, unit.team)
-              : [this.lowestAllyMonster(unit.team) ?? unit];
-        for (const target of targets) {
-          const amount = Math.round(target.stats.hp * effect.coeff);
+        for (const target of allyTargets) {
+          const amount = hasStatus(target, "heal_block")
+            ? 0
+            : Math.round(target.stats.hp * effect.coeff);
+          const before = target.hp;
           target.hp = Math.min(target.stats.hp, target.hp + amount);
-          this.log.push(`${target.name} 회복 +${amount}`);
+          const applied = target.hp - before;
+          this.log.push(`${target.name} 회복 +${applied}`);
           results.push({
             attackerId: unit.id,
             targetId: target.id,
-            damage: -amount,
+            damage: -applied,
             crit: false,
             usedSummonerSkill: false,
           });
         }
+      } else if (effect.kind === "hot") {
+        for (const target of allyTargets) {
+          addStatus(target, {
+            kind: "hot",
+            sourceUnitId: unit.id,
+            polarity: "buff",
+            turns: effect.turns,
+            stacking: "stack",
+            dispellable: true,
+            value: Math.round(target.stats.hp * effect.coeff),
+          });
+        }
       } else if (effect.kind === "shield") {
-        const targets =
-          effect.target === "all_allies"
-            ? aliveSummons(this.units, unit.team)
-            : [unit];
-        for (const t of targets) {
-          const amount = Math.round(t.stats.hp * effect.coeff);
-          t.shieldHp = (t.shieldHp ?? 0) + amount;
-          this.log.push(`${t.name} 실드 +${amount}`);
+        for (const target of allyTargets) {
+          const amount = Math.round(target.stats.hp * effect.coeff);
+          target.shieldHp = (target.shieldHp ?? 0) + amount;
+          target.shieldStatusVisible = true;
+          addStatus(target, {
+            kind: "shield",
+            sourceUnitId: unit.id,
+            polarity: "buff",
+            turns: 2,
+            stacking: "stack",
+            dispellable: true,
+            value: amount,
+          });
+          this.log.push(`${target.name} 실드 +${amount}`);
           results.push({
             attackerId: unit.id,
-            targetId: t.id,
+            targetId: target.id,
             damage: 0,
             crit: false,
             usedSummonerSkill: false,
@@ -2038,107 +2536,232 @@ export class Battle {
         sm.mana = Math.min(sm.manaMax, sm.mana + effect.amount);
         this.log.push(`${unit.name} 마나 +${effect.amount}`);
       } else if (effect.kind === "buff") {
-        const targets =
-          effect.target === "self"
-            ? [unit]
-            : aliveSummons(this.units, unit.team);
-        for (const t of targets) {
-          this.applyStatBuff(t, effect.axis, effect.amount, effect.turns);
+        for (const target of allyTargets) {
+          this.applyStatBuff(target, effect.axis, effect.amount, effect.turns, unit.id);
           this.log.push(
-            `${t.name} ${effect.axis} 버프 +${Math.round(effect.amount * 100)}%`,
+            `${target.name} ${effect.axis} 버프 +${Math.round(effect.amount * 100)}%`,
           );
         }
       } else if (effect.kind === "debuff") {
-        const targets =
-          effect.target === "all_enemies"
-            ? aliveSummons(
-                this.units,
-                unit.team === "ally" ? "enemy" : "ally",
-              )
-            : [this.resolveSingleTarget(unit, targetId)].filter(
-                (t): t is Unit => !!t,
-              );
-        for (const t of targets) {
-          this.applyStatDebuff(t, effect.axis, effect.amount, effect.turns);
+        for (const target of enemyTargets) {
+          if (!this.effectLands(unit, target, this.effectChance(effect))) continue;
+          this.applyStatDebuff(target, effect.axis, effect.amount, effect.turns, unit.id);
           this.log.push(
-            `${t.name} ${effect.axis} 약화 -${Math.round(effect.amount * 100)}%`,
+            `${target.name} ${effect.axis} 약화 -${Math.round(effect.amount * 100)}%`,
           );
         }
       } else if (effect.kind === "dot") {
-        const targets =
-          effect.target === "all_enemies"
-            ? aliveSummons(
-                this.units,
-                unit.team === "ally" ? "enemy" : "ally",
-              )
-            : [this.resolveSingleTarget(unit, targetId)].filter(
-                (t): t is Unit => !!t,
+        const damageHits = Math.max(
+          1,
+          ...skill.effects
+            .filter((entry): entry is Extract<SkillDef["effects"][number], { kind: "damage" }> =>
+              entry.kind === "damage",
+            )
+            .map((entry) => entry.hits ?? 1),
+        );
+        const rolls =
+          effect.chance != null && damageHits > 1 ? damageHits : 1;
+        const statusKind =
+          effect.dotKind === "burn"
+            ? "burn"
+            : effect.dotKind === "poison"
+              ? "poison"
+              : "dot";
+        for (const target of enemyTargets) {
+          for (let roll = 0; roll < rolls; roll += 1) {
+            if (!this.effectLands(unit, target, this.effectChance(effect))) continue;
+            const atkSnapshot =
+              unit.stats.atk *
+              Math.max(
+                0.3,
+                (1 + (unit.atkBuffPct ?? 0)) *
+                  (1 - (unit.atkDebuffPct ?? 0)),
               );
-        for (const t of targets) {
-          t.dotAtkCoeff = effect.coeff;
-          t.dotTicks = effect.turns;
-          t.dotSourceAtk = unit.stats.atk * (1 + (unit.atkBuffPct ?? 0));
-          this.log.push(`${t.name} 지속피해 ${effect.turns}턴`);
+            const value =
+              statusKind === "poison"
+                ? target.stats.hp * effect.coeff
+                : atkSnapshot * effect.coeff;
+            addStatus(target, {
+              kind: statusKind,
+              sourceUnitId: unit.id,
+              polarity: "debuff",
+              turns: effect.turns,
+              stacking: "stack",
+              dispellable: true,
+              amount: effect.coeff,
+              value,
+            });
+            this.log.push(`${target.name} ${statusKind} ${effect.turns}턴`);
+          }
         }
       } else if (effect.kind === "cc") {
-        const chance = effect.chance ?? 1;
-        const targets =
-          effect.target === "all_enemies"
-            ? aliveSummons(
-                this.units,
-                unit.team === "ally" ? "enemy" : "ally",
-              )
-            : [this.resolveSingleTarget(unit, targetId)].filter(
-                (t): t is Unit => !!t,
-              );
-        for (const t of targets) {
-          if (this.rng() > chance) continue;
-          if ((t.statusImmuneTurns ?? 0) > 0) continue;
-          t.stunnedTurns = Math.max(t.stunnedTurns ?? 0, effect.turns);
-          this.log.push(`${t.name} ${effect.cc} ${effect.turns}턴`);
+        const damageHits = Math.max(
+          1,
+          ...skill.effects
+            .filter((entry): entry is Extract<SkillDef["effects"][number], { kind: "damage" }> =>
+              entry.kind === "damage",
+            )
+            .map((entry) => entry.hits ?? 1),
+        );
+        const rolls =
+          effect.chance != null && damageHits > 1 ? damageHits : 1;
+        for (const target of enemyTargets) {
+          for (let roll = 0; roll < rolls; roll += 1) {
+            if (!this.effectLands(unit, target, effect.chance ?? 1)) continue;
+            addStatus(target, {
+              kind: effect.cc,
+              sourceUnitId: unit.id,
+              polarity: "debuff",
+              turns: effect.turns,
+              stacking: "replace",
+              dispellable: true,
+            });
+            this.log.push(`${target.name} ${effect.cc} ${effect.turns}턴`);
+            break;
+          }
         }
       } else if (effect.kind === "strip") {
-        const targets =
-          effect.target === "all_enemies"
-            ? aliveSummons(
-                this.units,
-                unit.team === "ally" ? "enemy" : "ally",
-              )
-            : [this.resolveSingleTarget(unit, targetId)].filter(
-                (t): t is Unit => !!t,
-              );
-        for (const t of targets) {
-          t.atkBuffPct = 0;
-          t.atkBuffTicks = 0;
-          t.defBuffPct = 0;
-          t.defBuffTicks = 0;
-          t.spdBuffPct = 0;
-          t.spdBuffTicks = 0;
-          t.shieldHp = 0;
-          this.log.push(`${t.name} 강화 해제`);
+        for (const target of enemyTargets) {
+          const removed = removeStatuses(target, "buff", effect.count ?? Infinity);
+          const strippedShield = removed
+            .filter((status) => status.kind === "shield")
+            .reduce((sum, status) => sum + (status.value ?? 0), 0);
+          target.shieldHp = Math.max(0, (target.shieldHp ?? 0) - strippedShield);
+          this.log.push(`${target.name} 강화 해제 ${removed.length}`);
         }
       } else if (effect.kind === "cleanse") {
+        for (const target of allyTargets) {
+          const removed = removeStatuses(target, "debuff", effect.count ?? Infinity);
+          this.log.push(`${target.name} 약화 해제 ${removed.length}`);
+        }
+      } else if (effect.kind === "heal_block" || effect.kind === "silence") {
+        const damageHits = Math.max(
+          1,
+          ...skill.effects
+            .filter((entry): entry is Extract<SkillDef["effects"][number], { kind: "damage" }> =>
+              entry.kind === "damage",
+            )
+            .map((entry) => entry.hits ?? 1),
+        );
+        const rolls =
+          effect.chance != null && damageHits > 1 ? damageHits : 1;
+        for (const target of enemyTargets) {
+          for (let roll = 0; roll < rolls; roll += 1) {
+            if (!this.effectLands(unit, target, effect.chance ?? 1)) continue;
+            addStatus(target, {
+              kind: effect.kind,
+              sourceUnitId: unit.id,
+              polarity: "debuff",
+              turns: effect.turns,
+              stacking: "replace",
+              dispellable: true,
+            });
+            break;
+          }
+        }
+      } else if (effect.kind === "atb") {
+        const targets = effect.target === "single" || effect.target === "all_enemies"
+          ? enemyTargets
+          : allyTargets;
+        for (const target of targets) {
+          target.atb = Math.max(0, Math.min(ATB_THRESHOLD, target.atb + effect.amount));
+        }
+      } else if (effect.kind === "revive") {
+        const target = this.resolveAllyTarget(unit, targetId, true);
+        if (target && !target.alive) {
+          target.alive = true;
+          target.hp = Math.max(1, Math.round(target.stats.hp * effect.hpFraction));
+          target.atb = 0;
+          target.shieldHp = 0;
+          target.statuses = [];
+          syncLegacyStatuses(target);
+          this.log.push(`${target.name} 부활`);
+        }
+      } else if (effect.kind === "cooldown") {
         const targets =
-          effect.target === "self"
-            ? [unit]
-            : aliveSummons(this.units, unit.team);
-        for (const t of targets) {
-          t.atkDebuffPct = 0;
-          t.atkDebuffTicks = 0;
-          t.defDebuffPct = 0;
-          t.defDebuffTicks = 0;
-          t.spdDebuffPct = 0;
-          t.spdDebuffTicks = 0;
-          t.dotTicks = 0;
-          t.stunnedTurns = 0;
-          this.log.push(`${t.name} 약화 해제`);
+          effect.target === "single" || effect.target === "all_enemies"
+            ? enemyTargets
+            : allyTargets;
+        for (const target of targets) {
+          if (
+            effect.direction === "increase" &&
+            !this.effectLands(unit, target, this.effectChance(effect))
+          ) {
+            continue;
+          }
+          const cds = ensureSkillCd(target);
+          target.skillCd = cds.map((cooldown) =>
+            effect.direction === "increase"
+              ? cooldown + effect.amount
+              : Math.max(0, cooldown - effect.amount),
+          );
+        }
+      } else if (effect.kind === "damage_share") {
+        for (const target of allyTargets) {
+          const partner =
+            target.id === unit.id
+              ? aliveSummons(this.units, unit.team)
+                  .filter((ally) => ally.id !== target.id)
+                  .sort(
+                    (a, b) =>
+                      b.hp / b.stats.hp - a.hp / a.stats.hp,
+                  )[0]
+              : unit;
+          addStatus(target, {
+            kind: "damage_share",
+            sourceUnitId: unit.id,
+            linkedUnitId: partner?.id === target.id ? undefined : partner?.id,
+            polarity: "buff",
+            turns: effect.turns,
+            stacking: "replace",
+            dispellable: true,
+            amount: effect.fraction,
+          });
+        }
+      } else if (effect.kind === "reflect") {
+        for (const target of allyTargets) {
+          addStatus(target, {
+            kind: "reflect",
+            sourceUnitId: unit.id,
+            polarity: "buff",
+            turns: effect.turns,
+            stacking: "replace",
+            dispellable: true,
+            amount: effect.fraction,
+          });
         }
       } else if (effect.kind === "provoke") {
-        const target = this.resolveSingleTarget(unit, targetId);
-        if (target) {
-          target.provokeTargetId = unit.id;
-          target.provokeTicks = effect.turns;
+        for (const target of enemyTargets) {
+          if (!this.effectLands(unit, target, effect.chance ?? 1)) continue;
+          addStatus(target, {
+            kind: "provoke",
+            sourceUnitId: unit.id,
+            linkedUnitId: unit.id,
+            polarity: "debuff",
+            turns: effect.turns,
+            stacking: "replace",
+            dispellable: true,
+          });
           this.log.push(`${target.name} 도발 ${effect.turns}턴`);
+        }
+      } else if (effect.kind === "immunity") {
+        for (const target of allyTargets) {
+          if (effect.kinds && effect.kinds.length > 0) {
+            const blocked = effect.kinds as import("./types.js").StatusKind[];
+            target.immuneStatusKinds = [
+              ...new Set([...(target.immuneStatusKinds ?? []), ...blocked]),
+            ];
+          } else {
+            addStatus(target, {
+              kind: "immunity",
+              sourceUnitId: unit.id,
+              polarity: "buff",
+              turns: effect.turns,
+              stacking: "replace",
+              dispellable: true,
+            });
+          }
+          this.log.push(`${target.name} 면역 ${effect.turns}턴`);
         }
       }
     }
@@ -2157,39 +2780,99 @@ export class Battle {
     );
   }
 
+  private effectChance(effect: object): number {
+    return "chance" in effect && typeof effect.chance === "number"
+      ? effect.chance
+      : 1;
+  }
+
+  private advanceStatusesAfterTurn(unit: Unit): void {
+    const expiredShield = advanceUnitStatuses(
+      unit,
+      this.turnStatusUnitId === unit.id ? this.turnStatusIds : undefined,
+    );
+    if (expiredShield > 0) {
+      unit.shieldHp = Math.max(0, (unit.shieldHp ?? 0) - expiredShield);
+    }
+    if (
+      unit.statusImmuneIsPassive &&
+      (unit.statusImmuneTurns ?? 0) > 0
+    ) {
+      unit.statusImmuneTurns = Math.max(0, (unit.statusImmuneTurns ?? 0) - 1);
+    }
+    if (this.turnStatusUnitId === unit.id) {
+      this.turnStatusUnitId = null;
+      this.turnStatusIds = new Set();
+    }
+  }
+
+  private beginStatusTurn(unit: Unit): void {
+    if (this.turnStatusUnitId === unit.id) return;
+    this.turnStatusUnitId = unit.id;
+    this.turnStatusIds = new Set(
+      ensureStatuses(unit).map((status) => status.id),
+    );
+  }
+
+  /** SW order: activation roll, immunity, then clamped RES-ACC resistance. */
+  private effectLands(
+    source: Unit,
+    target: Unit,
+    activationChance = 1,
+  ): boolean {
+    const chance = Math.max(0, Math.min(1, activationChance));
+    if (chance <= 0 || (chance < 1 && this.rng() >= chance)) {
+      this.log.push(`${target.name} 효과 불발`);
+      return false;
+    }
+    if (
+      hasStatus(target, "immunity") ||
+      ((target.statusImmuneTurns ?? 0) > 0 && !!target.statusImmuneIsPassive)
+    ) {
+      this.log.push(`${target.name} 상태이상 면역`);
+      return false;
+    }
+    const accuracy =
+      (source.stats.accuracy ?? 0) +
+      (source.accuracyBuff ?? 0) -
+      (source.accuracyDebuff ?? 0);
+    const resist = target.stats.resistance ?? 0;
+    const resistChance = Math.max(15, Math.min(85, resist - accuracy)) / 100;
+    if (this.rng() < resistChance) {
+      this.log.push(`${target.name} 저항`);
+      return false;
+    }
+    return true;
+  }
+
   private applyStatBuff(
     unit: Unit,
     axis: string,
     amount: number,
     turns: number,
+    sourceUnitId = unit.id,
   ): void {
-    switch (axis) {
-      case "atk":
-        unit.atkBuffPct = (unit.atkBuffPct ?? 0) + amount;
-        unit.atkBuffTicks = Math.max(unit.atkBuffTicks ?? 0, turns);
-        break;
-      case "def":
-        unit.defBuffPct = (unit.defBuffPct ?? 0) + amount;
-        unit.defBuffTicks = Math.max(unit.defBuffTicks ?? 0, turns);
-        break;
-      case "spd":
-        unit.spdBuffPct = (unit.spdBuffPct ?? 0) + amount;
-        unit.spdBuffTicks = Math.max(unit.spdBuffTicks ?? 0, turns);
-        break;
-      case "critRate":
-        unit.critRateBuff = (unit.critRateBuff ?? 0) + amount * 100;
-        unit.critRateBuffTicks = Math.max(unit.critRateBuffTicks ?? 0, turns);
-        break;
-      case "critDmg":
-        unit.critDmgBuff = (unit.critDmgBuff ?? 0) + amount * 100;
-        unit.critDmgBuffTicks = Math.max(unit.critDmgBuffTicks ?? 0, turns);
-        break;
-      case "accuracy":
-        unit.accuracyBuff = (unit.accuracyBuff ?? 0) + amount * 100;
-        unit.accuracyBuffTicks = Math.max(unit.accuracyBuffTicks ?? 0, turns);
-        break;
-      default:
-        break;
+    const kinds = {
+      atk: "atk_up",
+      def: "def_up",
+      spd: "spd_up",
+      critRate: "crit_up",
+      critDmg: "crit_dmg_up",
+      accuracy: "accuracy_up",
+    } as const;
+    const kind = kinds[axis as keyof typeof kinds];
+    if (kind) {
+      addStatus(unit, {
+        kind,
+        sourceUnitId,
+        polarity: "buff",
+        turns,
+        stacking: "replace",
+        dispellable: true,
+        amount: axis === "critRate" || axis === "critDmg" || axis === "accuracy"
+          ? amount * 100
+          : amount,
+      });
     }
   }
 
@@ -2198,89 +2881,30 @@ export class Battle {
     axis: string,
     amount: number,
     turns: number,
+    sourceUnitId = unit.id,
   ): void {
-    switch (axis) {
-      case "atk":
-        unit.atkDebuffPct = Math.min(
-          0.7,
-          (unit.atkDebuffPct ?? 0) + amount,
-        );
-        unit.atkDebuffTicks = Math.max(unit.atkDebuffTicks ?? 0, turns);
-        break;
-      case "def":
-        unit.defDebuffPct = Math.min(
-          0.7,
-          (unit.defDebuffPct ?? 0) + amount,
-        );
-        unit.defDebuffTicks = Math.max(unit.defDebuffTicks ?? 0, turns);
-        break;
-      case "spd":
-        unit.spdDebuffPct = Math.min(
-          0.7,
-          (unit.spdDebuffPct ?? 0) + amount,
-        );
-        unit.spdDebuffTicks = Math.max(unit.spdDebuffTicks ?? 0, turns);
-        break;
-      default:
-        // accuracy/crit debuffs: reuse atkDebuff as soft stub for accuracy
-        if (axis === "accuracy") {
-          unit.atkDebuffPct = Math.min(
-            0.5,
-            (unit.atkDebuffPct ?? 0) + amount * 0.5,
-          );
-          unit.atkDebuffTicks = Math.max(unit.atkDebuffTicks ?? 0, turns);
-        }
-        break;
-    }
-  }
-
-  private tickStatus(u: Unit): void {
-    if ((u.atkBuffTicks ?? 0) > 0) {
-      u.atkBuffTicks = (u.atkBuffTicks ?? 0) - 1;
-      if ((u.atkBuffTicks ?? 0) <= 0) u.atkBuffPct = 0;
-    }
-    if ((u.defBuffTicks ?? 0) > 0) {
-      u.defBuffTicks = (u.defBuffTicks ?? 0) - 1;
-      if ((u.defBuffTicks ?? 0) <= 0) u.defBuffPct = 0;
-    }
-    if ((u.spdBuffTicks ?? 0) > 0) {
-      u.spdBuffTicks = (u.spdBuffTicks ?? 0) - 1;
-      if ((u.spdBuffTicks ?? 0) <= 0) u.spdBuffPct = 0;
-    }
-    if ((u.critRateBuffTicks ?? 0) > 0) {
-      u.critRateBuffTicks = (u.critRateBuffTicks ?? 0) - 1;
-      if ((u.critRateBuffTicks ?? 0) <= 0) u.critRateBuff = 0;
-    }
-    if ((u.critDmgBuffTicks ?? 0) > 0) {
-      u.critDmgBuffTicks = (u.critDmgBuffTicks ?? 0) - 1;
-      if ((u.critDmgBuffTicks ?? 0) <= 0) u.critDmgBuff = 0;
-    }
-    if ((u.accuracyBuffTicks ?? 0) > 0) {
-      u.accuracyBuffTicks = (u.accuracyBuffTicks ?? 0) - 1;
-      if ((u.accuracyBuffTicks ?? 0) <= 0) u.accuracyBuff = 0;
-    }
-    if ((u.atkDebuffTicks ?? 0) > 0) {
-      u.atkDebuffTicks = (u.atkDebuffTicks ?? 0) - 1;
-      if ((u.atkDebuffTicks ?? 0) <= 0) u.atkDebuffPct = 0;
-    }
-    if ((u.defDebuffTicks ?? 0) > 0) {
-      u.defDebuffTicks = (u.defDebuffTicks ?? 0) - 1;
-      if ((u.defDebuffTicks ?? 0) <= 0) u.defDebuffPct = 0;
-    }
-    if ((u.spdDebuffTicks ?? 0) > 0) {
-      u.spdDebuffTicks = (u.spdDebuffTicks ?? 0) - 1;
-      if ((u.spdDebuffTicks ?? 0) <= 0) u.spdDebuffPct = 0;
-    }
-    if ((u.dotTicks ?? 0) > 0) {
-      u.dotTicks = (u.dotTicks ?? 0) - 1;
-      if ((u.dotTicks ?? 0) <= 0) {
-        u.dotAtkCoeff = 0;
-        u.dotSourceAtk = 0;
-      }
-    }
-    if ((u.provokeTicks ?? 0) > 0) {
-      u.provokeTicks = (u.provokeTicks ?? 0) - 1;
-      if ((u.provokeTicks ?? 0) <= 0) u.provokeTargetId = undefined;
+    const kinds = {
+      atk: "atk_down",
+      def: "def_down",
+      spd: "spd_down",
+      critRate: "crit_down",
+      critDmg: "crit_dmg_down",
+      accuracy: "accuracy_down",
+    } as const;
+    const kind = kinds[axis as keyof typeof kinds];
+    if (kind) {
+      addStatus(unit, {
+        kind,
+        sourceUnitId,
+        polarity: "debuff",
+        turns,
+        stacking: "replace",
+        dispellable: true,
+        amount:
+          axis === "critRate" || axis === "critDmg" || axis === "accuracy"
+            ? amount * 100
+            : Math.min(0.7, amount),
+      });
     }
   }
 
@@ -2299,7 +2923,12 @@ export class Battle {
     target: Unit,
     coeff: number,
     usedSummonerSkill: boolean,
-    opts?: { fromCounter?: boolean },
+    opts?: {
+      fromCounter?: boolean;
+      source?: "atk" | "maxHp" | "def" | "spd" | "targetMaxHp";
+      sourceFactor?: number;
+      ignoreDef?: number;
+    },
   ): SkillResult {
     if (target.kind === "summoner") {
       this.log.push(`${target.name}는 후열 — 공격 무효`);
@@ -2324,9 +2953,11 @@ export class Battle {
       };
     }
 
-    const critBonus = attacker.critCharm ?? 0;
+    const boardBuff = this.boardBuffTotals(attacker.team);
+    const critBonus = (attacker.critCharm ?? 0) + boardBuff.critRateBonus;
     if (critBonus > 0) attacker.critCharm = 0;
-    const critDmgExtra = attacker.critDmgBonus ?? 0;
+    const critDmgExtra =
+      (attacker.critDmgBonus ?? 0) + boardBuff.critDmgBonus;
     if (critDmgExtra > 0) attacker.critDmgBonus = 0;
 
     let incomingMul = target.damageTakenMul ?? 1;
@@ -2343,37 +2974,62 @@ export class Battle {
     const defMul =
       (1 + (target.defBuffPct ?? 0)) *
       (1 - (target.defDebuffPct ?? 0));
+    const rawSourceValue =
+      opts?.source === "maxHp"
+        ? attacker.stats.hp
+        : opts?.source === "def"
+          ? attacker.stats.def *
+            Math.max(0.3, (1 + (attacker.defBuffPct ?? 0)) * (1 - (attacker.defDebuffPct ?? 0)))
+          : opts?.source === "spd"
+            ? attacker.stats.spd *
+              Math.max(0.3, (1 + (attacker.spdBuffPct ?? 0)) * (1 - (attacker.spdDebuffPct ?? 0)))
+            : opts?.source === "targetMaxHp"
+              ? target.stats.hp
+              : attacker.stats.atk * Math.max(0.3, atkMul);
+    const sourceValue = rawSourceValue * Math.max(0, opts?.sourceFactor ?? 1);
+    const ignoreDef = Math.max(0, Math.min(1, opts?.ignoreDef ?? 0));
     const { damage, crit } = computeDamage({
-      atk: attacker.stats.atk * Math.max(0.3, atkMul),
+      atk: sourceValue,
       skillCoeff: coeff,
       attackerElement: attacker.element,
       defenderElement: target.element,
-      defenderDef: target.stats.def * Math.max(0.3, defMul),
+      defenderDef:
+        target.stats.def * Math.max(0.3, defMul) * (1 - ignoreDef),
       amplify: this.currentAmplify(),
       critRate:
         attacker.stats.critRate +
         critBonus +
-        (attacker.critRateBuff ?? 0),
+        (attacker.critRateBuff ?? 0) -
+        (attacker.critRateDebuff ?? 0),
       critDmg:
         attacker.stats.critDmg +
         critDmgExtra +
-        (attacker.critDmgBuff ?? 0),
+        (attacker.critDmgBuff ?? 0) -
+        (attacker.critDmgDebuff ?? 0),
       rng: this.rng,
     });
 
-    let captureMul = 1;
-    if (attacker.kind === "monster") {
-      const bonus = this.pendingCaptureDamageBonus[attacker.team] ?? 0;
-      if (bonus > 0) {
-        captureMul = 1 + bonus;
-        this.pendingCaptureDamageBonus[attacker.team] = 0;
-        this.log.push(
-          `따냄 추가피해 ×${captureMul.toFixed(2)} (${attacker.name})`,
-        );
-      }
-    }
+    const captureMul = 1 + boardBuff.damageBonus;
 
     let remaining = Math.round(damage * incomingMul * captureMul);
+    const isDungeonBoss =
+      !!this.dungeonBoss && target.id === this.dungeonBoss.unitId;
+    if (
+      isDungeonBoss &&
+      this.dungeonBoss?.kind === "necro" &&
+      this.necroBarrierHits > 0
+    ) {
+      this.necroBarrierHits -= 1;
+      remaining = 0;
+      this.log.push(`영혼 방벽 (${this.necroBarrierHits})`);
+    }
+    for (const buff of this.boardTeamBuffs[target.team]) {
+      const shield = buff.shieldByUnit?.[target.id] ?? 0;
+      if (shield <= 0 || remaining <= 0 || !buff.shieldByUnit) continue;
+      const absorbed = Math.min(shield, remaining);
+      buff.shieldByUnit[target.id] = shield - absorbed;
+      remaining -= absorbed;
+    }
     if (target.shieldHp && target.shieldHp > 0) {
       const absorbed = Math.min(target.shieldHp, remaining);
       target.shieldHp -= absorbed;
@@ -2381,15 +3037,44 @@ export class Battle {
       if (target.shieldHp <= 0) target.shieldHp = 0;
     }
 
-    const hpBefore = target.hp;
-    target.hp = Math.max(0, target.hp - remaining);
-    const applied = hpBefore - target.hp;
+    const share = statusesOf(target, "buff").find(
+      (status) =>
+        status.kind === "damage_share" &&
+        status.linkedUnitId &&
+        status.linkedUnitId !== target.id,
+    );
+    if (share && remaining > 0) {
+      const partner = this.getUnit(share.linkedUnitId!);
+      if (partner?.alive && partner.team === target.team) {
+        const shared = Math.min(
+          remaining,
+          Math.round(remaining * Math.max(0, Math.min(0.9, share.amount ?? 0))),
+        );
+        remaining -= shared;
+        this.dealDirectDamage(partner, shared);
+        this.log.push(`${partner.name} 피해 분담 ${shared}`);
+      }
+    }
+
+    const applied = this.dealDirectDamage(target, remaining);
     if (attacker.team === "ally" && target.team === "enemy" && applied > 0) {
       this.allyDamageDealt += applied;
     }
-    if (target.hp <= 0) {
-      target.alive = false;
-      this.log.push(`${target.name} defeated`);
+
+    const reflect = statusesOf(target, "buff").find(
+      (status) => status.kind === "reflect",
+    );
+    if (
+      applied > 0 &&
+      reflect &&
+      attacker.alive &&
+      attacker.team !== target.team
+    ) {
+      const reflected = Math.round(applied * Math.max(0, reflect.amount ?? 0));
+      if (reflected > 0) {
+        this.dealDirectDamage(attacker, reflected);
+        this.log.push(`${target.name} 반사 ${reflected}`);
+      }
     }
 
     // Nemesis: ATB on HP loss thresholds
@@ -2444,10 +3129,21 @@ export class Battle {
       target.alive &&
       (attacker.stunOnHitChance ?? 0) > 0
     ) {
-      if ((target.statusImmuneTurns ?? 0) > 0) {
-        this.log.push(`${target.name} 상태이상 면역`);
-      } else if (this.rng() * 100 < (attacker.stunOnHitChance ?? 0)) {
-        target.stunnedTurns = Math.max(target.stunnedTurns ?? 0, 1);
+      if (
+        this.effectLands(
+          attacker,
+          target,
+          (attacker.stunOnHitChance ?? 0) / 100,
+        )
+      ) {
+        addStatus(target, {
+          kind: "stun",
+          sourceUnitId: attacker.id,
+          polarity: "debuff",
+          turns: 1,
+          stacking: "replace",
+          dispellable: true,
+        });
         this.log.push(`${target.name} 기절`);
       }
     }
@@ -2466,6 +3162,35 @@ export class Battle {
       });
     }
 
+    if (
+      isDungeonBoss &&
+      this.dungeonBoss?.kind === "giant" &&
+      target.alive &&
+      attacker.team !== target.team &&
+      !opts?.fromCounter
+    ) {
+      this.giantHitCounter += 1;
+      if (this.giantHitCounter >= 7) {
+        this.giantHitCounter = 0;
+        const victims = this.dungeonBoss?.abyss
+          ? this.units.filter(
+              (unit) =>
+                unit.alive &&
+                unit.team === attacker.team &&
+                unit.kind === "monster",
+            )
+          : attacker.alive
+            ? [attacker]
+            : [];
+        this.log.push(`거인의 7타 반격`);
+        for (const victim of victims) {
+          this.applyHit(target, victim, 0.55 * SKILL_DMG_MUL, false, {
+            fromCounter: true,
+          });
+        }
+      }
+    }
+
     return {
       attackerId: attacker.id,
       targetId: target.id,
@@ -2473,6 +3198,21 @@ export class Battle {
       crit,
       usedSummonerSkill,
     };
+  }
+
+  private dealDirectDamage(target: Unit, amount: number): number {
+    const before = target.hp;
+    target.hp = Math.max(0, target.hp - Math.max(0, Math.round(amount)));
+    const applied = before - target.hp;
+    if (applied > 0 && hasStatus(target, "sleep")) {
+      removeStatusKind(target, "sleep");
+      this.log.push(`${target.name} 수면 해제`);
+    }
+    if (target.hp <= 0 && target.alive) {
+      target.alive = false;
+      this.log.push(`${target.name} defeated`);
+    }
+    return applied;
   }
 
   /** Circle pickups: heal the picker's team, or bomb the opposing monsters. */
@@ -2564,6 +3304,7 @@ export class Battle {
       ...spawned,
     ];
     this.currentWave = next;
+    this.resetDungeonBossState();
     this.log.push(`웨이브 ${this.currentWave}/${this.totalWaves} 출현`);
     // Soft reset ATB pressure: nudge ally ATB down slightly so wave isn't insta-cleared
     for (const u of this.units) {

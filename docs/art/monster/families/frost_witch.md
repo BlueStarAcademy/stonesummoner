@@ -45,7 +45,7 @@ Premium stylized 2.5D mobile RPG ice mage debuffer woman,
 long white hair crystal crown, blue gown silver armor plates fur-lined cloak,
 tall staff with giant element crystal head, swirling pool at feet,
 regal caster stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded pool base, clean white plate,
+eye-level front three-quarter, grounded pool base, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes crystal pool and gown gems only,
 no global recolor, no text, no cropped staff or pool
 ```

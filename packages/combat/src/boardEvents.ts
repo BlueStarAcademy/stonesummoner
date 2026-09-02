@@ -8,9 +8,7 @@ export interface BoardEventGains {
   /** Persistent battle Amplify (국면감). Capture uses a small tick only. */
   amplifyDelta: number;
   /**
-   * @deprecated Capture no longer grants skill Amplify — use
-   * `pendingCaptureDamageBonus` (N×10% on next monster hit) instead.
-   * Kept for item_magnet / shape bonuses.
+   * Temporary team damage bonus used by item_magnet.
    */
   skillAmplifyBonus: number;
   /**
@@ -18,13 +16,13 @@ export interface BoardEventGains {
    * `manaMax × CAPTURE_MANA_FRAC_PER_STONE × capturedCount` (not via this field).
    */
   mana: number;
-  /** Damage multiplier bonus for the next monster attack: `CAPTURE_DAMAGE_PER_STONE × N`. */
+  /** Team damage bonus until immediately before its next stone placement. */
   captureDamageBonus: number;
   /** Mana as fraction of manaMax from captures: `CAPTURE_MANA_FRAC_PER_STONE × N`. */
   captureManaFrac: number;
 }
 
-/** Per captured stone: +18% next-monster damage. */
+/** Per captured stone: +18% team damage for the current board cycle. */
 export const CAPTURE_DAMAGE_PER_STONE = 0.18;
 /** Per captured stone: +20%p summoner mana gauge. */
 export const CAPTURE_MANA_FRAC_PER_STONE = 0.2;
@@ -40,7 +38,7 @@ export function gainsForBoardEvent(
 ): BoardEventGains {
   if (kind === "item_magnet") {
     return {
-      amplifyDelta: 0.08,
+      amplifyDelta: 0,
       skillAmplifyBonus: 0.14,
       mana: 35 * manaMul,
       captureDamageBonus: 0,
@@ -50,8 +48,7 @@ export function gainsForBoardEvent(
   const n = Math.max(0, capturedCount);
   if (kind === "capture_large" || kind === "capture_small" || n >= 1) {
     return {
-      // Mild persistent Amp — main payoff is N× next-hit damage + mana.
-      amplifyDelta: n >= 3 ? 0.06 : 0.04,
+      amplifyDelta: 0,
       skillAmplifyBonus: 0,
       mana: 0,
       captureDamageBonus: CAPTURE_DAMAGE_PER_STONE * n,
@@ -59,8 +56,8 @@ export function gainsForBoardEvent(
     };
   }
   return {
-    amplifyDelta: 0.025,
-    skillAmplifyBonus: 0.02,
+    amplifyDelta: 0,
+    skillAmplifyBonus: 0,
     mana: SAFE_PLACE_MANA * manaMul,
     captureDamageBonus: 0,
     captureManaFrac: 0,

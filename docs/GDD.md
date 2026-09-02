@@ -55,6 +55,7 @@ flowchart LR
 | [board-progression.md](board-progression.md) | 5→7→9 크기 · 50수 강화 리셋 |
 | [symbols.md](symbols.md) | 상징 = SW 룬 1:1 |
 | [summoner.md](summoner.md) | 소환사·장비·마나 스킬 |
+| [summoner-account-level.md](summoner-account-level.md) | 소환사 = 유저 공유 레벨 통합 계획 |
 | [monster-template.md](monster-template.md) | 몬스터 템플릿·샘플 |
 | [content-map.md](content-map.md) | 콘텐츠·재화·해금 맵 |
 | [refs/](refs/) | 목업·기획 시트 참조 |
@@ -78,6 +79,7 @@ flowchart LR
 
 | 축 | 역할 |
 |----|------|
+| 소환사 레벨 | 유저와 동일. 속성 키트는 각성·장비·마법만 갈라짐 |
 | 상징 | 전투력·메타 **주축** (SW 룬) |
 | 홈·영광건물 | 생산·전역 버프 (SW 섬) |
 | 소환사 장비 | 마나 템포·소환사기 (보조) |

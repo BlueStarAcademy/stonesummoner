@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "dev": "npm run dev -w stonesummoner-web",
+    "dev:all": "sh -c 'npm run api -w stonesummoner-web & sleep 1 && npm run dev -w stonesummoner-web'",
     "api": "npm run api -w stonesummoner-web",
     "build": "npm run build -w stonesummoner-web",
     "start": "npm run start -w stonesummoner-web",
@@ -19,12 +20,15 @@
     "cli:demo": "npm run demo -w stonesummoner-cli",
     "check:encoding": "node scripts/check-hangul.mjs",
     "pretest": "npm run check:encoding",
-    "test": "npm test -w stonesummoner-board && npm test -w stonesummoner-combat && npm test -w stonesummoner-home && npm test -w stonesummoner-data && npm test -w stonesummoner-loop",
+    "test": "npm test -w stonesummoner-board && npm test -w stonesummoner-combat && npm test -w stonesummoner-home && npm test -w stonesummoner-data && npm test -w stonesummoner-loop && npm test -w stonesummoner-web",
     "test:board": "npm test -w stonesummoner-board",
     "test:combat": "npm test -w stonesummoner-combat",
     "test:home": "npm test -w stonesummoner-home",
     "test:data": "npm test -w stonesummoner-data",
     "test:loop": "npm test -w stonesummoner-loop",
+    "test:web": "npm test -w stonesummoner-web",
+    "balance:simulate": "tsx scripts/simulate-balance.ts",
+    "skills:audit-diversity": "tsx scripts/audit-skill-diversity.ts",
     "i18n:gen": "node apps/web/scripts/gen-i18n-packs.mjs",
     "store:graphics": "node scripts/gen-play-store-graphics.mjs",
     "icons:export": "node scripts/export-app-icons.mjs",
@@ -43,6 +47,7 @@
     "monster-art:2.5d:audit": "node scripts/audit-monster-battle-art.mjs",
     "monster-art:2.5d:audit:strict": "node scripts/audit-monster-battle-art.mjs --strict",
     "monster-art:redematte": "node scripts/redematte-painted-monster.mjs",
+    "monster-art:dematte-installed": "node scripts/dematte-monster-art.mjs",
     "monster-art:rebuild": "node scripts/install-battle-stills.mjs",
     "monster-art:bake": "node scripts/bake-monster-element-art.mjs",
     "monster-art:check": "node scripts/check-monster-art.mjs --strict",
@@ -63,7 +68,8 @@
     "gear-art:bootstrap": "node scripts/bootstrap-gear-star-art.mjs",
     "gear-art:sync": "node scripts/sync-cursor-gear-pngs.mjs",
     "gear-art:derive": "node scripts/derive-gear-star-art.mjs",
-    "gear-art:process": "node scripts/process-paint-icons.mjs ui-gear"
+    "gear-art:process": "node scripts/process-paint-icons.mjs ui-gear",
+    "monster-art:fix-white": "node scripts/fix-enclosed-white-monster-art.mjs"
   },
   "engines": {
     "node": ">=20"

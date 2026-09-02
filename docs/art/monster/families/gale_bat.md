@@ -49,7 +49,7 @@ dark fur white neck ruff, large bat ears, spread leathery wings,
 ornate armor with diamond gem buckle, tattered cloak panels,
 circular elemental energy ring, aggressive claw lunge stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-grounded clawed feet visible, clean white plate,
+grounded clawed feet visible, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes gem energy ring and cloak trim only,
 no global recolor, no text, no cropped wings or feet
 ```

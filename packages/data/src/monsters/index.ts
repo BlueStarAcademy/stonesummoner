@@ -1,5 +1,6 @@
 import { STONE_PASSIVE_LABEL } from "../stonePassives.js";
 import { baseStatsFor } from "./curves.js";
+import { familyKitProfile } from "./familyKitProfiles.js";
 import { kitsForFamily } from "./kitFactory.js";
 import { FAMILY_ROSTER } from "./roster.js";
 import {
@@ -41,10 +42,14 @@ export function expandFamily(seed: FamilySeed): MonsterDef[] {
       element,
       naturalStars: seed.naturalStars,
       role: kit.role ?? seed.role,
+      balanceArchetype: seed.balanceArchetype,
+      familyIdentity: seed.familyIdentity,
+      combatTags: seed.combatTags,
       baseStats: mergeStats(seed.baseStats, kit.baseStats),
       skillCoeff: kit.skillCoeff,
       skills: kit.skills,
       stonePassiveId: kit.stonePassiveId ?? seed.stonePassiveId,
+      ...(seed.passiveImmunity ? { passiveImmunity: seed.passiveImmunity } : {}),
     });
   });
 }
@@ -56,9 +61,15 @@ export function buildFamilySeeds(): FamilySeed[] {
     artKey: entry.familyId,
     naturalStars: entry.naturalStars,
     role: entry.role,
-    baseStats: baseStatsFor(entry.naturalStars, entry.role),
+    balanceArchetype: entry.balanceArchetype,
+    familyIdentity: entry.familyIdentity,
+    combatTags: entry.combatTags,
+    baseStats: baseStatsFor(entry.naturalStars, entry.balanceArchetype),
     stonePassiveId: entry.stonePassiveId,
     kits: kitsForFamily(entry),
+    ...(familyKitProfile(entry.familyId).passiveImmunity
+      ? { passiveImmunity: familyKitProfile(entry.familyId).passiveImmunity }
+      : {}),
   }));
 }
 
@@ -208,4 +219,18 @@ export {
   type MonsterDef,
   type FamilySeed,
 } from "./types.js";
-export type { MonsterRole } from "./types.js";
+export type {
+  BalanceArchetype,
+  CombatTag,
+  FamilyIdentity,
+  MonsterRole,
+} from "./types.js";
+export {
+  FAMILY_KIT_PROFILES,
+  familyKitProfile,
+} from "./familyKitProfiles.js";
+export type {
+  FamilyKitProfile,
+  FamilySkillProfile,
+  KitMechanic,
+} from "./familyKitProfiles.js";

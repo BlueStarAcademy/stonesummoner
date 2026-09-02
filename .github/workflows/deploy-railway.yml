@@ -1,0 +1,36 @@
+# main 푸시 → Railway 즉시 재배포
+# 1순위: 서비스 Settings의 GitHub Autodeploy (branch: main)
+# 2순위: 이 워크플로가 Deploy Hook으로 강제 트리거 (시크릿 필요)
+name: Deploy Railway
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-railway-main
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    name: Trigger Railway deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Railway deploy hook
+        env:
+          RAILWAY_DEPLOY_HOOK: ${{ secrets.RAILWAY_DEPLOY_HOOK }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAILWAY_DEPLOY_HOOK:-}" ]; then
+            echo "::notice::RAILWAY_DEPLOY_HOOK secret is not set."
+            echo "Relying on Railway GitHub Autodeploy (Settings → Source → Autodeploy → main)."
+            echo "To force-deploy from Actions: Railway → Service → Settings → Deploy Hooks → create hook,"
+            echo "then add the URL as repo secret RAILWAY_DEPLOY_HOOK."
+            exit 0
+          fi
+          echo "Triggering Railway deploy hook…"
+          curl -fsS -X POST "$RAILWAY_DEPLOY_HOOK"
+          echo
+          echo "Deploy hook accepted."

@@ -31,6 +31,6 @@ Premium stylized 2.5D mobile RPG holy paladin tank,
 white-gold plate winged halo crest, angel-face kite shield, glowing element spear,
 white tabard gold embroidery, heroic grounded tank stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-clean white plate, element accents in eyes spear halo shield gem only,
+transparent alpha background or solid magenta #FF00FF plate, element accents in eyes spear halo shield gem only,
 no global recolor, no text, no cropped shield spear or feet
 ```

@@ -31,6 +31,6 @@ Premium stylized 2.5D mobile RPG anthropomorphic seal stonesage,
 braided whiskers forehead sigil, ornate gold-embroidered dark robes medallions,
 extended palm and golden astrolabe staff, wise grounded caster stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-clean white plate, element accents in eyes sigil staff glow only,
+transparent alpha background or solid magenta #FF00FF plate, element accents in eyes sigil staff glow only,
 no global recolor, no text, no cropped staff or flippers
 ```

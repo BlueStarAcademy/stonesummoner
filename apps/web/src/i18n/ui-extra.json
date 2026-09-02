@@ -340,8 +340,52 @@
     "en": "OK"
   },
   "ui.stonePick.help": {
-    "ko": "마법진에 돌을 놓아 턴을 엽니다|빛나는 칸을 탭하면 착수됩니다|따내면 마나·증폭이 오릅니다|돌은 소환수가 아닙니다",
-    "en": "Place a stone on the circle to open your turn|Tap a glowing cell to place|Captures raise mana and amplify|Stones are not summon monsters"
+    "ko": "마법진에 돌을 놓아 턴을 엽니다|빛나는 칸을 탭하면 착수됩니다|따내면 마나·증폭이 오릅니다",
+    "en": "Place a stone on the circle to open your turn|Tap a glowing cell to place|Captures raise mana and amplify"
+  },
+  "ui.stonePick.helpItems": {
+    "ko": "특수 아이템",
+    "en": "Special items"
+  },
+  "ui.boardTokenDesc.crit_charm": {
+    "ko": "치명타 확률 상승",
+    "en": "Raises crit rate"
+  },
+  "ui.boardTokenDesc.shield_core": {
+    "ko": "아군에게 실드",
+    "en": "Shields allies"
+  },
+  "ui.boardTokenDesc.capture_magnet": {
+    "ko": "마나 획득",
+    "en": "Grants mana"
+  },
+  "ui.boardTokenDesc.stride_sand": {
+    "ko": "아군 행동게이지·공속",
+    "en": "Ally ATB and speed"
+  },
+  "ui.boardTokenDesc.seal_nail": {
+    "ko": "주변 칸 착수 금지",
+    "en": "Seals nearby cells"
+  },
+  "ui.boardTokenDesc.element_ward": {
+    "ko": "아군 피해 증가",
+    "en": "Raises ally damage"
+  },
+  "ui.boardTokenDesc.bait_stone": {
+    "ko": "실드와 상대 유인",
+    "en": "Shield and lure"
+  },
+  "ui.boardTokenDesc.transform_dust": {
+    "ko": "인접 돌 변환",
+    "en": "Flips adjacent stones"
+  },
+  "ui.boardTokenDesc.heal_orb": {
+    "ko": "아군 회복",
+    "en": "Heals allies"
+  },
+  "ui.boardTokenDesc.hp_bomb": {
+    "ko": "적에게 피해",
+    "en": "Damages enemies"
   },
   "ui.boardToken.crit_charm": {
     "ko": "치명부적",
@@ -1596,12 +1640,12 @@
     "en": "Hell"
   },
   "ui.ab309da205": {
-    "ko": "적 강화 +4 · 보상 대폭 증가",
-    "en": "Enemy +4 · much better rewards"
+    "ko": "적 강화 +10 · 보상 대폭 증가",
+    "en": "Enemy +10 · much better rewards"
   },
   "ui.7be5aa7542": {
-    "ko": "적 강화 +2 · 보상 증가",
-    "en": "Enemy +2 · better rewards"
+    "ko": "적 강화 +5 · 보상 증가",
+    "en": "Enemy +5 · better rewards"
   },
   "ui.956f2f4243": {
     "ko": "잠김",
@@ -2455,6 +2499,10 @@
     "ko": "체력형",
     "en": "Health"
   },
+  "ui.roleSpeed": {
+    "ko": "속도형",
+    "en": "Speed"
+  },
   "ui.roleSupport": {
     "ko": "지원형",
     "en": "Support"
@@ -2695,6 +2743,194 @@
     "ko": "마나 +{n}",
     "en": "Mana +{n}"
   },
+  "ui.skillTargetOneEnemy": {
+    "ko": "적 1명",
+    "en": "1 enemy"
+  },
+  "ui.skillTargetAllEnemies": {
+    "ko": "적 전체",
+    "en": "all enemies"
+  },
+  "ui.skillTargetSelf": {
+    "ko": "자신",
+    "en": "self"
+  },
+  "ui.skillTargetLowestAlly": {
+    "ko": "체력이 가장 낮은 아군",
+    "en": "lowest-HP ally"
+  },
+  "ui.skillTargetAllAllies": {
+    "ko": "아군 전체",
+    "en": "all allies"
+  },
+  "ui.skillTargetOneAlly": {
+    "ko": "아군 1명",
+    "en": "1 ally"
+  },
+  "ui.skillScaleAtk": {
+    "ko": "공격력",
+    "en": "ATK"
+  },
+  "ui.skillScaleDef": {
+    "ko": "방어력",
+    "en": "DEF"
+  },
+  "ui.skillScaleSpd": {
+    "ko": "공격 속도",
+    "en": "SPD"
+  },
+  "ui.skillScaleMaxHp": {
+    "ko": "최대 체력",
+    "en": "max HP"
+  },
+  "ui.skillScaleTargetMaxHp": {
+    "ko": "대상의 최대 체력",
+    "en": "target max HP"
+  },
+  "ui.skillScaleCurrentHp": {
+    "ko": "현재 체력",
+    "en": "current HP"
+  },
+  "ui.skillScaleLostHp": {
+    "ko": "잃은 체력",
+    "en": "lost HP"
+  },
+  "ui.skillAxisAtk": {
+    "ko": "공격력",
+    "en": "ATK"
+  },
+  "ui.skillAxisDef": {
+    "ko": "방어력",
+    "en": "DEF"
+  },
+  "ui.skillAxisSpd": {
+    "ko": "공격 속도",
+    "en": "SPD"
+  },
+  "ui.skillAxisCritRate": {
+    "ko": "치명타 확률",
+    "en": "critical rate"
+  },
+  "ui.skillAxisCritDmg": {
+    "ko": "치명타 피해",
+    "en": "critical damage"
+  },
+  "ui.skillAxisAccuracy": {
+    "ko": "효과 적중",
+    "en": "accuracy"
+  },
+  "ui.skillCcStun": {
+    "ko": "기절",
+    "en": "stun"
+  },
+  "ui.skillCcFreeze": {
+    "ko": "빙결",
+    "en": "freeze"
+  },
+  "ui.skillCcSleep": {
+    "ko": "수면",
+    "en": "sleep"
+  },
+  "ui.skillFxDamage": {
+    "ko": "{target} · {source} {pct}% 피해",
+    "en": "{target} · {pct}% {source} damage"
+  },
+  "ui.skillFxHeal": {
+    "ko": "{target} · {source} {pct}% 회복",
+    "en": "{target} · heal for {pct}% {source}"
+  },
+  "ui.skillFxShieldTarget": {
+    "ko": "{target} · {source} {pct}% 실드",
+    "en": "{target} · {pct}% {source} shield"
+  },
+  "ui.skillFxBuff": {
+    "ko": "{target} · {axis} +{pct}%",
+    "en": "{target} · {axis} +{pct}%"
+  },
+  "ui.skillFxDebuff": {
+    "ko": "{target} · {axis} -{pct}%",
+    "en": "{target} · {axis} -{pct}%"
+  },
+  "ui.skillFxCc": {
+    "ko": "{target} · {cc}",
+    "en": "{target} · {cc}"
+  },
+  "ui.skillFxDot": {
+    "ko": "{target} · 매 턴 {source} {pct}% 피해",
+    "en": "{target} · {pct}% {source} damage each turn"
+  },
+  "ui.skillFxHot": {
+    "ko": "{target} · 매 턴 {source} {pct}% 회복",
+    "en": "{target} · heal {pct}% {source} each turn"
+  },
+  "ui.skillFxStrip": {
+    "ko": "{target} · 이로운 효과 {count}개 제거",
+    "en": "{target} · remove {count} beneficial effect(s)"
+  },
+  "ui.skillFxCleanse": {
+    "ko": "{target} · 해로운 효과 {count}개 제거",
+    "en": "{target} · remove {count} harmful effect(s)"
+  },
+  "ui.skillFxProvoke": {
+    "ko": "{target} · 도발",
+    "en": "{target} · provoke"
+  },
+  "ui.skillFxHealBlock": {
+    "ko": "{target} · 회복 불가",
+    "en": "{target} · block healing"
+  },
+  "ui.skillFxSilence": {
+    "ko": "{target} · 침묵",
+    "en": "{target} · silence"
+  },
+  "ui.skillFxAtbUp": {
+    "ko": "{target} · 공격 게이지 +{pct}%",
+    "en": "{target} · attack bar +{pct}%"
+  },
+  "ui.skillFxAtbDown": {
+    "ko": "{target} · 공격 게이지 -{pct}%",
+    "en": "{target} · attack bar -{pct}%"
+  },
+  "ui.skillFxRevive": {
+    "ko": "{target} · 체력 {pct}%로 부활",
+    "en": "{target} · revive with {pct}% HP"
+  },
+  "ui.skillFxCooldownUp": {
+    "ko": "{target} · 스킬 쿨타임 {n}턴 증가",
+    "en": "{target} · increase skill cooldown by {n} turn(s)"
+  },
+  "ui.skillFxCooldownDown": {
+    "ko": "{target} · 스킬 쿨타임 {n}턴 감소",
+    "en": "{target} · reduce skill cooldown by {n} turn(s)"
+  },
+  "ui.skillFxShare": {
+    "ko": "{target} · 받는 피해 {pct}% 분담",
+    "en": "{target} · share {pct}% of incoming damage"
+  },
+  "ui.skillFxReflect": {
+    "ko": "{target} · 받은 피해 {pct}% 반사",
+    "en": "{target} · reflect {pct}% of damage received"
+  },
+  "ui.skillFxIgnoreDefense": {
+    "ko": "방어력 무시",
+    "en": "Ignore defense"
+  },
+  "ui.skillFxIgnoreDefenseApplied": {
+    "ko": "{text} · 방어력 무시",
+    "en": "{text} · ignore defense"
+  },
+  "ui.skillFxIgnoreDefensePercent": {
+    "ko": "{text} · 방어력 {pct}% 무시",
+    "en": "{text} · ignore {pct}% defense"
+  },
+  "ui.skillFxWithTurns": {
+    "ko": "{text} · {turns}턴",
+    "en": "{text} · {turns} turn(s)"
+  },
+  "ui.skillFxWithChance": {
+    "ko": "{text} · {pct}% 확률",
+    "en": "{text} · {pct}% chance"
+  },
   "ui.hubDojo": {
     "ko": "진문 수련장",
     "en": "Circle Training Hall"
@@ -2824,8 +3060,8 @@
     "en": "OK"
   },
   "ui.bldgUp.needAccount": {
-    "ko": "계정 Lv.{n}",
-    "en": "Account Lv.{n}"
+    "ko": "소환사 Lv.{n}",
+    "en": "Summoner Lv.{n}"
   },
   "ui.bldgProd.title": {
     "ko": "수집량",
@@ -3508,8 +3744,8 @@
     "en": "Close"
   },
   "ui.summonerInfo.unlockAt": {
-    "ko": "유저 레벨 {n}에 해금",
-    "en": "Unlocks at user level {n}"
+    "ko": "소환사 Lv.{n}",
+    "en": "Summoner Lv.{n}"
   },
   "ui.stagePrepTapRoster": {
     "ko": "소환수를 탭해 출전 / 해제",
@@ -3655,29 +3891,57 @@
     "ko": "적 1명에게 공격력 {pct}% 피해",
     "en": "Deal {pct}% ATK damage to 1 enemy"
   },
+  "ui.magicFxMultiDamage": {
+    "ko": "적 {n}명에게 공격력 {pct}% 피해",
+    "en": "Deal {pct}% ATK damage to {n} enemies"
+  },
   "ui.magicFxAllyBuffAtk": {
     "ko": "아군 공격력 +{pct}% ({turns}턴)",
     "en": "Ally ATK +{pct}% ({turns} turns)"
+  },
+  "ui.magicFxAllyBuffAtkMulti": {
+    "ko": "아군 {n}명 공격력 +{pct}% ({turns}턴)",
+    "en": "{n} allies ATK +{pct}% ({turns} turns)"
   },
   "ui.magicFxAllyBuffSpd": {
     "ko": "아군 속도 +{pct}% ({turns}턴)",
     "en": "Ally SPD +{pct}% ({turns} turns)"
   },
+  "ui.magicFxAllyBuffSpdMulti": {
+    "ko": "아군 {n}명 속도 +{pct}% ({turns}턴)",
+    "en": "{n} allies SPD +{pct}% ({turns} turns)"
+  },
   "ui.magicFxAllyBuffCrit": {
     "ko": "아군 치명타율 +{pct}% ({turns}턴)",
     "en": "Ally crit rate +{pct}% ({turns} turns)"
+  },
+  "ui.magicFxAllyBuffCritMulti": {
+    "ko": "아군 {n}명 치명타율 +{pct}% ({turns}턴)",
+    "en": "{n} allies crit rate +{pct}% ({turns} turns)"
   },
   "ui.magicFxAllyHeal": {
     "ko": "아군 최대 체력 {pct}% 회복",
     "en": "Heal allies for {pct}% max HP"
   },
+  "ui.magicFxAllyHealMulti": {
+    "ko": "아군 {n}명 최대 체력 {pct}% 회복",
+    "en": "Heal {n} allies for {pct}% max HP"
+  },
   "ui.magicFxAllyShield": {
     "ko": "아군에게 최대 체력 {pct}% 실드",
     "en": "Grant allies a shield equal to {pct}% max HP"
   },
+  "ui.magicFxAllyShieldMulti": {
+    "ko": "아군 {n}명에게 최대 체력 {pct}% 실드",
+    "en": "Grant {n} allies a shield equal to {pct}% max HP"
+  },
   "ui.magicFxEnemyDebuff": {
     "ko": "적 약화 {pct}% ({turns}턴)",
     "en": "Weaken enemies by {pct}% ({turns} turns)"
+  },
+  "ui.magicFxEnemyDebuffMulti": {
+    "ko": "적 {n}명 약화 {pct}% ({turns}턴)",
+    "en": "Weaken {n} enemies by {pct}% ({turns} turns)"
   },
   "ui.magicFxAmplify": {
     "ko": "다음 피해 +{pct}%",
@@ -4296,28 +4560,28 @@
     "en": "Form your battle party|Deploy up to four monsters|You can also adjust the party before fights"
   },
   "ui.bldgInfo.wish": {
-    "ko": "소원의 사당에서 보상을 뽑습니다|다양한 자원과 성장 보상을 얻을 수 있습니다|유저 레벨 7에 해금됩니다",
-    "en": "Draw rewards at the Temple of Wishes|Gain resources and growth rewards|Unlocks at user level 7"
+    "ko": "소원의 사당에서 보상을 뽑습니다|다양한 자원과 성장 보상을 얻을 수 있습니다|소환사 레벨 7에 해금됩니다",
+    "en": "Draw rewards at the Temple of Wishes|Gain resources and growth rewards|Unlocks at summoner level 7"
   },
   "ui.bldgInfo.dojo": {
-    "ko": "진문에 착수를 새기는 수련장입니다|하루 몇 회 수련으로 진문석을 얻습니다|진문석으로 시작 마나·증폭 상한·보드 징표를 각인합니다|유저 레벨 8에 해금됩니다",
-    "en": "Train to inscribe openings on the magic circle|Earn jinmun stones from a few daily drills|Spend them on start mana, Amplify cap, and board marks|Unlocks at user level 8"
+    "ko": "진문에 착수를 새기는 수련장입니다|하루 몇 회 수련으로 진문석을 얻습니다|진문석으로 시작 마나·증폭 상한·보드 징표를 각인합니다|소환사 레벨 8에 해금됩니다",
+    "en": "Train to inscribe openings on the magic circle|Earn jinmun stones from a few daily drills|Spend them on start mana, Amplify cap, and board marks|Unlocks at summoner level 8"
   },
   "ui.bldgInfo.crystal_mine": {
-    "ko": "시간이 지나면 수정을 생산·저장합니다|광맥을 터치해 쌓인 수정을 수거하세요|업그레이드로 생산량과 저장 한도를 늘릴 수 있습니다|유저 레벨 10에 해금됩니다",
-    "en": "Produces and stores crystals over time|Tap the mine bubble to collect crystals|Upgrade to raise production and capacity|Unlocks at user level 10"
+    "ko": "시간이 지나면 수정을 생산·저장합니다|광맥을 터치해 쌓인 수정을 수거하세요|업그레이드로 생산량과 저장 한도를 늘릴 수 있습니다|소환사 레벨 10에 해금됩니다",
+    "en": "Produces and stores crystals over time|Tap the mine bubble to collect crystals|Upgrade to raise production and capacity|Unlocks at summoner level 10"
   },
   "ui.bldgInfo.glory": {
     "ko": "영광 포인트로 버프 건물을 강화합니다|전투와 성장에 도움이 되는 효과를 얻습니다|포인트를 모아 장기적인 이득을 쌓으세요",
     "en": "Spend glory points to empower buff buildings|Gain lasting combat and growth bonuses|Bank points for long-term advantages"
   },
   "ui.bldgInfo.guild": {
-    "ko": "길드와 커뮤니티 기능을 이용합니다|동료와 교류하고 길드 활동을 확인하세요|유저 레벨 12에 해금됩니다",
-    "en": "Access guild and community features|Chat with allies and check guild activity|Unlocks at user level 12"
+    "ko": "길드와 커뮤니티 기능을 이용합니다|동료와 교류하고 길드 활동을 확인하세요|소환사 레벨 12에 해금됩니다",
+    "en": "Access guild and community features|Chat with allies and check guild activity|Unlocks at summoner level 12"
   },
   "ui.bldgInfo.fusion": {
-    "ko": "같은 종의 소환수를 융합해 진화합니다|높은 레벨·스킬·상징을 유지한 채 성장합니다|유저 레벨 17에 해금됩니다",
-    "en": "Fuse same-species monsters to evolve|Keep the better level, skills, and symbols|Unlocks at user level 17"
+    "ko": "같은 종의 소환수를 융합해 진화합니다|높은 레벨·스킬·상징을 유지한 채 성장합니다|소환사 레벨 17에 해금됩니다",
+    "en": "Fuse same-species monsters to evolve|Keep the better level, skills, and symbols|Unlocks at summoner level 17"
   },
   "ui.arena.setDefense": {
     "ko": "방어 덱 설정",
@@ -4608,8 +4872,8 @@
     "en": "Defense +{n}"
   },
   "ui.gearBonusLeaderAtk": {
-    "ko": "리더 공격력 +{n}%",
-    "en": "Leader Attack Power +{n}%"
+    "ko": "소환사 공격력 +{n}%",
+    "en": "Summoner Attack Power +{n}%"
   },
   "ui.sumInfoLeaderBuffs": {
     "ko": "리더 버프",
@@ -4694,6 +4958,10 @@
   "ui.sumMagicEnhanceCost": {
     "ko": "강화 비용",
     "en": "Enhance cost"
+  },
+  "ui.sumMagicEnhanceRate": {
+    "ko": "성공률 {pct}%",
+    "en": "Success {pct}%"
   },
   "ui.growthPlayingSkill": {
     "ko": "스킬 강화 중",
@@ -4783,6 +5051,14 @@
     "ko": "{skill1}, {skill2} 해금",
     "en": "Unlocked {skill1}, {skill2}"
   },
+  "ui.growthMagicFail": {
+    "ko": "강화 실패 (성공률 {pct}%)",
+    "en": "Enhance failed ({pct}% chance)"
+  },
+  "ui.growthMagicFailNote": {
+    "ko": "재료는 소모되었습니다",
+    "en": "Materials were consumed"
+  },
   "ui.growthPlayingGear": {
     "ko": "장비 강화 중",
     "en": "Enhancing gear"
@@ -4808,8 +5084,8 @@
     "en": "Skill power"
   },
   "ui.growthGearStatLeaderAtk": {
-    "ko": "리더 공격력",
-    "en": "Leader Attack Power"
+    "ko": "소환사 공격력",
+    "en": "Summoner Attack Power"
   },
   "ui.growthGearStatBoardSense": {
     "ko": "보드 감지",
@@ -5018,6 +5294,30 @@
   "ui.stoneBuffUntilNext": {
     "ko": "다음 마법석 소환전까지 {buff}",
     "en": "Until next magic stone: {buff}"
+  },
+  "ui.stoneBuffCritDmg": {
+    "ko": "+치명피해 {n}%",
+    "en": "+C.DMG {n}%"
+  },
+  "ui.stoneBuffShield": {
+    "ko": "실드",
+    "en": "Shield"
+  },
+  "ui.battleSettingsTabSound": {
+    "ko": "소리",
+    "en": "Sound"
+  },
+  "ui.battleAudioOn": {
+    "ko": "켜짐",
+    "en": "On"
+  },
+  "ui.battleAudioOff": {
+    "ko": "꺼짐",
+    "en": "Off"
+  },
+  "ui.battleStoneEta": {
+    "ko": "다음 착수",
+    "en": "Next stone"
   },
   "ui.stoneCapture": {
     "ko": "+피해 {n}%",
@@ -5322,5 +5622,49 @@
   "ui.gearAffixEffect.bossAtk": {
     "ko": "보스전 공격력 +{n}%",
     "en": "Boss ATK +{n}%"
+  },
+  "ui.growthResultMagicSuccess": {
+    "ko": "마법 강화 성공",
+    "en": "Magic enhance success"
+  },
+  "ui.growthResultMagicFail": {
+    "ko": "마법 강화 실패",
+    "en": "Magic enhance failed"
+  },
+  "ui.growthMagicSuccessBadge": {
+    "ko": "성공",
+    "en": "Success"
+  },
+  "ui.growthMagicFailBadge": {
+    "ko": "실패",
+    "en": "Failed"
+  },
+  "ui.growthPlayingMagicRate": {
+    "ko": "성공률 {pct}%",
+    "en": "Success rate {pct}%"
+  },
+  "ui.skillFxBurn": {
+    "ko": "{target} · 매 턴 공격력 {pct}% 화상",
+    "en": "{target} · Burn {pct}% ATK each turn"
+  },
+  "ui.skillFxPoison": {
+    "ko": "{target} · 매 턴 최대 체력 {pct}% 중독",
+    "en": "{target} · Poison {pct}% max HP each turn"
+  },
+  "ui.skillFxMultiHit": {
+    "ko": "{text} · {hits}회 공격",
+    "en": "{text} · {hits} hits"
+  },
+  "ui.skillFxImmunity": {
+    "ko": "{target} · 상태이상 면역",
+    "en": "{target} · Status immunity"
+  },
+  "ui.statusBurn": {
+    "ko": "화상",
+    "en": "Burn"
+  },
+  "ui.statusPoison": {
+    "ko": "중독",
+    "en": "Poison"
   }
 }

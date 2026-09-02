@@ -31,6 +31,6 @@ Premium stylized 2.5D mobile RPG gothic dark priest debuffer,
 pointed hood crown pale face element eye slits, dark plate armor diamond gems,
 tattered black robes shadow tendrils, staff with glowing orb eye slit,
 raised hand element energy wisps, imposing caster stance,
-high-end hand-painted dark fantasy, eye-level front three-quarter, clean white plate,
+high-end hand-painted dark fantasy, eye-level front three-quarter, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes gems orb tendrils only, no global recolor, no text
 ```

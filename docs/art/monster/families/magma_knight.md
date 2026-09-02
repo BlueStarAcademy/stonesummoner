@@ -29,6 +29,6 @@
 Premium stylized 2.5D mobile RPG living magma armor knight attacker,
 jagged obsidian plate element crack glow horned helm cross chest emblem,
 flame cape of embers, massive volcanic greatsword, heroic grounded stance,
-high-end hand-painted dark fantasy, eye-level front three-quarter, clean white plate,
+high-end hand-painted dark fantasy, eye-level front three-quarter, transparent alpha background or solid magenta #FF00FF plate,
 element accents in cracks eyes cross blade cape only, no global recolor, no text
 ```

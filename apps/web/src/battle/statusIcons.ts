@@ -2,8 +2,33 @@ import type { Unit } from "stonesummoner-combat";
 import {
   listUnitStatuses,
   type UnitStatusIcon,
-  type UnitStatusId,
 } from "stonesummoner-combat";
+
+type VisibleStatusId =
+  | "atk-up"
+  | "def-up"
+  | "spd-up"
+  | "crit-up"
+  | "cdmg-up"
+  | "acc-up"
+  | "shield"
+  | "immune"
+  | "damage-reduction"
+  | "reflect"
+  | "damage-share"
+  | "hot"
+  | "atk-down"
+  | "def-down"
+  | "spd-down"
+  | "stun"
+  | "freeze"
+  | "sleep"
+  | "provoke"
+  | "dot"
+  | "burn"
+  | "poison"
+  | "heal-block"
+  | "silence";
 
 function plate(rim: string, wash: string, glyph: string): string {
   return (
@@ -15,7 +40,7 @@ function plate(rim: string, wash: string, glyph: string): string {
   );
 }
 
-const GLYPH: Record<UnitStatusId, string> = {
+const GLYPH: Record<VisibleStatusId, string> = {
   "atk-up": plate(
     "#E87830",
     "#5A2810",
@@ -62,6 +87,30 @@ const GLYPH: Record<UnitStatusId, string> = {
     '<rect x="10.4" y="6.2" width="3.2" height="11.6" rx="1.1" fill="#FFF4C0"/>' +
       '<rect x="6.2" y="10.4" width="11.6" height="3.2" rx="1.1" fill="#FFF4C0"/>',
   ),
+  "damage-reduction": plate(
+    "#66A8D8",
+    "#153049",
+    '<path fill="#DCEFFF" d="M12 4.8c2.4 1.3 5 1.8 6.4 2v5.6c0 3.2-2.5 5.5-6.4 6.8-3.9-1.3-6.4-3.6-6.4-6.8V6.8c1.4-.2 4-.7 6.4-2z"/>' +
+      '<path fill="none" stroke="#36729C" stroke-width="1.8" stroke-linecap="round" d="M8.2 12h7.6"/>',
+  ),
+  reflect: plate(
+    "#D888F0",
+    "#32143E",
+    '<path fill="none" stroke="#F7DEFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7 9.2a6 6 0 0 1 10-1.7l1.7 1.7M17 14.8a6 6 0 0 1-10 1.7l-1.7-1.7"/>' +
+      '<path fill="#F7DEFF" d="M18.8 5.8v4.8H14zM5.2 18.2v-4.8H10z"/>',
+  ),
+  "damage-share": plate(
+    "#74B8E8",
+    "#153047",
+    '<circle cx="8" cy="12" r="3.4" fill="none" stroke="#E0F4FF" stroke-width="1.7"/>' +
+      '<circle cx="16" cy="12" r="3.4" fill="none" stroke="#E0F4FF" stroke-width="1.7"/>' +
+      '<path stroke="#E0F4FF" stroke-width="1.9" stroke-linecap="round" d="M10.8 10.2h2.4M10.8 13.8h2.4"/>',
+  ),
+  hot: plate(
+    "#54C878",
+    "#123522",
+    '<path fill="#D8FFE3" d="M10.2 4.8h3.6v5.4h5.4v3.6h-5.4v5.4h-3.6v-5.4H4.8v-3.6h5.4z"/>',
+  ),
   "atk-down": plate(
     "#A84840",
     "#301018",
@@ -87,6 +136,17 @@ const GLYPH: Record<UnitStatusId, string> = {
       '<circle cx="9.2" cy="8.2" r="1.15" fill="#E8E0FF"/>' +
       '<circle cx="16.4" cy="10.6" r="1.05" fill="#E8E0FF"/>',
   ),
+  freeze: plate(
+    "#70C8F0",
+    "#153443",
+    '<path fill="none" stroke="#E1F8FF" stroke-width="1.7" stroke-linecap="round" d="M12 4.8v14.4M5.8 8.4l12.4 7.2M5.8 15.6l12.4-7.2M8.7 6.7L12 8.6l3.3-1.9M8.7 17.3L12 15.4l3.3 1.9"/>',
+  ),
+  sleep: plate(
+    "#7880C8",
+    "#202344",
+    '<path fill="#E4E7FF" d="M6.3 7h6.8v1.7l-4.1 5h4.2V16H6.1v-1.8l4-4.9H6.3z"/>' +
+      '<path fill="#BCC3FF" d="M14.3 5h4.2v1.2L16 9.3h2.6V11h-4.5V9.7l2.4-3h-2.2z"/>',
+  ),
   provoke: plate(
     "#E05050",
     "#381018",
@@ -99,18 +159,56 @@ const GLYPH: Record<UnitStatusId, string> = {
     "#241030",
     '<path fill="#E0C8FF" d="M12 5.2c2.8 3.4 5.4 6.2 5.4 9.1A5.4 5.4 0 0 1 12 19.6a5.4 5.4 0 0 1-5.4-5.3c0-2.9 2.6-5.7 5.4-9.1z"/>',
   ),
+  burn: plate(
+    "#E07030",
+    "#401810",
+    '<path fill="#FFD0A0" d="M12 4.8c2.2 2.6 4.8 5.2 4.8 8.1A4.8 4.8 0 0 1 12 17.6a4.8 4.8 0 0 1-4.8-4.7c0-2.9 2.6-5.5 4.8-8.1z"/>' +
+      '<path fill="#FFF0C8" d="M12 9.2c1.1 1.3 2.2 2.6 2.2 4.1A2.2 2.2 0 0 1 12 15.4a2.2 2.2 0 0 1-2.2-2.1c0-1.5 1.1-2.8 2.2-4.1z"/>',
+  ),
+  poison: plate(
+    "#58A050",
+    "#183018",
+    '<circle cx="9.2" cy="9" r="2.2" fill="#C8F0B0"/>' +
+      '<circle cx="14.8" cy="9.6" r="2.6" fill="#A8E090"/>' +
+      '<circle cx="12" cy="14.8" r="3" fill="#D8FFC0"/>',
+  ),
+  "heal-block": plate(
+    "#D85068",
+    "#3B111B",
+    '<path fill="#FFD7DD" d="M10.3 5h3.4v5.3H19v3.4h-5.3V19h-3.4v-5.3H5v-3.4h5.3z"/>' +
+      '<path stroke="#5A101C" stroke-width="2.2" stroke-linecap="round" d="M5.5 5.5l13 13"/>',
+  ),
+  silence: plate(
+    "#9B709E",
+    "#301B32",
+    '<path fill="#F1DDF2" d="M5.2 9.2h3.1l4.2-3.4v12.4l-4.2-3.4H5.2z"/>' +
+      '<path fill="none" stroke="#F1DDF2" stroke-width="1.8" stroke-linecap="round" d="M15.2 9.1l4 5.8M19.2 9.1l-4 5.8"/>',
+  ),
 };
 
+function visibleStatusId(id: string): VisibleStatusId | null {
+  const normalized = id.replaceAll("_", "-");
+  if (normalized === "share") return "damage-share";
+  return Object.hasOwn(GLYPH, normalized)
+    ? (normalized as VisibleStatusId)
+    : null;
+}
+
 function renderOne(item: UnitStatusIcon): string {
+  const id = visibleStatusId(item.id);
+  if (!id) return "";
+  const glyph = GLYPH[id];
   const ticks =
     item.ticks > 0
       ? `<b class="battle-status-ticks">${item.ticks}</b>`
       : "";
-  return `<span class="battle-status-ico is-${item.polarity} is-${item.id}">${GLYPH[item.id]}${ticks}</span>`;
+  return `<span class="battle-status-ico is-${item.polarity} is-${id}">${glyph}${ticks}</span>`;
 }
 
 export function renderUnitStatusIcons(u: Unit): string {
   const items = listUnitStatuses(u);
   if (!items.length) return "";
-  return `<div class="battle-unit-statuses" aria-hidden="true">${items.map(renderOne).join("")}</div>`;
+  const icons = items.map(renderOne).filter(Boolean);
+  if (!icons.length) return "";
+  return `<div class="battle-unit-statuses" aria-hidden="true">${icons.join("")}</div>`;
 }

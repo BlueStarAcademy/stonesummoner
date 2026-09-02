@@ -3,9 +3,26 @@ export type StatModAxis = "atk" | "def" | "spd" | "critRate" | "critDmg" | "accu
 
 export type CcKind = "stun" | "freeze" | "sleep";
 
+export type DamageScalingSource = "atk" | "maxHp" | "def" | "spd" | "targetMaxHp";
+export type EnemyTarget = "single" | "all_enemies";
+export type AllyTarget = "self" | "ally_lowest" | "all_allies";
+
 export type SkillEffect =
-  | { kind: "damage"; target: "single" | "all_enemies"; coeff: number }
-  | { kind: "heal"; target: "self" | "ally_lowest" | "all_allies"; coeff: number }
+  | {
+      kind: "damage";
+      target: EnemyTarget;
+      coeff: number;
+      /** Defaults to ATK for backwards compatibility. */
+      source?: DamageScalingSource;
+      /** Normalizes non-ATK source values while preserving the base skill budget. */
+      sourceFactor?: number;
+      /** Fraction of DEF ignored, from 0 (none) to 1 (all). */
+      ignoreDef?: number;
+      /** Multi-hit count (2–5). Damage is split across hits. */
+      hits?: number;
+    }
+  | { kind: "heal"; target: AllyTarget; coeff: number }
+  | { kind: "hot"; target: AllyTarget; coeff: number; turns: number }
   | { kind: "shield"; target: "self" | "all_allies"; coeff: number }
   | { kind: "mana"; amount: number }
   | {
@@ -26,10 +43,14 @@ export type SkillEffect =
     }
   | {
       kind: "dot";
-      target: "single" | "all_enemies";
+      target: EnemyTarget;
       /** Fraction of caster ATK per tick. */
       coeff: number;
       turns: number;
+      /** Typed DoT; omit for legacy generic dot. */
+      dotKind?: "burn" | "poison" | "generic";
+      /** 0..1 apply chance before ACC/RES. */
+      chance?: number;
     }
   | {
       kind: "cc";
@@ -41,7 +62,46 @@ export type SkillEffect =
     }
   | { kind: "strip"; target: "single" | "all_enemies"; count?: number }
   | { kind: "cleanse"; target: "self" | "all_allies"; count?: number }
-  | { kind: "provoke"; target: "single"; turns: number };
+  | { kind: "heal_block"; target: EnemyTarget; turns: number; chance?: number }
+  | { kind: "silence"; target: EnemyTarget; turns: number; chance?: number }
+  | {
+      kind: "atb";
+      target: AllyTarget | EnemyTarget;
+      /** Positive fills and negative drains the 0–100 attack bar. */
+      amount: number;
+    }
+  | {
+      kind: "revive";
+      target: "ally_lowest";
+      /** Fraction of max HP restored on revival. */
+      hpFraction: number;
+    }
+  | {
+      kind: "cooldown";
+      target: AllyTarget | EnemyTarget;
+      direction: "decrease" | "increase";
+      amount: number;
+    }
+  | {
+      kind: "damage_share";
+      target: "self" | "ally_lowest" | "all_allies";
+      fraction: number;
+      turns: number;
+    }
+  | {
+      kind: "reflect";
+      target: "self" | "all_allies";
+      fraction: number;
+      turns: number;
+    }
+  | { kind: "provoke"; target: "single"; turns: number; chance?: number }
+  | {
+      kind: "immunity";
+      target: "self" | "all_allies";
+      /** Status kinds blocked while active. Empty = full immunity. */
+      kinds?: Array<"burn" | "poison" | "stun" | "freeze" | "sleep" | "silence" | "heal_block" | "dot">;
+      turns: number;
+    };
 
 export interface SkillDef {
   id: string;

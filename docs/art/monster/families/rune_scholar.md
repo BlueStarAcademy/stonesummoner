@@ -31,5 +31,5 @@ Premium stylized 2.5D mobile RPG elderly wizard stonesage,
 long white beard peaked hood forehead gem, dark gold-embroidered robes,
 golden staff with glowing orb, stone rune tablet, floating inscribed scrolls arc,
 wise grounded stance, high-end hand-painted dark fantasy, eye-level front three-quarter,
-clean white plate, element accents in eyes gem staff tablet scrolls only, no global recolor
+transparent alpha background or solid magenta #FF00FF plate, element accents in eyes gem staff tablet scrolls only, no global recolor
 ```

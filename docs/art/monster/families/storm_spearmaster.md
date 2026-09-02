@@ -30,6 +30,6 @@ Premium stylized 2.5D mobile RPG male storm warrior attacker,
 dark plate element vine filigree spiked pauldrons, tattered cape,
 massive double-ended spear with jagged blades and energy crackle,
 diagonal dynamic stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes filigree spear cape only, no global recolor, no text
 ```

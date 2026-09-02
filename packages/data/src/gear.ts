@@ -1320,21 +1320,21 @@ export function gearLeaderAtkPct(gear: SummonerGear): number {
   return pieces + gearSetBonuses(g).leaderAtkBonus;
 }
 
-/** Mana cost to go from `enhance` → `enhance+1` (steeper past +9). */
+/** Mana cost to go from `enhance` → `enhance+1` (steeper past +8). */
 export function gearEnhanceManaCost(enhance: number): number {
-  const base = 100 + enhance * 60;
-  const late = Math.max(0, enhance - 8) * 40;
+  const base = 250 + enhance * 150;
+  const late = Math.max(0, enhance - 8) * 100;
   return base + late;
 }
 
-/** Crystal cost from +12 onward (0 below). */
+/** Crystal cost from +12 onward (0 below): 2 / 4 / 6. */
 export function gearEnhanceCrystalCost(enhance: number): number {
   if (enhance < 12) return 0;
-  return 1 + (enhance - 12);
+  return 2 + (enhance - 12) * 2;
 }
 
 /** Mana cost to re-affix a piece to another gear set. */
-export const GEAR_SET_AFFIX_MANA = 180;
+export const GEAR_SET_AFFIX_MANA = 450;
 
 /**
  * Per-step stat multiplier when going from `enhance` → `enhance+1`.
@@ -1429,8 +1429,8 @@ export function canEquipGearOnElement(
 
 /** Mana refund when selling a bag piece (scales harder past +9). */
 export function gearSellMana(piece: GearPiece): number {
-  const base = 40 + piece.enhance * 35;
-  const late = piece.enhance >= 9 ? (piece.enhance - 8) * 50 : 0;
+  const base = 100 + piece.enhance * 85;
+  const late = piece.enhance >= 9 ? (piece.enhance - 8) * 120 : 0;
   const leader = Math.round((piece.leaderAtkBonus ?? 0) * 500);
   const grade = piece.stars * 8 + (piece.quality === "legend" ? 40 : 0);
   const affix = (piece.affixes ?? []).length * 120;

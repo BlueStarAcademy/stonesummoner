@@ -8,8 +8,11 @@ import {
   defaultOnboardSnapshot,
   deriveOnboardStep,
   fromOnboardRiteSave,
+  guideRailShouldShow,
   isSideRegionGuideOpen,
   isVirginOnboard,
+  overlayHidesGuideRail,
+  SIDE_CONTENT_REGION_IDS,
   sideRegionsUnlockedAtGuideStep,
   skipOnboardForProgressedSave,
   toOnboardRiteSave,
@@ -112,8 +115,36 @@ assert(isSideRegionGuideOpen("party", "arena"), "arena opens at party");
 assert(isSideRegionGuideOpen("equip", "warena"), "warena opens at equip");
 assert(isSideRegionGuideOpen("done", "guild"), "guild opens when guide done");
 assert(
-  sideRegionsUnlockedAtGuideStep("done").length === 6,
-  "all six side regions open at done",
+  sideRegionsUnlockedAtGuideStep("done").length === SIDE_CONTENT_REGION_IDS.length,
+  "all side regions open at done",
 );
+
+assert(
+  guideRailShouldShow({ step: "gateway", view: "home" }),
+  "rail shows on island during rite",
+);
+assert(
+  guideRailShouldShow({ step: "summon", view: "summon" }),
+  "rail shows on summon hall during rite",
+);
+assert(
+  !guideRailShouldShow({ step: "enhance", view: "enhance" }),
+  "rail hides on monster book",
+);
+assert(
+  !guideRailShouldShow({ step: "party", view: "party" }),
+  "rail hides on party hall",
+);
+assert(
+  !guideRailShouldShow({ step: "gateway", view: "home", blockingOverlay: true }),
+  "rail hides when a modal is open",
+);
+assert(
+  !guideRailShouldShow({ step: "done", view: "home" }),
+  "rail hides when rite is done",
+);
+assert(!overlayHidesGuideRail("stages-region"), "stages region keeps the rail");
+assert(overlayHidesGuideRail("settings-layer"), "settings modal hides the rail");
+assert(overlayHidesGuideRail("shop-layer"), "shop modal hides the rail");
 
 console.log("smoke-onboarding OK");

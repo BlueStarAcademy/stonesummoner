@@ -66,8 +66,10 @@ import {
   getSummonerKit,
   getSummonerLeader,
   magicEnhanceCrystalCost,
+  magicEnhanceEssenceCost,
   magicEnhanceManaCost,
   magicEnhanceRequiredLevel,
+  magicEnhanceSuccessRate,
   magicRank,
   magicSkillPower,
   MAX_MAGIC_RANK,
@@ -77,6 +79,7 @@ import {
   isWeekdayStageOpenToday,
   WEEKDAY_SKILL_MAT_DROP,
   scenarioSymbolDropTable,
+  scenarioGearStarWeights,
   scenarioEnemyHpMul,
   SKILL_DMG_MUL,
   getFusionRecipe,
@@ -125,6 +128,11 @@ import {
   type WishReward,
 } from "stonesummoner-home";
 import {
+  accountLevelOf,
+  sharedSummonerProgress,
+} from "./summonerLevel.js";
+export { accountLevelOf, sharedSummonerProgress } from "./summonerLevel.js";
+import {
   createStarterRoster,
   describeOwned,
   emptySymbolSlots,
@@ -143,6 +151,7 @@ import {
   monsterExpToNext,
   monsterMaxLevel,
   MAX_SKILL_LEVEL,
+  SKILL_LEVEL_POWER_PCT,
   nextUid,
   normalizeSkillLevels,
   pickRandomSkillUpIndex,
@@ -188,10 +197,14 @@ export {
   summonerAwakenEssenceCost,
 } from "./essences.js";
 import {
+  energyCostForStage,
   expForStage,
   isDifficultyOpen,
   isStageUnlocked,
   isStageUnlockedForDifficulty,
+  monsterExpPoolForStage,
+  scenarioDiffEnemyLevelBonus,
+  scenarioDiffEnemyStatMul,
   stageUnlockLabel,
   type ScenarioDifficulty,
 } from "./progress.js";
@@ -201,6 +214,7 @@ import {
   type DailyActivity,
 } from "./dailyMissions.js";
 import {
+  challengeTowerStageDifficulty,
   monthKey,
   syncChallengeTowerMonth,
 } from "./challengeTower.js";
@@ -264,6 +278,7 @@ export {
   monsterGrade,
   monsterMaxLevel,
   MAX_SKILL_LEVEL,
+  SKILL_LEVEL_POWER_PCT,
   displayedMonsterStars,
   monsterAwakenCrystalCost,
   monsterAwakenManaCost,
@@ -286,12 +301,23 @@ export {
   SUMMON_SCROLL_COST,
 } from "./roster.js";
 export {
+  energyCostForStage,
   expForStage,
   isDifficultyOpen,
+  isScenarioTrackFullyCleared,
   isStageClearedOnDifficulty,
   isStageUnlocked,
   isStageUnlockedForDifficulty,
+  monsterExpPoolForStage,
   nextStageInProgression,
+  scenarioDiffEnemyLevelBonus,
+  scenarioDiffEnemyStatMul,
+  scenarioDiffEnergyMul,
+  scenarioDiffExpMul,
+  SCENARIO_DIFF_ENERGY_MUL,
+  SCENARIO_DIFF_ENEMY_LEVEL_BONUS,
+  SCENARIO_DIFF_ENEMY_STAT_MUL,
+  SCENARIO_DIFF_EXP_MUL,
   stageUnlockLabel,
 } from "./progress.js";
 export type { ScenarioDifficulty } from "./progress.js";
@@ -339,8 +365,11 @@ export function equipVaultRemaining(
   );
 }
 
-/** Phase 3b: arena attacks per calendar day. */
-export const ARENA_ATTACKS_DAILY = 10;
+/** Arena invitations recharge one at a time instead of resetting daily. */
+export const ARENA_INVITATIONS_MAX = 10;
+export const ARENA_INVITATION_RECHARGE_MS = 30 * 60 * 1000;
+/** @deprecated Compatibility alias for older UI/tests. */
+export const ARENA_ATTACKS_DAILY = ARENA_INVITATIONS_MAX;
 /** Default ELO rating for new arena players. */
 export const DEFAULT_ARENA_RATING = 1000;
 export const ARENA_ELO_K = 32;
@@ -409,8 +438,36 @@ export function syncArenaAttackDay(
   now = Date.now(),
 ): PlayerSave {
   const day = todayKey(now);
-  if (save.arenaAttackDay === day) return save;
-  return { ...save, arenaAttackDay: day, arenaAttacksToday: 0 };
+  const explicit = Math.max(
+    0,
+    Math.min(
+      ARENA_INVITATIONS_MAX,
+      Math.floor(save.arenaInvitations ?? ARENA_INVITATIONS_MAX),
+    ),
+  );
+  const legacyRemaining =
+    save.arenaAttackDay === day
+      ? Math.max(
+          0,
+          ARENA_INVITATIONS_MAX - Math.floor(save.arenaAttacksToday ?? 0),
+        )
+      : ARENA_INVITATIONS_MAX;
+  const invitations = Math.min(explicit, legacyRemaining);
+  const updatedAt = save.arenaInvitationUpdatedAt ?? now;
+  const elapsed = Math.max(0, now - updatedAt);
+  const gained = Math.floor(elapsed / ARENA_INVITATION_RECHARGE_MS);
+  const next = Math.min(ARENA_INVITATIONS_MAX, invitations + gained);
+  const nextUpdatedAt =
+    next >= ARENA_INVITATIONS_MAX
+      ? now
+      : updatedAt + gained * ARENA_INVITATION_RECHARGE_MS;
+  return {
+    ...save,
+    arenaInvitations: next,
+    arenaInvitationUpdatedAt: nextUpdatedAt,
+    arenaAttackDay: day,
+    arenaAttacksToday: ARENA_INVITATIONS_MAX - next,
+  };
 }
 
 export function arenaAttacksRemaining(
@@ -418,7 +475,7 @@ export function arenaAttacksRemaining(
   now = Date.now(),
 ): number {
   const synced = syncArenaAttackDay(save, now);
-  return Math.max(0, ARENA_ATTACKS_DAILY - (synced.arenaAttacksToday ?? 0));
+  return synced.arenaInvitations;
 }
 
 export function syncGuildWeek(
@@ -974,27 +1031,36 @@ export const SUMMONER_ELEMENT_LABEL: Record<SummonerElement, string> = {
 export function createSummonerRoster(
   seed?: Partial<ElementSummonerProfile>,
 ): Record<SummonerElement, ElementSummonerProfile> {
-  const light: ElementSummonerProfile = {
-    level: Math.max(1, Math.floor(seed?.level ?? 1)),
-    exp: Math.max(0, Math.floor(seed?.exp ?? 0)),
-    awaken: Math.max(0, Math.floor(seed?.awaken ?? 0)),
-    gear: seed?.gear
-      ? normalizeSummonerGear(seed.gear, "light")
-      : createEmptyGear(),
-  };
-  const blank = (el: SummonerElement): ElementSummonerProfile => ({
-    level: 1,
-    exp: 0,
-    awaken: 0,
-    gear: createEmptyGear(),
+  const level = Math.max(1, Math.floor(seed?.level ?? 1));
+  const exp = Math.max(0, Math.floor(seed?.exp ?? 0));
+  const slot = (el: SummonerElement, awaken: number): ElementSummonerProfile => ({
+    level,
+    exp,
+    awaken,
+    gear:
+      el === "light" && seed?.gear
+        ? normalizeSummonerGear(seed.gear, "light")
+        : createEmptyGear(),
   });
   return {
-    fire: blank("fire"),
-    water: blank("water"),
-    wind: blank("wind"),
-    light,
-    dark: blank("dark"),
+    fire: slot("fire", 0),
+    water: slot("water", 0),
+    wind: slot("wind", 0),
+    light: slot("light", Math.max(0, Math.floor(seed?.awaken ?? 0))),
+    dark: slot("dark", 0),
   };
+}
+
+function withSharedSummonerProgress(
+  summoners: Record<SummonerElement, ElementSummonerProfile>,
+  shared: { level: number; exp: number },
+): Record<SummonerElement, ElementSummonerProfile> {
+  const next = { ...summoners };
+  for (const el of SUMMONER_ELEMENTS) {
+    const cur = next[el] ?? { level: 1, exp: 0, awaken: 0 };
+    next[el] = { ...cur, level: shared.level, exp: shared.exp };
+  }
+  return next;
 }
 
 export function createEmptySummonerMagic(): Record<
@@ -1029,16 +1095,8 @@ export function createEmptySummonerMagicLoadouts(): Record<
 export function accountSummonerLevel(
   summoners: Record<SummonerElement, ElementSummonerProfile>,
 ): number {
-  return Math.max(
-    1,
-    ...SUMMONER_ELEMENTS.map((e) => summoners[e]?.level ?? 1),
-  );
-}
-
-/** Account level = highest elemental summoner level. */
-export function accountLevelOf(save: PlayerSave): number {
-  if (save.summoners) return accountSummonerLevel(save.summoners);
-  return Math.max(1, Math.floor(save.island.summonerLevel ?? 1));
+  return sharedSummonerProgress({ summonerLevel: 1, summonerExp: 0 }, summoners)
+    .level;
 }
 
 export function getActiveSummoner(save: PlayerSave): ElementSummonerProfile {
@@ -1052,7 +1110,7 @@ export function getActiveSummoner(save: PlayerSave): ElementSummonerProfile {
   );
 }
 
-/** Mirror active awaken + account max level onto legacy island/awaken fields. */
+/** Mirror shared level/EXP onto every elemental kit + island fields. */
 export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
   let summoners = save.summoners ?? createSummonerRoster({
     level: save.island.summonerLevel,
@@ -1075,7 +1133,12 @@ export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
       gear: normalizeSummonerGear(seedGear, el),
     };
   }
-  summoners = nextSummoners;
+  const shared = sharedSummonerProgress(
+    save.island,
+    nextSummoners,
+    activeSummoner,
+  );
+  summoners = withSharedSummonerProgress(nextSummoners, shared);
   const active = summoners[activeSummoner] ?? summoners.light;
   const activeGear = normalizeSummonerGear(active.gear, activeSummoner);
   const summonerMagic = {
@@ -1106,8 +1169,8 @@ export function syncSummonerMirrors(save: PlayerSave): PlayerSave {
     gearBag,
     island: {
       ...save.island,
-      summonerLevel: accountSummonerLevel(summoners),
-      summonerExp: active.exp,
+      summonerLevel: shared.level,
+      summonerExp: shared.exp,
     },
   };
 }
@@ -1260,7 +1323,8 @@ export function setActiveSummoner(
   });
 }
 
-export function addActiveSummonerExp(
+/** Shared summoner/user EXP. Alias kept so callers do not fork per-element growth. */
+export function addSummonerExpToSave(
   save: PlayerSave,
   amount: number,
   now = Date.now(),
@@ -1271,28 +1335,37 @@ export function addActiveSummonerExp(
   unlockedBuildingIds: BuildingId[];
 } {
   const synced = syncSummonerMirrors(save);
-  const beforeAccountLv = accountSummonerLevel(
-    synced.summoners ?? createSummonerRoster(),
-  );
+  const beforeAccountLv = accountLevelOf(synced);
   const beforeBuildingIds = new Set(synced.island.buildings.map((b) => b.id));
-  const el = synced.activeSummoner;
-  const cur = synced.summoners[el];
-  let exp = cur.exp + amount;
-  let level = cur.level;
+  const shared = sharedSummonerProgress(
+    synced.island,
+    synced.summoners,
+    synced.activeSummoner,
+  );
+  let exp = shared.exp + Math.max(0, Math.floor(amount));
+  let level = shared.level;
   let levelsGained = 0;
-  while (exp >= summonerExpToNext(level)) {
-    exp -= summonerExpToNext(level);
+  let need = summonerExpToNext(level);
+  while (need > 0 && exp >= need) {
+    exp -= need;
     level += 1;
     levelsGained += 1;
+    need = summonerExpToNext(level);
   }
-  const summoners = {
-    ...synced.summoners,
-    [el]: { ...cur, level, exp },
-  };
-  let next = syncSummonerMirrors({ ...synced, summoners });
-  const afterAccountLv = accountSummonerLevel(
-    next.summoners ?? createSummonerRoster(),
-  );
+  const summoners = withSharedSummonerProgress(synced.summoners, {
+    level,
+    exp,
+  });
+  let next = syncSummonerMirrors({
+    ...synced,
+    summoners,
+    island: {
+      ...synced.island,
+      summonerLevel: level,
+      summonerExp: exp,
+    },
+  });
+  const afterAccountLv = accountLevelOf(next);
   const accountLevelsGained = Math.max(0, afterAccountLv - beforeAccountLv);
   const targetMax = energyMaxForLevel(afterAccountLv);
   let island = {
@@ -1310,6 +1383,8 @@ export function addActiveSummonerExp(
     unlockedBuildingIds,
   };
 }
+
+export const addActiveSummonerExp = addSummonerExpToSave;
 
 /** Serialized first-rite guide progress (mirrors web onboard snapshot). */
 export type OnboardRiteSave = {
@@ -1411,9 +1486,13 @@ export interface PlayerSave {
   skillMats: number;
   /** Phase 3b: arena defense lineup (local offline). */
   arenaDefense: { summoner: SummonerElement; party: string[] } | null;
-  /** Phase 3b: arena attacks used today. */
+  /** Rechargeable arena invitations (0–10). */
+  arenaInvitations: number;
+  /** Timestamp used to accrue one arena invitation every 30 minutes. */
+  arenaInvitationUpdatedAt: number;
+  /** @deprecated Compatibility mirror: max invitations minus current count. */
   arenaAttacksToday: number;
-  /** Phase 3b: YYYY-MM-DD of arena attack counter. */
+  /** @deprecated Compatibility day key for legacy saves/UI. */
   arenaAttackDay: string | null;
   /** Arena ELO rating (offline ladder). */
   arenaRating: number;
@@ -1480,6 +1559,10 @@ export interface PlayerSave {
   challengeTowerMonthKey: string | null;
   /** Highest floor cleared this month (0–100). */
   challengeTowerFloor: number;
+  /** Independent YYYY-MM key for the Hard tower track. */
+  challengeTowerHardMonthKey: string | null;
+  /** Highest Hard floor cleared this month (0–100). */
+  challengeTowerHardFloor: number;
   /** Feature-unlock modal ids already shown (building/hub/summoner). */
   seenFeatureUnlockIds: string[];
 }
@@ -1527,6 +1610,8 @@ export interface BattleReward {
 export interface LoopStepResult {
   save: PlayerSave;
   message: string;
+  /** Magic enhance attempt outcome (undefined for non-enhance steps). */
+  enhanceSuccess?: boolean;
   reward?: BattleReward;
   battleLog?: string[];
   /** Island buildings unlocked by account-level gain this step. */
@@ -1678,22 +1763,27 @@ function enemySummonerProfile(stage: StageDef): {
   return { weakBoard, awaken, skillTree };
 }
 
-function skillsForMonster(
+export function skillsForMonster(
   m: NonNullable<ReturnType<typeof getMonster>>,
-  evolve = 0,
+  _evolve = 0,
   skillLevels: [number, number, number] = defaultSkillLevels(),
 ) {
-  const evoBump = evolve * 0.05;
+  // Summoners War: evolving raises base stats only — skill % grows via skill-ups.
   return m.skills.map((sk, i) => {
     const lv = skillLevels[i] ?? 1;
-    const skBump = (lv - 1) * 0.08;
+    const skBump = (lv - 1) * SKILL_LEVEL_POWER_PCT;
     const cdCut = sk.cooldown > 0 && lv >= MAX_SKILL_LEVEL ? 1 : 0;
     return {
       ...sk,
       cooldown: Math.max(0, sk.cooldown - cdCut),
       effects: sk.effects.map((e) => {
-        if (e.kind === "damage" || e.kind === "heal" || e.kind === "shield") {
-          return { ...e, coeff: e.coeff * (1 + evoBump + skBump) };
+        if (
+          e.kind === "damage" ||
+          e.kind === "heal" ||
+          e.kind === "hot" ||
+          e.kind === "shield"
+        ) {
+          return { ...e, coeff: e.coeff * (1 + skBump) };
         }
         if (e.kind === "mana") {
           return { ...e, amount: Math.round(e.amount * (1 + skBump)) };
@@ -1750,13 +1840,14 @@ function unitFromOwned(
       resistance: stats.resistance,
     },
     skillCoeff:
-      m.skillCoeff *
-      (1 + (owned.evolve ?? 0) * 0.05 + (skillLevels[0]! - 1) * 0.08),
+      m.skillCoeff * (1 + (skillLevels[0]! - 1) * SKILL_LEVEL_POWER_PCT),
     skills: skillsForMonster(m, owned.evolve ?? 0, skillLevels),
     stonePassive: m.stonePassiveId,
     startShieldPct: mods.startShieldPct || undefined,
     counterChance: mods.counterChance || undefined,
     statusImmuneTurns: mods.statusImmuneTurns || undefined,
+    statusImmuneIsPassive: mods.statusImmuneTurns > 0 || undefined,
+    immuneStatusKinds: m.passiveImmunity ? [...m.passiveImmunity] : undefined,
     lifestealPct: mods.lifestealPct || undefined,
     stunOnHitChance: mods.stunChance || undefined,
     violentChance: mods.violentChance || undefined,
@@ -1786,6 +1877,9 @@ function unitFromMonsterId(
     skillCoeff: m.skillCoeff,
     skills: skillsForMonster(m, 0),
     stonePassive: m.stonePassiveId,
+    immuneStatusKinds: m.passiveImmunity
+      ? [...m.passiveImmunity]
+      : undefined,
   });
 }
 
@@ -1794,6 +1888,17 @@ function scaleScenarioEnemyHp(unit: Unit, stage: StageDef): Unit {
   if (mul === 1) return unit;
   const hp = Math.max(1, Math.round(unit.stats.hp * mul));
   unit.stats = { ...unit.stats, hp };
+  unit.hp = hp;
+  if (unit.originalMaxHp != null) unit.originalMaxHp = hp;
+  return unit;
+}
+
+function applyScenarioDiffStatMul(unit: Unit, mul: number): Unit {
+  if (mul === 1) return unit;
+  const hp = Math.max(1, Math.round(unit.stats.hp * mul));
+  const atk = Math.max(1, Math.round(unit.stats.atk * mul));
+  const def = Math.max(1, Math.round(unit.stats.def * mul));
+  unit.stats = { ...unit.stats, hp, atk, def };
   unit.hp = hp;
   if (unit.originalMaxHp != null) unit.originalMaxHp = hp;
   return unit;
@@ -1893,6 +1998,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     awakenMats: {},
     skillMats: 0,
     arenaDefense: null,
+    arenaInvitations: ARENA_INVITATIONS_MAX,
+    arenaInvitationUpdatedAt: now,
     arenaAttacksToday: 0,
     arenaAttackDay: null,
     arenaRating: DEFAULT_ARENA_RATING,
@@ -1926,6 +2033,8 @@ export function createNewSave(now = Date.now()): PlayerSave {
     attendanceLastClaimDay: null,
     challengeTowerMonthKey: monthKey(now),
     challengeTowerFloor: 0,
+    challengeTowerHardMonthKey: monthKey(now),
+    challengeTowerHardFloor: 0,
     seenFeatureUnlockIds: [],
   };
 }
@@ -2322,7 +2431,7 @@ export function runFusion(
   const island = syncBuildingUnlocks(tickProduction(save.island));
   if (
     !island.buildings.some((b) => b.id === "fusion_star") &&
-    island.summonerLevel < 17
+    accountLevelOf(save) < 17
   ) {
     return {
       save: { ...save, island },
@@ -2405,7 +2514,7 @@ export function runRecipeFusion(
   const recipe = getFusionRecipe(recipeId);
   if (!recipe) return { save, message: `조합 레시피 없음: ${recipeId}` };
   const needLv = recipe.unlockSummonerLevel ?? 1;
-  if (island.summonerLevel < needLv) {
+  if (accountLevelOf({ ...save, island }) < needLv) {
     return {
       save: { ...save, island },
       message: `조합 해금 필요 (소환사 Lv.${needLv})`,
@@ -2832,7 +2941,7 @@ export function runCraftScroll(save: PlayerSave): LoopStepResult {
   let island = syncBuildingUnlocks(tickProduction(save.island));
   if (
     !island.buildings.some((b) => b.id === "craft_hall") &&
-    island.summonerLevel < 19
+    accountLevelOf(save) < 19
   ) {
     return {
       save: { ...save, island },
@@ -2867,7 +2976,7 @@ export function runCraftEssence(save: PlayerSave): LoopStepResult {
   let island = syncBuildingUnlocks(tickProduction(save.island));
   if (
     !island.buildings.some((b) => b.id === "fuse_center") &&
-    island.summonerLevel < 12
+    accountLevelOf(save) < 12
   ) {
     return {
       save: { ...save, island },
@@ -2943,7 +3052,7 @@ export function runPracticeDojo(
   let island = syncBuildingUnlocks(tickProduction(save.island, now), now);
   if (
     !island.buildings.some((b) => b.id === "practice_dojo") &&
-    island.summonerLevel < 8
+    accountLevelOf(save) < 8
   ) {
     return {
       save: { ...save, island },
@@ -2988,7 +3097,7 @@ export function runBuyCircleInscription(
   let island = syncBuildingUnlocks(tickProduction(save.island));
   if (
     !island.buildings.some((b) => b.id === "practice_dojo") &&
-    island.summonerLevel < 8
+    accountLevelOf(save) < 8
   ) {
     return {
       save: { ...save, island },
@@ -3026,7 +3135,7 @@ function guildHallIsland(save: PlayerSave) {
   const island = syncBuildingUnlocks(tickProduction(save.island));
   const unlocked =
     island.buildings.some((b) => b.id === "guild_hall") ||
-    island.summonerLevel >= 12;
+    accountLevelOf(save) >= 12;
   return { island, unlocked };
 }
 
@@ -3103,7 +3212,7 @@ export function runGuildCheckIn(
   let island = syncBuildingUnlocks(tickProduction(save.island, now), now);
   if (
     !island.buildings.some((b) => b.id === "guild_hall") &&
-    island.summonerLevel < 12
+    accountLevelOf(save) < 12
   ) {
     return {
       save: { ...save, island },
@@ -3241,7 +3350,7 @@ export function listRoster(save: PlayerSave): string[] {
 
 export function listGear(save: PlayerSave): string[] {
   const gear = getActiveGear(save);
-  const leader = (gearLeaderAtkPct(gear) * 100).toFixed(1);
+  const summonerAtk = (gearLeaderAtkPct(gear) * 100).toFixed(1);
   const sets = summarizeGearSets(gear)
     .filter((s) => s.count > 0)
     .map(
@@ -3265,7 +3374,7 @@ export function listGear(save: PlayerSave): string[] {
     slotLine(
       "하의",
       gear.bottom,
-      `HP+${gear.bottom?.summonerHpBonus ?? 0} 리더+${((gear.bottom?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
+      `HP+${gear.bottom?.summonerHpBonus ?? 0} 소환사ATK+${((gear.bottom?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
     ),
     slotLine(
       "신발",
@@ -3275,7 +3384,7 @@ export function listGear(save: PlayerSave): string[] {
     slotLine(
       "반지",
       gear.ring,
-      `스킬+${((gear.ring?.skillPowerBonus ?? 0) * 100).toFixed(0)}% 리더+${((gear.ring?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
+      `스킬+${((gear.ring?.skillPowerBonus ?? 0) * 100).toFixed(0)}% 소환사ATK+${((gear.ring?.leaderAtkBonus ?? 0) * 100).toFixed(1)}%`,
     ),
     slotLine(
       "목걸이",
@@ -3283,7 +3392,7 @@ export function listGear(save: PlayerSave): string[] {
       `sense+${(gear.necklace?.boardSenseBonus ?? 0).toFixed(2)}`,
     ),
     `세트 ${sets || "없음"}`,
-    `리더 합산 ATK +${leader}%`,
+    `소환사 합산 ATK +${summonerAtk}%`,
     `가방 ${(save.gearBag ?? []).length}/${gearBagCapacity(save)}`,
   ];
 }
@@ -4099,10 +4208,11 @@ export function runAwakenSummoner(save: PlayerSave): LoopStepResult {
     };
   }
   const needLv = awakenMinLevel(cur);
-  if (active.level < needLv) {
+  const sharedLv = accountLevelOf(synced);
+  if (sharedLv < needLv) {
     return {
       save: synced,
-      message: `진화 해금: 소환사 Lv.${needLv}+ 필요 (현재 ${active.level})`,
+      message: `진화 해금: 소환사 Lv.${needLv}+ 필요 (현재 ${sharedLv})`,
     };
   }
   const manaCost = awakenManaCost(cur);
@@ -4172,7 +4282,7 @@ export function runUnlockSkillNode(
   const gate = canUnlockSkillNode(
     unlocked,
     nodeId as SkillTreeNodeId,
-    save.island.summonerLevel,
+    accountLevelOf(save),
   );
   if (!gate.ok) {
     return { save, message: gate.reason };
@@ -4204,11 +4314,12 @@ export function runUnlockSkillNode(
   };
 }
 
-/** Enhance a Phase 2 summoner magic skill (+0→+5). First +5 unlocks that branch. */
+/** Enhance a Phase 2 summoner magic skill (+0→+5). Costs are spent on every attempt. */
 export function runEnhanceMagicSkill(
   save: PlayerSave,
   skillId: string,
   element?: SummonerElement,
+  rng: () => number = Math.random,
 ): LoopStepResult {
   const synced = syncSummonerMirrors(save);
   const el = element ?? synced.activeSummoner;
@@ -4220,20 +4331,13 @@ export function runEnhanceMagicSkill(
   }
   const prog = { ...(synced.summonerMagic[el] ?? emptyMagicProgress()) };
   prog.ranks = { ...prog.ranks };
-  // Upper skills locked until branch matches
-  if (
-    (def.slot === "A1" || def.slot === "A2") &&
-    prog.branch !== "A"
-  ) {
+  if ((def.slot === "A1" || def.slot === "A2") && prog.branch !== "A") {
     return {
       save: synced,
       message: `${def.nameKo} — A 기초를 +${MAX_MAGIC_RANK}까지 강화해 해금`,
     };
   }
-  if (
-    (def.slot === "B1" || def.slot === "B2") &&
-    prog.branch !== "B"
-  ) {
+  if ((def.slot === "B1" || def.slot === "B2") && prog.branch !== "B") {
     return {
       save: synced,
       message: `${def.nameKo} — B 기초를 +${MAX_MAGIC_RANK}까지 강화해 해금`,
@@ -4265,7 +4369,7 @@ export function runEnhanceMagicSkill(
     };
   }
   const needLv = magicEnhanceRequiredLevel(cur);
-  const sumLv = synced.summoners[el]?.level ?? 1;
+  const sumLv = accountLevelOf(synced);
   if (sumLv < needLv) {
     return {
       save: synced,
@@ -4274,6 +4378,8 @@ export function runEnhanceMagicSkill(
   }
   const manaCost = magicEnhanceManaCost(cur);
   const crystalCost = magicEnhanceCrystalCost(cur);
+  const essenceCost = magicEnhanceEssenceCost(cur);
+  const rate = magicEnhanceSuccessRate(cur);
   if (synced.island.mana < manaCost) {
     return {
       save: synced,
@@ -4286,6 +4392,48 @@ export function runEnhanceMagicSkill(
       message: `크리스탈 부족 (필요 ${crystalCost}, 보유 ${synced.island.crystal})`,
     };
   }
+  const mats = normalizeAwakenMats(synced.awakenMats);
+  const haveMat = essenceAmountsFor(mats, el);
+  if (!canPayEssenceCost(haveMat, essenceCost)) {
+    const missing = (["low", "mid", "high"] as const).find(
+      (quality) => haveMat[quality] < essenceCost[quality],
+    )!;
+    return {
+      save: synced,
+      message: `속성 정수(${el}/${missing}) 부족 (필요 ${essenceCost[missing]}, 보유 ${haveMat[missing]})`,
+    };
+  }
+
+  const spentIsland = {
+    ...synced.island,
+    mana: synced.island.mana - manaCost,
+    crystal: synced.island.crystal - crystalCost,
+  };
+  const spentMats = {
+    ...mats,
+    [el]: {
+      low: haveMat.low - essenceCost.low,
+      mid: haveMat.mid - essenceCost.mid,
+      high: haveMat.high - essenceCost.high,
+    },
+  };
+  const spentSave = syncSummonerMirrors({
+    ...synced,
+    island: spentIsland,
+    awakenMats: spentMats,
+    summonerMagic: { ...synced.summonerMagic, [el]: prog },
+  });
+
+  const roll = rng();
+  if (roll >= rate) {
+    const pct = Math.round(rate * 100);
+    return {
+      save: spentSave,
+      enhanceSuccess: false,
+      message: `${SUMMONER_ELEMENT_LABEL[el]} ${def.nameKo} 강화 실패 (성공률 ${pct}%) (−골드 ${manaCost}${crystalCost > 0 ? ` · −크리스탈 ${crystalCost}` : ""} · −정수)`,
+    };
+  }
+
   const beforeTier2 = magicTier2Unlocked(el, prog);
   prog.ranks[skillId] = cur + 1;
   const nextProg = tryUnlockMagicBranch(el, prog);
@@ -4298,15 +4446,11 @@ export function runEnhanceMagicSkill(
         : "";
   return {
     save: syncSummonerMirrors({
-      ...synced,
-      summonerMagic: { ...synced.summonerMagic, [el]: nextProg },
-      island: {
-        ...synced.island,
-        mana: synced.island.mana - manaCost,
-        crystal: synced.island.crystal - crystalCost,
-      },
+      ...spentSave,
+      summonerMagic: { ...spentSave.summonerMagic, [el]: nextProg },
     }),
-    message: `${SUMMONER_ELEMENT_LABEL[el]} ${def.nameKo} +${cur + 1}${unlockedNote} (−골드 ${manaCost}${crystalCost > 0 ? ` · −크리스탈 ${crystalCost}` : ""})`,
+    enhanceSuccess: true,
+    message: `${SUMMONER_ELEMENT_LABEL[el]} ${def.nameKo} +${cur + 1}${unlockedNote} (−골드 ${manaCost}${crystalCost > 0 ? ` · −크리스탈 ${crystalCost}` : ""} · −정수)`,
   };
 }
 
@@ -4701,11 +4845,12 @@ export function createStageBattle(
   const leader = getSummonerLeader(activeEl);
   const awakenAtk = awakenLeaderAtkPct(awaken);
   const gearAffix = gearAffixTotals(gear);
-  const affixAtk =
+  const gearLocalAtk =
+    gearLeaderAtkPct(gear) +
     gearAffix.allyAtkAdd + (stage.bossMonsterId ? gearAffix.bossAtkAdd : 0);
-  const gearAtk = gearLeaderAtkPct(gear) + tree.leaderAtkBonus + affixAtk;
   for (const u of allyMonsters) {
-    let atkMul = 1 + awakenAtk + gearAtk + (leader.atkPct ?? 0);
+    let atkMul =
+      1 + awakenAtk + tree.leaderAtkBonus + (leader.atkPct ?? 0);
     if (leader.elementAtkPct && u.element === activeEl) {
       atkMul += leader.elementAtkPct;
     }
@@ -4740,7 +4885,7 @@ export function createStageBattle(
           awaken * 300) *
           gearAffix.summonerHpMul,
       ),
-      atk: 155 + lvl * 5,
+      atk: Math.round((155 + lvl * 5) * (1 + gearLocalAtk)),
       def:
         210 +
         Math.floor(gear.shoes?.enhance ?? 0) +
@@ -4771,18 +4916,30 @@ export function createStageBattle(
     enemyIds = filtered.length > 0 ? filtered : enemyIds.slice(0, 1);
   }
 
-  const diffBonus =
-    opts?.difficulty === "hell" ? 4 : opts?.difficulty === "hard" ? 2 : 0;
+  const difficulty = opts?.difficulty ?? "normal";
+  const diffBonus = scenarioDiffEnemyLevelBonus(difficulty);
+  // Prefer versioned difficultyBalance levels; fall back to SW mul when absent.
+  const diffStatMul =
+    stage.difficultyBalance?.[difficulty] != null
+      ? 1
+      : scenarioDiffEnemyStatMul(difficulty);
+  const explicitEnemyLevel =
+    stage.difficultyBalance?.[difficulty]?.enemyLevel ??
+    stage.enemyLevel;
   const enemyLevel = () =>
-    1 + Math.floor(stage.stage / 2) + Math.floor(stage.map / 3) + diffBonus;
+    explicitEnemyLevel ??
+    (1 + Math.floor(stage.stage / 2) + Math.floor(stage.map / 3) + diffBonus);
 
   const enemyIdsForWave = (wave: number): string[] =>
     hasEnemyOverride
       ? enemyIds
       : stage.enemyWaves?.[wave - 1] ?? stage.enemyMonsterIds;
 
+  const scaleEnemy = (unit: Unit): Unit =>
+    applyScenarioDiffStatMul(unit, diffStatMul);
+
   const enemyMonsters = enemyIds.map((id, i) =>
-    stageEnemyUnit(id, stage, 1, i, enemyLevel()),
+    scaleEnemy(stageEnemyUnit(id, stage, 1, i, enemyLevel())),
   );
 
   const enemyUnits: Unit[] = [
@@ -4793,9 +4950,9 @@ export function createStageBattle(
       kind: "summoner",
       element: "dark",
       stats: {
-        hp: 4800 + diffBonus * 400,
-        atk: 145 + diffBonus * 14,
-        def: 210 + diffBonus * 20,
+        hp: Math.round((4800 + diffBonus * 400) * diffStatMul),
+        atk: Math.round((145 + diffBonus * 14) * diffStatMul),
+        def: Math.round((210 + diffBonus * 20) * diffStatMul),
         spd: 88,
         critRate: 12,
         critDmg: 50,
@@ -4831,6 +4988,7 @@ export function createStageBattle(
       kind: sk.kind,
       power: magicSkillPower(sk, magicRank(magicProg, sk.id)),
       turns: sk.turns,
+      hitCount: sk.hitCount,
       descKo: sk.descKo,
       vfxFamily: sk.vfxFamily,
       orbBolt: sk.orbBolt,
@@ -4844,6 +5002,7 @@ export function createStageBattle(
       kind: sk.kind,
       power: magicSkillPower(sk, 0),
       turns: sk.turns,
+      hitCount: sk.hitCount,
       descKo: sk.descKo,
       vfxFamily: sk.vfxFamily,
       orbBolt: sk.orbBolt,
@@ -4879,14 +5038,26 @@ export function createStageBattle(
     totalWaves,
     modules,
     rng: opts?.rng,
+    dungeonBoss:
+      stage.cairosDungeon && stage.bossMonsterId
+        ? {
+            kind: stage.cairosDungeon,
+            unitId: `e-w${totalWaves}-0`,
+            abyss:
+              stage.cairosTier === "abyss_normal" ||
+              stage.cairosTier === "abyss_hard",
+          }
+        : undefined,
     spawnWave: (wave) =>
       enemyIdsForWave(wave).map((id, i) =>
-        stageEnemyUnit(
-          id,
-          stage,
-          wave,
-          i,
-          enemyLevel() + (wave - 1),
+        scaleEnemy(
+          stageEnemyUnit(
+            id,
+            stage,
+            wave,
+            i,
+            enemyLevel() + (wave - 1),
+          ),
         ),
       ),
   });
@@ -5128,7 +5299,12 @@ export function applyRewards(
                 ? 1.1
                 : 1;
   const affix = gearAffixTotals(getActiveGear(save));
-  const manaGain = Math.round((180 + stage.stage * 60) * modeMul * affix.battleGoldMul);
+  const profiledMana =
+    stage.difficultyBalance?.[difficulty]?.manaReward ?? stage.manaReward;
+  const manaGain = Math.round(
+    (profiledMana ?? (180 + stage.stage * 60) * modeMul) *
+      affix.battleGoldMul,
+  );
   const arenaNpcMatch = stage.mode === "arena" && !!opts?.arenaNpc;
   const stageGlory = stage.gloryReward ?? 0;
   let gloryGain =
@@ -5146,7 +5322,20 @@ export function applyRewards(
       affix.symbolChanceMul,
   );
   const expGain = Math.round(expForStage(stage, difficulty) * affix.expMul);
-  const monsterExpGain = Math.max(1, Math.round(expGain * 0.75));
+  const deployedMonsterCount = Math.max(
+    1,
+    save.party.filter((uid) => save.roster.some((m) => m.uid === uid)).length,
+  );
+  const monsterExpPool = monsterExpPoolForStage(stage, difficulty);
+  const monsterExpGain =
+    monsterExpPool > 0
+      ? Math.max(
+          1,
+          Math.round(
+            (monsterExpPool * affix.expMul) / deployedMonsterCount,
+          ),
+        )
+      : 0;
 
   let working = syncSummonerMirrors({
     ...save,
@@ -5169,9 +5358,7 @@ export function applyRewards(
     working = bumpDailyActivity(working, "dungeon");
   }
 
-  const beforeAccountLv = accountSummonerLevel(
-    working.summoners ?? createSummonerRoster(),
-  );
+  const beforeAccountLv = accountLevelOf(working);
   const beforeActive = getActiveSummoner(working);
   const beforeParty = working.party
     .map((uid) => working.roster.find((m) => m.uid === uid))
@@ -5194,31 +5381,18 @@ export function applyRewards(
   working = { ...working, roster: rosterAfter };
 
   const afterActive = getActiveSummoner(working);
-  const afterAccountLv = accountSummonerLevel(
-    working.summoners ?? createSummonerRoster(),
-  );
+  const afterAccountLv = accountLevelOf(working);
   const expTracks: ExpTrackGain[] = [
     {
-      kind: "user",
-      id: "user",
+      kind: "summoner",
+      id: working.activeSummoner ?? "light",
+      element: working.activeSummoner ?? "light",
       gained: expGain,
       beforeLevel: beforeAccountLv,
       beforeExp: beforeActive.exp,
       afterLevel: afterAccountLv,
       afterExp: afterActive.exp,
       expPerLevel: summonerExpToNext(afterAccountLv),
-      levelsGained: Math.max(0, afterAccountLv - beforeAccountLv),
-    },
-    {
-      kind: "summoner",
-      id: working.activeSummoner ?? "light",
-      element: working.activeSummoner ?? "light",
-      gained: expGain,
-      beforeLevel: beforeActive.level,
-      beforeExp: beforeActive.exp,
-      afterLevel: afterActive.level,
-      afterExp: afterActive.exp,
-      expPerLevel: summonerExpToNext(afterActive.level),
       levelsGained: leveled.levelsGained,
     },
     ...beforeParty.map((bp) => {
@@ -5246,7 +5420,9 @@ export function applyRewards(
   const dropQualityWeights =
     scenarioTable?.qualityWeights ?? stage.qualityWeights;
   const scenarioGearStars = scenarioTable
-    ? (scenarioTable.starWeights.filter((r) => r.value <= 5) as {
+    ? (scenarioGearStarWeights(difficulty, stage.stage).filter(
+        (r) => r.value <= 5,
+      ) as {
         value: 1 | 2 | 3 | 4 | 5;
         w: number;
       }[])
@@ -5265,7 +5441,9 @@ export function applyRewards(
           ? (stage.stage as 1 | 2 | 3 | 4 | 5 | 6)
           : undefined;
       symbol = rollSymbolDrop(rng, `drop_${stage.id}_${symbols.length}`, {
-        preferredSet: stage.dropSetId,
+        ...(stage.dropSetPool?.length
+          ? {}
+          : { preferredSet: stage.dropSetId }),
         preferredSlot,
         setPool: stage.dropSetPool,
         starWeights: dropStarWeights,
@@ -5368,7 +5546,7 @@ export function applyRewards(
     scrolls += 1;
   }
 
-  const crystalGain = rollStageCrystalDrop(stage, rng, affix.crystalChanceMul);
+  let crystalGain = rollStageCrystalDrop(stage, rng, affix.crystalChanceMul);
   if (crystalGain > 0) {
     island = {
       ...island,
@@ -5385,11 +5563,37 @@ export function applyRewards(
   let challengeTowerFloor = working.challengeTowerFloor ?? 0;
   let challengeTowerMonthKey =
     working.challengeTowerMonthKey ?? monthKey();
+  let challengeTowerHardFloor = working.challengeTowerHardFloor ?? 0;
+  let challengeTowerHardMonthKey =
+    working.challengeTowerHardMonthKey ?? monthKey();
   let scrollsLegend = save.scrollsLegend ?? 0;
   if (stage.mode === "challenge_tower") {
-    const priorFloor = challengeTowerFloor;
-    challengeTowerFloor = Math.max(challengeTowerFloor, stage.stage);
-    challengeTowerMonthKey = monthKey();
+    const towerDifficulty =
+      stage.challengeTowerDifficulty ??
+      challengeTowerStageDifficulty(stage.id) ??
+      "normal";
+    const priorFloor =
+      towerDifficulty === "hard"
+        ? challengeTowerHardFloor
+        : challengeTowerFloor;
+    if (towerDifficulty === "hard") {
+      challengeTowerHardFloor = Math.max(
+        challengeTowerHardFloor,
+        stage.stage,
+      );
+      challengeTowerHardMonthKey = monthKey();
+    } else {
+      challengeTowerFloor = Math.max(challengeTowerFloor, stage.stage);
+      challengeTowerMonthKey = monthKey();
+    }
+    if (stage.stage % 10 === 0 && priorFloor < stage.stage) {
+      const milestoneCrystal = towerDifficulty === "hard" ? 20 : 10;
+      crystalGain += milestoneCrystal;
+      island = {
+        ...island,
+        crystal: (island.crystal ?? 0) + milestoneCrystal,
+      };
+    }
     if (stage.stage === 100 && priorFloor < 100) {
       scrollsLegend += 1;
     }
@@ -5586,6 +5790,8 @@ export function applyRewards(
       trialTitleUnlocked,
       challengeTowerMonthKey,
       challengeTowerFloor,
+      challengeTowerHardMonthKey,
+      challengeTowerHardFloor,
       raidBossHp,
       raidMilestonesClaimed,
       raidWeekKey: working.raidWeekKey ?? null,
@@ -5649,10 +5855,10 @@ export function runSortie(
   }
   if (stage.mode === "arena") {
     working = syncArenaAttackDay(working, now);
-    if ((working.arenaAttacksToday ?? 0) >= ARENA_ATTACKS_DAILY) {
+    if (working.arenaInvitations <= 0) {
       return {
         save: working,
-        message: `오늘 아레나 공격 한도 소진 (${ARENA_ATTACKS_DAILY}회)`,
+        message: `아레나 초대장 부족 (${ARENA_INVITATIONS_MAX}장까지 충전)`,
       };
     }
   }
@@ -5668,19 +5874,32 @@ export function runSortie(
   if (stage.mode === "challenge_tower") {
     working = syncChallengeTowerMonth(working, now);
   }
+  if (
+    stage.mode === "depth" &&
+    (stage.cairosTier === "abyss_normal" ||
+      stage.cairosTier === "abyss_hard")
+  ) {
+    const families = working.party
+      .map((uid) => working.roster.find((monster) => monster.uid === uid))
+      .filter((monster): monster is OwnedMonster => !!monster)
+      .map(
+        (monster) =>
+          getMonster(monster.monsterId)?.familyId ?? monster.monsterId,
+      );
+    if (new Set(families).size !== families.length) {
+      return {
+        save: working,
+        message: `심연 던전은 같은 계열 소환수를 중복 편성할 수 없습니다`,
+      };
+    }
+  }
   const difficulty =
     stage.mode === "arena" ||
     stage.mode === "world_arena" ||
     stage.mode === "guild_raid"
       ? "normal"
       : (opts?.difficulty ?? "normal");
-  const energyCost =
-    stage.mode === "scenario"
-      ? Math.ceil(
-          stage.energyCost *
-            (difficulty === "hell" ? 2 : difficulty === "hard" ? 1.5 : 1),
-        )
-      : stage.energyCost;
+  const energyCost = energyCostForStage(stage, difficulty);
   const energy = Math.floor(working.island.energy);
   if (energyCost > 0 && energy < energyCost) {
     return {
@@ -5737,9 +5956,15 @@ export function runSortie(
       stage.mode === "equip"
         ? (working.equipVaultWeekEntries ?? 0) + 1
         : (working.equipVaultWeekEntries ?? 0),
+    arenaInvitations:
+      stage.mode === "arena"
+        ? Math.max(0, working.arenaInvitations - 1)
+        : working.arenaInvitations,
+    arenaInvitationUpdatedAt: working.arenaInvitationUpdatedAt,
     arenaAttacksToday:
       stage.mode === "arena"
-        ? (working.arenaAttacksToday ?? 0) + 1
+        ? ARENA_INVITATIONS_MAX -
+          Math.max(0, working.arenaInvitations - 1)
         : (working.arenaAttacksToday ?? 0),
     arenaAttackDay:
       stage.mode === "arena"

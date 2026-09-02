@@ -90,7 +90,7 @@ describe("Phase1 island", () => {
       island.buildings.find((b) => b.id === "mana_pond")!.level,
       1,
     );
-    assert.match(blocked.message, /계정 Lv\.3/);
+    assert.match(blocked.message, /소환사 Lv\.3/);
     island = { ...island, summonerLevel: 3 };
     const r = upgradeBuilding(island, "mana_pond");
     assert.equal(r.island.buildings.find((b) => b.id === "mana_pond")!.level, 2);
@@ -159,29 +159,29 @@ describe("Phase1 island", () => {
     assert.equal(full.storedCrystal, 3);
   });
 
-  it("regens energy 1 per 3 minutes up to max", () => {
+  it("regens energy 1 per 5 minutes up to max", () => {
     let island = createStarterIsland(0);
-    island = { ...island, energy: 50, energyUpdatedAt: 0 };
-    island = tickProduction(island, 180_000);
-    assert.equal(island.energy, 51);
-    assert.equal(island.energyUpdatedAt, 180_000);
-    island = tickProduction(island, 540_000);
-    assert.equal(island.energy, 53);
-    island = tickProduction(island, 180_000 * 100);
+    island = { ...island, energy: 20, energyUpdatedAt: 0 };
+    island = tickProduction(island, 300_000);
+    assert.equal(island.energy, 21);
+    assert.equal(island.energyUpdatedAt, 300_000);
+    island = tickProduction(island, 900_000);
+    assert.equal(island.energy, 23);
+    island = tickProduction(island, 300_000 * 100);
     assert.equal(island.energy, island.energyMax);
   });
 
   it("tracks countdown to next energy and starts timer when leaving max", () => {
     let island = createStarterIsland(0);
-    island = { ...island, energy: 50, energyUpdatedAt: 0 };
-    assert.equal(energyRegenRemainingMs(island, 45_000), 135_000);
-    assert.equal(energyRegenRemainingMs(island, 180_000), 0);
+    island = { ...island, energy: 20, energyUpdatedAt: 0 };
+    assert.equal(energyRegenRemainingMs(island, 45_000), 255_000);
+    assert.equal(energyRegenRemainingMs(island, 300_000), 0);
     island = { ...island, energy: island.energyMax!, energyUpdatedAt: 0 };
     assert.equal(energyRegenRemainingMs(island, 30_000), null);
     const spent = spendEnergy(island, 3, 90_000);
     assert.equal(spent.energy, island.energyMax! - 3);
     assert.equal(spent.energyUpdatedAt, 90_000);
-    assert.equal(energyRegenRemainingMs(spent, 90_000), 180_000);
+    assert.equal(energyRegenRemainingMs(spent, 90_000), 300_000);
   });
 
   it("levels summoner from exp", () => {

@@ -5,6 +5,8 @@ export type AudioPrefs = {
   bgm: number;
   sfx: number;
   muted: boolean;
+  bgmMuted: boolean;
+  sfxMuted: boolean;
 };
 
 const DEFAULTS: AudioPrefs = {
@@ -12,6 +14,8 @@ const DEFAULTS: AudioPrefs = {
   bgm: 0.72,
   sfx: 0.85,
   muted: false,
+  bgmMuted: false,
+  sfxMuted: false,
 };
 
 function clamp01(n: number): number {
@@ -32,6 +36,8 @@ export function readAudioPrefs(): AudioPrefs {
       bgm: clamp01(parsed.bgm ?? DEFAULTS.bgm),
       sfx: clamp01(parsed.sfx ?? DEFAULTS.sfx),
       muted: Boolean(parsed.muted),
+      bgmMuted: Boolean(parsed.bgmMuted),
+      sfxMuted: Boolean(parsed.sfxMuted),
     };
   } catch {
     return defaultAudioPrefs();
@@ -47,6 +53,8 @@ export function writeAudioPrefs(next: AudioPrefs): void {
         bgm: clamp01(next.bgm),
         sfx: clamp01(next.sfx),
         muted: Boolean(next.muted),
+        bgmMuted: Boolean(next.bgmMuted),
+        sfxMuted: Boolean(next.sfxMuted),
       }),
     );
   } catch {

@@ -82,15 +82,32 @@ export { pickExpertStone, scoreExpertStone } from "./stoneTactic.js";
 export type { StoneEval, StoneSuggestion } from "./ai.js";
 export type {
   BattlePhase,
+  BoardTeamBuff,
+  BoardTeamBuffSource,
   Element,
   FinishReason,
   SummonerState,
+  StatusInstance,
+  StatusKind,
+  StatusPolarity,
+  StatusStacking,
   TeamId,
   Unit,
   UnitKind,
   UnitStats,
 } from "./types.js";
-export { listUnitStatuses } from "./statuses.js";
+export {
+  addStatus,
+  advanceUnitStatuses,
+  ensureStatuses,
+  hasStatus,
+  listUnitStatuses,
+  removeStatusKind,
+  removeStatuses,
+  statusesOf,
+  syncLegacyStatuses,
+  tickUnitStatuses,
+} from "./statuses.js";
 export type {
   UnitStatusIcon,
   UnitStatusId,

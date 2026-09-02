@@ -32,6 +32,6 @@ Premium stylized 2.5D mobile RPG divine judge debuffer,
 hooded white figure golden mask glow, star-motif white-gold armor feather wings,
 massive star-spike halo, golden scale of justice and war hammer,
 long star-embroidered robe, authoritative wide stance,
-high-end hand-painted dark fantasy, eye-level front three-quarter, clean white plate,
+high-end hand-painted dark fantasy, eye-level front three-quarter, transparent alpha background or solid magenta #FF00FF plate,
 element accents in mask halo stars scale hammer only, no global recolor, no text
 ```

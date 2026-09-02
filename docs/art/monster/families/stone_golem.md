@@ -46,6 +46,6 @@ dark gray weathered rock with moss patches, glowing rune bands on chest forearms
 small fierce glowing eyes, enormous fists, stone loin guard, wide defensive stance,
 high-end hand-painted dark fantasy over dimensional 3D-like forms,
 eye-level front three-quarter camera, grounded full body, safe margin,
-clean white plate, element accents in cracks and runes only,
+transparent alpha background or solid magenta #FF00FF plate, element accents in cracks and runes only,
 no weapon, no human face, no text, no cropped limbs
 ```

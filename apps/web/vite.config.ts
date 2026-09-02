@@ -31,6 +31,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: false,
       includeAssets: ["favicon.svg", "icons/*.svg", "icons/*.png"],
       manifest: {
         name: "StoneSummoner",
@@ -64,13 +65,33 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,ico,png,woff2}"],
-        // stages terrain + auth heroes can exceed Workbox's 2 MiB default
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        navigateFallbackDenylist: [/^\/api\//],
+        // stages terrain / world-map and auth heroes can exceed Workbox's 2 MiB default
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              /^\/art\/(?:home\/|hub\/|ui\/(?:nav|res)\/|summoner\/|auth\/|monster\/[^/]+\.(?:webp|png|svg)$)/.test(
+                url.pathname,
+              ),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "island-critical-v1",
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],
   server: {
+    host: "0.0.0.0",
     port: 5173,
+    strictPort: true,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8080",
@@ -79,6 +100,7 @@ export default defineConfig({
     },
   },
   preview: {
+    host: "0.0.0.0",
     port: 4173,
   },
 });
