@@ -354,6 +354,7 @@ import {
   isStageUnlockedForDifficulty,
   isDifficultyOpen,
   nextStageInProgression,
+  SCENARIO_DIFF_ENERGY_MUL,
   MAX_EVOLVE,
   MAX_MONSTER_AWAKEN,
   MAX_SKILL_LEVEL,
@@ -22485,9 +22486,24 @@ const STAGE_DIFFICULTIES: {
   blurb: string;
   energyMul: number;
 }[] = [
-  { id: "normal", labelKo: t('ui.aef1a1e70e'), blurb: t('ui.2387a8e0b0'), energyMul: 1 },
-  { id: "hard", labelKo: t('ui.3dfdef02ab'), blurb: t('ui.7be5aa7542'), energyMul: 1.5 },
-  { id: "hell", labelKo: t('ui.173366486b'), blurb: t('ui.ab309da205'), energyMul: 2 },
+  {
+    id: "normal",
+    labelKo: t("ui.aef1a1e70e"),
+    blurb: t("ui.2387a8e0b0"),
+    energyMul: SCENARIO_DIFF_ENERGY_MUL.normal,
+  },
+  {
+    id: "hard",
+    labelKo: t("ui.3dfdef02ab"),
+    blurb: t("ui.7be5aa7542"),
+    energyMul: SCENARIO_DIFF_ENERGY_MUL.hard,
+  },
+  {
+    id: "hell",
+    labelKo: t("ui.173366486b"),
+    blurb: t("ui.ab309da205"),
+    energyMul: SCENARIO_DIFF_ENERGY_MUL.hell,
+  },
 ];
 
 function stageEnergyCost(stage: StageDef): number {

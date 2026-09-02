@@ -17,6 +17,7 @@ export {
   isStageClearedOnDifficulty,
   isStageUnlockedForDifficulty,
   isDifficultyOpen,
+  isScenarioTrackFullyCleared,
   nextStageInProgression,
   listGear,
   listGearBag,
