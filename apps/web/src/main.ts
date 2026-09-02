@@ -811,7 +811,6 @@ let sessionUser: SessionUser | null = null;
 const authUi = {
   pane: "gate" as "gate" | "login" | "register" | "privacy" | "terms",
 };
-let islandPreloadProgress: IslandPreloadProgress | null = null;
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -916,6 +915,9 @@ let cloudTimer: ReturnType<typeof setTimeout> | null = null;
 /** False after cloud 401 — keep local play, stop PUT spam. */
 let cloudSyncOk = true;
 let cloudAuthWarned = false;
+/** False when /api is unreachable (local dev without `npm run api`, etc.). */
+let apiReachable = false;
+let chatPollBackoffMs = 1600;
 let ephemeralStore = false;
 
 let save: PlayerSave = createNewSave();
@@ -1953,7 +1955,7 @@ let chatLineNick: string | null = null;
 let chatLineText: string | null = null;
 /** True while the one-line dock has unseen messages. */
 let chatLineUnread = false;
-let chatPollTimer: ReturnType<typeof setInterval> | null = null;
+let chatPollTimer: ReturnType<typeof setTimeout> | null = null;
 let chatWanted = false;
 let chatAfter = 0;
 let chatSendBusy = false;
@@ -3277,10 +3279,41 @@ async function apiJson<T>(
       return null;
     }
     if (!res.ok) return null;
+    noteApiReachable();
     return (await res.json()) as T;
   } catch {
+    noteApiUnreachable();
     return null;
   }
+}
+
+function noteApiReachable(): void {
+  apiReachable = true;
+  chatPollBackoffMs = 1600;
+}
+
+function noteApiUnreachable(): void {
+  if (apiReachable) apiReachable = false;
+  chatPollBackoffMs = Math.min(60_000, Math.max(1600, chatPollBackoffMs * 2));
+}
+
+function chatPollDelayMs(): number {
+  return apiReachable ? 1600 : chatPollBackoffMs;
+}
+
+function scheduleChatPoll(): void {
+  if (!chatWanted) return;
+  if (chatPollTimer) clearTimeout(chatPollTimer);
+  chatPollTimer = setTimeout(() => {
+    chatPollTimer = null;
+    void tickChatLive();
+  }, chatPollDelayMs());
+}
+
+function clearChatPoll(): void {
+  if (!chatPollTimer) return;
+  clearTimeout(chatPollTimer);
+  chatPollTimer = null;
 }
 
 function noteCloudUnauthorized(): void {
@@ -3325,7 +3358,7 @@ function loadLocalSave(key = localSaveKey()): PlayerSave | null {
 }
 
 function scheduleCloudSave(): void {
-  if (!cloudSyncOk) return;
+  if (!cloudSyncOk || !apiReachable) return;
   if (!sessionUser || sessionUser.id.startsWith("local-")) return;
   if (cloudTimer) clearTimeout(cloudTimer);
   cloudTimer = setTimeout(() => {
@@ -3348,7 +3381,7 @@ function persist(opts?: { flushCloud?: boolean }): void {
 }
 
 function flushCloudSave(): void {
-  if (!cloudSyncOk) return;
+  if (!cloudSyncOk || !apiReachable) return;
   if (!sessionUser || sessionUser.id.startsWith("local-")) return;
   if (cloudTimer) {
     clearTimeout(cloudTimer);
@@ -4172,8 +4205,12 @@ async function enterWithUser(
       opts?.fresh === true ||
       readAuthPrefs().autoLogin);
   if (enterGame) {
-    await prepareIslandAssets();
     view = "home";
+    if (user.kind === "demo") {
+      flash(t("ui.0b00025fb4"));
+    } else if (user.kind === "guest") {
+      flash(t("ui.02f932d2cd"));
+    }
   } else {
     view = "auth";
     flash(
@@ -4254,11 +4291,15 @@ async function prepareIslandAssets(): Promise<void> {
 
 async function startGameFromAuth(): Promise<void> {
   if (!sessionUser) return;
+  view = "home";
   syncOnboardFromSave({
     offerWelcome: !onboard.welcomeSeen && onboard.step !== "done",
   });
-  await prepareIslandAssets();
-  view = "home";
+  if (sessionUser.kind === "demo") {
+    flash(t("ui.0b00025fb4"));
+  } else if (sessionUser.kind === "guest") {
+    flash(t("ui.02f932d2cd"));
+  }
   render();
   window.requestAnimationFrame(() => {
     maybePromptAttendance();
@@ -9425,25 +9466,6 @@ function renderAuth(): string {
   </div>`;
 }
 
-function renderIslandPreload(): string {
-  const progress = islandPreloadProgress ?? {
-    completed: 0,
-    total: 1,
-    percent: 0,
-  };
-  const label = escapeHtml(t("boot.loading"));
-  return `${authHeroLayer()}
-    <div class="auth-screen auth-screen--form auth-island-preload">
-      ${authBrand()}
-      <div class="island-preload-card" aria-live="polite">
-        <strong class="island-preload-percent">${progress.percent}%</strong>
-        <div class="island-preload-bar" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.percent}">
-          <span class="island-preload-fill" style="width:${progress.percent}%"></span>
-        </div>
-      </div>
-    </div>`;
-}
-
 function isFacilityView(v: View = view): boolean {
   return (
     v === "summon" ||
@@ -12291,6 +12313,7 @@ async function doJoinChat(): Promise<boolean> {
     profile: chatProfilePayload(),
   });
   if (r.ok) {
+    noteApiReachable();
     applyChatSnapshot(r.data);
     chatConnected = true;
     chatFailFlashed = false;
@@ -12307,13 +12330,16 @@ async function doJoinChat(): Promise<boolean> {
       profile: chatProfilePayload(),
     });
     if (again.ok) {
+      noteApiReachable();
       applyChatSnapshot(again.data);
       chatConnected = true;
       chatFailFlashed = false;
       persistChatChannel();
       return true;
     }
+    if (again.status === 0) noteApiUnreachable();
   }
+  if (r.status === 0) noteApiUnreachable();
   chatFlashError(r.error);
   return false;
 }
@@ -12366,32 +12392,35 @@ async function sendChatLive(text: string): Promise<boolean> {
 
 async function tickChatLive(): Promise<void> {
   if (!chatWanted || !canUseLiveChat()) return;
-  if (!chatConnected) {
-    await joinChatLive();
-    return;
-  }
-  const r = await chatPoll(chatAfter, { tab: chatTab, peer: chatPeerUid });
-  if (!r.ok) {
-    if (r.error === "not_joined" || r.status === 409) {
-      chatConnected = false;
+  try {
+    if (!chatConnected) {
       await joinChatLive();
       return;
     }
-    if (r.status === 401) {
-      chatConnected = false;
-      chatWanted = false;
-      if (chatPollTimer) {
-        clearInterval(chatPollTimer);
-        chatPollTimer = null;
+    const r = await chatPoll(chatAfter, { tab: chatTab, peer: chatPeerUid });
+    if (!r.ok) {
+      if (r.status === 0) noteApiUnreachable();
+      if (r.error === "not_joined" || r.status === 409) {
+        chatConnected = false;
+        await joinChatLive();
+        return;
       }
-      chatFlashError("unauthorized");
+      if (r.status === 401) {
+        chatConnected = false;
+        chatWanted = false;
+        clearChatPoll();
+        chatFlashError("unauthorized");
+        return;
+      }
+      chatFlashError(r.error);
       return;
     }
-    chatFlashError(r.error);
-    return;
+    noteApiReachable();
+    chatFailFlashed = false;
+    applyChatSnapshot(r.data);
+  } finally {
+    if (chatWanted) scheduleChatPoll();
   }
-  chatFailFlashed = false;
-  applyChatSnapshot(r.data);
 }
 
 function startChatLive(): void {
@@ -12399,18 +12428,12 @@ function startChatLive(): void {
   chatWanted = true;
   if (chatPollTimer) return;
   ensureChatChannels();
-  chatPollTimer = setInterval(() => {
-    void tickChatLive();
-  }, 1600);
   void tickChatLive();
 }
 
 function stopChatLive(): void {
   chatWanted = false;
-  if (chatPollTimer) {
-    clearInterval(chatPollTimer);
-    chatPollTimer = null;
-  }
+  clearChatPoll();
   const was = chatConnected;
   chatConnected = false;
   chatAfter = 0;
@@ -13131,7 +13154,7 @@ function render(): void {
     const next = app.querySelector<HTMLElement>(".home-island");
     if (next && next !== keepIsland) next.replaceWith(keepIsland);
   }
-  setBackHistoryTrapWanted(view !== "auth" || !!islandPreloadProgress);
+  setBackHistoryTrapWanted(view !== "auth");
 }
 
 /** Full re-render; island DOM is preserved by render() when staying on the island. */
@@ -13161,20 +13184,6 @@ function renderScreen(): void {
       </div>
       ${authFooter()}
     </main>`;
-    return;
-  }
-  if (islandPreloadProgress) {
-    app.classList.add("auth-mode");
-    app.classList.remove(
-      "home-mode",
-      "expedition-mode",
-      "combat-mode",
-      "monster-mode",
-      "summoner-mode",
-      "facility-modal-open",
-      "party-modal-open",
-    );
-    app.innerHTML = `<main class="auth-main auth-main--center">${renderIslandPreload()}</main>`;
     return;
   }
 
@@ -24589,7 +24598,7 @@ function bindAuth(): void {
 
 
   app.querySelector("#auth-start")?.addEventListener("click", () => {
-    void startGameFromAuth();
+    startGameFromAuth();
   });
 
   app.querySelector("#auth-logout")?.addEventListener("click", () => {
@@ -25927,7 +25936,6 @@ function handleAuthHardwareBack(): void {
 }
 
 function handleHardwareBack(): void {
-  if (islandPreloadProgress) return;
   if (closeTopOverlay()) return;
   if (closeLeftoverTransientUi()) return;
   if (view === "auth") {
