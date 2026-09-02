@@ -8577,7 +8577,8 @@ main {
 
 .battle-chrome .battle-ticker,
 .battle-chrome .battle-stage-pill,
-.battle-chrome .board-mini {
+.battle-chrome .board-mini,
+.battle-chrome .board-mini-col {
   pointer-events: auto;
 }
 
@@ -9161,8 +9162,9 @@ main {
   justify-content: flex-end;
   flex: 1 1 0;
   width: auto;
-  max-width: 88px;
-  min-width: 56px;
+  max-width: calc(88px * min(1.18, var(--unit-stature, 1)));
+  min-width: calc(52px * var(--unit-stature, 1));
+  --unit-stature: 1;
   padding: 0 1px 0;
   margin: 0;
   border: 0;
@@ -9353,7 +9355,7 @@ main {
 }
 
 .battle-unit--summoner .battle-unit-art {
-  height: clamp(96px, 16dvh, 132px);
+  height: calc(clamp(96px, 16dvh, 132px) * var(--unit-stature, 1));
 }
 
 .battle-screen--boss .battle-lane.enemy {
@@ -9634,10 +9636,10 @@ button.battle-unit {
   position: relative;
   z-index: 1;
   display: block;
-  width: 118%;
+  width: calc(118% * min(1.12, var(--unit-stature, 1)));
   margin-left: -9%;
   margin-right: -9%;
-  height: clamp(96px, 15.5dvh, 128px);
+  height: calc(clamp(96px, 15.5dvh, 128px) * var(--unit-stature, 1));
   line-height: 0;
   overflow: visible;
   /* Soft-cut baked dark mattes so sprites read as field characters */
@@ -10017,33 +10019,41 @@ button.battle-unit {
   box-shadow: 0 2px 8px #0006;
 }
 
-.battle-board-buffs {
+.board-frame--circle > .battle-board-buffs {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
   display: flex;
-  flex: 1 1 auto;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-width: 0;
+  gap: 6px;
+  width: min(72%, 220px);
   pointer-events: none;
 }
 
 .battle-board-buffs-team {
   display: flex;
-  gap: 3px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
 }
 
 .battle-board-buff {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  min-height: 24px;
-  padding: 2px 6px;
-  border: 1px solid #dbb55c88;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid #dbb55caa;
   border-radius: 999px;
-  background: #181321e6;
+  background: #181321f0;
   color: #f6dfa3;
-  box-shadow: 0 1px 5px #0008;
-  font-size: 0.58rem;
+  box-shadow: 0 2px 10px #000a;
+  font-size: 0.78rem;
+  font-weight: 800;
   white-space: nowrap;
 }
 
@@ -10058,7 +10068,10 @@ button.battle-unit {
 
 .battle-board-buffs-team.is-enemy .battle-board-buff {
   filter: saturate(0.75);
-  opacity: 0.82;
+  opacity: 0.86;
+  font-size: 0.68rem;
+  min-height: 24px;
+  padding: 3px 8px;
 }
 
 .battle-hud-actions {
@@ -10126,7 +10139,7 @@ body > .battle-settings-layer.settings-layer {
   top: 0;
   left: 0;
   z-index: 1;
-  width: min(250px, calc(100vw - 16px));
+  width: min(280px, calc(100vw - 16px));
   overflow: hidden;
   border: 1px solid #c9a22788;
   border-radius: 14px;
@@ -10210,6 +10223,50 @@ body > .battle-settings-layer.settings-layer {
   display: grid;
   gap: 1px;
   padding: 5px;
+}
+
+.battle-audio-row {
+  display: grid;
+  grid-template-columns: 3.4rem 2.6rem 1fr 2rem;
+  gap: 6px;
+  align-items: center;
+  min-height: 40px;
+  padding: 4px 8px;
+}
+
+.battle-audio-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #f0e6c8;
+}
+
+.battle-audio-toggle {
+  min-height: 26px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid #c9a22755;
+  background: #1a1528;
+  color: #b8b0d0;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.battle-audio-toggle.is-on {
+  color: #f0e6c8;
+  border-color: #c9a227aa;
+  background: #2a2440;
+}
+
+.battle-audio-row input[type="range"] {
+  width: 100%;
+  accent-color: #c9a227;
+}
+
+.battle-audio-val {
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: #e8dcc0;
+  text-align: right;
 }
 
 .battle-auto-option {
@@ -10332,14 +10389,9 @@ body > .battle-settings-layer.settings-layer {
   display: none;
 }
 
-.board-wrap--stage .board-phase-tag {
-  position: absolute;
-  left: 50%;
-  bottom: 2px;
-  transform: translateX(-50%);
-  z-index: 4;
-  pointer-events: none;
-  margin: 0;
+.board-wrap--stage .board-phase-tag,
+.board-wrap--stage .board-opening-hint {
+  display: none;
 }
 
 .board-wrap--stage .board-frame--tilted {
@@ -11963,9 +12015,73 @@ body > .battle-settings-layer.settings-layer {
   pointer-events: none;
 }
 
-/* Opacity only — [hidden]/display:none dumps decoded stone images (WebView flicker). */
+.board-mini-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  flex: 0 0 auto;
+  width: min(132px, 34vw);
+  pointer-events: none;
+}
+
+.board-mini-col .board-mini {
+  width: 100%;
+}
+
+.board-mini-col.is-stowed,
 .board-mini.is-stowed {
   opacity: 0;
+}
+
+.board-mini-eta {
+  display: grid;
+  gap: 3px;
+  padding: 3px 4px 4px;
+  border-radius: 8px;
+  border: 1px solid #c9a22766;
+  background: #120e1ce8;
+  box-shadow: 0 4px 10px #0007, inset 0 1px 0 #ffffff10;
+}
+
+.board-mini-eta-track {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: #2a2438;
+  overflow: hidden;
+}
+
+.board-mini-eta-track > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6a5a2a, #e2c56a);
+}
+
+.board-mini-eta.is-ready .board-mini-eta-track > i {
+  background: linear-gradient(90deg, #c9a227, #f0e0a0);
+}
+
+.board-mini-eta-pips {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+}
+
+.board-mini-eta-pips > i {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: #3a3448;
+}
+
+.board-mini-eta-pips > i.is-on {
+  background: #e2c56a;
+}
+
+.board-mini-eta.is-ready .board-mini-eta-pips > i.is-on {
+  background: #f4e7a8;
 }
 
 .board.board-mini-grid {
@@ -15326,10 +15442,20 @@ body > .battle-settings-layer.settings-layer {
 
 .result-battle-action-label {
   width: 100%;
-  font-size: 0.94rem;
+  font-size: 0.82rem;
   font-weight: 800;
   text-align: center;
   line-height: 1.2;
+  color: #d8c898;
+}
+
+.result-battle-action-stage {
+  width: 100%;
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.2;
+  color: #fff3c8;
 }
 
 .result-battle-action-energy {

@@ -1199,6 +1199,32 @@ describe("Battle flow", () => {
     assert.deepEqual(b.activeBoardBuffs("ally"), []);
   });
 
+  it("counts remaining actions until the next ally stone", () => {
+    const b = new Battle({
+      boardSize: 5,
+      units: roster(),
+      allySummoner: summonerState("a-sum"),
+      enemySummoner: summonerState("e-sum"),
+      rng: () => 0.5,
+    });
+    b.getUnit("e-m1")!.stats.hp = 5000;
+    b.getUnit("e-m1")!.hp = 5000;
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("a-m1")!.atb = 100;
+    b.tickUntilReady();
+    assert.equal(b.phase, "await_stone");
+    assert.equal(b.turnsUntilStone("ally"), 0);
+    assert.equal(b.autoStone(), true);
+    b.useSkill({ targetId: "e-m1" });
+    assert.ok(b.turnsUntilStone("ally") > 0);
+    for (const u of b.units) u.atb = 0;
+    b.getUnit("e-m1")!.atb = 100;
+    b.tickUntilReady();
+    assert.equal(b.phase, "await_stone");
+    assert.equal(b.turnsUntilStone("enemy"), 0);
+    assert.ok(b.turnsUntilStone("ally") >= 1);
+  });
+
   it("composed ult refunds mana and buffs when tree nodes unlocked", () => {
     const sm = summonerState("a-sum", 100, 0.1);
     sm.skillTreeUnlocked = ["root_mana", "abyss_well", "root_power", "leader_aura"];

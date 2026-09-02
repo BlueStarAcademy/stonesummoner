@@ -53,6 +53,7 @@ import {
   getSummonerBattleStillSrc,
 } from "./battle/spinePacks";
 import { BATTLE_STILL_FAMILY_SET } from "./battle/battleStills";
+import { battleUnitStature } from "./battle/stature";
 import { battleBgIdForStage, battleBgSrc, battleSkyHtml } from "./battle/battleBg";
 import {
   initAudio,
@@ -1758,7 +1759,7 @@ function saveBattleMinimapPref(): void {
 }
 
 let battleMinimapOn = loadBattleMinimapPref();
-let battleSettingsTab: "screen" | "auto" = "screen";
+let battleSettingsTab: "screen" | "auto" | "sound" = "screen";
 /** Blocks input while place/strike choreography plays. */
 let battleFxBusy = false;
 /** Wall-clock skip: enable after 1 minute and 50 attack turns. */
@@ -6251,6 +6252,7 @@ function resultBattleAction(
   const enabled = energy >= cost;
   return `<button type="button" class="result-battle-action result-battle-action--${action}${enabled ? "" : " is-disabled"}" data-result-battle="${action}" ${enabled ? "" : "disabled"}>
     <span class="result-battle-action-label">${escapeHtml(label)}</span>
+    <strong class="result-battle-action-stage">${escapeHtml(stage.nameKo)}</strong>
     <span class="res-cost-chip result-battle-action-energy"><img class="res-ico" src="/art/ui/res/energy.svg" width="20" height="20" alt="" draggable="false" /><strong>${cost}</strong></span>
   </button>`;
 }
@@ -6512,6 +6514,7 @@ function renderResult(): string {
       ? `<p class="result-empty">${escapeHtml(t("ui.symbolBagFull"))}</p>`
       : "";
   const nextStage = win ? nextCampaignStage(stage) : null;
+  const stepTwoStage = nextStage ?? stage;
   const riteContinue =
     firstRite && onboard.step === "summon"
       ? `<button type="button" class="auth-btn-primary result-cta-primary result-onboard-cta" id="btn-result-onboard">${escapeHtml(t("ui.onboard.resultSummonCta"))}</button>`
@@ -6550,7 +6553,7 @@ function renderResult(): string {
       ${resultEnergyBadgeHtml()}
       <div class="result-banner result-banner--compact">
         <h2 class="result-title">${title}</h2>
-        <p class="result-stage">${stageLine}</p>
+        <p class="result-stage">${resultStep === 2 ? escapeHtml(stepTwoStage.nameKo) : stageLine}</p>
       </div>
       ${resultStep === 1 ? stepOne : stepTwo}
     </div>
@@ -8533,6 +8536,8 @@ function renderUnit(
       : "";
   const artSize = opts?.boss ? 240 : isSummoner ? 128 : 168;
   const facing: "front" | "back" = u.team === "ally" ? "back" : "front";
+  const monsterDef = u.monsterId ? getMonster(u.monsterId) : null;
+  const stature = battleUnitStature(u, monsterDef, { boss: opts?.boss });
   const art =
     u.kind === "monster"
       ? opts?.boss && currentStage?.bossArtId
@@ -8579,7 +8584,7 @@ function renderUnit(
     </div>`;
   }
 
-  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" ${attrs} title="${escapeHtml(`${u.name} · ${elementLabel(u.element as SummonerElement)}`)}">
+  return `<${tag} class="battle-unit${isSummoner ? " battle-unit--summoner" : ""}${opts?.boss ? " battle-unit--boss" : ""} el-${u.element}${active}${targeted}${dead}${waveEnter}${shield ? " has-shield" : ""}" data-unit="${u.id}" data-spine-id="${spineId}" data-stature="${stature.toFixed(2)}" style="--unit-stature:${stature}" ${attrs} title="${escapeHtml(`${u.name} · ${elementLabel(u.element as SummonerElement)}`)}">
     ${isActive ? `<span class="battle-unit-turn" aria-hidden="true"></span>` : ""}
     ${renderUnitStatusIcons(u)}
     <span class="battle-unit-glow" aria-hidden="true"></span>
@@ -8599,23 +8604,27 @@ function renderBoardTeamBuffHud(): string {
       .map((buff) => {
         const values = [
           buff.damageBonus
-            ? `<b>ATK +${Math.round(buff.damageBonus * 100)}%</b>`
+            ? `<b>${escapeHtml(t("ui.stoneCapture", { n: Math.round(buff.damageBonus * 100) }))}</b>`
             : "",
           buff.critRateBonus
-            ? `<b>CRI +${Math.round(buff.critRateBonus)}%</b>`
+            ? `<b>${escapeHtml(t("ui.stoneBuffCrit", { n: Math.round(buff.critRateBonus) }))}</b>`
             : "",
           buff.critDmgBonus
-            ? `<b>CDMG +${Math.round(buff.critDmgBonus)}%</b>`
+            ? `<b>${escapeHtml(t("ui.stoneBuffCritDmg", { n: Math.round(buff.critDmgBonus) }))}</b>`
             : "",
-          buff.spdPct ? `<b>SPD +${Math.round(buff.spdPct * 100)}%</b>` : "",
-          buff.shieldByUnit ? `<b>SHIELD</b>` : "",
+          buff.spdPct
+            ? `<b>${escapeHtml(t("ui.stoneBuffSpd", { n: Math.round(buff.spdPct * 100) }))}</b>`
+            : "",
+          buff.shieldByUnit
+            ? `<b>${escapeHtml(t("ui.stoneBuffShield"))}</b>`
+            : "",
         ].filter(Boolean);
         return `<span class="battle-board-buff is-${buff.source}"><i aria-hidden="true">${buff.source === "capture" ? "&#9673;" : "&#9670;"}</i>${values.join("")}</span>`;
       })
       .join("");
     return `<div class="battle-board-buffs-team is-${team}">${chips}</div>`;
   };
-  const html = renderTeam("enemy") + renderTeam("ally");
+  const html = renderTeam("ally") + renderTeam("enemy");
   return html
     ? `<div class="battle-board-buffs" aria-hidden="true">${html}</div>`
     : "";
@@ -8797,17 +8806,6 @@ function renderBoard(): string {
       boardRekindleFx = false;
     });
   }
-  const rebuildTag =
-    phase > 0
-      ? `${t("ui.0f554c7cff")} ${"I".repeat(Math.min(phase, 3))}`
-      : "";
-  const openingHint = battle.openingBonusPending
-    ? `<span class="board-opening-hint">${t("ui.413147d435")}</span>`
-    : "";
-  const phaseTagHtml =
-    rebuildTag || openingHint
-      ? `<div class="board-phase-tag">${rebuildTag}${openingHint}</div>`
-      : "";
   const canClick = false;
   const resetPct = Math.min(
     100,
@@ -8820,7 +8818,7 @@ function renderBoard(): string {
   const circleSrc = battleCircleSrc(circleId);
   const summoningAlly = !!stoneSummonFx;
   return `<div class="board-frame board-frame--tilted board-frame--circle board-frame--has-art phase-${Math.min(phase, 3)}${showRekindle ? " is-rekindling" : ""}${battle.openingBonusPending ? " has-opening" : ""}${canClick ? " is-placeable" : ""}${summoningAlly ? " is-summoning" : ""}" data-element="${battle.circleElement ?? ""}" data-circle="${circleId}">
-    ${phaseTagHtml}
+    ${renderBoardTeamBuffHud()}
     <div class="board-phase-meter" aria-hidden="true"><i style="width:${resetPct}%"></i></div>
     <div class="board-stage">
       <div class="board-hit" aria-hidden="true">
@@ -8864,6 +8862,53 @@ function renderBoardMini(): string {
   </aside>`;
 }
 
+const STONE_ETA_PIPS = 6;
+
+function renderStoneEtaMeter(): string {
+  if (!battle) return "";
+  const turns = battle.turnsUntilStone("ally");
+  const ready = turns <= 0;
+  const filled = ready ? STONE_ETA_PIPS : Math.max(0, STONE_ETA_PIPS - Math.min(turns, STONE_ETA_PIPS));
+  const pct = Math.round((filled / STONE_ETA_PIPS) * 100);
+  const pips = Array.from(
+    { length: STONE_ETA_PIPS },
+    (_, i) => `<i class="${i < filled ? "is-on" : ""}"></i>`,
+  ).join("");
+  return `<div class="board-mini-eta${ready ? " is-ready" : ""}" role="meter" aria-valuemin="0" aria-valuemax="${STONE_ETA_PIPS}" aria-valuenow="${filled}" aria-label="${escapeHtml(t("ui.battleStoneEta"))}">
+    <span class="board-mini-eta-track"><i style="width:${pct}%"></i></span>
+    <span class="board-mini-eta-pips" aria-hidden="true">${pips}</span>
+  </div>`;
+}
+
+function renderBoardMiniCol(): string {
+  const visible = !pickOverlayOpen() && battleMinimapOn;
+  return `<div class="board-mini-col${visible ? "" : " is-stowed"}" id="board-mini-col">
+    ${renderBoardMini()}
+    ${renderStoneEtaMeter()}
+  </div>`;
+}
+
+function syncStoneEtaMeter(): void {
+  const col = app.querySelector<HTMLElement>("#board-mini-col");
+  if (!col || !battle) return;
+  const show = !pickOverlayOpen() && battleMinimapOn;
+  col.classList.toggle("is-stowed", !show);
+  const html = renderStoneEtaMeter();
+  const wrap = document.createElement("div");
+  wrap.innerHTML = html;
+  const incoming = wrap.firstElementChild as HTMLElement | null;
+  if (!incoming) return;
+  const live = col.querySelector<HTMLElement>(".board-mini-eta");
+  if (!live) {
+    col.appendChild(incoming);
+    return;
+  }
+  live.className = incoming.className;
+  live.innerHTML = incoming.innerHTML;
+  const now = incoming.getAttribute("aria-valuenow");
+  if (now) live.setAttribute("aria-valuenow", now);
+}
+
 function boardMiniContentKey(): string {
   if (!battle) return "";
   const grid = battle.board.getBoard();
@@ -8904,6 +8949,7 @@ function syncBoardMini(): void {
   mini.removeAttribute("hidden");
   mini.classList.toggle("is-stowed", !show);
   mini.setAttribute("aria-hidden", show ? "false" : "true");
+  syncStoneEtaMeter();
 
   const size = battle.board.size;
   let grid = mini.querySelector<HTMLElement>(".board-mini-grid");
@@ -8989,12 +9035,20 @@ function patchBattleLayout(live: HTMLElement, incoming: HTMLElement): void {
 function patchBattleChrome(live: HTMLElement, incoming: HTMLElement): void {
   const mini = live.querySelector<HTMLElement>("#board-mini");
   if (mini) incoming.querySelector("#board-mini")?.remove();
+  if (mini && mini.parentElement !== live) {
+    live.insertBefore(mini, live.firstChild);
+  }
 
   for (const child of Array.from(live.children)) {
     if (child !== mini) child.remove();
   }
 
   for (const child of Array.from(incoming.children)) {
+    if (child.id === "board-mini-col") {
+      if (mini) child.insertBefore(mini, child.firstChild);
+      live.appendChild(child);
+      continue;
+    }
     if (child.id === "board-mini") {
       if (!mini) live.appendChild(child);
       continue;
@@ -10271,7 +10325,7 @@ function positionBattleAutoSettings(
   const r = btn.getBoundingClientRect();
   const pad = 8;
   const gap = 8;
-  const width = Math.min(250, Math.max(160, window.innerWidth - pad * 2));
+  const width = Math.min(280, Math.max(180, window.innerWidth - pad * 2));
   card.style.width = `${Math.round(width)}px`;
   const height = Math.max(card.offsetHeight, 120);
   let left = r.right - width;
@@ -10289,7 +10343,7 @@ function ensureBattleAutoSettings(): HTMLElement | null {
   let layer = findBattleAutoSettingsLayer();
   if (
     layer &&
-    (!layer.querySelector("[data-battle-settings-tab]") ||
+    (!layer.querySelector("[data-battle-settings-tab=\"sound\"]") ||
       !layer.classList.contains("battle-settings-layer"))
   ) {
     layer.remove();
@@ -10377,6 +10431,23 @@ function applyBattleSettingsUi(): void {
     if (on) panel.removeAttribute("hidden");
     else panel.setAttribute("hidden", "");
   });
+  const audio = getAudioPrefs();
+  layer.querySelectorAll<HTMLButtonElement>("[data-audio-toggle]").forEach((btn) => {
+    const id = btn.dataset.audioToggle;
+    const enabled = id === "bgm" ? !audio.bgmMuted : id === "sfx" ? !audio.sfxMuted : false;
+    btn.classList.toggle("is-on", enabled);
+    btn.setAttribute("aria-checked", enabled ? "true" : "false");
+    btn.textContent = enabled ? t("ui.battleAudioOn") : t("ui.battleAudioOff");
+  });
+  layer.querySelectorAll<HTMLInputElement>("[data-audio-range]").forEach((el) => {
+    const id = el.dataset.audioRange;
+    const value = id === "bgm" ? audio.bgm : id === "sfx" ? audio.sfx : 0;
+    const enabled = id === "bgm" ? !audio.bgmMuted : id === "sfx" ? !audio.sfxMuted : false;
+    el.value = String(Math.round(value * 100));
+    el.disabled = !enabled;
+    const valEl = layer.querySelector(`[data-audio-val="${id}"]`);
+    if (valEl) valEl.textContent = String(Math.round(value * 100));
+  });
 }
 
 function bindBattleAutoSettingsLayer(layer: HTMLElement | null): void {
@@ -10393,10 +10464,20 @@ function bindBattleAutoSettingsLayer(layer: HTMLElement | null): void {
     const tabBtn = target.closest<HTMLButtonElement>("[data-battle-settings-tab]");
     if (tabBtn && layer.contains(tabBtn)) {
       const tab = tabBtn.dataset.battleSettingsTab;
-      if (tab === "screen" || tab === "auto") {
+      if (tab === "screen" || tab === "auto" || tab === "sound") {
         battleSettingsTab = tab;
         applyBattleSettingsUi();
+        positionBattleAutoSettings(layer, app.querySelector("#btn-auto-settings"));
       }
+      return;
+    }
+    const audioToggle = target.closest<HTMLButtonElement>("[data-audio-toggle]");
+    if (audioToggle && layer.contains(audioToggle)) {
+      const id = audioToggle.dataset.audioToggle;
+      const p = getAudioPrefs();
+      if (id === "bgm") setAudioPrefs({ bgmMuted: !p.bgmMuted });
+      else if (id === "sfx") setAudioPrefs({ sfxMuted: !p.sfxMuted });
+      applyBattleSettingsUi();
       return;
     }
     const opt = target.closest<HTMLButtonElement>("[data-auto-option]");
@@ -10420,6 +10501,16 @@ function bindBattleAutoSettingsLayer(layer: HTMLElement | null): void {
       return;
     }
     applyBattleSettingsUi();
+  });
+  layer.addEventListener("input", (ev) => {
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const id = target.dataset.audioRange;
+    if (id !== "bgm" && id !== "sfx") return;
+    const n = Number(target.value) / 100;
+    setAudioPrefs({ [id]: n });
+    const valEl = layer.querySelector(`[data-audio-val="${id}"]`);
+    if (valEl) valEl.textContent = String(Math.round(n * 100));
   });
 }
 
@@ -23755,6 +23846,16 @@ function renderBattleAutoSettings(): string {
     </button>`;
   const screenOn = battleSettingsTab === "screen";
   const autoOn = battleSettingsTab === "auto";
+  const soundOn = battleSettingsTab === "sound";
+  const p = getAudioPrefs();
+  const pct = (n: number) => String(Math.round(n * 100));
+  const audioRow = (id: "bgm" | "sfx", label: Parameters<typeof t>[0], value: number, enabled: boolean) =>
+    `<div class="battle-audio-row">
+      <span class="battle-audio-label">${escapeHtml(t(label))}</span>
+      <button type="button" class="battle-audio-toggle${enabled ? " is-on" : ""}" data-audio-toggle="${id}" data-no-sfx="1" role="switch" aria-checked="${enabled}">${escapeHtml(enabled ? t("ui.battleAudioOn") : t("ui.battleAudioOff"))}</button>
+      <input type="range" min="0" max="100" step="1" value="${pct(value)}" data-audio-range="${id}" data-no-sfx="1" ${enabled ? "" : "disabled"} />
+      <span class="battle-audio-val" data-audio-val="${id}">${pct(value)}</span>
+    </div>`;
   return `<div class="settings-layer battle-settings-layer battle-auto-settings" id="battle-auto-settings" aria-label="${escapeHtml(t("ui.battleSettings"))}" hidden aria-hidden="true">
     <button type="button" class="settings-backdrop" data-auto-settings-close aria-label="${escapeHtml(t("ui.1a7f31cadb"))}"></button>
     <div class="battle-auto-settings-card" role="dialog" aria-modal="true">
@@ -23765,6 +23866,7 @@ function renderBattleAutoSettings(): string {
       <div class="battle-settings-tabs" role="tablist" aria-label="${escapeHtml(t("ui.battleSettings"))}">
         <button type="button" class="battle-settings-tab${screenOn ? " is-on" : ""}" data-battle-settings-tab="screen" role="tab" aria-selected="${screenOn}">${escapeHtml(t("ui.battleSettingsTabScreen"))}</button>
         <button type="button" class="battle-settings-tab${autoOn ? " is-on" : ""}" data-battle-settings-tab="auto" role="tab" aria-selected="${autoOn}">${escapeHtml(t("ui.battleSettingsTabAuto"))}</button>
+        <button type="button" class="battle-settings-tab${soundOn ? " is-on" : ""}" data-battle-settings-tab="sound" role="tab" aria-selected="${soundOn}">${escapeHtml(t("ui.battleSettingsTabSound"))}</button>
       </div>
       <div class="battle-settings-panel${screenOn ? "" : " is-hidden"}" data-battle-settings-panel="screen" role="tabpanel"${screenOn ? "" : " hidden"}>
         <div class="battle-auto-options">
@@ -23777,6 +23879,10 @@ function renderBattleAutoSettings(): string {
           ${option("combat", "ui.autoCombat", battleAutoOptions.combat)}
           ${option("all", "ui.autoAll", allEnabled)}
         </div>
+      </div>
+      <div class="battle-settings-panel${soundOn ? "" : " is-hidden"}" data-battle-settings-panel="sound" role="tabpanel"${soundOn ? "" : " hidden"}>
+        ${audioRow("bgm", "settings.audioBgm", p.bgm, !p.bgmMuted)}
+        ${audioRow("sfx", "settings.audioSfx", p.sfx, !p.sfxMuted)}
       </div>
     </div>
   </div>`;
@@ -23850,7 +23956,7 @@ function renderBattle(manaPct: number): string {
   }${currentStage?.bossMonsterId ? " battle-screen--boss-stage" : ""}${bossMode ? " battle-screen--boss" : ""}${chaseClass}" data-bg="${battleBgIdForStage(currentStage)}">
     ${battleSkyHtml(currentStage)}
     <header class="battle-chrome">
-      ${renderBoardMini()}
+      ${renderBoardMiniCol()}
       <div class="battle-stage-pill" title="${stageTitle}">
         <strong class="battle-stage-name">${stageTitle}</strong>
         <span class="battle-page">${pageLabel}</span>
@@ -23885,7 +23991,6 @@ function renderBattle(manaPct: number): string {
     ${utilRow}
     <div class="battle-hud battle-hud--stage">
       ${navBackBtn({ id: "btn-back", label: t('ui.1a7f31cadb') })}
-      ${renderBoardTeamBuffHud()}
       <div class="battle-hud-actions">
         ${battleSkipAllowedForStage(currentStage) ? `<button type="button" class="secondary${battleSkipReady ? " is-ready" : ""}" id="btn-battle-skip"${battleSkipReady ? "" : " disabled"}>${escapeHtml(t("ui.battleSkip"))}</button>` : ""}
         <button type="button" class="secondary" id="btn-speed">x${battleSpeed}</button>

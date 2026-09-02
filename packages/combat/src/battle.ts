@@ -558,6 +558,77 @@ export class Battle {
     return this.lastStoneTeam !== team;
   }
 
+  /**
+   * Remaining unit actions before `team` next places a stone.
+   * 0 means that team is placing now.
+   */
+  turnsUntilStone(team: TeamId): number {
+    if (this.finishReason) return 0;
+    const active = this.activeUnitId ? this.getUnit(this.activeUnitId) : null;
+    if (
+      this.phase === "await_stone" &&
+      active?.alive &&
+      active.team === team
+    ) {
+      return 0;
+    }
+
+    const atb = new Map<string, number>();
+    for (const u of this.units) atb.set(u.id, u.atb);
+    let last: TeamId | null = this.lastStoneTeam;
+    let actions = 0;
+    if (
+      active?.alive &&
+      (this.phase === "await_stone" ||
+        this.phase === "await_skill" ||
+        this.phase === "await_capture_shop")
+    ) {
+      atb.set(active.id, 0);
+      if (this.phase === "await_stone") last = active.team;
+      if (active.team !== team) actions += 1;
+    }
+
+    const spdMulOf = (u: Unit): number => {
+      const boardSpd = this.boardBuffTotals(u.team).spdPct;
+      const boost = ((u.spdBoostTurns ?? 0) > 0 ? 1.4 : 1) * (1 + boardSpd);
+      const buff =
+        (1 + (u.spdBuffPct ?? 0)) *
+        Math.max(0.3, 1 - (u.spdDebuffPct ?? 0));
+      return boost * buff;
+    };
+    const locked = (u: Unit): boolean =>
+      hasStatus(u, "stun") ||
+      hasStatus(u, "freeze") ||
+      hasStatus(u, "sleep");
+
+    for (let step = 0; step < 240; step++) {
+      for (const u of this.units) {
+        if (!u.alive) continue;
+        atb.set(
+          u.id,
+          (atb.get(u.id) ?? 0) + u.stats.spd * 0.1 * spdMulOf(u),
+        );
+      }
+      const ready = this.units
+        .filter((u) => u.alive && (atb.get(u.id) ?? 0) >= ATB_THRESHOLD)
+        .sort(
+          (a, b) =>
+            (atb.get(b.id) ?? 0) - (atb.get(a.id) ?? 0) ||
+            b.stats.spd - a.stats.spd,
+        );
+      const unit = ready[0];
+      if (!unit) continue;
+      atb.set(unit.id, 0);
+      if (locked(unit)) continue;
+      if (last !== unit.team) {
+        if (unit.team === team) return actions;
+        last = unit.team;
+      }
+      actions += 1;
+    }
+    return actions;
+  }
+
   alive(team?: TeamId): Unit[] {
     return this.units.filter((u) => u.alive && (team ? u.team === team : true));
   }

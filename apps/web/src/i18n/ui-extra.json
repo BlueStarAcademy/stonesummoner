@@ -5199,6 +5199,30 @@
     "ko": "다음 마법석 소환전까지 {buff}",
     "en": "Until next magic stone: {buff}"
   },
+  "ui.stoneBuffCritDmg": {
+    "ko": "+치명피해 {n}%",
+    "en": "+C.DMG {n}%"
+  },
+  "ui.stoneBuffShield": {
+    "ko": "실드",
+    "en": "Shield"
+  },
+  "ui.battleSettingsTabSound": {
+    "ko": "소리",
+    "en": "Sound"
+  },
+  "ui.battleAudioOn": {
+    "ko": "켜짐",
+    "en": "On"
+  },
+  "ui.battleAudioOff": {
+    "ko": "꺼짐",
+    "en": "Off"
+  },
+  "ui.battleStoneEta": {
+    "ko": "다음 착수",
+    "en": "Next stone"
+  },
   "ui.stoneCapture": {
     "ko": "+피해 {n}%",
     "en": "+DMG {n}%"
