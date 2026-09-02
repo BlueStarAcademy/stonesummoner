@@ -95,6 +95,8 @@ npm test
 프로덕션 빌드에 Service Worker + Web Manifest가 포함됩니다 (`vite-plugin-pwa`).  
 HTTPS(Railway 기본)에서 설치·오프라인 캐시가 동작합니다.
 
+`sw.js`와 `index.html`은 `Cache-Control: no-cache`로 내려가, 배포 후 설치된 PWA가 새 클라이언트를 받을 수 있습니다. 이미 열린 PWA는 다시 포그라운드로 올 때 서비스 워커를 갱신하고 새로고침합니다. 그래도 이전이면 앱을 완전히 종료한 뒤 다시 여세요.
+
 ## Google Play (Android)
 
 Capacitor로 `apps/web`을 APK/AAB로 패키징합니다. 절차·서명·스토어 문구 초안은 [docs/play-store.md](docs/play-store.md)를 보세요.
