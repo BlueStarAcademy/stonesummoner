@@ -1,5 +1,6 @@
 import { STONE_PASSIVE_LABEL } from "../stonePassives.js";
 import { baseStatsFor } from "./curves.js";
+import { familyKitProfile } from "./familyKitProfiles.js";
 import { kitsForFamily } from "./kitFactory.js";
 import { FAMILY_ROSTER } from "./roster.js";
 import {
@@ -48,6 +49,7 @@ export function expandFamily(seed: FamilySeed): MonsterDef[] {
       skillCoeff: kit.skillCoeff,
       skills: kit.skills,
       stonePassiveId: kit.stonePassiveId ?? seed.stonePassiveId,
+      ...(seed.passiveImmunity ? { passiveImmunity: seed.passiveImmunity } : {}),
     });
   });
 }
@@ -65,6 +67,9 @@ export function buildFamilySeeds(): FamilySeed[] {
     baseStats: baseStatsFor(entry.naturalStars, entry.balanceArchetype),
     stonePassiveId: entry.stonePassiveId,
     kits: kitsForFamily(entry),
+    ...(familyKitProfile(entry.familyId).passiveImmunity
+      ? { passiveImmunity: familyKitProfile(entry.familyId).passiveImmunity }
+      : {}),
   }));
 }
 

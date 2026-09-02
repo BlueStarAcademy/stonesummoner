@@ -1847,6 +1847,7 @@ function unitFromOwned(
     counterChance: mods.counterChance || undefined,
     statusImmuneTurns: mods.statusImmuneTurns || undefined,
     statusImmuneIsPassive: mods.statusImmuneTurns > 0 || undefined,
+    immuneStatusKinds: m.passiveImmunity ? [...m.passiveImmunity] : undefined,
     lifestealPct: mods.lifestealPct || undefined,
     stunOnHitChance: mods.stunChance || undefined,
     violentChance: mods.violentChance || undefined,
@@ -1876,6 +1877,9 @@ function unitFromMonsterId(
     skillCoeff: m.skillCoeff,
     skills: skillsForMonster(m, 0),
     stonePassive: m.stonePassiveId,
+    immuneStatusKinds: m.passiveImmunity
+      ? [...m.passiveImmunity]
+      : undefined,
   });
 }
 

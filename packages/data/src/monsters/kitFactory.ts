@@ -182,7 +182,57 @@ function mechanicEffects(
       return [{ kind: "shield", target: ally === "self" ? "self" : "all_allies", coeff: light ? 0.04 : 0.12 + stars * 0.01 }];
     case "mana":
       return [{ kind: "mana", amount: light ? 2 : 8 + stars * 2 }];
+    case "burn":
+      return [{
+        kind: "dot",
+        target: enemy,
+        coeff: light ? 0.06 : 0.12,
+        turns,
+        dotKind: "burn",
+        chance,
+      }];
+    case "poison":
+      return [{
+        kind: "dot",
+        target: enemy,
+        coeff: light ? 0.03 : 0.05 + stars * 0.005,
+        turns,
+        dotKind: "poison",
+        chance,
+      }];
+    case "multi_hit":
+      return [];
+    case "immunity":
+      return [{
+        kind: "immunity",
+        target: ally === "self" ? "self" : "all_allies",
+        turns,
+        ...(stars >= 4 ? {} : { kinds: ["burn", "poison"] as const }),
+      }];
   }
+}
+
+
+function hitsForMechanic(mechanic: KitMechanic, stars: number): number | undefined {
+  if (mechanic === "multi_hit") {
+    return stars >= 5 ? 5 : stars >= 3 ? 4 : 3;
+  }
+  if (mechanic === "burn" || mechanic === "poison") {
+    return stars >= 4 ? 3 : 2;
+  }
+  return undefined;
+}
+
+function withDamageHits(
+  effects: SkillEffect[],
+  mechanic: KitMechanic,
+  stars: number,
+): SkillEffect[] {
+  const hits = hitsForMechanic(mechanic, stars);
+  if (!hits) return effects;
+  return effects.map((effect) =>
+    effect.kind === "damage" ? { ...effect, hits } : effect,
+  );
 }
 
 const EFFECT_DESC: Record<SkillEffect["kind"], string> = {
@@ -205,6 +255,7 @@ const EFFECT_DESC: Record<SkillEffect["kind"], string> = {
   damage_share: "받는 피해를 나눕니다",
   reflect: "받은 피해를 반사합니다",
   provoke: "적을 도발합니다",
+  immunity: "상태이상 면역을 부여합니다",
 };
 
 function effectsDesc(
@@ -270,10 +321,14 @@ function buildProfileSkill(
   nameKo: string,
 ): SkillDef {
   const damage = profile.damage ? damageEffect(base, entry, element) : undefined;
-  const effects = [
-    ...(damage ? [damage] : []),
-    ...mechanicEffects(profile.mechanic, entry.role, element, entry.naturalStars),
-  ];
+  const effects = withDamageHits(
+    [
+      ...(damage ? [damage] : []),
+      ...mechanicEffects(profile.mechanic, entry.role, element, entry.naturalStars),
+    ],
+    profile.mechanic,
+    entry.naturalStars,
+  );
   return {
     id: slot,
     nameKo,
@@ -297,10 +352,14 @@ export function kitsForFamily(entry: FamilyRosterEntry): Record<Element, Element
     const s2Vfx = familySkillVfx(entry.familyIdentity, "s2", el);
     const s3Vfx = familySkillVfx(entry.familyIdentity, "s3", el);
     const s1Base = buildS1(entry.balanceArchetype, el, entry.naturalStars);
-    const s1Effects = [
-      ...s1Base.effects,
-      ...mechanicEffects(profile.s1, entry.role, el, entry.naturalStars, true),
-    ];
+    const s1Effects = withDamageHits(
+      [
+        ...s1Base.effects,
+        ...mechanicEffects(profile.s1, entry.role, el, entry.naturalStars, true),
+      ],
+      profile.s1,
+      entry.naturalStars,
+    );
 
     const skills = [
       {

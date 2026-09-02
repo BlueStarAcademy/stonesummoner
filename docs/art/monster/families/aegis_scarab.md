@@ -1,0 +1,50 @@
+# aegis_scarab (아이기스갑충)
+
+## Identity
+
+- aegis scarab guardian, natural 3★ tank
+- Body: upright scarab beetle knight
+- Focus: aegis shell shield-wings
+- Armor/cloth: golden-green carapace armor
+- Combat stance: shell-wing guard
+- **Keep across elements**: scarab silhouette, shell-wing shield, carapace
+- **Change per element**: carapace metal tint, aegis glow
+
+## Awaken delta
+
+- ornate horn crest, radiant shell veins
+- Portrait: aegis_scarab_{element}_awaken.webp
+- Battle: aegis_scarab_{element}-awaken-front.webp / -awaken-back.webp
+
+## artKey
+
+`aegis_scarab_{element}` — fire / water / wind / light / dark
+
+## Element variants
+
+- **fire**: warm red-orange-gold accents and aura
+- **water**: teal-blue-silver accents and aura
+- **wind**: green-lime accents and airy aura
+- **light**: gold-white holy radiance accents
+- **dark**: violet-black void accents and aura
+
+## Front/back requirements
+
+- **front**: face, primary weapon/focus, chest readable
+- **back**: rear armor, cape/wings/tail if any, weapon back — not a mirror flip
+- Full body grounded, feet visible, ~12% empty margin, square 1:1
+- Magenta `#FF00FF` plate OR true transparent alpha — no checkerboard, no text
+
+## Battle prompt block
+
+```text
+Premium stylized 2.5D mobile RPG battle character full body,
+high-end hand-painted dark fantasy over dimensional 3D-like forms,
+eye-level orthographic-like three-quarter camera, coherent anatomy,
+cinematic soft key and rim light, ambient occlusion,
+aegis scarab guardian tank, upright scarab beetle knight, carapace armor, shell-wing shield guard stance,
+{element} palette baked into paint not filter recolor,
+clear solid silhouette, grounded stance, feet fully visible with margin,
+solid magenta #FF00FF background plate, square composition,
+no text, no watermark, no UI, no cropped limbs
+```

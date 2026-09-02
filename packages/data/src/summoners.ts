@@ -29,7 +29,9 @@ export type SummonerMagicSkillKind =
   | "amplify"
   | "dual_stone"
   | "board_clean"
-  | "damage_reduce";
+  | "damage_reduce"
+  | "enemy_ailment"
+  | "ally_cleanse";
 
 export interface SummonerLeaderDef {
   id: string;
@@ -80,6 +82,16 @@ export interface SummonerMagicSkillDef {
   vfxFamily?: "melee" | "bolt" | "nova" | "support";
   /** Projectile travels as a glowing orb. */
   orbBolt?: boolean;
+  /** Multi-hit strikes against each selected target (damage kinds). */
+  hits?: number;
+  /** On-hit or dedicated ailment payload. */
+  ailment?: {
+    kind: "burn" | "poison" | "stun" | "freeze" | "sleep" | "silence";
+    turns: number;
+    chance: number;
+  };
+  /** ally_cleanse: number of debuffs to remove. */
+  cleanseCount?: number;
 }
 
 export interface SummonerKitDef {
@@ -186,10 +198,12 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         id: "fire_magma",
         nameKo: "용암파열",
         manaCostFrac: 1,
-        kind: "aoe_damage",
-        power: 1.7,
-        rankScale: 0.11,
-        hitCount: 3,
+        kind: "single_damage",
+        power: 2.4,
+        rankScale: 0.1,
+        hitCount: 1,
+        hits: 3,
+        ailment: { kind: "burn", turns: 2, chance: 0.45 },
       },
       B1: {
         slot: "B1",
@@ -236,11 +250,12 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         id: "fire_bloodlust",
         nameKo: "혈염고취",
         manaCostFrac: 0.55,
-        kind: "ally_buff_atk",
-        power: 0.3,
-        turns: 3,
-        rankScale: 0.045,
-        hitCount: 3,
+        kind: "enemy_ailment",
+        power: 0,
+        turns: 2,
+        rankScale: 0.03,
+        hitCount: 2,
+        ailment: { kind: "burn", turns: 2, chance: 0.85 },
       },
       B4: {
         slot: "B4",
@@ -301,9 +316,11 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         nameKo: "해일연격",
         manaCostFrac: 1,
         kind: "aoe_damage",
-        power: 1.65,
-        rankScale: 0.11,
-        hitCount: 3,
+        power: 1.5,
+        rankScale: 0.07,
+        hitCount: 0,
+        hits: 2,
+        ailment: { kind: "freeze", turns: 1, chance: 0.35 },
       },
       B1: {
         slot: "B1",
@@ -320,10 +337,11 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         id: "water_cycle",
         nameKo: "생명방울",
         manaCostFrac: 0.5,
-        kind: "ally_heal",
-        power: 0.26,
-        rankScale: 0.04,
-        hitCount: 1,
+        kind: "ally_cleanse",
+        power: 0,
+        rankScale: 0.025,
+        hitCount: 3,
+        cleanseCount: 2,
       },
       A3: {
         slot: "A3",
@@ -412,13 +430,16 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
       },
       A2: {
         slot: "A2",
-        id: "wind_tempest",
-        nameKo: "열풍연격",
-        manaCostFrac: 1,
-        kind: "aoe_damage",
-        power: 1.65,
-        rankScale: 0.11,
-        hitCount: 3,
+        id: "wind_blade",
+        nameKo: "바람칼날",
+        manaCostFrac: 0.9,
+        kind: "single_damage",
+        power: 2.1,
+        turns: 2,
+        rankScale: 0.08,
+        hitCount: 1,
+        hits: 3,
+        ailment: { kind: "sleep", turns: 1, chance: 0.35 },
       },
       B1: {
         slot: "B1",
@@ -471,14 +492,15 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
       },
       B4: {
         slot: "B4",
-        id: "wind_army",
-        nameKo: "전군순풍",
-        manaCostFrac: 0.6,
-        kind: "ally_buff_spd",
-        power: 0.24,
-        turns: 3,
-        rankScale: 0.04,
-        hitCount: 5,
+        id: "wind_gale",
+        nameKo: "질풍전령",
+        manaCostFrac: 0.5,
+        kind: "enemy_ailment",
+        power: 0,
+        turns: 2,
+        rankScale: 0.03,
+        hitCount: 2,
+        ailment: { kind: "silence", turns: 2, chance: 0.7 },
       },
     },
   },
@@ -522,6 +544,8 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         power: 2.55,
         rankScale: 0.16,
         hitCount: 1,
+        hits: 2,
+        ailment: { kind: "stun", turns: 1, chance: 0.35 },
       },
       A2: {
         slot: "A2",
@@ -579,10 +603,11 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         id: "light_bless",
         nameKo: "치유광파",
         manaCostFrac: 0.55,
-        kind: "ally_heal",
-        power: 0.3,
-        rankScale: 0.045,
+        kind: "ally_cleanse",
+        power: 0,
+        rankScale: 0.03,
         hitCount: 3,
+        cleanseCount: 3,
       },
       B4: {
         slot: "B4",
@@ -622,11 +647,12 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         id: "dark_curse",
         nameKo: "저주의 씨앗",
         manaCostFrac: 0.45,
-        kind: "enemy_debuff",
-        power: 0.18,
-        turns: 2,
-        rankScale: 0.03,
-        hitCount: 1,
+        kind: "enemy_ailment",
+        power: 0,
+        turns: 3,
+        rankScale: 0.02,
+        hitCount: 3,
+        ailment: { kind: "poison", turns: 3, chance: 0.8 },
       },
       A1: {
         slot: "A1",
@@ -685,10 +711,12 @@ export const SUMMONER_KITS: Record<Element, SummonerKitDef> = {
         id: "dark_storm",
         nameKo: "암연연격",
         manaCostFrac: 1,
-        kind: "aoe_damage",
-        power: 1.95,
-        rankScale: 0.13,
-        hitCount: 5,
+        kind: "single_damage",
+        power: 2.7,
+        rankScale: 0.11,
+        hitCount: 1,
+        hits: 4,
+        ailment: { kind: "silence", turns: 1, chance: 0.3 },
       },
       B3: {
         slot: "B3",

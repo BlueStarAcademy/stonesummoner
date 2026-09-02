@@ -1378,6 +1378,43 @@ describe("diverse skill runtime", () => {
     assert.equal(battle.getUnit("e-m1")!.atb, 4.25);
   });
 
+  it("splits multi-hit damage across hits", () => {
+    const battle = combatWithSkill([
+      { kind: "damage", target: "single", coeff: 1.0, hits: 4 },
+    ]);
+    const results = battle.useSkill({ targetId: "e-m1", skillIndex: 0 });
+    assert.equal(results.length, 4);
+  });
+
+  it("applies burn and poison from typed dots", () => {
+    const burnBattle = combatWithSkill([
+      { kind: "dot", target: "single", coeff: 0.2, turns: 2, dotKind: "burn", chance: 1 },
+    ]);
+    burnBattle.useSkill({ targetId: "e-m1", skillIndex: 0 });
+    assert.equal(hasStatus(burnBattle.getUnit("e-m1")!, "burn"), true);
+
+    const poisonBattle = combatWithSkill([
+      { kind: "dot", target: "single", coeff: 0.05, turns: 2, dotKind: "poison", chance: 1 },
+    ]);
+    poisonBattle.useSkill({ targetId: "e-m1", skillIndex: 0 });
+    assert.equal(hasStatus(poisonBattle.getUnit("e-m1")!, "poison"), true);
+  });
+
+  it("grants immunity and blocks burn via immuneStatusKinds", () => {
+    const battle = combatWithSkill([
+      { kind: "immunity", target: "all_allies", turns: 2 },
+    ]);
+    battle.useSkill({ skillIndex: 0 });
+    assert.equal(hasStatus(battle.getUnit("a-m1")!, "immunity"), true);
+
+    const blocked = combatWithSkill([
+      { kind: "dot", target: "single", coeff: 0.2, turns: 2, dotKind: "burn", chance: 1 },
+    ]);
+    blocked.getUnit("e-m1")!.immuneStatusKinds = ["burn"];
+    blocked.useSkill({ targetId: "e-m1", skillIndex: 0 });
+    assert.equal(hasStatus(blocked.getUnit("e-m1")!, "burn"), false);
+  });
+
   it("strips and cleanses by priority and count", () => {
     const strip = combatWithSkill([
       { kind: "strip", target: "single", count: 1 },

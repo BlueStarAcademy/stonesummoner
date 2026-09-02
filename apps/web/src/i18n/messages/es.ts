@@ -1480,7 +1480,12 @@ const messages: MessageDict = {
   "ui.growthResultMagicFail": "Magic enhance failed",
   "ui.growthMagicSuccessBadge": "Success",
   "ui.growthMagicFailBadge": "Failed",
-  "ui.growthPlayingMagicRate": "Success rate {pct}%"
-};
+  "ui.growthPlayingMagicRate": "Success rate {pct}%",
+  "ui.skillFxBurn": "{target} · Burn {pct}% ATK each turn",
+  "ui.skillFxPoison": "{target} · Poison {pct}% max HP each turn",
+  "ui.skillFxMultiHit": "{text} · {hits} hits",
+  "ui.skillFxImmunity": "{target} · Status immunity",
+  "ui.statusBurn": "Burn",
+  "ui.statusPoison": "Poison"};
 
 export default messages;

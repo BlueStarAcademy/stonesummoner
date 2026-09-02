@@ -1501,7 +1501,13 @@ export type MessageKey =
   | "ui.growthResultMagicFail"
   | "ui.growthMagicSuccessBadge"
   | "ui.growthMagicFailBadge"
-  | "ui.growthPlayingMagicRate";
+  | "ui.growthPlayingMagicRate"
+  | "ui.skillFxBurn"
+  | "ui.skillFxPoison"
+  | "ui.skillFxMultiHit"
+  | "ui.skillFxImmunity"
+  | "ui.statusBurn"
+  | "ui.statusPoison";
 
 export type MessageDict = Record<MessageKey, string>;
 

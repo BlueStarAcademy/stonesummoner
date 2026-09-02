@@ -1480,7 +1480,12 @@ const messages: MessageDict = {
   "ui.growthResultMagicFail": "마법 강화 실패",
   "ui.growthMagicSuccessBadge": "성공",
   "ui.growthMagicFailBadge": "실패",
-  "ui.growthPlayingMagicRate": "성공률 {pct}%"
-};
+  "ui.growthPlayingMagicRate": "성공률 {pct}%",
+  "ui.skillFxBurn": "{target} · 매 턴 공격력 {pct}% 화상",
+  "ui.skillFxPoison": "{target} · 매 턴 최대 체력 {pct}% 중독",
+  "ui.skillFxMultiHit": "{text} · {hits}회 공격",
+  "ui.skillFxImmunity": "{target} · 상태이상 면역",
+  "ui.statusBurn": "화상",
+  "ui.statusPoison": "중독"};
 
 export default messages;
