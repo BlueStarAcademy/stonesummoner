@@ -5319,6 +5319,14 @@
     "ko": "다음 착수",
     "en": "Next stone"
   },
+  "ui.boardBuffAlly": {
+    "ko": "아군",
+    "en": "Ally"
+  },
+  "ui.boardBuffEnemy": {
+    "ko": "적군",
+    "en": "Enemy"
+  },
   "ui.stoneCapture": {
     "ko": "+피해 {n}%",
     "en": "+DMG {n}%"

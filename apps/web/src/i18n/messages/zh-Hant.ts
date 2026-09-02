@@ -1403,6 +1403,8 @@ const messages: MessageDict = {
   "ui.battleAudioOn": "On",
   "ui.battleAudioOff": "Off",
   "ui.battleStoneEta": "Next stone",
+  "ui.boardBuffAlly": "Ally",
+  "ui.boardBuffEnemy": "Enemy",
   "ui.stoneCapture": "+DMG {n}%",
   "ui.stoneMana": "+{n}",
   "ui.stoneVictory": "+{n}",
@@ -1489,6 +1491,7 @@ const messages: MessageDict = {
   "ui.skillFxMultiHit": "{text} · {hits} hits",
   "ui.skillFxImmunity": "{target} · Status immunity",
   "ui.statusBurn": "Burn",
-  "ui.statusPoison": "Poison"};
+  "ui.statusPoison": "Poison"
+};
 
 export default messages;

@@ -8901,31 +8901,44 @@ function renderBoardTeamBuffHud(): string {
   const renderTeam = (team: "ally" | "enemy") => {
     const buffs = battle!.activeBoardBuffs(team);
     if (!buffs.length) return "";
-    const chips = buffs
-      .map((buff) => {
-        const values = [
-          buff.damageBonus
-            ? `<b>${escapeHtml(t("ui.stoneCapture", { n: Math.round(buff.damageBonus * 100) }))}</b>`
-            : "",
-          buff.critRateBonus
-            ? `<b>${escapeHtml(t("ui.stoneBuffCrit", { n: Math.round(buff.critRateBonus) }))}</b>`
-            : "",
-          buff.critDmgBonus
-            ? `<b>${escapeHtml(t("ui.stoneBuffCritDmg", { n: Math.round(buff.critDmgBonus) }))}</b>`
-            : "",
-          buff.spdPct
-            ? `<b>${escapeHtml(t("ui.stoneBuffSpd", { n: Math.round(buff.spdPct * 100) }))}</b>`
-            : "",
-          buff.shieldByUnit
-            ? `<b>${escapeHtml(t("ui.stoneBuffShield"))}</b>`
-            : "",
-        ].filter(Boolean);
-        return `<span class="battle-board-buff is-${buff.source}"><i aria-hidden="true">${buff.source === "capture" ? "&#9673;" : "&#9670;"}</i>${values.join("")}</span>`;
-      })
-      .join("");
-    return `<div class="battle-board-buffs-team is-${team}">${chips}</div>`;
+    let damageBonus = 0;
+    let critRateBonus = 0;
+    let critDmgBonus = 0;
+    let spdPct = 0;
+    let hasShield = false;
+    let hasItem = false;
+    for (const buff of buffs) {
+      damageBonus += buff.damageBonus ?? 0;
+      critRateBonus += buff.critRateBonus ?? 0;
+      critDmgBonus += buff.critDmgBonus ?? 0;
+      spdPct += buff.spdPct ?? 0;
+      if (buff.shieldByUnit) hasShield = true;
+      if (buff.source === "item") hasItem = true;
+    }
+    const values = [
+      damageBonus
+        ? `<b>${escapeHtml(t("ui.stoneCapture", { n: Math.round(damageBonus * 100) }))}</b>`
+        : "",
+      critRateBonus
+        ? `<b>${escapeHtml(t("ui.stoneBuffCrit", { n: Math.round(critRateBonus) }))}</b>`
+        : "",
+      critDmgBonus
+        ? `<b>${escapeHtml(t("ui.stoneBuffCritDmg", { n: Math.round(critDmgBonus) }))}</b>`
+        : "",
+      spdPct
+        ? `<b>${escapeHtml(t("ui.stoneBuffSpd", { n: Math.round(spdPct * 100) }))}</b>`
+        : "",
+      hasShield ? `<b>${escapeHtml(t("ui.stoneBuffShield"))}</b>` : "",
+    ].filter(Boolean);
+    if (!values.length) return "";
+    const label = team === "ally" ? t("ui.boardBuffAlly") : t("ui.boardBuffEnemy");
+    return `<div class="battle-board-buffs-box is-${team}${hasItem ? " has-item" : ""}">
+      <span class="battle-board-buffs-label">${escapeHtml(label)}</span>
+      <div class="battle-board-buffs-vals">${values.join("")}</div>
+    </div>`;
   };
-  const html = renderTeam("ally") + renderTeam("enemy");
+  /* Enemy above ally — same vertical order as battle lanes. */
+  const html = renderTeam("enemy") + renderTeam("ally");
   return html
     ? `<div class="battle-board-buffs" aria-hidden="true">${html}</div>`
     : "";

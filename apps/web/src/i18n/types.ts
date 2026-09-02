@@ -1424,6 +1424,8 @@ export type MessageKey =
   | "ui.battleAudioOn"
   | "ui.battleAudioOff"
   | "ui.battleStoneEta"
+  | "ui.boardBuffAlly"
+  | "ui.boardBuffEnemy"
   | "ui.stoneCapture"
   | "ui.stoneMana"
   | "ui.stoneVictory"
