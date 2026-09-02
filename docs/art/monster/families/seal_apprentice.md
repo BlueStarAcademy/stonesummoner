@@ -45,7 +45,7 @@ Premium stylized 2.5D mobile RPG young male mage stonesage,
 messy dark hair hooded ornate black-purple robe gold filigree,
 glowing gems on chest belt boots, floating element energy orb above raised palm,
 grounded caster stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, clean white plate,
+eye-level front three-quarter, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes orb and gems only,
 no global recolor, no text, no cropped orb or feet
 ```

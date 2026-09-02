@@ -47,6 +47,6 @@ weathered cracked skull glowing eyes, tattered hood rags leather belt,
 chest crescent glyph, curved blade and round heater shield,
 ethereal mist aura at feet, grounded combat stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-clean white plate, element accents in eyes glyph mist and shield orb only,
+transparent alpha background or solid magenta #FF00FF plate, element accents in eyes glyph mist and shield orb only,
 no global recolor, no text, no cropped blade shield or feet
 ```

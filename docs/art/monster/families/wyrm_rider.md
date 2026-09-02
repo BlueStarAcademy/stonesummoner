@@ -34,5 +34,5 @@ silver hair crown helm forehead gem, dark draconic scale armor gold trim,
 black dragon on shoulders glowing wings, tattered skirt cloak,
 ornate element-energy polearm spear, heroic front stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter, grounded feet,
-clean white plate, element accents in eyes gems wings spear only, no global recolor, no text
+transparent alpha background or solid magenta #FF00FF plate, element accents in eyes gems wings spear only, no global recolor, no text
 ```

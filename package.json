@@ -46,6 +46,7 @@
     "monster-art:2.5d:audit": "node scripts/audit-monster-battle-art.mjs",
     "monster-art:2.5d:audit:strict": "node scripts/audit-monster-battle-art.mjs --strict",
     "monster-art:redematte": "node scripts/redematte-painted-monster.mjs",
+    "monster-art:dematte-installed": "node scripts/dematte-monster-art.mjs",
     "monster-art:rebuild": "node scripts/install-battle-stills.mjs",
     "monster-art:bake": "node scripts/bake-monster-element-art.mjs",
     "monster-art:check": "node scripts/check-monster-art.mjs --strict",

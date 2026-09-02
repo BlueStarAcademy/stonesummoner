@@ -37,6 +37,6 @@ Premium stylized 2.5D mobile RPG demonic samurai attacker,
 dark-gold O-yoroi armor lava crack glow, horned kabuto demonic mask,
 dual element-flame long swords downward stance, tattered wide cape,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-grounded feet, clean white plate, element accents in cracks eyes sword flames only,
+grounded feet, transparent alpha background or solid magenta #FF00FF plate, element accents in cracks eyes sword flames only,
 no global recolor, no text, no cropped swords or feet
 ```

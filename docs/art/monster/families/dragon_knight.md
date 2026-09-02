@@ -51,5 +51,5 @@ massive two-handed greatsword with glowing elemental core,
 element accents in armor seams wings and blade only,
 high-end hand-painted dark fantasy over dimensional 3D-like forms,
 eye-level front three-quarter grounded combat stance, full body safe margin,
-clean white plate, no global recolor, no chibi, no text, no cropped sword or wings
+transparent alpha background or solid magenta #FF00FF plate, no global recolor, no chibi, no text, no cropped sword or wings
 ```

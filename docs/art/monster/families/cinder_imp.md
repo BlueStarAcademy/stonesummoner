@@ -47,7 +47,7 @@ Premium stylized 2.5D mobile RPG demonic imp attacker,
 compact muscular body not chibi, lava-crack skin, flame hair crown, curved horns,
 volcanic-rock armor with diamond gems, clawed hands and feet, thin arrow-tail,
 aggressive forward claw stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, safe margin, clean white plate,
+eye-level front three-quarter, safe margin, transparent alpha background or solid magenta #FF00FF plate,
 element accents in cracks gems flame hair and aura only,
 no global recolor, no text, no cropped limbs
 ```

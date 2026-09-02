@@ -34,6 +34,6 @@ carved stone face element eyes stone beard, ornate headdress spire gem,
 moss vine stone robes celestial chest symbol rune carvings,
 staff with faceted crystal in golden branch cage, extended casting hand,
 wise grounded stance, high-end hand-painted dark fantasy,
-eye-level front three-quarter, grounded feet, clean white plate,
+eye-level front three-quarter, grounded feet, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes gem chest symbol staff crystal runes only, no global recolor, no text
 ```

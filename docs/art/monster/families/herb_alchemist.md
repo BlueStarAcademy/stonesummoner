@@ -46,6 +46,6 @@ bushy white beard ponytail, ornate green tunic gold embroidery leather pouches,
 mortar pestle and bubbling potion flask, plant basket on back,
 swirling element energy floating leaves, cheerful grounded stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-clean white plate, element accents in eyes potion and wisps only,
+transparent alpha background or solid magenta #FF00FF plate, element accents in eyes potion and wisps only,
 no global recolor, no text, no cropped tools or feet
 ```

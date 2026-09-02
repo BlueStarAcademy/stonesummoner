@@ -44,7 +44,7 @@ Premium stylized 2.5D mobile RPG armored hellhound capturer,
 Doberman dog black-tan markings, heavy spiked iron plate armor,
 glowing element spikes and gap flames, menacing front battle stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-all four legs grounded, clean white plate,
+all four legs grounded, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eyes spike glow and gap flames only,
 no global recolor, no text, no cropped legs
 ```

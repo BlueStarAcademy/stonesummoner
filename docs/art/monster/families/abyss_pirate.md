@@ -31,6 +31,6 @@ Premium stylized 2.5D mobile RPG undead pirate captain attacker,
 bicorne hat gold trim, captain coat epaulettes skull buckle,
 spectral element flame cutlass, tattered coat ghost aura, heroic stance,
 high-end hand-painted dark fantasy, eye-level front three-quarter,
-grounded boots, clean white plate, element accents in eyes ghost flames hat plume only,
+grounded boots, transparent alpha background or solid magenta #FF00FF plate, element accents in eyes ghost flames hat plume only,
 no global recolor, no text, no cropped sword or feet
 ```

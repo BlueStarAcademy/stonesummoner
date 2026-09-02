@@ -108,9 +108,17 @@ export async function dematteBuffer(rgba, w, h, lim = 36, opts = {}) {
     // Painted #000 plate: every plate pixel can be punched (no tunneling through fur).
     if (!plateOnly && !plateCheckerboard && a >= 8) {
       const lum = (r + g + b) / 3;
-      const opaqueCap = opts.opaqueMatteLum ?? Math.min(lim, 28);
-      if (lum > opaqueCap) return;
-      if (!isFlat(x, y)) return;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      const brightMatteMin = opts.brightMatteLumMin ?? 248;
+      const isBrightMatte =
+        opts.allowBrightMatte !== false && lum >= brightMatteMin && chroma <= chromaMax;
+      if (isBrightMatte) {
+        if (!isFlat(x, y)) return;
+      } else {
+        const opaqueCap = opts.opaqueMatteLum ?? Math.min(lim, 28);
+        if (lum > opaqueCap) return;
+        if (!isFlat(x, y)) return;
+      }
     }
     visited[i] = 1;
     q.push(i);
@@ -384,6 +392,43 @@ export function punchRoundedRect(rgba, w, h, inset = 0.12, radius = 0.08) {
       if (insideRound(x, y)) rgba[(y * w + x) * 4 + 3] = 0;
     }
   }
+}
+
+/**
+ * Detect near-white opaque delivery plates (#fff / light gray studio backdrop).
+ * @param {import("sharp").Sharp|string|Buffer} srcImage
+ * @param {object} [opts]
+ */
+export async function detectWhitePlate(srcImage, opts = {}) {
+  const probe = opts.probeSize ?? 256;
+  const lumMin = opts.lumMin ?? 235;
+  const chromaMax = opts.chromaMax ?? 12;
+  const { data, info } = await sharp(srcImage)
+    .resize(probe, probe, { fit: "inside" })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const w = info.width;
+  const h = info.height;
+  let borderBright = 0;
+  let borderTotal = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const onEdge = y === 0 || y === h - 1 || x === 0 || x === w - 1;
+      if (!onEdge) continue;
+      borderTotal += 1;
+      const o = (y * w + x) * 4;
+      const r = data[o];
+      const g = data[o + 1];
+      const b = data[o + 2];
+      const a = data[o + 3];
+      if (a < 200) continue;
+      const lum = (r + g + b) / 3;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      if (lum >= lumMin && chroma <= chromaMax) borderBright += 1;
+    }
+  }
+  return borderTotal > 0 && borderBright / borderTotal >= 0.55;
 }
 
 export async function detectPreAlpha(srcImage, opts = {}) {
@@ -1025,6 +1070,10 @@ export async function imageToInstalledBattleWebp(srcImage, dstWebp, opts = {}) {
     await imageToChromaBattleWebp(srcImage, dstWebp, transparentOpts);
     return "chroma";
   }
+  if (await detectWhitePlate(srcImage)) {
+    await imageToDematteWebp(srcImage, dstWebp, opts.whitePlate ?? WHITE_PLATE_BATTLE_DEMATTE);
+    return "white-plate";
+  }
   await imageToDematteWebp(srcImage, dstWebp, paintedOpts);
   return "dematte";
 }
@@ -1147,6 +1196,21 @@ export const TRANSPARENT_PORTRAIT_INSTALL = {
   fillHolePasses: 6,
 };
 
+/** Near-white studio plate — edge flood only; flatness gate protects pale armor. */
+export const WHITE_PLATE_BATTLE_DEMATTE = {
+  ...BATTLE_STILL_DEMATTE,
+  allowBrightMatte: true,
+  brightMatteLumMin: 240,
+  flatRange: 4,
+  defringe: true,
+  defringeLim: 248,
+  defringeSilhouette: true,
+  fillHoles: false,
+  sealInterior: false,
+  nearLossless: true,
+  lossless: true,
+};
+
 /** Hand-painted battle stills on pure black — strict #000 plate-only dematte. */
 export const PAINTED_BATTLE_DEMATTE = {
   ...BATTLE_STILL_DEMATTE,
@@ -1183,6 +1247,17 @@ export const PORTRAIT_DEMATTE = {
   fillHolePasses: 5,
   nearLossless: true,
   lossless: true,
+};
+
+/** Portrait bust on near-white plate (same bright-matte rules as battle). */
+export const WHITE_PLATE_PORTRAIT_DEMATTE = {
+  ...PORTRAIT_DEMATTE,
+  plateOnly: false,
+  allowBrightMatte: true,
+  brightMatteLumMin: 240,
+  flatRange: 4,
+  fillHoles: false,
+  sealInterior: false,
 };
 
 export async function writeWebpAtomic(dstWebp, buf) {

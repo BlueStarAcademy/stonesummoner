@@ -51,6 +51,6 @@ layered ice-tabard skirt with snowflake embroidery and thick fur hem,
 crystalline greaves, left hand raised holding large floating jagged crystal cluster,
 high-end hand-painted dark fantasy over dimensional 3D-like forms,
 eye-level front three-quarter camera, grounded full body, safe margin,
-clean white plate, element accents only in eyes crystals embroidery and aura,
+transparent alpha background or solid magenta #FF00FF plate, element accents only in eyes crystals embroidery and aura,
 no global recolor, no child proportions, no text, no cropped crystals or feet
 ```

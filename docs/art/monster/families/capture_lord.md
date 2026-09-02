@@ -31,6 +31,6 @@ Premium stylized 2.5D mobile RPG dark knight sorcerer capturer,
 silver-white hair shadow-mask single element eye, lattice armor gold trim spiked,
 tattered cape shadow tendrils, serrated polearm element flame tip,
 floating chained element orb on open palm, commanding wide stance,
-high-end hand-painted dark fantasy, eye-level front three-quarter, clean white plate,
+high-end hand-painted dark fantasy, eye-level front three-quarter, transparent alpha background or solid magenta #FF00FF plate,
 element accents in eye orb polearm only, no global recolor, no text
 ```

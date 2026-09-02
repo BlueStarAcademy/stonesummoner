@@ -24828,9 +24828,26 @@ img.el-tint-dark {
   z-index: 3;
 }
 
-.mon-slot.is-party::after {
-  content: none;
-  display: none;
+.mon-slot-party-mark {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  z-index: 3;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-size: 0.58rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  color: #1a1208;
+  background: linear-gradient(180deg, #f0d878, #c9a227);
+  border: 1px solid #ffe9a0aa;
+  box-shadow: 0 1px 3px #000a;
+  pointer-events: none;
 }
 
 .mon-slot-art {
@@ -25202,15 +25219,6 @@ img.el-tint-dark {
 .mon-book-inv.mon-book-inv--rail .mon-slot-stars-overlay .mon-star {
   font-size: 0.52rem;
   letter-spacing: -0.06em;
-}
-
-.mon-book-inv.mon-book-inv--rail .mon-slot-party {
-  display: none;
-}
-
-.mon-book-inv.mon-book-inv--rail .mon-slot--portrait.is-party::after {
-  content: none;
-  display: none;
 }
 
 @media (max-width: 380px) {
