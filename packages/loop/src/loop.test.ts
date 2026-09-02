@@ -1097,7 +1097,7 @@ describe("game loop", () => {
     };
     const ok = runGrindSymbol(save, "0", () => 0);
     assert.match(ok.message, /연마/);
-    assert.equal(ok.save.island.mana, save.island.mana - 150);
+    assert.equal(ok.save.island.mana, save.island.mana - 400);
     assert.equal(ok.save.grindstones, 2);
     const sym = ok.save.symbols[0]!;
     assert.ok(sym.prefixStat);
@@ -1757,7 +1757,7 @@ describe("game loop", () => {
     const late = runEnhanceGear(save, "weapon");
     assert.match(late.message, /크리스탈/);
     assert.equal(late.save.gear.weapon?.enhance, 13);
-    assert.equal(late.save.island.crystal, 4);
+    assert.equal(late.save.island.crystal, 3);
     save = late.save;
 
     save = {
@@ -1767,7 +1767,7 @@ describe("game loop", () => {
     };
     const sold = runSellGearBag(save, 0);
     assert.match(sold.message, /크리스탈/);
-    assert.equal(sold.save.island.crystal, 3);
+    assert.equal(sold.save.island.crystal, 6);
     assert.ok(sold.save.island.mana > save.island.mana);
     save = { ...sold.save, gearBag: [] };
 

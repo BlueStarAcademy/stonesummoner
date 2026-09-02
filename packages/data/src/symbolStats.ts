@@ -293,8 +293,11 @@ export function summarizeSymbolSets(
   }).filter((p) => p.count > 0 || (rawCounts[p.setId] ?? 0) > 0);
 }
 
+/** Gold cost to go from `enhance` → `enhance+1` (steeper past +8). */
 export function symbolEnhanceManaCost(enhance: number): number {
-  return 60 + enhance * 35;
+  const base = 150 + enhance * 85;
+  const late = Math.max(0, enhance - 8) * 70;
+  return base + late;
 }
 
 export const MAX_SYMBOL_ENHANCE = 15;

@@ -42,6 +42,7 @@ import {
   gearEnhanceManaCost,
   gearSellCrystal,
   gearSellMana,
+  GEAR_SET_AFFIX_MANA,
   gearSetBonuses,
   gearStarsToInvGrade,
   gearStarsToQuality,
@@ -65,8 +66,10 @@ import {
   SKILL_TREE_NODES,
   stripUnenhancedStarterGear,
   summarizeGearSets,
+  SYMBOL_GRIND_MANA_COST,
   SYMBOL_SETS,
   summarizeSymbolSets,
+  symbolEnhanceManaCost,
   WEEKDAY_STAGES,
   isWeekdayStageOpenToday,
   SKILL_DMG_MUL,
@@ -840,6 +843,47 @@ describe("phase1 data", () => {
     assert.ok(earlyStep > 0);
     assert.ok(lateStep > earlyStep * 1.8, `late ${lateStep} vs early ${earlyStep}`);
     assert.ok(gearEnhanceStepMul(0) < gearEnhanceStepMul(14));
+  });
+
+  it("prices symbol and gear enhance as meaningful gold sinks", () => {
+    assert.equal(symbolEnhanceManaCost(0), 150);
+    assert.equal(symbolEnhanceManaCost(8), 830);
+    assert.equal(symbolEnhanceManaCost(14), 1760);
+    assert.equal(SYMBOL_GRIND_MANA_COST, 400);
+    assert.equal(gearEnhanceManaCost(0), 250);
+    assert.equal(gearEnhanceManaCost(8), 1450);
+    assert.equal(gearEnhanceManaCost(14), 2950);
+    assert.equal(gearEnhanceCrystalCost(11), 0);
+    assert.equal(gearEnhanceCrystalCost(12), 2);
+    assert.equal(gearEnhanceCrystalCost(13), 4);
+    assert.equal(gearEnhanceCrystalCost(14), 6);
+    assert.equal(GEAR_SET_AFFIX_MANA, 450);
+    let symbolTotal = 0;
+    let gearTotal = 0;
+    let crystalTotal = 0;
+    for (let e = 0; e < MAX_GEAR_ENHANCE; e++) {
+      symbolTotal += symbolEnhanceManaCost(e);
+      gearTotal += gearEnhanceManaCost(e);
+      crystalTotal += gearEnhanceCrystalCost(e);
+    }
+    assert.equal(symbolTotal, 12645);
+    assert.equal(gearTotal, 21600);
+    assert.equal(crystalTotal, 12);
+  });
+
+  it("refunds partial crystal on high-enhance gear sell", () => {
+    const piece = normalizeGearPiece({
+      id: "t_sell",
+      slot: "top",
+      nameKo: "t",
+      enhance: 15,
+      setId: "guardian",
+      stars: 3,
+      quality: "rare",
+      materialId: "plate",
+    });
+    assert.equal(gearSellCrystal(piece), 6);
+    assert.ok(gearSellMana(piece) >= 100 + 15 * 85);
   });
 
   it("reapplies enhance bonuses when normalizing gear", () => {

@@ -136,7 +136,7 @@ export const IMPRINTABLE_SLOTS = [2, 4, 6] as const;
 
 /** Imprint stone inventory cost per main-stat re-roll (slots 2/4/6). */
 export const SYMBOL_IMPRINT_STONE_COST = 1;
-export const SYMBOL_GRIND_MANA_COST = 150;
+export const SYMBOL_GRIND_MANA_COST = 400;
 /** Grindstone inventory cost per grind (prefix or substat enhance). */
 export const SYMBOL_GRIND_STONE_COST = 1;
 
