@@ -10115,11 +10115,15 @@ button.battle-unit {
 
 /* Fixed + body-ported so combat-mode transform / overflow cannot clip. */
 .battle-settings-layer.settings-layer {
-  display: block;
-  align-items: unset;
-  justify-content: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: var(--z-modal-nested);
   pointer-events: auto;
+}
+
+.battle-settings-layer > .settings-backdrop {
+  background: #07050c80;
 }
 
 body > .battle-settings-layer.settings-layer {
@@ -10135,11 +10139,14 @@ body > .battle-settings-layer.settings-layer {
 }
 
 .battle-auto-settings-card {
-  position: fixed;
-  top: 0;
-  left: 0;
+  position: relative;
+  top: auto;
+  left: auto;
   z-index: 1;
-  width: min(280px, calc(100vw - 16px));
+  width: min(360px, calc(100vw - 32px));
+  height: min(360px, calc(100dvh - 48px));
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid #c9a22788;
   border-radius: 14px;
@@ -10152,9 +10159,16 @@ body > .battle-settings-layer.settings-layer {
   color: #f0e6c8;
 }
 
+.battle-settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .battle-settings-panel {
   display: block;
-  min-height: 44px;
+  height: 100%;
+  overflow: auto;
   background: #14101cf2;
 }
 

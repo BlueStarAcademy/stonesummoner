@@ -10314,29 +10314,13 @@ function removeBattleAutoSettingsLayer(): void {
 }
 
 /** Toggle battle AUTO sheet without remounting combat. */
-function positionBattleAutoSettings(
-  layer: HTMLElement,
-  btn: HTMLElement | null,
-): void {
+function positionBattleAutoSettings(layer: HTMLElement): void {
   const card = findBattleAutoSettingsCard();
-  if (!card) return;
   layer.style.zIndex = String(Math.max(overlayStackZ, 10500));
-  if (!btn) return;
-  const r = btn.getBoundingClientRect();
-  const pad = 8;
-  const gap = 8;
-  const width = Math.min(280, Math.max(180, window.innerWidth - pad * 2));
-  card.style.width = `${Math.round(width)}px`;
-  const height = Math.max(card.offsetHeight, 120);
-  let left = r.right - width;
-  left = Math.min(
-    Math.max(pad, left),
-    Math.max(pad, window.innerWidth - width - pad),
-  );
-  let top = r.top - height - gap;
-  if (top < pad) top = Math.min(window.innerHeight - height - pad, r.bottom + gap);
-  card.style.left = `${Math.round(left)}px`;
-  card.style.top = `${Math.round(top)}px`;
+  if (!card) return;
+  card.style.removeProperty("width");
+  card.style.removeProperty("left");
+  card.style.removeProperty("top");
 }
 
 function ensureBattleAutoSettings(): HTMLElement | null {
@@ -10344,7 +10328,8 @@ function ensureBattleAutoSettings(): HTMLElement | null {
   if (
     layer &&
     (!layer.querySelector("[data-battle-settings-tab=\"sound\"]") ||
-      !layer.classList.contains("battle-settings-layer"))
+      !layer.classList.contains("battle-settings-layer") ||
+      !layer.querySelector(".battle-settings-body"))
   ) {
     layer.remove();
     layer = null;
@@ -10373,8 +10358,8 @@ function applyBattleAutoSettingsOpen(): void {
   if (battleAutoSettingsOpen) {
     document.body.appendChild(layer);
     applyBattleSettingsUi();
-    positionBattleAutoSettings(layer, btn);
-    requestAnimationFrame(() => positionBattleAutoSettings(layer, btn));
+    positionBattleAutoSettings(layer);
+    requestAnimationFrame(() => positionBattleAutoSettings(layer));
     if (opening) replayModalPop(layer);
     rememberOverlayOpen("battle-auto-settings");
   } else {
@@ -10392,7 +10377,7 @@ function restoreBattleAutoSettingsIfOpen(): void {
       btn.classList.add("is-open");
       btn.setAttribute("aria-expanded", "true");
     }
-    positionBattleAutoSettings(layer, btn);
+    positionBattleAutoSettings(layer);
     return;
   }
   applyBattleAutoSettingsOpen();
@@ -10467,7 +10452,7 @@ function bindBattleAutoSettingsLayer(layer: HTMLElement | null): void {
       if (tab === "screen" || tab === "auto" || tab === "sound") {
         battleSettingsTab = tab;
         applyBattleSettingsUi();
-        positionBattleAutoSettings(layer, app.querySelector("#btn-auto-settings"));
+        positionBattleAutoSettings(layer);
       }
       return;
     }
@@ -10522,8 +10507,7 @@ function ensureBattleAutoSettingsViewport(): void {
   const onViewportChange = () => {
     if (!battleAutoSettingsOpen) return;
     const layer = findBattleAutoSettingsLayer();
-    const btn = app.querySelector<HTMLButtonElement>("#btn-auto-settings");
-    if (layer && btn) positionBattleAutoSettings(layer, btn);
+    if (layer) positionBattleAutoSettings(layer);
   };
   window.addEventListener("resize", onViewportChange, { passive: true });
   window.visualViewport?.addEventListener("resize", onViewportChange, { passive: true });
@@ -23868,21 +23852,23 @@ function renderBattleAutoSettings(): string {
         <button type="button" class="battle-settings-tab${autoOn ? " is-on" : ""}" data-battle-settings-tab="auto" role="tab" aria-selected="${autoOn}">${escapeHtml(t("ui.battleSettingsTabAuto"))}</button>
         <button type="button" class="battle-settings-tab${soundOn ? " is-on" : ""}" data-battle-settings-tab="sound" role="tab" aria-selected="${soundOn}">${escapeHtml(t("ui.battleSettingsTabSound"))}</button>
       </div>
-      <div class="battle-settings-panel${screenOn ? "" : " is-hidden"}" data-battle-settings-panel="screen" role="tabpanel"${screenOn ? "" : " hidden"}>
-        <div class="battle-auto-options">
-          ${option("minimap", "ui.battleMinimap", battleMinimapOn)}
+      <div class="battle-settings-body">
+        <div class="battle-settings-panel${screenOn ? "" : " is-hidden"}" data-battle-settings-panel="screen" role="tabpanel"${screenOn ? "" : " hidden"}>
+          <div class="battle-auto-options">
+            ${option("minimap", "ui.battleMinimap", battleMinimapOn)}
+          </div>
         </div>
-      </div>
-      <div class="battle-settings-panel${autoOn ? "" : " is-hidden"}" data-battle-settings-panel="auto" role="tabpanel"${autoOn ? "" : " hidden"}>
-        <div class="battle-auto-options">
-          ${option("stone", "ui.autoStone", battleAutoOptions.stone)}
-          ${option("combat", "ui.autoCombat", battleAutoOptions.combat)}
-          ${option("all", "ui.autoAll", allEnabled)}
+        <div class="battle-settings-panel${autoOn ? "" : " is-hidden"}" data-battle-settings-panel="auto" role="tabpanel"${autoOn ? "" : " hidden"}>
+          <div class="battle-auto-options">
+            ${option("stone", "ui.autoStone", battleAutoOptions.stone)}
+            ${option("combat", "ui.autoCombat", battleAutoOptions.combat)}
+            ${option("all", "ui.autoAll", allEnabled)}
+          </div>
         </div>
-      </div>
-      <div class="battle-settings-panel${soundOn ? "" : " is-hidden"}" data-battle-settings-panel="sound" role="tabpanel"${soundOn ? "" : " hidden"}>
-        ${audioRow("bgm", "settings.audioBgm", p.bgm, !p.bgmMuted)}
-        ${audioRow("sfx", "settings.audioSfx", p.sfx, !p.sfxMuted)}
+        <div class="battle-settings-panel${soundOn ? "" : " is-hidden"}" data-battle-settings-panel="sound" role="tabpanel"${soundOn ? "" : " hidden"}>
+          ${audioRow("bgm", "settings.audioBgm", p.bgm, !p.bgmMuted)}
+          ${audioRow("sfx", "settings.audioSfx", p.sfx, !p.sfxMuted)}
+        </div>
       </div>
     </div>
   </div>`;
