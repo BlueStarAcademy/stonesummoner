@@ -1,41 +1,42 @@
 # Stages world map art
 
-Expedition (출정) world map uses a **layered** layout — same idea as the home island:
+Expedition (출정) world map — **buildings are baked into the terrain**.
 
-1. **Terrain only** — no baked buildings  
-2. **Landmark sprites** — MQ regions (map-01…13 themes) + side content, placed by `%` from data  
-3. **UI pins** — clickable overlays on top
+1. **Terrain** — bright HQ biome atlas with stage buildings painted in  
+2. **UI pins only** — clickable labels; `%` coords target each building plaza  
+3. **New content later** — keep the same map composition; redraw the atlas and add the new building into the image (do not go back to overlay sprites)
+
+Biome bands follow MAIN QUEST south→north. Side islands are themed per dungeon.
 
 ## Files
 
 | Asset | Path | Size |
 |-------|------|------|
-| Terrain | `apps/web/public/art/stages/stages-world-terrain.webp` | **2880×3840** (3:4, expansive pan) |
+| Terrain | `apps/web/public/art/stages/stages-world-terrain.webp` | **2880×3840** (3:4) bright HQ, baked buildings |
 | Terrain mid | `stages-world-terrain-1080.webp` | 1440×1920 |
-| MQ landmarks | `landmark-mq-01.webp` … `mq-13.webp` | 512×512 — match battle `map-01`…`map-13` |
-| Side landmarks | `landmark-{artKey}.webp` | 512×512, alpha |
-| Legacy | `stages-world-map.png` | unused (baked atlas) |
+| Landmark WebPs | `landmark-*.webp` | legacy overlays (unused while buildings are baked) |
+| Legacy | `stages-world-map.png` | early baked atlas (style reference) |
 
-## Data
+## Demo pin authoring
 
-Source of truth: [`packages/data/src/stagesMap.ts`](../../packages/data/src/stagesMap.ts)
+Demo accounts get **맵 배치** on the expedition map:
+1. Drag pins onto the painted building plazas
+2. **완료** saves `%` coords to `localStorage` (`stonesummoner.stages.pinLayout.v1`)
+3. **좌표 복사** exports MQ + side `x/y` for pasting into `stagesMap.ts` / `scenario.ts`
 
-- `STAGES_MAP_NATURAL` — atlas pixel size (must match terrain WebP)
-- `STAGES_MQ_LANDMARK_LAYOUT` — 13 main-quest region vignettes (battle-bg themed)
-- `STAGES_LANDMARK_LAYOUT` — side content (challenge tower, etc.)
-- `SIDE_CONTENT_PIN_LAYOUT` — derived from side landmark x/y
-- Camera home: `STAGES_MAP_HOME_REGION_ID` (`mq1`) — map always opens framed on stage 1
+## Pad layout (source of truth)
 
-To add a new side building later:
+[`packages/data/src/stagesMap.ts`](../../packages/data/src/stagesMap.ts) + matching `MAIN_QUEST_AREAS` x/y in `scenario.ts`.
 
-1. Drop `landmark-{artKey}.webp` (512² dematted)
-2. Append one row to `STAGES_LANDMARK_LAYOUT`
-3. Wire the region id in unlock rules as needed
+| Role | Pins |
+|------|------|
+| Main quest road | 13 plazas, south→north |
+| Side content | 7 island plazas (tower, trials, dungeons, arena, guild) |
+
+Camera home: `STAGES_MAP_HOME_REGION_ID` (`mq1`).
 
 ## Art notes
 
-MQ landmarks are painted from battle arena references (`/art/battle/bg/map-XX.webp`) so each pin matches its combat biome (moonlit forest, flame canyon, end temple, …).
-
-## Camera
-
-`STAGES_WORLD_OVERSCAN ≈ 2.35` so the large atlas pans freely on all axes. Opening the stages view always calls `focusStagesRegion("mq1")`.
+- Prefer baking buildings into the terrain for visual quality.  
+- When adding a stage/dungeon later: extend the same atlas (same overall form) and paint the new building in.  
+- Pin `%` must match the plaza under each painted building.  

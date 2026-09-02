@@ -202,13 +202,9 @@ import {
   MAIN_QUEST_PIN_LAYOUT,
   MAIN_QUEST_STAGES,
   SIDE_CONTENT_PIN_LAYOUT,
-  STAGES_LANDMARK_LAYOUT,
-  STAGES_MQ_LANDMARK_LAYOUT,
   STAGES_MAP_HOME_REGION_ID,
   STAGES_MAP_NATURAL as STAGES_MAP_NATURAL_DATA,
   STAGES_TERRAIN_ART_PATH,
-  stagesLandmarkArtPath,
-  STAGES_PER_AREA,
   TRIAL_STAGES,
   CHALLENGE_TOWER_STAGES,
   WEEKDAY_STAGES,
@@ -3171,9 +3167,155 @@ const STAGES_MAP_ASPECT = STAGES_MAP_NATURAL.w / STAGES_MAP_NATURAL.h;
 /** World larger than viewport so the full atlas can be panned widely. */
 const STAGES_WORLD_OVERSCAN = 2.35;
 /** Bump when atlas fit metrics change so the next bind re-centers once. */
-const STAGES_MAP_FIT_VERSION = 3;
+const STAGES_MAP_FIT_VERSION = 10;
 let stagesMapFitApplied = 0;
 let stagesWorldResizeObs: ResizeObserver | null = null;
+
+/** Demo authoring: drag landmarks/pins, persist % coords in localStorage. */
+const STAGES_PIN_LAYOUT_KEY = "stonesummoner.stages.pinLayout.v1";
+type StagesPinPos = { x: number; y: number };
+type StagesPinLayoutMap = Record<string, StagesPinPos>;
+let stagesPinEdit = false;
+let stagesPinDraft: StagesPinLayoutMap | null = null;
+let stagesPinSuppressClick = false;
+let stagesPinDrag: { id: string; pointerId: number; moved: boolean } | null =
+  null;
+
+function defaultStagesPinLayout(): StagesPinLayoutMap {
+  const out: StagesPinLayoutMap = {};
+  for (const p of MAIN_QUEST_PIN_LAYOUT) out[p.id] = { x: p.x, y: p.y };
+  for (const p of SIDE_CONTENT_PIN_LAYOUT) out[p.id] = { x: p.x, y: p.y };
+  return out;
+}
+
+function readStagesPinOverrides(): StagesPinLayoutMap {
+  try {
+    const raw = localStorage.getItem(STAGES_PIN_LAYOUT_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as StagesPinLayoutMap;
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: StagesPinLayoutMap = {};
+    for (const [id, pos] of Object.entries(parsed)) {
+      if (!pos || typeof pos.x !== "number" || typeof pos.y !== "number") continue;
+      out[id] = {
+        x: Math.round(pos.x * 10) / 10,
+        y: Math.round(pos.y * 10) / 10,
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeStagesPinOverrides(layout: StagesPinLayoutMap): void {
+  try {
+    localStorage.setItem(STAGES_PIN_LAYOUT_KEY, JSON.stringify(layout));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function stagesPinXY(id: string): StagesPinPos {
+  const fromDraft = stagesPinDraft?.[id];
+  if (fromDraft) return fromDraft;
+  const saved = readStagesPinOverrides()[id];
+  if (saved) return saved;
+  const mq = MAIN_QUEST_PIN_LAYOUT.find((p) => p.id === id);
+  if (mq) return { x: mq.x, y: mq.y };
+  const side = SIDE_CONTENT_PIN_LAYOUT.find((p) => p.id === id);
+  if (side) return { x: side.x, y: side.y };
+  return { x: 50, y: 50 };
+}
+
+function clampStagesPinPct(n: number): number {
+  return Math.max(0, Math.min(100, Math.round(n * 10) / 10));
+}
+
+function clientToStagesPct(
+  clientX: number,
+  clientY: number,
+  world: HTMLElement,
+): StagesPinPos {
+  const rect = world.getBoundingClientRect();
+  const w = Math.max(1, rect.width);
+  const h = Math.max(1, rect.height);
+  return {
+    x: clampStagesPinPct(((clientX - rect.left) / w) * 100),
+    y: clampStagesPinPct(((clientY - rect.top) / h) * 100),
+  };
+}
+
+function applyStagesPinPosDom(id: string, x: number, y: number): void {
+  const px = clampStagesPinPct(x);
+  const py = clampStagesPinPct(y);
+  if (!stagesPinDraft) stagesPinDraft = { ...defaultStagesPinLayout(), ...readStagesPinOverrides() };
+  stagesPinDraft[id] = { x: px, y: py };
+  app.querySelectorAll<HTMLElement>(`[data-stages-pin="${id}"]`).forEach((el) => {
+    el.style.left = `${px}%`;
+    el.style.top = `${py}%`;
+  });
+}
+
+function stagesPinLayoutExportText(layout: StagesPinLayoutMap): string {
+  const mq = MAIN_QUEST_PIN_LAYOUT.map((p) => {
+    const pos = layout[p.id] ?? { x: p.x, y: p.y };
+    return {
+      map: p.map,
+      id: p.id,
+      x: clampStagesPinPct(pos.x),
+      y: clampStagesPinPct(pos.y),
+    };
+  });
+  const side = SIDE_CONTENT_PIN_LAYOUT.map((p) => {
+    const pos = layout[p.id] ?? { x: p.x, y: p.y };
+    return {
+      id: p.id,
+      x: clampStagesPinPct(pos.x),
+      y: clampStagesPinPct(pos.y),
+    };
+  });
+  const mqTs = mq
+    .map(
+      (p) =>
+        `  { map: ${p.map}, /* ${p.id} */ x: ${p.x}, y: ${p.y} },`,
+    )
+    .join("\n");
+  const sideTs = side
+    .map((p) => `  { id: "${p.id}", x: ${p.x}, y: ${p.y} },`)
+    .join("\n");
+  return [
+    "// stages pin layout export",
+    "MQ_XY = [",
+    mqTs,
+    "];",
+    "SIDE_XY = [",
+    sideTs,
+    "];",
+    "",
+    JSON.stringify({ mq, side }, null, 2),
+  ].join("\n");
+}
+
+function enterStagesPinEdit(): void {
+  if (sessionUser?.kind !== "demo") return;
+  stagesRegion = null;
+  stageEntryId = null;
+  stagesDropInfoOpen = false;
+  stagesPinEdit = true;
+  stagesPinDraft = { ...defaultStagesPinLayout(), ...readStagesPinOverrides() };
+  stagesPinDrag = null;
+  render();
+}
+
+function exitStagesPinEdit(commit: boolean): void {
+  if (commit && stagesPinDraft) writeStagesPinOverrides(stagesPinDraft);
+  stagesPinEdit = false;
+  stagesPinDraft = null;
+  stagesPinDrag = null;
+  stagesPinSuppressClick = false;
+  render();
+}
 
 function localSaveKey(): string {
   if (sessionUser?.kind === "demo") return DEMO_SAVE_KEY;
@@ -8447,6 +8589,7 @@ function bindBattleSkillInspect(): void {
     );
   });
   bindBattleSkillInfo();
+}
 
 /** Affinity of the current turn unit toward `target` (SW HP-bar tint). */
 function battleHpAffinityToward(target: Unit): ElementRelation | null {
@@ -13005,6 +13148,7 @@ function renderScreen(): void {
   );
   app.classList.toggle("summoner-mode", view === "summoner");
   app.classList.toggle("island-layout-edit", onIsland && islandLayoutEdit);
+  app.classList.toggle("stages-pin-edit", isStages && stagesPinEdit);
   app.classList.toggle("facility-modal-open", isFacilityView());
   app.classList.toggle("party-modal-open", view === "party" || arenaDefenseOpen);
   app.innerHTML = `
@@ -13109,10 +13253,17 @@ function renderScreen(): void {
       ${onIsland && !isStages ? "" : renderHomeChatRail()}
       ${
         isStages
-          ? `<button type="button" class="stages-map-back" data-nav="home" aria-label="${t("ui.d758337556")}">
-        <img class="stages-map-back-ico" src="/art/ui/back-arrow.svg" width="18" height="18" alt="" draggable="false" />
-        <span>${t("ui.d758337556")}</span>
-      </button>`
+          ? `<div class="stages-map-chrome">
+        <button type="button" class="stages-map-back" data-nav="home" aria-label="${t("ui.d758337556")}">
+          <img class="stages-map-back-ico" src="/art/ui/back-arrow.svg" width="18" height="18" alt="" draggable="false" />
+          <span>${t("ui.d758337556")}</span>
+        </button>
+        ${
+          sessionUser?.kind === "demo" && !stagesPinEdit
+            ? `<button type="button" class="stages-pin-edit-fab" id="btn-stages-pin-edit">${t("ui.stages.pinEdit")}</button>`
+            : ""
+        }
+      </div>`
           : ""
       }
     </header>
@@ -22350,15 +22501,18 @@ function isMainQuestRegion(id: StagesRegionId): boolean {
 }
 
 function stagesRegions(): StagesRegion[] {
-  const mqRegions: StagesRegion[] = MAIN_QUEST_PIN_LAYOUT.map((pin) => ({
-    id: pin.id,
-    name: pin.areaKo,
-    blurb: `${t('ui.9d96ebc162')} ${MIDDOT} ${pin.areaKo}`,
-    x: pin.x,
-    y: pin.y,
-    tone: pin.tone,
-    stages: stagesForMap(pin.map),
-  }));
+  const mqRegions: StagesRegion[] = MAIN_QUEST_PIN_LAYOUT.map((pin) => {
+    const pos = stagesPinXY(pin.id);
+    return {
+      id: pin.id,
+      name: pin.areaKo,
+      blurb: `${t('ui.9d96ebc162')} ${MIDDOT} ${pin.areaKo}`,
+      x: pos.x,
+      y: pos.y,
+      tone: pin.tone,
+      stages: stagesForMap(pin.map),
+    };
+  });
   const sideMeta: Record<
     string,
     {
@@ -22409,12 +22563,13 @@ function stagesRegions(): StagesRegion[] {
   };
   const sideRegions: StagesRegion[] = SIDE_CONTENT_PIN_LAYOUT.map((pin) => {
     const meta = sideMeta[pin.id]!;
+    const pos = stagesPinXY(pin.id);
     return {
       id: pin.id,
       name: meta.name,
       blurb: `${meta.blurb} ${MIDDOT} ${pin.landmarkKo}`,
-      x: pin.x,
-      y: pin.y,
+      x: pos.x,
+      y: pos.y,
       tone: pin.id,
       stages: meta.stages,
       equipWeekly: meta.equipWeekly,
@@ -22470,6 +22625,7 @@ function resetCoreStageBindings(): void {
 }
 
 function openStagesRegionPin(regionId: string): void {
+  if (stagesPinEdit || stagesPinSuppressClick) return;
   const region = stagesRegions().find((candidate) => candidate.id === regionId);
   if (!region) return;
   if (!isStagesRegionOpen(region)) {
@@ -23583,10 +23739,10 @@ function renderStagesRegionSheet(region: StagesRegion): string {
 }
 function renderStages(): string {
   const regions = stagesRegions();
-  const mqNodes = MAIN_QUEST_PIN_LAYOUT.map(
-    (p) =>
-      `<span class="stages-mq-node" style="left:${p.x}%;top:${p.y}%" aria-hidden="true"><span class="stages-mq-node-core"></span></span>`,
-  ).join("");
+  const mqNodes = MAIN_QUEST_PIN_LAYOUT.map((p) => {
+    const pos = stagesPinXY(p.id);
+    return `<span class="stages-mq-node" data-stages-pin="${p.id}" style="left:${pos.x}%;top:${pos.y}%" aria-hidden="true"><span class="stages-mq-node-core"></span></span>`;
+  }).join("");
   const pins = regions
     .map((r) => {
       const prog = regionProgress(r.stages);
@@ -23603,13 +23759,6 @@ function renderStages(): string {
         ? MAIN_QUEST_PIN_LAYOUT.find((p) => p.id === r.id)
         : null;
       const mark = mq ? String(pinLayout?.map ?? "") : "";
-      // Depth is a hub of three 10-floor dungeons, so a flat cleared/total is noise.
-      const sub =
-        r.id === "depth"
-          ? ""
-          : mq
-            ? `${prog.cleared}/${STAGES_PER_AREA}`
-            : `${prog.cleared}/${prog.total}`;
       const lockMark = open
         ? ""
         : `<span class="stages-pin-lock" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2zm-6-2a2 2 0 1 1 4 0v2h-4V7zm6 12H7v-8h10v8z"/></svg></span>`;
@@ -23617,31 +23766,27 @@ function renderStages(): string {
         ? `<span class="stages-pin-num" aria-hidden="true">${mark}</span>`
         : "";
       const ariaName = mark ? `${mark} ${r.name}` : r.name;
-      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${open ? "" : " is-locked"}${active ? " is-active" : ""}${onboardPin}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" data-core-region="${r.id}" aria-label="${ariaName}${open ? "" : ` ${MIDDOT} ${t('ui.b35f488f01')}`}" ${open ? "" : 'data-locked="1"'}>
+      return `<button type="button" class="stages-pin ${mq ? "stages-pin--mq" : "stages-pin--side"} stages-pin--${r.tone}${open ? "" : " is-locked"}${active ? " is-active" : ""}${onboardPin}${prog.cleared === prog.total && prog.total > 0 ? " is-cleared" : ""}" style="left:${r.x}%;top:${r.y}%" data-region="${r.id}" data-core-region="${r.id}" data-stages-pin="${r.id}" aria-label="${ariaName}${open ? "" : ` ${MIDDOT} ${t('ui.b35f488f01')}`}" ${open ? "" : 'data-locked="1"'}>
         <span class="stages-pin-dot" aria-hidden="true">${mq ? `<span class="stages-pin-mark">${mark}</span>` : ""}</span>
         <span class="stages-pin-label">
           <strong>${lockMark}${titleNum}${r.name}</strong>
-          ${
-            open && !sub
-              ? ""
-              : `<small>${open ? sub : t('ui.759f762a02')}</small>`
-          }
         </span>
       </button>`;
     })
     .join("");
-  const landmarks = [
-    ...STAGES_MQ_LANDMARK_LAYOUT.map((lm) => {
-      const scale = lm.scale ?? 1;
-      return `<img class="stages-landmark stages-landmark--mq" src="${stagesLandmarkArtPath(lm.artKey)}" alt="" draggable="false" decoding="async" style="left:${lm.x}%;top:${lm.y}%;--lm-scale:${scale}" data-landmark="mq${lm.map}" data-mq-map="${lm.map}" aria-hidden="true" />`;
-    }),
-    ...STAGES_LANDMARK_LAYOUT.map((lm) => {
-      const scale = lm.scale ?? 1;
-      return `<img class="stages-landmark${lm.id === "challenge_tower" ? " stages-landmark--hero" : ""}" src="${stagesLandmarkArtPath(lm.artKey)}" alt="" draggable="false" decoding="async" style="left:${lm.x}%;top:${lm.y}%;--lm-scale:${scale}" data-landmark="${lm.id}" aria-hidden="true" />`;
-    }),
-  ].join("");
-  return `<div class="stages-hub stages-hub--map">
-    <div class="stages-viewport" id="stages-viewport">
+  // Buildings are baked into the terrain art; UI only places pins.
+  // Demo pin-edit entry lives in the expedition app-bar (above chat).
+  const editHud = stagesPinEdit
+    ? `<div class="stages-pin-edit-hud" role="toolbar" aria-label="${t("ui.stages.pinEdit")}">
+      <strong>${t("ui.stages.pinEdit")}</strong>
+      <button type="button" class="secondary" id="btn-stages-pin-reset">${t("ui.ff75b4ff24")}</button>
+      <button type="button" class="secondary" id="btn-stages-pin-copy">${t("ui.stages.pinCopy")}</button>
+      <button type="button" class="auth-btn-primary" id="btn-stages-pin-done">${t("ui.8d8680373c")}</button>
+    </div>`
+    : "";
+  return `<div class="stages-hub stages-hub--map${stagesPinEdit ? " is-pin-edit" : ""}">
+    ${editHud}
+    <div class="stages-viewport${stagesPinEdit ? " is-pin-edit" : ""}" id="stages-viewport">
       <div class="stages-world" id="stages-world" style="transform:translate(${stagesPan.x}px,${stagesPan.y}px)">
         <img
           class="stages-map-img"
@@ -23653,7 +23798,6 @@ function renderStages(): string {
           draggable="false"
         />
         <div class="stages-map-veil" aria-hidden="true"></div>
-        <div class="stages-landmarks" aria-hidden="true">${landmarks}</div>
         <div class="stages-mq-nodes">${mqNodes}</div>
         <div class="stages-map-pins">${pins}</div>
       </div>
@@ -24577,8 +24721,9 @@ function focusStagesRegion(regionId: string): void {
     MAIN_QUEST_PIN_LAYOUT.find((p) => p.id === regionId) ??
     stagesRegions().find((r) => r.id === regionId);
   if (!pin) return;
-  const fx = Math.max(0.05, Math.min(0.95, pin.x / 100));
-  const fy = Math.max(0.05, Math.min(0.95, pin.y / 100));
+  const pos = stagesPinXY(regionId);
+  const fx = Math.max(0.05, Math.min(0.95, pos.x / 100));
+  const fy = Math.max(0.05, Math.min(0.95, pos.y / 100));
   const vw = viewport.clientWidth;
   const vh = viewport.clientHeight;
   // Keep the pin above the region sheet / objective chip.
@@ -24661,6 +24806,7 @@ function bindStagesPan(): void {
     const target = ev.target as HTMLElement | null;
     if (target?.closest?.(".stages-region-layer")) return;
     if (target?.closest?.("[data-core-region]")) return;
+    if (stagesPinEdit && target?.closest?.("[data-stages-pin]")) return;
     stagesPanDrag = {
       pointerId: ev.pointerId,
       startX: ev.clientX,
@@ -24698,6 +24844,111 @@ function bindStagesPan(): void {
   };
   viewport.addEventListener("pointerup", endDrag);
   viewport.addEventListener("pointercancel", endDrag);
+}
+
+function bindStagesPinEdit(): void {
+  const viewport = app.querySelector<HTMLElement>("#stages-viewport");
+  const world = app.querySelector<HTMLElement>("#stages-world");
+
+  app.querySelector("#btn-stages-pin-edit")?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    enterStagesPinEdit();
+  });
+  app.querySelector("#btn-stages-pin-done")?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    exitStagesPinEdit(true);
+  });
+  app.querySelector("#btn-stages-pin-reset")?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    stagesPinDraft = defaultStagesPinLayout();
+    writeStagesPinOverrides({});
+    try {
+      localStorage.removeItem(STAGES_PIN_LAYOUT_KEY);
+    } catch {
+      /* ignore */
+    }
+    for (const [id, pos] of Object.entries(stagesPinDraft)) {
+      applyStagesPinPosDom(id, pos.x, pos.y);
+    }
+  });
+  app.querySelector("#btn-stages-pin-copy")?.addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const layout =
+      stagesPinDraft ??
+      { ...defaultStagesPinLayout(), ...readStagesPinOverrides() };
+    const text = stagesPinLayoutExportText(layout);
+    const btn = app.querySelector<HTMLButtonElement>("#btn-stages-pin-copy");
+    try {
+      await navigator.clipboard.writeText(text);
+      if (btn) {
+        btn.textContent = t("ui.stages.pinCopied");
+        window.setTimeout(() => {
+          if (btn.isConnected) btn.textContent = t("ui.stages.pinCopy");
+        }, 1200);
+      }
+    } catch {
+      /* ignore clipboard failures */
+    }
+  });
+
+  if (!stagesPinEdit || !viewport || !world) return;
+
+  const startDrag = (el: HTMLElement, ev: PointerEvent) => {
+    if (ev.button !== 0) return;
+    const id = el.dataset.stagesPin;
+    if (!id) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    stagesPanDrag = null;
+    stagesPinDrag = { id, pointerId: ev.pointerId, moved: false };
+    app.querySelectorAll<HTMLElement>("[data-stages-pin]").forEach((node) => {
+      node.classList.toggle("is-dragging", node.dataset.stagesPin === id);
+    });
+    try {
+      el.setPointerCapture(ev.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const moveDrag = (ev: PointerEvent) => {
+    if (!stagesPinDrag || stagesPinDrag.pointerId !== ev.pointerId) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    stagesPinDrag.moved = true;
+    const pct = clientToStagesPct(ev.clientX, ev.clientY, world);
+    applyStagesPinPosDom(stagesPinDrag.id, pct.x, pct.y);
+  };
+
+  const endDrag = (ev: PointerEvent) => {
+    if (!stagesPinDrag || stagesPinDrag.pointerId !== ev.pointerId) return;
+    const moved = stagesPinDrag.moved;
+    const pct = clientToStagesPct(ev.clientX, ev.clientY, world);
+    applyStagesPinPosDom(stagesPinDrag.id, pct.x, pct.y);
+    app.querySelectorAll<HTMLElement>(".is-dragging").forEach((node) => {
+      node.classList.remove("is-dragging");
+    });
+    stagesPinDrag = null;
+    if (moved) {
+      stagesPinSuppressClick = true;
+      queueMicrotask(() => {
+        stagesPinSuppressClick = false;
+      });
+    }
+  };
+
+  app.querySelectorAll<HTMLElement>("[data-stages-pin]").forEach((el) => {
+    // Landmarks + pins are both draggable; mq-nodes follow via shared id.
+    if (el.classList.contains("stages-mq-node")) return;
+    el.addEventListener("pointerdown", (ev) => startDrag(el, ev));
+    el.addEventListener("pointermove", moveDrag);
+    el.addEventListener("pointerup", endDrag);
+    el.addEventListener("pointercancel", endDrag);
+  });
 }
 
 function clearIslandLongPress(): void {
@@ -24925,6 +25176,13 @@ function applyViewChange(next: View, opts?: { fromBack?: boolean }): void {
     commitPartyDraftOnLeave();
   }
   if (next !== "stages") {
+    if (stagesPinEdit) {
+      if (stagesPinDraft) writeStagesPinOverrides(stagesPinDraft);
+      stagesPinEdit = false;
+      stagesPinDraft = null;
+      stagesPinDrag = null;
+      stagesPinSuppressClick = false;
+    }
     stagesRegion = null;
     stageEntryId = null;
     stagesDropInfoOpen = false;
@@ -25655,6 +25913,7 @@ function bind(): void {
 
   if (view === "stages") {
     bindStagesPan();
+    bindStagesPinEdit();
     maybeGuideOnboardStages();
   }
 
@@ -26450,6 +26709,7 @@ function bind(): void {
       ?.querySelectorAll<HTMLButtonElement>("[data-core-region]")
       .forEach((pin) => {
         pin.addEventListener("click", (ev) => {
+          if (stagesPinEdit || stagesPinSuppressClick) return;
           if (mapViewport.getAttribute("data-pan-moved") === "1") return;
           ev.preventDefault();
           ev.stopPropagation();

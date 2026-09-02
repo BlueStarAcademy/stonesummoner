@@ -895,6 +895,18 @@
     "ko": "완료",
     "en": "Done"
   },
+  "ui.stages.pinEdit": {
+    "ko": "맵 배치",
+    "en": "Edit map"
+  },
+  "ui.stages.pinCopy": {
+    "ko": "좌표 복사",
+    "en": "Copy coords"
+  },
+  "ui.stages.pinCopied": {
+    "ko": "복사됨",
+    "en": "Copied"
+  },
   "ui.df72a8753d": {
     "ko": "대기",
     "en": "Stored"
