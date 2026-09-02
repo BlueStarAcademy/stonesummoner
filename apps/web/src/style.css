@@ -9155,6 +9155,8 @@ main {
 }
 
 .battle-unit {
+  /* Room under art for HP/ATB (or mana) strip — keeps glow on the feet. */
+  --battle-bars-space: 22px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -9175,6 +9177,10 @@ main {
   text-align: center;
   -webkit-tap-highlight-color: transparent;
   overflow: visible;
+}
+
+.battle-unit:has(.battle-unit-bars--mana) {
+  --battle-bars-space: 28px;
 }
 
 .battle-unit--summoner {
@@ -9619,7 +9625,8 @@ button.battle-unit {
 .battle-unit-glow {
   position: absolute;
   left: 50%;
-  bottom: 6px;
+  /* Sit under the art feet, above the HP/ATB strip (not over the gauges). */
+  bottom: var(--battle-bars-space, 22px);
   width: 78%;
   height: 18px;
   transform: translateX(-50%);
@@ -9856,15 +9863,18 @@ button.battle-unit {
 }
 
 .battle-unit-bars {
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
+  /* Flow under the portrait — do not overlay short silhouettes (slime etc.). */
+  position: relative;
+  left: auto;
+  bottom: auto;
   z-index: 3;
-  width: 78%;
-  max-width: 68px;
-  margin: 0;
+  flex: 0 0 auto;
+  align-self: center;
+  width: 86%;
+  max-width: 72px;
+  margin: 2px 0 0;
   padding: 1px 2px 2px;
-  transform: translateX(-50%);
+  transform: none;
   border-radius: 5px;
   background: #0e0b16aa;
   border: 1px solid #ffffff18;
