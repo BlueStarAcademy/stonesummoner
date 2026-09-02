@@ -1980,15 +1980,20 @@ describe("game loop", () => {
     save = {
       ...save,
       island: { ...save.island, mana: 5000, crystal: 20 },
+      awakenMats: { light: { low: 40, mid: 10, high: 5 } },
       summoners: {
         ...save.summoners,
         light: { ...save.summoners.light, level: 1 },
       },
     };
-    const first = runEnhanceMagicSkill(save, "light_open", "light");
+    const first = runEnhanceMagicSkill(save, "light_open", "light", () => 0);
+    assert.equal(first.enhanceSuccess, true);
     assert.equal(first.save.summonerMagic.light.ranks.light_open, 1);
+    assert.equal(first.save.island.mana, 5000 - 500);
+    assert.deepEqual(first.save.awakenMats.light, { low: 34, mid: 10, high: 5 });
 
-    const locked = runEnhanceMagicSkill(first.save, "light_open", "light");
+    const locked = runEnhanceMagicSkill(first.save, "light_open", "light", () => 0);
+    assert.equal(locked.enhanceSuccess, undefined);
     assert.equal(locked.save.summonerMagic.light.ranks.light_open, 1);
     assert.match(locked.message, /Lv\.5/);
 
@@ -1999,8 +2004,35 @@ describe("game loop", () => {
         light: { ...first.save.summoners.light, level: 5 },
       },
     };
-    const ok = runEnhanceMagicSkill(save, "light_open", "light");
+    const ok = runEnhanceMagicSkill(save, "light_open", "light", () => 0);
+    assert.equal(ok.enhanceSuccess, true);
     assert.equal(ok.save.summonerMagic.light.ranks.light_open, 2);
+  });
+
+  it("spends magic enhance costs on failure", () => {
+    let save = createNewSave(0);
+    save = {
+      ...save,
+      island: { ...save.island, mana: 5000, crystal: 20 },
+      awakenMats: { light: { low: 40, mid: 10, high: 5 } },
+      summoners: {
+        ...save.summoners,
+        light: { ...save.summoners.light, level: 5 },
+      },
+      summonerMagic: {
+        ...save.summonerMagic,
+        light: {
+          ...(save.summonerMagic.light ?? { ranks: {}, branch: null }),
+          ranks: { light_open: 1 },
+        },
+      },
+    };
+    const fail = runEnhanceMagicSkill(save, "light_open", "light", () => 0.99);
+    assert.equal(fail.enhanceSuccess, false);
+    assert.equal(fail.save.summonerMagic.light.ranks.light_open, 1);
+    assert.equal(fail.save.island.mana, 5000 - 950);
+    assert.deepEqual(fail.save.awakenMats.light, { low: 30, mid: 9, high: 5 });
+    assert.match(fail.message, /실패/);
   });
 
   it("unlocks summoner skill tree nodes with gates", () => {

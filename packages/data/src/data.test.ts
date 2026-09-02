@@ -62,6 +62,10 @@ import {
   SCENARIO_NORMAL_STAR_WEIGHTS,
   scenarioSymbolDropTable,
   magicEnhanceRequiredLevel,
+  magicEnhanceManaCost,
+  magicEnhanceCrystalCost,
+  magicEnhanceEssenceCost,
+  magicEnhanceSuccessRate,
   skillTreeBonuses,
   SKILL_TREE_NODES,
   stripUnenhancedStarterGear,
@@ -1266,5 +1270,16 @@ describe("phase1 data", () => {
     assert.equal(magicEnhanceRequiredLevel(2), 10);
     assert.equal(magicEnhanceRequiredLevel(3), 15);
     assert.equal(magicEnhanceRequiredLevel(4), 20);
+  });
+
+  it("scales magic enhance costs, essence, and success rate", () => {
+    assert.equal(magicEnhanceManaCost(0), 500);
+    assert.equal(magicEnhanceManaCost(1), 950);
+    assert.equal(magicEnhanceCrystalCost(0), 0);
+    assert.equal(magicEnhanceCrystalCost(2), 1);
+    assert.deepEqual(magicEnhanceEssenceCost(0), { low: 6, mid: 0, high: 0 });
+    assert.deepEqual(magicEnhanceEssenceCost(4), { low: 6, mid: 8, high: 2 });
+    assert.equal(magicEnhanceSuccessRate(0), 1);
+    assert.equal(magicEnhanceSuccessRate(4), 0.4);
   });
 });

@@ -3,6 +3,7 @@ import { ARROW_RIGHT, EM_DASH } from "./marks";
 
 export const GROWTH_REVEAL_LAYER_ID = "growth-reveal-layer";
 export const GROWTH_REVEAL_PLAY_MS = 3000;
+export const GROWTH_REVEAL_MAGIC_PLAY_MS = 3400;
 const SKIP_LOCK_MS = 400;
 
 export type GrowthRevealKind =
@@ -13,6 +14,8 @@ export type GrowthRevealKind =
   | "fusion"
   | "magic"
   | "gear";
+
+export type GrowthRevealOutcome = "success" | "fail";
 
 export type GrowthStatDelta = {
   id: string;
@@ -38,6 +41,10 @@ export type GrowthRevealPayload = {
   stats: GrowthStatDelta[];
   skills: GrowthSkillDelta[];
   notes: string[];
+  /** Magic enhance success/fail — drives result chrome + title. */
+  outcome?: GrowthRevealOutcome;
+  /** Shown during magic enhance play (success chance %). */
+  ratePct?: number;
 };
 
 export type GrowthRevealHost = {
@@ -89,8 +96,12 @@ function playingKey(kind: GrowthRevealKind): MessageKey {
   }
 }
 
-function resultKey(kind: GrowthRevealKind): MessageKey {
-  switch (kind) {
+function resultKey(payload: GrowthRevealPayload): MessageKey {
+  if (payload.kind === "magic") {
+    if (payload.outcome === "fail") return "ui.growthResultMagicFail";
+    if (payload.outcome === "success") return "ui.growthResultMagicSuccess";
+  }
+  switch (payload.kind) {
     case "skillFeed":
       return "ui.growthResultSkill";
     case "powerUp":
@@ -110,6 +121,10 @@ function resultKey(kind: GrowthRevealKind): MessageKey {
 
 function formatStat(n: number, percent?: boolean): string {
   return percent ? `${n}%` : String(n);
+}
+
+function formatRank(kind: GrowthRevealKind, n: number): string {
+  return kind === "magic" || kind === "gear" ? `+${n}` : `Lv.${n}`;
 }
 
 function renderStatRows(stats: GrowthStatDelta[]): string {
@@ -133,19 +148,31 @@ function renderStatRows(stats: GrowthStatDelta[]): string {
   </section>`;
 }
 
-function renderSkillRows(skills: GrowthSkillDelta[]): string {
+function renderSkillRows(
+  skills: GrowthSkillDelta[],
+  kind: GrowthRevealKind,
+  outcome?: GrowthRevealOutcome,
+): string {
   if (!skills.length) return "";
   const rows = skills
-    .map(
-      (skill) => `<div class="growth-skill-row">
+    .map((skill) => {
+      const grew = skill.to > skill.from;
+      const rowCls = [
+        "growth-skill-row",
+        outcome === "fail" ? "is-fail" : "",
+        outcome === "success" && grew ? "is-success" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return `<div class="${rowCls}">
         <span class="growth-skill-ico" aria-hidden="true">${skill.iconHtml}</span>
         <div class="growth-skill-meta">
           <strong>${escapeHtml(skill.name)}</strong>
-          <span>Lv.${skill.from} ${ARROW_RIGHT} Lv.${skill.to}</span>
+          <span class="growth-skill-rank">${formatRank(kind, skill.from)} <span aria-hidden="true">${ARROW_RIGHT}</span> ${formatRank(kind, skill.to)}</span>
           <small>${escapeHtml(skill.effect)}</small>
         </div>
-      </div>`,
-    )
+      </div>`;
+    })
     .join("");
   return `<section class="growth-result-block" aria-label="${escapeHtml(t("ui.growthSkillTitle"))}">
     <p class="growth-result-block-title">${escapeHtml(t("ui.growthSkillTitle"))}</p>
@@ -153,21 +180,55 @@ function renderSkillRows(skills: GrowthSkillDelta[]): string {
   </section>`;
 }
 
-function renderNotes(notes: string[]): string {
+function renderNotes(notes: string[], outcome?: GrowthRevealOutcome): string {
   if (!notes.length) return "";
+  const listCls = outcome === "success" ? "growth-result-notes is-unlock" : "growth-result-notes";
   return `<section class="growth-result-block" aria-label="${escapeHtml(t("ui.growthNotesTitle"))}">
     <p class="growth-result-block-title">${escapeHtml(t("ui.growthNotesTitle"))}</p>
-    <ul class="growth-result-notes">${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>
+    <ul class="${listCls}">${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>
   </section>`;
+}
+
+function renderMagicPlayFx(payload: GrowthRevealPayload): string {
+  if (payload.kind !== "magic") return "";
+  const rate =
+    payload.ratePct != null
+      ? `<span class="growth-rite-rate">${escapeHtml(
+          t("ui.growthPlayingMagicRate", { pct: payload.ratePct }),
+        )}</span>`
+      : "";
+  return `<div class="growth-rite-magic-fx" aria-hidden="true">
+      <span class="growth-rite-orb growth-rite-orb--a"></span>
+      <span class="growth-rite-orb growth-rite-orb--b"></span>
+      <span class="growth-rite-orb growth-rite-orb--c"></span>
+      <span class="growth-rite-rune growth-rite-rune--a"></span>
+      <span class="growth-rite-rune growth-rite-rune--b"></span>
+      <span class="growth-rite-spark"></span>
+    </div>
+    ${rate}`;
+}
+
+function renderOutcomeBadge(payload: GrowthRevealPayload): string {
+  if (payload.kind !== "magic" || !payload.outcome) return "";
+  const label =
+    payload.outcome === "fail"
+      ? t("ui.growthMagicFailBadge")
+      : t("ui.growthMagicSuccessBadge");
+  return `<span class="growth-result-badge growth-result-badge--${payload.outcome}">${escapeHtml(label)}</span>`;
 }
 
 function renderPlaying(payload: GrowthRevealPayload): string {
   const close = escapeHtml(t("ui.growthClose"));
   const title = escapeHtml(t(playingKey(payload.kind)));
+  const outcomeCls =
+    payload.kind === "magic" && payload.outcome
+      ? ` is-${payload.outcome}`
+      : "";
   return `<div class="settings-layer growth-reveal-layer" id="${GROWTH_REVEAL_LAYER_ID}" aria-hidden="false">
     <button type="button" class="settings-backdrop" id="btn-growth-reveal-skip" aria-label="${close}"></button>
-    <div class="growth-rite-play growth-rite-play--${payload.kind}" role="dialog" aria-modal="true" aria-labelledby="growth-rite-title">
+    <div class="growth-rite-play growth-rite-play--${payload.kind}${outcomeCls}" role="dialog" aria-modal="true" aria-labelledby="growth-rite-title">
       <div class="growth-rite-glow" aria-hidden="true"></div>
+      ${renderMagicPlayFx(payload)}
       <img class="growth-rite-circle" src="/art/hub/summon-circle.webp" width="320" height="320" alt="" draggable="false" onerror="this.onerror=null;this.src='/art/hub/summon-circle.svg'" />
       <div class="growth-rite-core">${payload.portraitHtml}</div>
       <p class="growth-rite-kicker" id="growth-rite-title">${title}</p>
@@ -182,14 +243,16 @@ function renderPlaying(payload: GrowthRevealPayload): string {
 
 function renderResult(payload: GrowthRevealPayload): string {
   const close = escapeHtml(t("ui.growthClose"));
-  const title = escapeHtml(t(resultKey(payload.kind)));
+  const title = escapeHtml(t(resultKey(payload)));
+  const outcomeCls = payload.outcome ? ` is-${payload.outcome}` : "";
   const hero = payload.heroLine
     ? `<p class="growth-result-hero-line">${escapeHtml(payload.heroLine)}</p>`
     : "";
   return `<div class="settings-layer growth-reveal-layer" id="${GROWTH_REVEAL_LAYER_ID}" aria-hidden="false">
     <button type="button" class="settings-backdrop" id="btn-growth-reveal-close" aria-label="${close}"></button>
-    <div class="settings-sheet growth-result-sheet" role="dialog" aria-modal="true" aria-labelledby="growth-result-title">
+    <div class="settings-sheet growth-result-sheet growth-result-sheet--${payload.kind}${outcomeCls}" role="dialog" aria-modal="true" aria-labelledby="growth-result-title">
       <button type="button" class="modal-x" data-modal-x-for="btn-growth-reveal-close" aria-label="${close}"></button>
+      ${renderOutcomeBadge(payload)}
       <h2 class="settings-title" id="growth-result-title">${title}</h2>
       <div class="growth-result-hero">
         <div class="growth-result-art" aria-hidden="true">${payload.portraitHtml}</div>
@@ -199,8 +262,8 @@ function renderResult(payload: GrowthRevealPayload): string {
         </div>
       </div>
       ${renderStatRows(payload.stats)}
-      ${renderSkillRows(payload.skills)}
-      ${renderNotes(payload.notes)}
+      ${renderSkillRows(payload.skills, payload.kind, payload.outcome)}
+      ${renderNotes(payload.notes, payload.outcome)}
       <button type="button" class="auth-btn-primary full" id="btn-growth-reveal-ok">${escapeHtml(t("ui.468266d639"))}</button>
     </div>
   </div>`;
@@ -297,6 +360,8 @@ export function playGrowthReveal(
   onDismiss: () => void,
 ): void {
   abortGrowthReveal();
+  const playMs =
+    payload.kind === "magic" ? GROWTH_REVEAL_MAGIC_PLAY_MS : GROWTH_REVEAL_PLAY_MS;
   const session: Live = {
     payload,
     phase: "playing",
@@ -304,7 +369,7 @@ export function playGrowthReveal(
     onDismiss,
     skipLocked: true,
     startedAt: Date.now(),
-    playMs: GROWTH_REVEAL_PLAY_MS,
+    playMs,
     playTimer: 0,
     lockTimer: 0,
   };

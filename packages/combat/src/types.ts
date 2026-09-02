@@ -221,6 +221,7 @@ export interface SummonerState {
     kind: string;
     power: number;
     turns?: number;
+    hitCount?: number;
     descKo?: string;
     vfxId?: string;
     vfxFamily?: "melee" | "bolt" | "nova" | "support";
