@@ -67,7 +67,8 @@
     "gear-art:bootstrap": "node scripts/bootstrap-gear-star-art.mjs",
     "gear-art:sync": "node scripts/sync-cursor-gear-pngs.mjs",
     "gear-art:derive": "node scripts/derive-gear-star-art.mjs",
-    "gear-art:process": "node scripts/process-paint-icons.mjs ui-gear"
+    "gear-art:process": "node scripts/process-paint-icons.mjs ui-gear",
+    "monster-art:fix-white": "node scripts/fix-enclosed-white-monster-art.mjs"
   },
   "engines": {
     "node": ">=20"
