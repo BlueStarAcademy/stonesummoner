@@ -2,11 +2,11 @@
 
 ## 제작 범위
 
-- 50 패밀리 × 5속성 = 250 artKey
-- artKey마다 기본 front/back + 각성 front/back = **총 1,000장**
+- 75 패밀리 × 5속성 = 375 artKey
+- artKey마다 기본 front/back + 각성 front/back = **총 1,500장**
 - 원본: 1536×1536 이상 PNG/WebP
 - 설치본: 투명 1024×1024 WebP
-- 초상과 128/256 목록 이미지는 front 설치 시 기존 파이프라인에서 파생
+- 전투 스틸은 완성된 초상화 카드의 캐릭터 정체성을 기준으로 독립 제작
 
 ## 2.5D 기준
 
@@ -22,11 +22,16 @@
 
 ## 카메라와 페어 규칙
 
+- 기본 front는 같은 artKey의 기본 초상화, 각성 front는 각성 초상화를
+  primary identity reference로 사용한다.
 - **front**: 얼굴과 장비 전면이 읽히는 전방 3/4 전투 자세
 - **back**: front와 같은 캐릭터·체형·장비·카메라 높이를 유지한 후방 3/4
 - back은 front의 좌우 반전 복제본이 아니며 등 장비, 망토, 날개, 꼬리 구조가 보여야 한다.
+- back은 해당 초상화와 승인된 front를 함께 참조하며 무기 수, 갑옷 조각,
+  의상 구조와 속성 재질을 바꾸지 않는다.
 - 각성은 종족과 핵심 실루엣을 바꾸지 않고 재질, 장식, 오라를 진화시킨다.
 - 이펙트는 실루엣과 장비 구조를 가리지 않는 범위로 제한한다.
+- 기존 전투 캐릭터의 재사용, 좌우 반전, 단순 recolor는 허용하지 않는다.
 
 ## 패밀리 시트 승인 조건
 
@@ -81,6 +86,9 @@ assets/monster/battle/{familyId}_{element}-back.webp
 assets/monster/battle/{familyId}_{element}-awaken-front.webp
 assets/monster/battle/{familyId}_{element}-awaken-back.webp
 ```
+
+생성 원본은 deployable `main`이 아니라 `art-source/battle-portrait-v2`
+브랜치의 worktree에 저장한다. `main`에는 설치된 1024² WebP만 커밋한다.
 
 배경은 실제 alpha 또는 균일한 `#FF00FF` 플레이트만 허용한다. 검은 배경과 가짜 체크무늬 투명 배경은 사용하지 않는다.
 

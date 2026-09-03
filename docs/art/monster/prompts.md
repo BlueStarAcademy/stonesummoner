@@ -92,6 +92,16 @@ Use only when painted per-element WebPs are not ready. Prefer painted install.
 
 ### Battle (per element)
 
+Every battle still is identity-locked to its matching portrait card:
+
+- Base front uses `/art/monster/{artKey}.webp` as the primary face, costume,
+  weapon, material, and elemental reference.
+- Awaken front uses `/art/monster/{artKey}_awaken.webp`.
+- Back uses the matching portrait and approved front together, preserving the
+  same anatomy, equipment count, costume construction, and elemental details.
+- Never reuse, mirror, recolor, or lightly edit an unrelated legacy battle
+  character. Front and back are separately painted views of the same individual.
+
 ```
 Premium stylized 2.5D mobile RPG battle character full body,
 high-end hand-painted dark fantasy over dimensional 3D-like forms,
@@ -108,6 +118,11 @@ no text, no watermark, no UI, no cropped limbs or equipment
 
 Generate at **1536×1536 or larger** and deliver PNG/WebP. Install resizes to
 transparent **WebP 1024×1024** with contain fitting.
+
+Large editable battle sources live on the dedicated art-source branch and are
+installed into deployable `main` through `CURSOR_ASSETS`. Do not commit battle
+source PNGs to `main`; only installed WebPs under
+`apps/web/public/art/monster/battle/` ship with the game.
 
 ### Portrait card (per element)
 
