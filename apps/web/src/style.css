@@ -8391,27 +8391,24 @@ main {
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  overflow: hidden;
+  background: #0a1220;
 }
 
 .battle-sky-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  /* Slight upper bias for enemy-lane floor; keep near-ground (map bottom) in frame */
-  object-position: center 58%;
+  object-fit: contain;
+  /* Keep the painted near/far floor bands readable without cover-crop zoom. */
+  object-position: center center;
   opacity: 0.92;
   filter: brightness(1.06) contrast(1.04);
 }
 
-/* Thunder mountain: far terrace sits mid-image; crop storm-sky so enemies stand on stone. */
+/* Thunder mountain: bias slightly upward so the far terrace stays in frame. */
 .battle-sky[data-bg="map-07"] .battle-sky-img,
 .battle-screen[data-bg="map-07"] .battle-sky-img {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: 138%;
-  top: -30%;
-  object-position: center 52%;
+  object-position: center 46%;
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy {
