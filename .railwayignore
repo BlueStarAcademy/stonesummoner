@@ -1,0 +1,8 @@
+.git
+.cursor
+**/node_modules
+**/dist
+assets
+apps/web/public/art/stages/_src
+docs/art/monster/portrait-card-full-sheet.webp
+docs/art/monster/portrait-card-pilot-sheet.webp
