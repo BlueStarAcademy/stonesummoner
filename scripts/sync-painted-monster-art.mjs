@@ -8,6 +8,7 @@
  * Usage:
  *   node scripts/sync-painted-monster-art.mjs --families wolf_fighter,moss_turtle
  *   node scripts/sync-painted-monster-art.mjs --all
+ *   node scripts/sync-painted-monster-art.mjs --assets C:/art-source --families wolf_fighter
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -34,7 +35,15 @@ if (families.length === 0) {
   process.exit(1);
 }
 
-const assetsRoot = path.join(root, "assets");
+const assetsRoot = path.resolve(
+  argVal("--assets") ||
+    process.env.CURSOR_ASSETS ||
+    path.join(root, "assets"),
+);
+if (!path.isAbsolute(assetsRoot)) {
+  console.error(`assets path must resolve to an absolute path: ${assetsRoot}`);
+  process.exit(1);
+}
 process.env.CURSOR_ASSETS = assetsRoot;
 
 const r = spawnSync(
