@@ -8528,10 +8528,10 @@ main {
 
 /* === battle stage units (standing sprites) === */
 .battle-layout--stage {
-  --battle-midfield-drop: 14px;
-  /* Midfield circle: ~18–22% visual height after floor tilt (docs/battle-ui.md). */
-  --board-map-span: min(64%, calc(var(--design-h) * 0.32));
-  gap: 6px;
+  --battle-midfield-drop: 0px;
+  /* Midfield circle sits between rims; keep compact so lanes stay close. */
+  --board-map-span: min(82%, calc(var(--design-h) * 0.42));
+  gap: 2px;
   padding: 4px 4px 4px;
   min-height: 0;
   flex: 1;
@@ -8539,10 +8539,10 @@ main {
 }
 
 .battle-layout--stage .board-wrap--stage {
-  flex: 1 1 auto;
-  /* Board is the table BETWEEN the two rims */
+  flex: 0 0 auto;
   z-index: 1;
-  margin-top: var(--battle-midfield-drop);
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 /* While stones can be placed, keep the tilted grid above rim portraits. */
@@ -8702,12 +8702,12 @@ main {
 /* Far rim — sit on the far floor band of the arena BG */
 .battle-lane.enemy {
   --battle-depth-scale: 0.94;
-  --battle-depth-y: calc(26px + var(--battle-midfield-drop, 0px) * 0.65);
+  --battle-depth-y: calc(10px + var(--battle-midfield-drop, 0px) * 0.65);
   --battle-depth-z: -42px;
   --battle-depth-tilt: -1.5deg;
   --battle-depth-opacity: 0.94;
-  padding-top: calc(68px + env(safe-area-inset-top) + var(--battle-midfield-drop, 0px));
-  min-height: clamp(110px, 17dvh, 140px);
+  padding-top: calc(52px + env(safe-area-inset-top));
+  min-height: clamp(96px, 14dvh, 124px);
   margin-bottom: 0;
 }
 
@@ -10189,7 +10189,7 @@ button.battle-unit,
   gap: 8px;
   flex: 0 0 auto;
   padding: 4px 6px calc(6px + env(safe-area-inset-bottom) * 0.35);
-  margin: 0;
+  margin: auto 0 0;
   min-height: 44px;
 }
 
@@ -10591,9 +10591,9 @@ body > .battle-settings-layer.settings-layer {
 
 .board-wrap--stage {
   gap: 0;
-  padding: 8px 2px 0;
+  padding: 0 2px;
   border-radius: 14px;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
   justify-content: center;
   background: transparent;
@@ -10615,9 +10615,9 @@ body > .battle-settings-layer.settings-layer {
 
 .board-wrap--stage .board-frame--tilted {
   position: relative;
-  margin-top: 4px;
-  width: var(--board-map-span, 64%);
-  max-width: 248px;
+  margin-top: 0;
+  width: var(--board-map-span, 82%);
+  max-width: 328px;
 }
 
 .board-wrap--stage.is-live .board-frame--tilted .board {
@@ -12001,11 +12001,11 @@ body > .battle-settings-layer.settings-layer {
   pointer-events: auto;
 }
 
-/* Compact pick plate — large enough to tap, small enough to keep the arena readable. */
+/* Large flat grid for easy taps; overlay is independent of the midfield circle. */
 .stone-pick-circle {
   position: relative;
-  width: min(80%, calc(var(--design-h) * 0.52));
-  max-width: 320px;
+  width: min(100%, calc(var(--design-h) * 0.82));
+  max-width: 100%;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
