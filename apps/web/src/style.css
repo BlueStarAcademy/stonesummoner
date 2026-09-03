@@ -16985,9 +16985,11 @@ button.stage-prep-slot {
 .stage-prep-slot-img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  object-position: center center;
+  object-fit: cover;
+  object-position: center 36%;
   display: block;
+  transform: scale(1.38);
+  transform-origin: center 32%;
 }
 
 .stage-prep-slot--summoner .stage-prep-slot-awaken {
@@ -17039,6 +17041,9 @@ button.stage-prep-slot {
 .stage-prep-slot--summoner > .stage-prep-slot-img {
   width: 58px;
   height: 58px;
+  transform: none;
+  object-fit: cover;
+  object-position: center 28%;
 }
 
 .stage-prep-slot small,
@@ -25331,6 +25336,7 @@ img.el-tint-dark {
 .mon-slot.mon-slot--portrait .mon-slot-art {
   border: 0;
   background: transparent;
+  overflow: hidden;
 }
 
 .mon-slot-stars-overlay,
@@ -25341,11 +25347,16 @@ img.el-tint-dark {
 .mon-slot-img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  object-position: center center;
+  object-fit: cover;
+  object-position: center 36%;
   display: block;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: high-quality;
+}
+
+.mon-slot.mon-slot--portrait:not(.mon-slot--empty) .mon-slot-img:not(.mon-slot-img--empty) {
+  transform: scale(1.38);
+  transform-origin: center 32%;
 }
 
 /* Portrait-card element badge stays independent from painted character art. */
@@ -25430,16 +25441,16 @@ img.el-tint-dark {
   pointer-events: none;
 }
 
-/* Compact inventory portraits (e.g. dew_slime) — shrink so the full body stays in frame. */
-.mon-slot[data-art-family="dew_slime"] .mon-slot-img,
+/* Compact inventory portraits (e.g. dew_slime) — zoom so the body fills the cell. */
+.mon-slot.mon-slot--portrait[data-art-family="dew_slime"] .mon-slot-img,
 .stage-prep-slot[data-art-family="dew_slime"] .stage-prep-slot-img,
 .arena-defense-slot[data-art-family="dew_slime"] .arena-defense-slot-img,
 .pvp-rival-mon[data-art-family="dew_slime"] .pvp-rival-mon-img,
 .fusion-recipe-mat[data-art-family="dew_slime"] .fusion-recipe-mat-img,
-.codex-cell[data-art-family="dew_slime"] .codex-cell-img,
-.stage-prep-info-art-wrap[data-art-family="dew_slime"] .stage-prep-info-art {
-  object-position: center center;
-  transform: scale(0.74);
+.codex-cell[data-art-family="dew_slime"] .codex-cell-img {
+  object-fit: cover;
+  object-position: center 48%;
+  transform: scale(1.72);
   transform-origin: center center;
 }
 
@@ -25702,7 +25713,7 @@ img.el-tint-dark {
   gap: 0;
   margin: 0;
   border-radius: 10px;
-  overflow: visible;
+  overflow: hidden;
   flex: 0 0 var(--mon-slot-size);
   flex-direction: row;
   align-items: stretch;
@@ -25730,15 +25741,16 @@ img.el-tint-dark {
   height: 100%;
   border-radius: 8px;
   border: 0;
-  padding: 3px 3px 8px;
+  padding: 0;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .mon-book-inv.mon-book-inv--rail .mon-slot--portrait .mon-slot-img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  object-position: center center;
+  object-fit: cover;
+  object-position: center 36%;
 }
 
 .mon-book-inv.mon-book-inv--rail .mon-slot-lv-overlay {
@@ -33431,17 +33443,20 @@ button.linkish {
   place-items: center;
   width: 100%;
   height: 100%;
-  padding: 6px 4px 8px;
+  padding: 0;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .codex-cell-img {
-  width: 94%;
-  height: 94%;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  object-position: center center;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  object-position: center 36%;
+  transform: scale(1.38);
+  transform-origin: center 32%;
 }
 
 .codex-cell.is-locked .codex-cell-img,
