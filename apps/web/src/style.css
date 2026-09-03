@@ -8530,7 +8530,7 @@ main {
 .battle-layout--stage {
   --battle-midfield-drop: 0px;
   /* Midfield circle sits between rims; keep compact so lanes stay close. */
-  --board-map-span: min(82%, calc(var(--design-h) * 0.42));
+  --board-map-span: min(90%, calc(var(--design-h) * 0.46));
   gap: 2px;
   padding: 4px 4px 4px;
   min-height: 0;
@@ -10616,8 +10616,8 @@ body > .battle-settings-layer.settings-layer {
 .board-wrap--stage .board-frame--tilted {
   position: relative;
   margin-top: 0;
-  width: var(--board-map-span, 82%);
-  max-width: 328px;
+  width: var(--board-map-span, 90%);
+  max-width: 372px;
 }
 
 .board-wrap--stage.is-live .board-frame--tilted .board {
