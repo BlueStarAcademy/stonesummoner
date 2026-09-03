@@ -1,0 +1,6 @@
+.git
+.cursor
+**/node_modules
+**/dist
+assets
+apps/web/public/art/stages/_src
