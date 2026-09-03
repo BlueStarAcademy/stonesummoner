@@ -34,7 +34,12 @@ export interface BoardToken {
   id: BoardItemId;
   x: number;
   y: number;
+  /** Remaining stone plays until despawn if not picked (1 = gone next play). */
+  turnsLeft?: number;
 }
+
+/** Hard cap of special items visible on the active board. */
+export const MAX_BOARD_TOKENS = 2;
 
 /** Temporary forbidden point from 봉인못. */
 export interface TempSeal {
@@ -72,7 +77,7 @@ export function tokenBoardResource(id: BoardItemId): "gold" | "crystal" {
 }
 
 /** Base chance to spawn a token after a stone summon (before phase bonus). */
-export const ITEM_SPAWN_CHANCE = 0.32;
+export const ITEM_SPAWN_CHANCE = 0.22;
 
 /** Prefer magnet more often on higher empowered phases. Transform dust is rare. */
 export function weightedItemId(

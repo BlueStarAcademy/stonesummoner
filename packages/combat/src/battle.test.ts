@@ -365,8 +365,13 @@ describe("Battle flow", () => {
     for (const u of b.units) u.atb = u.id === "a-m1" ? 100 : 0;
     b.tickUntilReady();
     const amplify0 = b.currentAmplify();
+    const mana0 = b.allySummoner.mana;
     assert.equal(b.playStone({ x: 0, y: 0 }), true);
-    assert.ok(b.lastStoneReport?.chips.some((chip) => chip.kind === "shape"));
+    assert.equal(
+      (b.lastStoneReport?.chips ?? []).some((chip) => chip.kind === "shape"),
+      false,
+    );
+    assert.ok(b.allySummoner.mana >= mana0);
     assert.equal(b.currentAmplify(), amplify0);
     assert.deepEqual(b.activeBoardBuffs("ally"), []);
     assert.equal(b.getUnit("a-m1")!.shieldHp ?? 0, 0);

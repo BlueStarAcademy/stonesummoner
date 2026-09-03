@@ -65,6 +65,7 @@ export type GearAffixKind = "econ" | "combat";
 /** Where an affix lands once aggregated. */
 export type GearAffixEffect =
   | "battleGold"
+  | "battleGoldChance"
   | "exp"
   | "symbolChance"
   | "gearChance"
@@ -80,6 +81,7 @@ export type GearAffixEffect =
 export type GearAffixId =
   | "goldSurge"
   | "goldTouch"
+  | "goldFortune"
   | "crystalEye"
   | "symbolLure"
   | "vaultGreed"
@@ -115,6 +117,8 @@ export interface GearAffixRoll {
 /** Aggregated affix effects for a full loadout. */
 export interface GearAffixTotals {
   battleGoldMul: number;
+  /** Additive mid-placement gold chance (0.05 = +5%p). */
+  battleGoldChanceAdd: number;
   expMul: number;
   symbolChanceMul: number;
   gearChanceMul: number;
@@ -301,6 +305,15 @@ export const GEAR_AFFIXES: GearAffixDef[] = [
     minStars: 4,
     value: [0.2, 0.35],
     weight: 12,
+  },
+  {
+    id: "goldFortune",
+    nameKo: "황금 행운",
+    kind: "econ",
+    effect: "battleGoldChance",
+    minStars: 4,
+    value: [0.05, 0.12],
+    weight: 11,
   },
   {
     id: "crystalEye",
@@ -1221,6 +1234,7 @@ export function gearSetBonuses(gear: SummonerGear): GearSetBonus {
 export function emptyGearAffixTotals(): GearAffixTotals {
   return {
     battleGoldMul: 1,
+    battleGoldChanceAdd: 0,
     expMul: 1,
     symbolChanceMul: 1,
     gearChanceMul: 1,
@@ -1271,6 +1285,9 @@ export function gearAffixTotals(gear: SummonerGear): GearAffixTotals {
     switch (def.effect) {
       case "battleGold":
         out.battleGoldMul += roll.value;
+        break;
+      case "battleGoldChance":
+        out.battleGoldChanceAdd += roll.value;
         break;
       case "exp":
         out.expMul += roll.value;

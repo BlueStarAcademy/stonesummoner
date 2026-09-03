@@ -8555,6 +8555,7 @@ main {
 
 /* Rim portraits must not steal stone taps while the board is live. */
 .battle-layout--stage.is-stone-pick .battle-lane button.battle-unit,
+.battle-layout--stage.is-stone-pick .battle-lane .battle-unit[data-target],
 .battle-layout--stage.is-stone-pick .battle-lane .battle-unit-skills-wrap,
 .battle-layout--stage.is-stone-pick .battle-lane .battle-unit-skills-wrap *,
 .battle-layout--stage.is-stone-pick .battle-lane .battle-unit-skills,
@@ -8691,6 +8692,7 @@ main {
 }
 
 .battle-lane button.battle-unit,
+.battle-lane .battle-unit[data-target],
 .battle-lane .battle-unit-skills-wrap,
 .battle-lane .battle-unit-skills-wrap *,
 .battle-lane .battle-unit-skills,
@@ -9723,7 +9725,8 @@ main {
   opacity: 0.75;
 }
 
-button.battle-unit {
+button.battle-unit,
+.battle-unit[data-target] {
   cursor: pointer;
 }
 
@@ -10214,32 +10217,44 @@ button.battle-unit {
   z-index: 6;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   gap: 6px;
-  width: min(72%, 220px);
+  width: min(86%, 260px);
   pointer-events: none;
 }
 
 .battle-board-buffs-team {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   justify-content: center;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.battle-board-buffs-label {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #d8c98aaa;
+  white-space: nowrap;
 }
 
 .battle-board-buff {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 28px;
-  padding: 4px 10px;
+  min-height: 26px;
+  padding: 3px 8px;
   border: 1px solid #dbb55caa;
   border-radius: 999px;
   background: #181321f0;
   color: #f6dfa3;
   box-shadow: 0 2px 10px #000a;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -10255,10 +10270,14 @@ button.battle-unit {
 
 .battle-board-buffs-team.is-enemy .battle-board-buff {
   filter: saturate(0.75);
-  opacity: 0.86;
-  font-size: 0.68rem;
-  min-height: 24px;
-  padding: 3px 8px;
+  opacity: 0.9;
+  font-size: 0.66rem;
+  min-height: 22px;
+  padding: 2px 7px;
+}
+
+.battle-board-buffs-team.is-enemy .battle-board-buffs-label {
+  color: #c9b8b8aa;
 }
 
 .battle-hud-actions {
@@ -12188,15 +12207,34 @@ body > .battle-settings-layer.settings-layer {
 .stone-pick-help-sheet {
   max-width: min(420px, calc(100vw - 24px));
   max-height: min(82dvh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .stone-pick-help-body {
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.stone-pick-help-list {
+  flex: 0 0 auto;
+  margin: 0 0 8px;
+}
+
+.stone-pick-help-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
 }
 
 .stone-pick-help-items-title {
-  margin: 14px 0 8px;
+  margin: 6px 0 8px;
   color: #e8d9a8;
   font-size: 0.82rem;
   font-weight: 800;
@@ -12238,15 +12276,16 @@ body > .battle-settings-layer.settings-layer {
 }
 
 .stone-pick-help-item-copy span {
-  color: #b8a990;
+  color: #cfc3a8;
   font-size: 0.74rem;
   font-weight: 650;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .stone-pick-help-sheet .stone-pick-help-ok {
+  flex: 0 0 auto;
   width: 100%;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 /* Soften midfield ritual floor while the real plate is up. */
@@ -14257,6 +14296,12 @@ body > .battle-settings-layer.settings-layer {
 }
 .bar.mana > i {
   background: var(--mana);
+  transition: width 0.45s ease-out;
+}
+
+.bar.mana > i.is-mana-fill {
+  filter: brightness(1.25) saturate(1.15);
+  box-shadow: 0 0 10px #7ab6ff88;
 }
 
 .board-wrap {
@@ -25302,6 +25347,81 @@ img.el-tint-dark {
   image-rendering: high-quality;
 }
 
+/* Portrait-card element badge stays independent from painted character art. */
+.mon-slot-art,
+.profile-icon-cell,
+.codex-cell,
+.summon-multi-seal,
+.summon-reveal-seal,
+.summon-detail-portrait {
+  position: relative;
+}
+
+.mon-slot.el-fire .mon-slot-art,
+.profile-icon-cell.el-fire,
+.codex-cell.el-fire,
+.summon-multi-cell.el-fire .summon-multi-seal,
+.summon-reveal.el-fire .summon-reveal-seal,
+.summon-detail-sheet.el-fire .summon-detail-portrait {
+  --monster-element-badge: url("/art/ui/element/fire.svg");
+}
+
+.mon-slot.el-water .mon-slot-art,
+.profile-icon-cell.el-water,
+.codex-cell.el-water,
+.summon-multi-cell.el-water .summon-multi-seal,
+.summon-reveal.el-water .summon-reveal-seal,
+.summon-detail-sheet.el-water .summon-detail-portrait {
+  --monster-element-badge: url("/art/ui/element/water.svg");
+}
+
+.mon-slot.el-wind .mon-slot-art,
+.profile-icon-cell.el-wind,
+.codex-cell.el-wind,
+.summon-multi-cell.el-wind .summon-multi-seal,
+.summon-reveal.el-wind .summon-reveal-seal,
+.summon-detail-sheet.el-wind .summon-detail-portrait {
+  --monster-element-badge: url("/art/ui/element/wind.svg");
+}
+
+.mon-slot.el-light .mon-slot-art,
+.profile-icon-cell.el-light,
+.codex-cell.el-light,
+.summon-multi-cell.el-light .summon-multi-seal,
+.summon-reveal.el-light .summon-reveal-seal,
+.summon-detail-sheet.el-light .summon-detail-portrait {
+  --monster-element-badge: url("/art/ui/element/light.svg");
+}
+
+.mon-slot.el-dark .mon-slot-art,
+.profile-icon-cell.el-dark,
+.codex-cell.el-dark,
+.summon-multi-cell.el-dark .summon-multi-seal,
+.summon-reveal.el-dark .summon-reveal-seal,
+.summon-detail-sheet.el-dark .summon-detail-portrait {
+  --monster-element-badge: url("/art/ui/element/dark.svg");
+}
+
+:is(
+  .mon-slot-art,
+  .profile-icon-cell,
+  .codex-cell,
+  .summon-multi-seal,
+  .summon-reveal-seal,
+  .summon-detail-portrait
+)::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  top: 3px;
+  left: 3px;
+  width: clamp(16px, 28%, 24px);
+  aspect-ratio: 1;
+  background: var(--monster-element-badge) center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px #000b);
+  pointer-events: none;
+}
+
 /* Compact inventory portraits (e.g. dew_slime) — shrink so the full body stays in frame. */
 .mon-slot[data-art-family="dew_slime"] .mon-slot-img,
 .stage-prep-slot[data-art-family="dew_slime"] .stage-prep-slot-img,
@@ -26951,11 +27071,36 @@ img.el-tint-dark {
   text-shadow: 0 1px 3px #000c, 0 0 10px #5a8cffaa;
   white-space: nowrap;
   pointer-events: none;
-  animation: manaFloatUp 0.72s ease-out forwards;
+  animation: manaFloatUp 0.9s ease-out forwards;
 }
 
 .mana-float.is-enemy {
   color: #ff9eb0;
+}
+
+.stone-loot-float {
+  position: absolute;
+  z-index: 41;
+  transform: translate(-50%, -20%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 800;
+  font-size: 0.86rem;
+  color: #f0d878;
+  text-shadow: 0 1px 3px #000c;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: manaFloatUp 0.98s ease-out forwards;
+}
+
+.stone-loot-float.is-crystal {
+  color: #b9d4ff;
+}
+
+.stone-loot-float .res-ico {
+  width: 14px;
+  height: 14px;
 }
 
 .battle-unit.is-mana-intake .battle-unit-art::before {
@@ -34663,7 +34808,16 @@ button.linkish {
 .mon-inspect-hero.is-mon-awakened .mon-preview-img.is-awakened,
 img.mon-rite-art.is-awakened,
 img.is-awakened:not(.is-awakened-preview) {
-  filter: saturate(1.12) drop-shadow(0 0 10px #c9a22766);
+  filter: none;
+}
+
+:is(
+  .mon-slot-art,
+  .summon-multi-seal,
+  .summon-reveal-seal,
+  .summon-detail-portrait
+):has(img.is-awakened) {
+  box-shadow: inset 0 0 0 1px #ffe9a088, 0 0 10px #c9a22755;
 }
 
 .mon-rite-portrait .mon-rite-art.is-awaken-next {

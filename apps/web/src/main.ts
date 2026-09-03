@@ -7022,6 +7022,7 @@ function pulseArenaStonePlace(
     ms,
   );
   spawnSummonerManaFloat(team, report);
+  applyStoneLootToSave(report);
   const frame = app.querySelector(".board-frame");
   if (kind === "place" || kind === "shape" || !frame) return;
   frame.classList.add("fx-capture-flash");
@@ -7055,11 +7056,94 @@ function spawnSummonerManaFloat(
   el.style.top = `${Math.round(p.y)}px`;
   layer.appendChild(el);
   summoner?.classList.add("is-mana-intake");
-  const ms = fxDurationMs(720, battleSpeed);
+  const manaFill = summoner?.querySelector<HTMLElement>(".bar.mana > i");
+  if (manaFill && battle) {
+    const sm =
+      team === "ally" ? battle.allySummoner : battle.enemySummoner;
+    const afterPct = Math.max(
+      0,
+      Math.min(100, Math.round((sm.mana / Math.max(1, sm.manaMax)) * 100)),
+    );
+    const beforePct = Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(((sm.mana - n) / Math.max(1, sm.manaMax)) * 100),
+      ),
+    );
+    manaFill.style.transition = "none";
+    manaFill.style.width = `${beforePct}%`;
+    void manaFill.offsetWidth;
+    manaFill.style.removeProperty("transition");
+    manaFill.classList.remove("is-mana-fill");
+    void manaFill.offsetWidth;
+    manaFill.style.width = `${afterPct}%`;
+    manaFill.classList.add("is-mana-fill");
+  }
+  const ms = fxDurationMs(900, battleSpeed);
   window.setTimeout(() => {
     el.remove();
     summoner?.classList.remove("is-mana-intake");
+    manaFill?.classList.remove("is-mana-fill");
   }, ms);
+}
+
+function applyStoneLootToSave(report: StoneReport | null | undefined): void {
+  if (!report || report.team !== "ally") return;
+  let gold = 0;
+  let crystal = 0;
+  for (const chip of report.chips) {
+    if (chip.kind === "gold") gold += chip.n ?? 0;
+    if (chip.kind === "crystal") crystal += chip.n ?? 0;
+  }
+  if (gold <= 0 && crystal <= 0) return;
+  save = {
+    ...save,
+    island: {
+      ...save.island,
+      mana: save.island.mana + gold,
+      crystal: (save.island.crystal ?? 0) + crystal,
+    },
+  };
+  persist();
+  syncHudResources();
+  spawnStoneLootFloat(report.team, gold, crystal);
+}
+
+function spawnStoneLootFloat(
+  team: "ally" | "enemy",
+  gold: number,
+  crystal: number,
+): void {
+  if (gold <= 0 && crystal <= 0) return;
+  const layer = app.querySelector<HTMLElement>(".dmg-layer");
+  const summoner = app.querySelector<HTMLElement>(
+    `.battle-lane.${team} .battle-unit--summoner`,
+  );
+  const art =
+    summoner?.querySelector<HTMLElement>(".battle-unit-art") ?? summoner;
+  if (!layer || !art) return;
+  const r = art.getBoundingClientRect();
+  if (r.width < 2 && r.height < 2) return;
+  const base = clientPointInElement(
+    layer,
+    r.left + r.width * 0.5,
+    r.top + r.height * 0.08,
+  );
+  const spawn = (kind: "gold" | "crystal", n: number, dx: number) => {
+    const el = document.createElement("span");
+    el.className = `stone-loot-float is-${kind}`;
+    const src =
+      kind === "crystal" ? "/art/ui/res/crystal.svg" : "/art/ui/res/gold.svg";
+    el.innerHTML = `<img class="res-ico" src="${src}" width="14" height="14" alt="" draggable="false" /><strong>+${n}</strong>`;
+    el.style.left = `${Math.round(base.x + dx)}px`;
+    el.style.top = `${Math.round(base.y)}px`;
+    layer.appendChild(el);
+    const ms = fxDurationMs(980, battleSpeed);
+    window.setTimeout(() => el.remove(), ms);
+  };
+  if (gold > 0) spawn("gold", gold, crystal > 0 ? -18 : 0);
+  if (crystal > 0) spawn("crystal", crystal, gold > 0 ? 18 : 0);
 }
 
 /** Module B board/amp feedback after a stone lands at (x,y). */
@@ -7115,19 +7199,8 @@ function boardMarkTitle(id: string): string {
 }
 
 function stoneResultChipsForDisplay(report: StoneReport): StoneReportChip[] {
-  const notable =
-    report.showResultSheet ||
-    report.chips.some(
-      (c) =>
-        c.kind === "token" ||
-        c.kind === "shape" ||
-        c.kind === "victory" ||
-        c.kind === "heal" ||
-        c.kind === "shield" ||
-        c.kind === "dmg" ||
-        c.kind === "seal",
-    );
-  return report.chips.filter((c) => c.kind !== "mana" || notable);
+  // Mana uses the summoner head float; shape name chips are never shown.
+  return report.chips.filter((c) => c.kind !== "shape" && c.kind !== "mana");
 }
 
 function stoneResultChipHtml(chip: StoneReportChip): string {
@@ -7206,12 +7279,6 @@ function stoneResultSheetPickHtml(report: StoneReport): string {
     return `<div class="stone-result-sheet-hero stone-result-sheet-hero--capture">
       <span class="stone-result-sheet-cap-num" aria-hidden="true">${report.capturedCount}</span>
       <strong class="stone-result-sheet-name">${escapeHtml(t("ui.stoneCapture", { n }))}</strong>
-    </div>`;
-  }
-  const shape = report.chips.find((c) => c.kind === "shape" && c.id);
-  if (shape?.id) {
-    return `<div class="stone-result-sheet-hero stone-result-sheet-hero--shape">
-      <strong class="stone-result-sheet-name">${escapeHtml(shapeBonusLabel(shape.id))}</strong>
     </div>`;
   }
   return "";
@@ -7355,8 +7422,10 @@ function renderStonePickHelpBody(): string {
       : "";
   const items = BOARD_ITEMS.map((item) => renderStonePickHelpItem(item.id)).join("");
   return `${rules}
-    <h3 class="stone-pick-help-items-title">${escapeHtml(t("ui.stonePick.helpItems"))}</h3>
-    <ul class="stone-pick-help-items">${items}</ul>`;
+    <div class="stone-pick-help-scroll">
+      <h3 class="stone-pick-help-items-title">${escapeHtml(t("ui.stonePick.helpItems"))}</h3>
+      <ul class="stone-pick-help-items">${items}</ul>
+    </div>`;
 }
 
 function renderStonePickHelpLayer(): string {
@@ -7537,7 +7606,7 @@ async function presentStoneResult(report: StoneReport | null): Promise<void> {
   layer?.classList.add("is-in");
   const dwell =
     chips.length > 2 ||
-    chips.some((c) => c.kind === "shape" || c.kind === "token")
+    chips.some((c) => c.kind === "token" || c.kind === "gold" || c.kind === "crystal")
       ? 1100
       : chips.some((c) => !["atk", "spd", "def"].includes(c.kind))
         ? 900
@@ -9089,10 +9158,10 @@ function renderUnit(
       ? " is-wave-enter"
       : "";
   const isSummoner = u.kind === "summoner";
-  const tag = opts?.targetable && u.alive ? "button" : "div";
+  const tag = "div";
   const attrs =
     opts?.targetable && u.alive
-      ? `type="button" data-target="${u.id}"`
+      ? `role="button" tabindex="0" data-target="${u.id}"`
       : "";
   const artSize = opts?.boss ? 240 : isSummoner ? 128 : 168;
   const facing: "front" | "back" = u.team === "ally" ? "back" : "front";
@@ -9177,26 +9246,28 @@ function renderBoardTeamBuffHud(): string {
       if (buff.shieldByUnit) hasShield = true;
       if (buff.source === "item") hasItem = true;
     }
-    const values = [
+    const chips = [
       damageBonus
-        ? `<b>${escapeHtml(t("ui.stoneCapture", { n: Math.round(damageBonus * 100) }))}</b>`
+        ? `<span class="battle-board-buff${hasItem ? " is-item" : ""}"><b>${escapeHtml(t("ui.stoneCapture", { n: Math.round(damageBonus * 100) }))}</b></span>`
         : "",
       critRateBonus
-        ? `<b>${escapeHtml(t("ui.stoneBuffCrit", { n: Math.round(critRateBonus) }))}</b>`
+        ? `<span class="battle-board-buff${hasItem ? " is-item" : ""}"><b>${escapeHtml(t("ui.stoneBuffCrit", { n: Math.round(critRateBonus) }))}</b></span>`
         : "",
       critDmgBonus
-        ? `<b>${escapeHtml(t("ui.stoneBuffCritDmg", { n: Math.round(critDmgBonus) }))}</b>`
+        ? `<span class="battle-board-buff${hasItem ? " is-item" : ""}"><b>${escapeHtml(t("ui.stoneBuffCritDmg", { n: Math.round(critDmgBonus) }))}</b></span>`
         : "",
       spdPct
-        ? `<b>${escapeHtml(t("ui.stoneBuffSpd", { n: Math.round(spdPct * 100) }))}</b>`
+        ? `<span class="battle-board-buff${hasItem ? " is-item" : ""}"><b>${escapeHtml(t("ui.stoneBuffSpd", { n: Math.round(spdPct * 100) }))}</b></span>`
         : "",
-      hasShield ? `<b>${escapeHtml(t("ui.stoneBuffShield"))}</b>` : "",
+      hasShield
+        ? `<span class="battle-board-buff${hasItem ? " is-item" : ""}"><b>${escapeHtml(t("ui.stoneBuffShield"))}</b></span>`
+        : "",
     ].filter(Boolean);
-    if (!values.length) return "";
+    if (!chips.length) return "";
     const label = team === "ally" ? t("ui.boardBuffAlly") : t("ui.boardBuffEnemy");
-    return `<div class="battle-board-buffs-box is-${team}${hasItem ? " has-item" : ""}">
+    return `<div class="battle-board-buffs-team is-${team}${hasItem ? " has-item" : ""}">
       <span class="battle-board-buffs-label">${escapeHtml(label)}</span>
-      <div class="battle-board-buffs-vals">${values.join("")}</div>
+      ${chips.join("")}
     </div>`;
   };
   /* Enemy above ally — same vertical order as battle lanes. */
@@ -16149,10 +16220,13 @@ function inventoryPortraitSrc(src: string, size: 128 | 256): string {
 function monsterInventoryPortraitFallbacks(
   monsterId: string | undefined | null,
   preferAwakened = false,
+  preferredSize: 128 | 256 = 256,
 ): string[] {
   const portraits = monsterPortraitFallbacks(monsterId, preferAwakened);
+  const alternateSize = preferredSize === 128 ? 256 : 128;
   return [
-    ...portraits.map((src) => inventoryPortraitSrc(src, 256)),
+    ...portraits.map((src) => inventoryPortraitSrc(src, preferredSize)),
+    ...portraits.map((src) => inventoryPortraitSrc(src, alternateSize)),
     ...portraits,
   ];
 }
@@ -16363,7 +16437,7 @@ function monsterArtImg(
   size = 96,
   preferAwakened = false,
 ): string {
-  if (/\b(?:mon-slot-img|stage-prep-slot-img|stage-prep-info-art|power-up-preview-img|codex-cell-img|arena-defense-slot-img|pvp-rival-mon-img|fusion-recipe-mat-img|fusion-pair-img|fusion-flow-result-img|fusion-recipe-result-img)\b/.test(className)) {
+  if (/\b(?:mon-slot-img|stage-prep-slot-img|stage-prep-info-art|power-up-preview-img|codex-cell-img|profile-icon-img|arena-defense-slot-img|pvp-rival-mon-img|fusion-recipe-mat-img|fusion-pair-img|fusion-flow-result-img|fusion-recipe-result-img)\b/.test(className)) {
     return monsterInventoryArtImg(
       monsterId,
       className,
@@ -16385,14 +16459,20 @@ function monsterInventoryArtImg(
   size = 96,
   preferAwakened = false,
 ): string {
+  const preferredSize: 128 | 256 = size <= 64 ? 128 : 256;
   const fallbacks = monsterInventoryPortraitFallbacks(
     monsterId,
     preferAwakened,
+    preferredSize,
   );
   if (!fallbacks.length) return "";
   const src = fallbacks[0]!;
+  const portrait = monsterPortraitFallbacks(monsterId, preferAwakened)[0];
+  const srcset = portrait
+    ? `${inventoryPortraitSrc(portrait, 128)} 128w, ${inventoryPortraitSrc(portrait, 256)} 256w`
+    : `${src} ${preferredSize}w`;
   const awakenCls = preferAwakened ? " is-awakened" : "";
-  return `<img class="${className}${awakenCls}" src="${src}" srcset="${src} 256w" sizes="${Math.max(1, size * 2)}px" width="${size}" height="${size}" alt="" draggable="false" decoding="async" loading="lazy"${imgSrcOnerrorChain(fallbacks, true)} />`;
+  return `<img class="${className}${awakenCls}" src="${src}" srcset="${srcset}" sizes="${Math.max(1, size)}px" width="${size}" height="${size}" alt="" draggable="false" decoding="async" loading="lazy"${imgSrcOnerrorChain(fallbacks, true)} />`;
 }
 
 /** Art used in battle / book hero: Spine still when available, else WebP. */
@@ -18889,6 +18969,7 @@ function gearSubStatEntryIds(piece: GearPiece): Set<string> {
 
 const GEAR_AFFIX_EFFECT_ICON: Record<string, string> = {
   battleGold: "/art/ui/res/gold.svg",
+  battleGoldChance: "/art/ui/res/gold.svg",
   crystalChance: "/art/ui/res/crystal.svg",
   symbolChance: "/art/ui/res/jinmun.svg",
   scrollChance: "/art/ui/res/energy.svg",
@@ -24957,8 +25038,13 @@ function bindBattleInteractive(): void {
           render();
           return;
         }
+        // Non-aim skills: first tap selects, second tap casts.
+        if (selectedSummonerSkill === id) {
+          castSkill(id);
+          return;
+        }
         selectedSummonerSkill = id;
-        castSkill(id);
+        render();
       });
     });
 
@@ -27504,8 +27590,12 @@ function bind(): void {
           render();
           return;
         }
+        if (selectedSummonerSkill === id) {
+          castSkill(id);
+          return;
+        }
         selectedSummonerSkill = id;
-        castSkill(id);
+        render();
       });
     });
 

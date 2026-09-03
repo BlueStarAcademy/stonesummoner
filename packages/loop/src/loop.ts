@@ -5020,6 +5020,18 @@ export function createStageBattle(
   );
 
   const ins = circleInscriptionBuffFromLevels(save?.circleInscriptions ?? {});
+  const stoneGoldRange =
+    difficulty === "hell"
+      ? { min: 18, max: 42 }
+      : difficulty === "hard"
+        ? { min: 12, max: 28 }
+        : { min: 6, max: 16 };
+  const stoneCrystalRange =
+    difficulty === "hell"
+      ? { min: 1, max: 3 }
+      : difficulty === "hard"
+        ? { min: 1, max: 2 }
+        : { min: 1, max: 1 };
   return new Battle({
     boardSize: stage.boardSize,
     units: [...allyUnits, ...enemyUnits],
@@ -5045,6 +5057,15 @@ export function createStageBattle(
     powerGapAmplifyCap: powerGapCap,
     inscriptionAmplifyCapAdd: ins.amplifyCapAdd,
     inscriptionItemSpawnBonus: ins.itemSpawnBonus,
+    stoneLoot: {
+      goldChance: Math.min(0.85, 0.2 + gearAffix.battleGoldChanceAdd),
+      goldMin: stoneGoldRange.min,
+      goldMax: stoneGoldRange.max,
+      goldAmountMul: gearAffix.battleGoldMul,
+      crystalChance: Math.min(0.45, 0.03 * gearAffix.crystalChanceMul),
+      crystalMin: stoneCrystalRange.min,
+      crystalMax: stoneCrystalRange.max,
+    },
     totalWaves,
     modules,
     rng: opts?.rng,

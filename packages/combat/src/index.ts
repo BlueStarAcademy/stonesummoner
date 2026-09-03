@@ -61,6 +61,7 @@ export {
   BOARD_ITEMS,
   itemDef,
   ITEM_SPAWN_CHANCE,
+  MAX_BOARD_TOKENS,
   tokenBoardResource,
   weightedItemId,
 } from "./items.js";

@@ -38,6 +38,7 @@ import {
 import { clampAmplify, computeDamage } from "./damage.js";
 import {
   itemDef,
+  MAX_BOARD_TOKENS,
   shouldSpawnItem,
   weightedItemId,
   type BoardItemId,
@@ -186,6 +187,19 @@ export interface BattleConfig {
   inscriptionAmplifyCapAdd?: number;
   /** Extra board-item spawn chance from circle inscriptions. */
   inscriptionItemSpawnBonus?: number;
+  /**
+   * Mid-placement gold/crystal loot (ally only). Chance values are 0–1;
+   * amounts roll inclusive [min, max] then apply amountMul.
+   */
+  stoneLoot?: {
+    goldChance: number;
+    goldMin: number;
+    goldMax: number;
+    goldAmountMul: number;
+    crystalChance: number;
+    crystalMin: number;
+    crystalMax: number;
+  };
   rng?: () => number;
   /** Override empowered reset threshold (default 50 on 7×7). */
   resetThreshold?: number;
@@ -345,6 +359,7 @@ export class Battle {
   private powerGapCap: number;
   private inscriptionAmplifyAdd: number;
   private inscriptionItemSpawn: number;
+  private stoneLoot: BattleConfig["stoneLoot"];
   private rng: () => number;
   private spawnWaveFn?: (wave: number) => Unit[];
   private turnStatusUnitId: string | null = null;
@@ -397,6 +412,7 @@ export class Battle {
     this.powerGapCap = config.powerGapAmplifyCap ?? 1.25;
     this.inscriptionAmplifyAdd = config.inscriptionAmplifyCapAdd ?? 0;
     this.inscriptionItemSpawn = config.inscriptionItemSpawnBonus ?? 0;
+    this.stoneLoot = config.stoneLoot;
     this.rng = config.rng ?? Math.random;
     this.modules = config.modules ?? {};
     this.dungeonBoss = config.dungeonBoss;
@@ -1135,6 +1151,7 @@ export class Battle {
   }
 
   private trySpawnItem(): void {
+    if (this.tokens.length >= MAX_BOARD_TOKENS) return;
     const bonus =
       itemSpawnBonusForPhase(this.circle.boardPhase) + this.inscriptionItemSpawn;
     if (!shouldSpawnItem(bonus, this.rng)) return;
@@ -1154,8 +1171,43 @@ export class Battle {
 
     const spot = empty[Math.floor(this.rng() * empty.length)]!;
     const id = weightedItemId(this.circle.boardPhase, this.rng);
-    this.tokens.push({ id, x: spot.x, y: spot.y });
+    this.tokens.push({ id, x: spot.x, y: spot.y, turnsLeft: 1 });
     this.log.push(`${itemDef(id).nameKo} 스폰 (${spot.x},${spot.y})`);
+  }
+
+  /** Uneaten board items age out after one intervening stone play. */
+  private tickBoardTokenExpiry(): void {
+    if (this.tokens.length === 0) return;
+    this.tokens = this.tokens
+      .map((token) => ({
+        ...token,
+        turnsLeft: (token.turnsLeft ?? 1) - 1,
+      }))
+      .filter((token) => token.turnsLeft > 0);
+  }
+
+  /** Ally stone placement: chance to earn gold/crystal from difficulty + gear. */
+  private rollStoneLootChips(): StoneReportChip[] {
+    const loot = this.stoneLoot;
+    if (!loot) return [];
+    const chips: StoneReportChip[] = [];
+    if (this.rng() < loot.goldChance) {
+      const span = Math.max(0, loot.goldMax - loot.goldMin);
+      const base = loot.goldMin + Math.floor(this.rng() * (span + 1));
+      const n = Math.max(1, Math.round(base * loot.goldAmountMul));
+      chips.push({ kind: "gold", n });
+      this.log.push(`착수 골드 +${n}`);
+    }
+    if (this.rng() < loot.crystalChance) {
+      const span = Math.max(0, loot.crystalMax - loot.crystalMin);
+      const n = Math.max(
+        1,
+        loot.crystalMin + Math.floor(this.rng() * (span + 1)),
+      );
+      chips.push({ kind: "crystal", n });
+      this.log.push(`착수 크리스탈 +${n}`);
+    }
+    return chips;
   }
 
   /**
@@ -1184,6 +1236,7 @@ export class Battle {
     // The old cycle ends only once the team's next placement is known legal.
     this.clearBoardTeamBuffs(unit.team);
     this.lastStoneReport = null;
+    this.tickBoardTokenExpiry();
     const chips: StoneReportChip[] = [];
     let claimedVictory = false;
     const picked = this.tokenAt(point.x, point.y);
@@ -1330,9 +1383,13 @@ export class Battle {
         const shapeMana = sh.mana * manaMul;
         if (shapeMana > 0) manaGain += shapeMana;
         sm.mana = Math.min(sm.manaMax, sm.mana + shapeMana);
-        chips.push({ kind: "shape", id: sh.id });
+        // Shape bonuses still grant mana; do not surface Go jargon chips in UI.
         this.log.push(`형상 ${sh.labelKo}`);
       }
+    }
+
+    if (unit.team === "ally") {
+      chips.push(...this.rollStoneLootChips());
     }
 
     const earnedBoardEffect = result.capturedCount > 0 || !!picked;
@@ -1419,7 +1476,7 @@ export class Battle {
       !!picked ||
       claimedVictory ||
       result.capturedCount > 0 ||
-      chips.some((c) => c.kind === "shape" || c.kind === "shield");
+      chips.some((c) => c.kind === "shield");
     this.lastStoneReport = {
       team: unit.team,
       x: point.x,

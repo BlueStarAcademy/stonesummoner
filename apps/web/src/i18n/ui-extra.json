@@ -328,8 +328,8 @@
     "en": "Magic stone"
   },
   "ui.stonePick.helpTitle": {
-    "ko": "마법진 착수",
-    "en": "Circle placement"
+    "ko": "마법석 소환",
+    "en": "Magic stone summon"
   },
   "ui.stonePick.helpBtn": {
     "ko": "도움말",
@@ -340,8 +340,8 @@
     "en": "OK"
   },
   "ui.stonePick.help": {
-    "ko": "마법진에 돌을 놓아 턴을 엽니다|빛나는 칸을 탭하면 착수됩니다|따내면 마나·증폭이 오릅니다",
-    "en": "Place a stone on the circle to open your turn|Tap a glowing cell to place|Captures raise mana and amplify"
+    "ko": "마법진에 마법석을 소환해 턴을 엽니다|빛나는 칸을 탭하면 마법석이 소환됩니다|따내면 마나·증폭이 오릅니다",
+    "en": "Summon a magic stone on the circle to open your turn|Tap a glowing cell to summon|Captures raise mana and amplify"
   },
   "ui.stonePick.helpItems": {
     "ko": "특수 아이템",
@@ -364,7 +364,7 @@
     "en": "Ally ATB and speed"
   },
   "ui.boardTokenDesc.seal_nail": {
-    "ko": "주변 칸 착수 금지",
+    "ko": "주변 칸 소환 금지",
     "en": "Seals nearby cells"
   },
   "ui.boardTokenDesc.element_ward": {
@@ -5539,6 +5539,10 @@
     "ko": "황금 손길",
     "en": "Gold Touch"
   },
+  "ui.gearAffix.goldFortune": {
+    "ko": "황금 행운",
+    "en": "Gold Fortune"
+  },
   "ui.gearAffix.crystalEye": {
     "ko": "결정안",
     "en": "Crystal Eye"
@@ -5586,6 +5590,10 @@
   "ui.gearAffixEffect.battleGold": {
     "ko": "전투 골드 +{n}%",
     "en": "Battle gold +{n}%"
+  },
+  "ui.gearAffixEffect.battleGoldChance": {
+    "ko": "소환 골드 확률 +{n}%p",
+    "en": "Summon gold chance +{n}%p"
   },
   "ui.gearAffixEffect.exp": {
     "ko": "획득 EXP +{n}%",
