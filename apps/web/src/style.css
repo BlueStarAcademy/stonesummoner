@@ -8532,6 +8532,8 @@ main {
 /* === battle stage units (standing sprites) === */
 .battle-layout--stage {
   --battle-midfield-drop: 14px;
+  /* Midfield circle: ~18–22% visual height after floor tilt (docs/battle-ui.md). */
+  --board-map-span: min(64%, calc(var(--design-h) * 0.32));
   gap: 6px;
   padding: 4px 4px 4px;
   min-height: 0;
@@ -10617,6 +10619,8 @@ body > .battle-settings-layer.settings-layer {
 .board-wrap--stage .board-frame--tilted {
   position: relative;
   margin-top: 4px;
+  width: var(--board-map-span, 64%);
+  max-width: 248px;
 }
 
 .board-wrap--stage.is-live .board-frame--tilted .board {
@@ -10687,8 +10691,8 @@ body > .battle-settings-layer.settings-layer {
 }
 
 .board-wrap--stage .board-stage {
-  padding-top: 10px;
-  padding-bottom: 14px;
+  padding-top: 4px;
+  padding-bottom: 8px;
 }
 
 .board-circle-art {
@@ -12000,11 +12004,11 @@ body > .battle-settings-layer.settings-layer {
   pointer-events: auto;
 }
 
-/* Large flat grid for easy taps; map circle art sits under the intersections. */
+/* Compact pick plate — large enough to tap, small enough to keep the arena readable. */
 .stone-pick-circle {
   position: relative;
-  width: min(100%, calc(var(--design-h) * 0.78));
-  max-width: 100%;
+  width: min(80%, calc(var(--design-h) * 0.52));
+  max-width: 320px;
   aspect-ratio: 1;
   display: grid;
   place-items: center;

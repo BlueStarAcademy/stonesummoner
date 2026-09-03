@@ -3227,10 +3227,10 @@ const STAGES_MAP_NATURAL = {
   h: STAGES_MAP_NATURAL_DATA.h,
 } as const;
 const STAGES_MAP_ASPECT = STAGES_MAP_NATURAL.w / STAGES_MAP_NATURAL.h;
-/** World larger than viewport so the full atlas can be panned widely. */
-const STAGES_WORLD_OVERSCAN = 2.35;
+/** World larger than viewport so the atlas can be panned. Keep modest so landmarks stay readable. */
+const STAGES_WORLD_OVERSCAN = 1.6;
 /** Bump when atlas fit metrics change so the next bind re-centers once. */
-const STAGES_MAP_FIT_VERSION = 10;
+const STAGES_MAP_FIT_VERSION = 11;
 let stagesMapFitApplied = 0;
 let stagesWorldResizeObs: ResizeObserver | null = null;
 
