@@ -356,6 +356,10 @@ export class Battle {
   attackTurnCount = 0;
   /** Ally HP damage actually applied to enemies (no overkill / shield). */
   allyDamageDealt = 0;
+  /** Mid-battle stone-loot gold pending payout at result (ally only). */
+  pendingStoneGold = 0;
+  /** Mid-battle stone-loot crystal pending payout at result (ally only). */
+  pendingStoneCrystal = 0;
   private powerGapCap: number;
   private inscriptionAmplifyAdd: number;
   private inscriptionItemSpawn: number;
@@ -1196,7 +1200,8 @@ export class Battle {
       const base = loot.goldMin + Math.floor(this.rng() * (span + 1));
       const n = Math.max(1, Math.round(base * loot.goldAmountMul));
       chips.push({ kind: "gold", n });
-      this.log.push(`착수 골드 +${n}`);
+      this.pendingStoneGold += n;
+      this.log.push(`착수 골드 +${n} (결과 합산)`);
     }
     if (this.rng() < loot.crystalChance) {
       const span = Math.max(0, loot.crystalMax - loot.crystalMin);
@@ -1205,7 +1210,8 @@ export class Battle {
         loot.crystalMin + Math.floor(this.rng() * (span + 1)),
       );
       chips.push({ kind: "crystal", n });
-      this.log.push(`착수 크리스탈 +${n}`);
+      this.pendingStoneCrystal += n;
+      this.log.push(`착수 크리스탈 +${n} (결과 합산)`);
     }
     return chips;
   }

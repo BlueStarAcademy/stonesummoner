@@ -6512,7 +6512,9 @@ function grantRewardIfNeeded(): void {
   const scrollsBefore = save.scrolls;
   const scrollsPremiumBefore = save.scrollsPremium ?? 0;
   const scrollsLegendBefore = save.scrollsLegend ?? 0;
-  const { save: next, reward } = applyRewards(
+  const stoneGold = Math.max(0, Math.floor(battle.pendingStoneGold));
+  const stoneCrystal = Math.max(0, Math.floor(battle.pendingStoneCrystal));
+  let { save: next, reward } = applyRewards(
     save,
     currentStage,
     victory,
@@ -6520,6 +6522,26 @@ function grantRewardIfNeeded(): void {
     battleDiff,
     { damageDealt: battle.allyDamageDealt, arenaNpc: arenaBattleNpc },
   );
+  if (stoneGold > 0 || stoneCrystal > 0) {
+    next = {
+      ...next,
+      island: {
+        ...next.island,
+        mana: next.island.mana + stoneGold,
+        crystal: (next.island.crystal ?? 0) + stoneCrystal,
+      },
+    };
+    reward = {
+      ...reward,
+      mana: reward.mana + stoneGold,
+      crystal:
+        (reward.crystal ?? 0) + stoneCrystal > 0
+          ? (reward.crystal ?? 0) + stoneCrystal
+          : undefined,
+    };
+    battle.pendingStoneGold = 0;
+    battle.pendingStoneCrystal = 0;
+  }
   save = next;
   persist();
   lastScrollGain = Math.max(0, save.scrolls - scrollsBefore);
@@ -7022,7 +7044,7 @@ function pulseArenaStonePlace(
     ms,
   );
   spawnSummonerManaFloat(team, report);
-  applyStoneLootToSave(report);
+  previewStoneLootFloat(report);
   const frame = app.querySelector(".board-frame");
   if (kind === "place" || kind === "shape" || !frame) return;
   frame.classList.add("fx-capture-flash");
@@ -7088,7 +7110,7 @@ function spawnSummonerManaFloat(
   }, ms);
 }
 
-function applyStoneLootToSave(report: StoneReport | null | undefined): void {
+function previewStoneLootFloat(report: StoneReport | null | undefined): void {
   if (!report || report.team !== "ally") return;
   let gold = 0;
   let crystal = 0;
@@ -7097,16 +7119,6 @@ function applyStoneLootToSave(report: StoneReport | null | undefined): void {
     if (chip.kind === "crystal") crystal += chip.n ?? 0;
   }
   if (gold <= 0 && crystal <= 0) return;
-  save = {
-    ...save,
-    island: {
-      ...save.island,
-      mana: save.island.mana + gold,
-      crystal: (save.island.crystal ?? 0) + crystal,
-    },
-  };
-  persist();
-  syncHudResources();
   spawnStoneLootFloat(report.team, gold, crystal);
 }
 
