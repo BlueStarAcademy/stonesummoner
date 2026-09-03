@@ -15,6 +15,7 @@ COPY --from=build /app/package.json ./
 COPY --from=build /app/apps/web/package.json ./apps/web/package.json
 COPY --from=build /app/apps/web/server.mjs ./apps/web/server.mjs
 COPY --from=build /app/apps/web/server ./apps/web/server
+COPY --from=build /app/apps/web/shared ./apps/web/shared
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
