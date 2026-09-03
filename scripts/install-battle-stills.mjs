@@ -282,27 +282,6 @@ for (const artKey of roster) {
   if (pra !== "missing") portraitDerivatives += 2;
 }
 
-let copyFrom = dematteDir;
-if (usePad) {
-  const paddedDir = path.join(stagingDir, "padded");
-  const dematteRel = path.relative(root, dematteDir).replace(/\\/g, "/");
-  const paddedRel = path.relative(root, paddedDir).replace(/\\/g, "/");
-  const r = spawnSync(
-    process.execPath,
-    [
-      path.join(root, "scripts/pad-battle-stills.mjs"),
-      "--dir",
-      dematteRel,
-      "--staging",
-      paddedRel,
-      "--force",
-    ],
-    { cwd: root, stdio: "inherit" },
-  );
-  if ((r.status ?? 1) !== 0) process.exit(r.status ?? 1);
-  copyFrom = paddedDir;
-}
-
 /** Windows can throw UNKNOWN on copyFile when dest is open elsewhere. */
 async function safeCopyFile(src, dest) {
   try {
@@ -314,10 +293,33 @@ async function safeCopyFile(src, dest) {
   }
 }
 
-for (const f of fs
-  .readdirSync(copyFrom)
-  .filter((x) => x.endsWith(".webp") && !x.startsWith("_"))) {
-  await safeCopyFile(path.join(copyFrom, f), path.join(battleOutDir, f));
+if (!portraitsOnly) {
+  let copyFrom = dematteDir;
+  if (usePad) {
+    const paddedDir = path.join(stagingDir, "padded");
+    const dematteRel = path.relative(root, dematteDir).replace(/\\/g, "/");
+    const paddedRel = path.relative(root, paddedDir).replace(/\\/g, "/");
+    const r = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts/pad-battle-stills.mjs"),
+        "--dir",
+        dematteRel,
+        "--staging",
+        paddedRel,
+        "--force",
+      ],
+      { cwd: root, stdio: "inherit" },
+    );
+    if ((r.status ?? 1) !== 0) process.exit(r.status ?? 1);
+    copyFrom = paddedDir;
+  }
+
+  for (const f of fs
+    .readdirSync(copyFrom)
+    .filter((x) => x.endsWith(".webp") && !x.startsWith("_"))) {
+    await safeCopyFile(path.join(copyFrom, f), path.join(battleOutDir, f));
+  }
 }
 
 for (const [alias, target] of Object.entries(MONSTER_ALIAS)) {
