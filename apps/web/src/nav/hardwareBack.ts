@@ -9,11 +9,14 @@ declare global {
     __ssHardwareBack?: () => void;
     __ssSuspendAudio?: () => void;
     __ssHaltAudio?: () => void;
+    StoneSummonerNative?: { exitApp: () => void };
   }
 }
 
 /** True while in-game (or always in the native/PWA shell). */
 let trapWanted = false;
+/** Ignore further back / history traps after the player confirmed quit. */
+let exiting = false;
 
 export function isNativeApp(): boolean {
   return Capacitor.isNativePlatform();
@@ -60,7 +63,7 @@ function dropTrapState(): void {
 }
 
 export function armBackHistoryTrap(): void {
-  if (!trapIsActive()) return;
+  if (exiting || !trapIsActive()) return;
   try {
     const st = history.state as { ssBack?: number } | null;
     if (st?.ssBack === 1) return;
@@ -76,6 +79,7 @@ export function armBackHistoryTrap(): void {
  * Native / installed PWA always trap, including the login gate.
  */
 export function setBackHistoryTrapWanted(on: boolean): void {
+  if (exiting) return;
   trapWanted = on || isAppShell();
   if (trapIsActive()) {
     armBackHistoryTrap();
@@ -85,23 +89,46 @@ export function setBackHistoryTrapWanted(on: boolean): void {
 }
 
 export async function exitNativeApp(): Promise<void> {
+  if (exiting) return;
+  exiting = true;
+  dropTrapState();
+
+  try {
+    await withTimeout(haltAudioForExit(), 400);
+  } catch {
+    /* still try to leave */
+  }
+
+  try {
+    window.StoneSummonerNative?.exitApp();
+  } catch {
+    /* Capacitor plugin / history fallback below */
+  }
+
   if (isNativeApp()) {
     try {
-      await withTimeout(haltAudioForExit(), 400);
+      await App.exitApp();
     } catch {
-      /* still try to leave */
+      /* ignore */
     }
     try {
-      await App.exitApp();
-      return;
+      await App.minimizeApp();
     } catch {
-      /* fall through */
+      /* ignore */
     }
-  }
-  if (isStandaloneDisplay()) {
-    window.close();
+    /* Never history.back() here — the back trap would reopen the quit sheet. */
     return;
   }
+
+  if (isStandaloneDisplay()) {
+    try {
+      window.close();
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+
   /* Browser tab: do not close AudioContext (window.close is a no-op). */
   setBackHistoryTrapWanted(false);
   try {
@@ -114,6 +141,7 @@ export async function exitNativeApp(): Promise<void> {
 export function installHardwareBack(onBack: () => void): void {
   let lastAt = 0;
   const run = (): void => {
+    if (exiting) return;
     const now = Date.now();
     if (now - lastAt < 180) return;
     lastAt = now;
@@ -135,7 +163,7 @@ export function installHardwareBack(onBack: () => void): void {
   if (isAppShell()) armBackHistoryTrap();
 
   window.addEventListener("popstate", () => {
-    if (!trapIsActive()) return;
+    if (exiting || !trapIsActive()) return;
     armBackHistoryTrap();
     run();
   });
