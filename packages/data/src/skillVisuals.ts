@@ -57,6 +57,44 @@ export function skillIconPath(vfxId: string | undefined | null): string | null {
   return null;
 }
 
+/** Temporary UI emblem while a dedicated monster skill WebP is still missing. */
+export function skillEffectIconPath(
+  skill?: { effects?: Array<{ kind: string }> } | null,
+): string {
+  const kinds = new Set((skill?.effects ?? []).map((effect) => effect.kind));
+  if (
+    kinds.has("heal") ||
+    kinds.has("hot") ||
+    kinds.has("revive") ||
+    kinds.has("cleanse")
+  ) {
+    return "/art/ui/skill/heal.webp";
+  }
+  if (
+    kinds.has("shield") ||
+    kinds.has("immunity") ||
+    kinds.has("damage_share") ||
+    kinds.has("reflect")
+  ) {
+    return "/art/ui/skill/shield.webp";
+  }
+  if (kinds.has("mana") || kinds.has("atb") || kinds.has("cooldown")) {
+    return "/art/ui/skill/mana.webp";
+  }
+  return "/art/ui/skill/damage.webp";
+}
+
+/**
+ * Prefer the dedicated painted path; fall back to a typed UI skill emblem so
+ * battle/book UI never renders an empty skill slot for new families.
+ */
+export function resolveSkillIconPath(
+  vfxId: string | undefined | null,
+  skill?: { effects?: Array<{ kind: string }> } | null,
+): string {
+  return skillIconPath(vfxId) ?? skillEffectIconPath(skill);
+}
+
 function intensityForSlot(slot: string): SkillVisualIntensity {
   if (slot === "s3" || slot === "A" || slot === "A3" || slot === "A4") {
     return "ultimate";

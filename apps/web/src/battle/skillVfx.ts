@@ -82,7 +82,7 @@ type SkfxLayer = { src: string; cls: string };
 export interface SkillVfxProfile {
   id: string;
   variant: 0 | 1 | 2 | 3;
-  artSrc: string | null;
+  artSrc: string;
 }
 
 const skillVfxProfiles = new Map<string, SkillVfxProfile>();
@@ -97,6 +97,13 @@ function skillArtSrc(vfxId: string | undefined): string | null {
     return `/art/summoner/skill/${parts[1]}.webp`;
   }
   return null;
+}
+
+function skillArtSrcWithFallback(
+  vfxId: string | undefined,
+  fallback = "/art/ui/skill/damage.webp",
+): string {
+  return skillArtSrc(vfxId) ?? fallback;
 }
 
 function profileVariant(id: string): 0 | 1 | 2 | 3 {
@@ -114,7 +121,7 @@ export function resolveSkillVfxProfile(
   const profile = {
     id,
     variant: profileVariant(id),
-    artSrc: skillArtSrc(vfxId),
+    artSrc: skillArtSrcWithFallback(vfxId),
   } satisfies SkillVfxProfile;
   skillVfxProfiles.set(id, profile);
   return profile;

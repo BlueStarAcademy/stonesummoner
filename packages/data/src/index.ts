@@ -38,6 +38,8 @@ export {
   describeSkillVfx,
   monsterSkillVfxId,
   skillIconPath,
+  skillEffectIconPath,
+  resolveSkillIconPath,
   summonerSkillVfxId,
 } from "./skillVisuals.js";
 export type {
