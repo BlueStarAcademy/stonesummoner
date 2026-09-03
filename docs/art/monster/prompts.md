@@ -137,6 +137,8 @@ no text, no nameplate, no stars, no frame, no element badge, no watermark
   places the editable element badge there.
 - Source location:
   `assets/monster/portrait-cards/{artKey}[_awaken].png|webp`.
+  The deployable `main` branch omits large editable sources; restore them from
+  `art-source/all-assets-2026-09` before running source-based art tooling.
 
 Battle stills remain transparent and continue to follow the battle delivery
 rules above.
