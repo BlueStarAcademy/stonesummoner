@@ -26,6 +26,7 @@ import {
   processChromaBattleRgba,
   rawRgbaToTransparentWebp,
   rawRgbaToDematteWebp,
+  writeWebpAtomic,
 } from "./lib/dematte-webp.mjs";
 import {
   MONSTER_ART_KEYS,
@@ -72,6 +73,7 @@ const BUST_OPTS = {
 /** Transparent margin after bust extract (was 48 → character read small in slots). */
 const BUST_PAD = 28;
 const SIZE = PORTRAIT_DEMATTE.size;
+const PORTRAIT_CARD_DIR = path.join(root, "assets/monster/portrait-cards");
 
 /** Legacy family aliases share one bust crop. */
 const MONSTER_ALIAS = {
@@ -133,7 +135,12 @@ async function edgeClearRatio(webpPath) {
   return edge > 0 ? clear / edge : 0;
 }
 
-async function processDerivatives(portraitPath, outDir, portraitName) {
+async function processDerivatives(
+  portraitPath,
+  outDir,
+  portraitName,
+  allowOpaque = false,
+) {
   if (!fs.existsSync(portraitPath)) return "missing-out";
   if (!qa) {
     await writePortraitDerivatives(portraitPath, outDir, portraitName);
@@ -142,7 +149,9 @@ async function processDerivatives(portraitPath, outDir, portraitName) {
   let ok = true;
   for (const size of PORTRAIT_DERIVATIVE_SIZES) {
     const filePath = portraitDerivativePath(outDir, portraitName, size);
-    const result = await inspectPortraitDerivative(filePath, size);
+    const result = await inspectPortraitDerivative(filePath, size, {
+      allowOpaque,
+    });
     if (!result.ok) {
       console.warn("qa derivative", portraitName, size, result.issue);
       ok = false;
@@ -222,14 +231,62 @@ async function writePortrait(srcPath, destWebp) {
   );
 }
 
+function resolvePortraitCard(name) {
+  for (const ext of [".png", ".webp"]) {
+    const candidate = path.join(PORTRAIT_CARD_DIR, `${name}${ext}`);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+async function writePortraitCard(srcPath, destWebp) {
+  const buffer = await sharp(srcPath)
+    .resize(SIZE, SIZE, {
+      fit: "cover",
+      position: "centre",
+      kernel: sharp.kernel.lanczos3,
+    })
+    .removeAlpha()
+    .webp({ quality: 96, smartSubsample: true, effort: 6 })
+    .toBuffer();
+  await writeWebpAtomic(destWebp, buffer);
+}
+
 async function processMonsterArtKey(key, battleDir, outDir, awaken = false) {
   const onlyKey = awaken ? `${key}_awaken` : key;
   if (only && !only.includes(onlyKey) && !only.includes(key)) return "skip";
   const dest = path.join(outDir, `${onlyKey}.webp`);
+  const portraitCard = resolvePortraitCard(onlyKey);
   if (derivativesOnly) {
-    const result = await processDerivatives(dest, outDir, onlyKey);
+    const result = await processDerivatives(
+      dest,
+      outDir,
+      onlyKey,
+      Boolean(portraitCard),
+    );
     if (result === "ok") console.log("derivatives", onlyKey);
     return result;
+  }
+  if (portraitCard) {
+    if (!qa) {
+      await writePortraitCard(portraitCard, dest);
+      await writePortraitDerivatives(dest, outDir, onlyKey);
+      console.log("portrait-card", onlyKey);
+      return "ok";
+    }
+    if (!fs.existsSync(dest)) return "missing-out";
+    const meta = await sharp(dest).metadata();
+    if (meta.format !== "webp" || meta.width !== SIZE || meta.height !== SIZE) {
+      console.warn("qa portrait-card", onlyKey, "bad-output");
+      return "bad-derivative";
+    }
+    const derivativeResult = await processDerivatives(
+      dest,
+      outDir,
+      onlyKey,
+      true,
+    );
+    return derivativeResult;
   }
   const src = resolveStillSrc(battleDir, key, awaken);
   if (!src) {

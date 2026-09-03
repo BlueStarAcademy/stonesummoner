@@ -282,6 +282,7 @@ import {
   normalizeSymbolQuality,
   qualityToPlateId,
   skillIconPath,
+  skillEffectIconPath,
   skillTreeBonuses,
   SYMBOL_SETS,
   stagesForMap,
@@ -4075,7 +4076,8 @@ function renderOnboardWelcome(): string {
         ${roster
           .map((m) => {
             const src = monsterArtSrc(m.monsterId) ?? "/art/auth/logo-mark-192.png";
-            return `<li class="onboard-welcome-ally">
+            const element = getMonster(m.monsterId)?.element ?? "dark";
+            return `<li class="onboard-welcome-ally el-${element}">
               <img src="${src}" width="56" height="56" alt="" draggable="false" decoding="async" />
             </li>`;
           })
@@ -15874,10 +15876,17 @@ function skillArtImg(
   vfxId: string | undefined | null,
   className: string,
   size: number,
+  skill?: { effects?: { kind: string }[] } | null,
 ): string {
-  const src = skillIconPath(vfxId);
+  const dedicated = skillIconPath(vfxId);
+  const fallback = skillEffectIconPath(skill);
+  const src = dedicated ?? fallback;
   if (!src) return "";
-  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
+  const onerr =
+    dedicated && dedicated !== fallback
+      ? ` onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='${fallback}';}"`
+      : "";
+  return `<img class="${className}" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${onerr} />`;
 }
 
 function monsterSkillArtImg(
@@ -15890,13 +15899,22 @@ function monsterSkillArtImg(
   className: string,
   size: number,
 ): string {
-  const src = skillIconPath(skill?.vfxId);
-  if (!src?.startsWith("/art/monster/skill/")) return "";
-  return `<img class="${className} mon-skill-art-img" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async" />`;
+  const dedicated = skillIconPath(skill?.vfxId);
+  const fallback = skillEffectIconPath(skill);
+  const src =
+    dedicated?.startsWith("/art/monster/skill/") ? dedicated : fallback;
+  const onerr =
+    dedicated?.startsWith("/art/monster/skill/")
+      ? ` onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='${fallback}';}"`
+      : "";
+  return `<img class="${className} mon-skill-art-img" src="${src}" width="${size}" height="${size}" alt="" draggable="false" decoding="async"${onerr} />`;
 }
 
 function summonerSkillArtSrc(skillId: string | undefined | null): string {
-  return skillIconPath(skillId ? `summoner:${skillId}` : null) ?? "";
+  return (
+    skillIconPath(skillId ? `summoner:${skillId}` : null) ??
+    "/art/ui/skill/damage.webp"
+  );
 }
 
 function summonerSkillArtImg(

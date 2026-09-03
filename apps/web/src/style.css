@@ -25351,6 +25351,7 @@ img.el-tint-dark {
 .mon-slot-art,
 .profile-icon-cell,
 .codex-cell,
+.onboard-welcome-ally,
 .summon-multi-seal,
 .summon-reveal-seal,
 .summon-detail-portrait {
@@ -25360,6 +25361,7 @@ img.el-tint-dark {
 .mon-slot.el-fire .mon-slot-art,
 .profile-icon-cell.el-fire,
 .codex-cell.el-fire,
+.onboard-welcome-ally.el-fire,
 .summon-multi-cell.el-fire .summon-multi-seal,
 .summon-reveal.el-fire .summon-reveal-seal,
 .summon-detail-sheet.el-fire .summon-detail-portrait {
@@ -25369,6 +25371,7 @@ img.el-tint-dark {
 .mon-slot.el-water .mon-slot-art,
 .profile-icon-cell.el-water,
 .codex-cell.el-water,
+.onboard-welcome-ally.el-water,
 .summon-multi-cell.el-water .summon-multi-seal,
 .summon-reveal.el-water .summon-reveal-seal,
 .summon-detail-sheet.el-water .summon-detail-portrait {
@@ -25378,6 +25381,7 @@ img.el-tint-dark {
 .mon-slot.el-wind .mon-slot-art,
 .profile-icon-cell.el-wind,
 .codex-cell.el-wind,
+.onboard-welcome-ally.el-wind,
 .summon-multi-cell.el-wind .summon-multi-seal,
 .summon-reveal.el-wind .summon-reveal-seal,
 .summon-detail-sheet.el-wind .summon-detail-portrait {
@@ -25387,6 +25391,7 @@ img.el-tint-dark {
 .mon-slot.el-light .mon-slot-art,
 .profile-icon-cell.el-light,
 .codex-cell.el-light,
+.onboard-welcome-ally.el-light,
 .summon-multi-cell.el-light .summon-multi-seal,
 .summon-reveal.el-light .summon-reveal-seal,
 .summon-detail-sheet.el-light .summon-detail-portrait {
@@ -25396,6 +25401,7 @@ img.el-tint-dark {
 .mon-slot.el-dark .mon-slot-art,
 .profile-icon-cell.el-dark,
 .codex-cell.el-dark,
+.onboard-welcome-ally.el-dark,
 .summon-multi-cell.el-dark .summon-multi-seal,
 .summon-reveal.el-dark .summon-reveal-seal,
 .summon-detail-sheet.el-dark .summon-detail-portrait {
@@ -25406,6 +25412,7 @@ img.el-tint-dark {
   .mon-slot-art,
   .profile-icon-cell,
   .codex-cell,
+  .onboard-welcome-ally,
   .summon-multi-seal,
   .summon-reveal-seal,
   .summon-detail-portrait

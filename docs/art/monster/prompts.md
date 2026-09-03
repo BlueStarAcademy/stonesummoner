@@ -109,13 +109,37 @@ no text, no watermark, no UI, no cropped limbs or equipment
 Generate at **1536×1536 or larger** and deliver PNG/WebP. Install resizes to
 transparent **WebP 1024×1024** with contain fitting.
 
-### Portrait (optional, per element)
+### Portrait card (per element)
+
+Portrait cards are independent painted assets, not crops when a dedicated
+source exists. Generate at **1536×1536 or larger** and install to 768² WebP.
 
 ```
-Premium Com2uS Summoners War style monster portrait bust,
-ultra detailed hand-painted 2D dark fantasy, {element} palette in paint,
-dark charcoal background, square 768×768, no text
+Premium modern stylized mobile fantasy monster portrait card,
+large readable head and expressive face, upper-body composition,
+clean graphic silhouette, crisp cel-shaped forms with rich painterly materials,
+high color contrast and sharp facial, weapon, and costume details,
+distinctive {element} equipment, material, aura, lighting, and particles,
+full-frame fantasy environment background unique to this character variant,
+square composition, character fills most of the frame and reads at 56px,
+no text, no nameplate, no stars, no frame, no element badge, no watermark
 ```
+
+- Portrait cards are intentionally **opaque full-frame art**. Do not dematte,
+  chroma-key, or flatten a character painted for transparency onto white.
+- Backgrounds in one element share a palette, not an identical template:
+  vary location, light direction, particles, weather, and distant motifs.
+- The five elements retain a recognizable family silhouette but receive
+  separately painted equipment, materials, lighting, and effects. No tint bake.
+- Awakened art depicts the same individual with a stronger silhouette, evolved
+  costume or armor, and a clearly upgraded aura.
+- Keep the upper-left corner free of critical facial or weapon details; the UI
+  places the editable element badge there.
+- Source location:
+  `assets/monster/portrait-cards/{artKey}[_awaken].png|webp`.
+
+Battle stills remain transparent and continue to follow the battle delivery
+rules above.
 
 ### Awaken
 

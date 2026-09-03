@@ -39,7 +39,7 @@ export async function writePortraitDerivatives(
   return written;
 }
 
-export async function inspectPortraitDerivative(filePath, expectedSize) {
+export async function inspectPortraitDerivative(filePath, expectedSize, opts = {}) {
   if (!fs.existsSync(filePath)) return { ok: false, issue: "missing" };
   try {
     const meta = await sharp(filePath).metadata();
@@ -53,7 +53,9 @@ export async function inspectPortraitDerivative(filePath, expectedSize) {
         issue: `size/format=${meta.width ?? "?"}x${meta.height ?? "?"}/${meta.format ?? "?"}`,
       };
     }
-    if (!meta.hasAlpha) return { ok: false, issue: "missing-alpha" };
+    if (!meta.hasAlpha && !opts.allowOpaque) {
+      return { ok: false, issue: "missing-alpha" };
+    }
     return { ok: true, issue: null };
   } catch (error) {
     return { ok: false, issue: `unreadable=${error.message}` };
