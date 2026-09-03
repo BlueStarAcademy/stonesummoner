@@ -1183,11 +1183,11 @@ export class Battle {
   private tickBoardTokenExpiry(): void {
     if (this.tokens.length === 0) return;
     this.tokens = this.tokens
-      .map((token) => ({
-        ...token,
-        turnsLeft: (token.turnsLeft ?? 1) - 1,
-      }))
-      .filter((token) => token.turnsLeft > 0);
+      .map((token) => {
+        if (token.turnsLeft == null) return token;
+        return { ...token, turnsLeft: token.turnsLeft - 1 };
+      })
+      .filter((token) => token.turnsLeft == null || token.turnsLeft > 0);
   }
 
   /** Ally stone placement: chance to earn gold/crystal from difficulty + gear. */
@@ -1242,7 +1242,6 @@ export class Battle {
     // The old cycle ends only once the team's next placement is known legal.
     this.clearBoardTeamBuffs(unit.team);
     this.lastStoneReport = null;
-    this.tickBoardTokenExpiry();
     const chips: StoneReportChip[] = [];
     let claimedVictory = false;
     const picked = this.tokenAt(point.x, point.y);
@@ -1428,6 +1427,9 @@ export class Battle {
     if (picked) {
       chips.push(...this.applyTokenPickup(unit, picked));
     }
+
+    // Age uneaten tokens after pickup so a token can still be claimed this play.
+    this.tickBoardTokenExpiry();
 
     if (
       this.modules.moduleD &&
