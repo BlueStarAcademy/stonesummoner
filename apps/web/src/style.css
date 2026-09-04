@@ -8398,26 +8398,26 @@ main {
 .battle-sky-img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  /* Keep the painted near/far floor bands readable without cover-crop zoom. */
-  object-position: center center;
+  object-fit: cover;
+  /* Keep the painted sky / far terrace in frame (do not crop the map top). */
+  object-position: center 14%;
   opacity: 0.92;
   filter: brightness(1.06) contrast(1.04);
 }
 
-/* Thunder mountain: bias slightly upward so the far terrace stays in frame. */
+/* Thunder mountain: keep the far terrace, not the cliff crop. */
 .battle-sky[data-bg="map-07"] .battle-sky-img,
 .battle-screen[data-bg="map-07"] .battle-sky-img {
-  object-position: center 46%;
+  object-position: center 10%;
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy {
-  padding-top: calc(96px + env(safe-area-inset-top) + var(--battle-midfield-drop, 0px));
+  padding-top: 0;
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front {
   --battle-depth-scale: 0.96;
-  --battle-depth-y: calc(34px + var(--battle-midfield-drop, 0px) * 0.65);
+  --battle-depth-y: 6px;
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front::after {
@@ -8530,21 +8530,21 @@ main {
 .battle-layout--stage {
   --battle-midfield-drop: 0px;
   --battle-hud-span: calc(52px + env(safe-area-inset-bottom));
-  /* Midfield circle sits between rims and shrinks if the HUD would clip. */
-  --board-map-span: min(86%, 36dvh, calc(var(--design-h) * 0.36));
-  gap: 2px;
+  /* Midfield circle sits just above the ally rim. */
+  --board-map-span: min(70%, 24dvh, calc(var(--design-h) * 0.24));
+  gap: 0;
   padding: 4px 4px var(--battle-hud-span);
   min-height: 0;
   flex: 1;
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 
 .battle-layout--stage .board-wrap--stage {
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-height: 0;
-  max-height: min(372px, 36dvh);
+  max-height: min(260px, 24dvh);
   z-index: 1;
-  margin-top: 0;
+  margin-top: 2px;
   margin-bottom: 0;
   display: flex;
   align-items: center;
@@ -8705,15 +8705,15 @@ main {
   pointer-events: auto;
 }
 
-/* Far rim — sit on the far floor band of the arena BG */
+/* Far rim — sit on the far floor band, packed down toward the circle */
 .battle-lane.enemy {
   --battle-depth-scale: 0.94;
-  --battle-depth-y: calc(10px + var(--battle-midfield-drop, 0px) * 0.65);
+  --battle-depth-y: 4px;
   --battle-depth-z: -42px;
   --battle-depth-tilt: -1.5deg;
   --battle-depth-opacity: 0.94;
-  padding-top: calc(52px + env(safe-area-inset-top));
-  min-height: clamp(96px, 14dvh, 124px);
+  padding-top: 0;
+  min-height: clamp(80px, 11dvh, 104px);
   margin-bottom: 0;
 }
 
@@ -9147,9 +9147,9 @@ main {
     scale(var(--battle-depth-scale));
   transform-origin: center bottom;
   overflow: visible;
-  /* Skill strip + select bubble sit above the unit head. */
+  /* Skill strip is absolutely positioned; keep a short gap under the circle. */
   padding-bottom: 8px;
-  padding-top: 108px;
+  padding-top: 28px;
 }
 
 .battle-formation {
@@ -9830,18 +9830,48 @@ button.battle-unit,
   width: 100%;
   margin-left: 0;
   margin-right: 0;
-  height: clamp(70px, 11.2dvh, 92px);
+  height: clamp(52px, 8.4dvh, 68px);
+  transform: translateY(6px);
 }
 
 .battle-unit[data-art-family="dew_slime"] .battle-unit-img {
-  object-position: center center;
-  transform-origin: center center;
+  object-position: center bottom;
+  transform-origin: center bottom;
   animation-name: battle-unit-idle-compact;
 }
 
 @keyframes battle-unit-idle-compact {
   0%, 100% { transform: scale(var(--battle-compact-scale)) translateY(0); }
-  50% { transform: scale(var(--battle-compact-scale)) translateY(-1.5px); }
+  50% { transform: scale(var(--battle-compact-scale)) translateY(-1px); }
+}
+
+.battle-unit[data-battle-air="1"] {
+  --battle-air-lift: 38px;
+}
+
+.battle-unit[data-battle-air="1"] .battle-unit-art {
+  transform: translateY(calc(-1 * var(--battle-air-lift)));
+}
+
+.battle-unit[data-battle-air="1"] .battle-unit-glow {
+  opacity: 0.38;
+  width: 40%;
+  bottom: calc(-1 * var(--battle-bars-space, 22px) + 10px);
+}
+
+.battle-unit[data-battle-air="1"] .battle-unit-img {
+  animation-name: battle-unit-idle-air;
+}
+
+@keyframes battle-unit-idle-air {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .battle-unit[data-battle-air="1"] .battle-unit-img {
+    animation: none;
+  }
 }
 
 .battle-unit.active[data-art-family="dew_slime"] .battle-unit-img {

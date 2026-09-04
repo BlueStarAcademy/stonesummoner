@@ -54,6 +54,25 @@ const FAMILY_STATURE: Readonly<Record<string, number>> = {
   sky_warden: 1.3,
 };
 
+/** Families that hover above the arena floor (bats, birds, wisps). */
+const AIR_FAMILIES: ReadonlySet<string> = new Set([
+  "gale_bat",
+  "crow_scout",
+  "venom_stinger",
+  "purify_finch",
+  "mute_owl",
+  "slumber_moth",
+  "sanctum_dove",
+  "ember_wisp",
+  "forest_sprite",
+  "angel_healer",
+  "sky_warden",
+]);
+
+export function battleUnitAirborne(familyId?: string | null): boolean {
+  return !!familyId && AIR_FAMILIES.has(familyId);
+}
+
 const ROLE_STATURE: Readonly<Record<string, number>> = {
   tank: 1.14,
   attacker: 1.06,
