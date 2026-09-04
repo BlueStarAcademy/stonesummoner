@@ -16762,22 +16762,9 @@ body > .battle-settings-layer.settings-layer {
   margin-bottom: 6px;
 }
 
-#stages-region-host .stage-prep--sortie .stage-prep-slot {
-  min-height: 60px;
-}
-
+#stages-region-host .stage-prep--sortie .stage-prep-slot,
 #stages-region-host .stage-prep--sortie .stage-prep-slot--summoner {
-  min-height: 68px;
-}
-
-#stages-region-host .stage-prep--sortie .stage-prep-team--enemy .stage-prep-slot-art {
-  width: 48px;
-  height: 48px;
-}
-
-#stages-region-host .stage-prep--sortie .stage-prep-team--enemy .stage-prep-slot--summoner .stage-prep-slot-art {
-  width: 52px;
-  height: 52px;
+  min-height: 0;
 }
 
 #stages-region-host .stage-prep--sortie .stage-prep-vs {
@@ -16957,11 +16944,12 @@ body > .battle-settings-layer.settings-layer {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-height: 68px;
-  padding: 4px 2px 4px;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 0;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  padding: 0;
   border-radius: 10px;
   --grade-rim: #c9a227aa;
   border: 2.5px solid var(--grade-rim);
@@ -16986,7 +16974,7 @@ button.stage-prep-slot {
 }
 
 .stage-prep-slot--summoner {
-  min-height: 76px;
+  min-height: 0;
 }
 
 .stage-prep-slot.empty {
@@ -17001,25 +16989,25 @@ button.stage-prep-slot {
 }
 
 .stage-prep-slot-art {
-  flex: 0 0 auto;
-  width: 52px;
-  height: 52px;
-  border-radius: 10px;
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  border-radius: inherit;
   overflow: hidden;
-  display: grid;
-  place-items: center;
+  display: block;
   background: transparent;
   border: 0;
+  z-index: 0;
 }
 
 .stage-prep-slot-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 36%;
+  object-position: center center;
   display: block;
-  transform: scale(1.38);
-  transform-origin: center 32%;
+  transform: none;
 }
 
 .stage-prep-slot--summoner .stage-prep-slot-awaken {
@@ -17063,17 +17051,14 @@ button.stage-prep-slot {
   font-size: 0.44rem;
 }
 
-.stage-prep-slot--summoner .stage-prep-slot-art {
-  width: 58px;
-  height: 58px;
-}
-
+.stage-prep-slot--summoner .stage-prep-slot-art,
 .stage-prep-slot--summoner > .stage-prep-slot-img {
-  width: 58px;
-  height: 58px;
+  width: auto;
+  height: auto;
+  inset: 0;
   transform: none;
   object-fit: cover;
-  object-position: center 28%;
+  object-position: center center;
 }
 
 .stage-prep-slot small,
@@ -18027,21 +18012,13 @@ button.stage-prep-slot {
   .stage-prep-slots {
     gap: 4px;
   }
-  .stage-prep-slot-art {
-    width: 44px;
-    height: 44px;
-  }
-  .stage-prep-slot--summoner .stage-prep-slot-art {
-    width: 48px;
-    height: 48px;
-  }
-  #stages-region-host .stage-prep--sortie .stage-prep-team--enemy .stage-prep-slot-art {
-    width: 40px;
-    height: 40px;
-  }
+  .stage-prep-slot-art,
+  .stage-prep-slot--summoner .stage-prep-slot-art,
+  #stages-region-host .stage-prep--sortie .stage-prep-team--enemy .stage-prep-slot-art,
   #stages-region-host .stage-prep--sortie .stage-prep-team--enemy .stage-prep-slot--summoner .stage-prep-slot-art {
-    width: 44px;
-    height: 44px;
+    width: auto;
+    height: auto;
+    inset: 0;
   }
   .stage-prep-summoner-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -25474,7 +25451,6 @@ img.el-tint-dark {
 
 /* Compact inventory portraits (e.g. dew_slime) — zoom so the body fills the cell. */
 .mon-slot.mon-slot--portrait[data-art-family="dew_slime"] .mon-slot-img,
-.stage-prep-slot[data-art-family="dew_slime"] .stage-prep-slot-img,
 .arena-defense-slot[data-art-family="dew_slime"] .arena-defense-slot-img,
 .pvp-rival-mon[data-art-family="dew_slime"] .pvp-rival-mon-img,
 .fusion-recipe-mat[data-art-family="dew_slime"] .fusion-recipe-mat-img,
