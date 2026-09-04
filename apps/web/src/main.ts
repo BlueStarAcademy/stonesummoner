@@ -16522,7 +16522,8 @@ function monsterArtImg(
   if (!fallbacks.length) return "";
   const src = fallbacks[0];
   const awakenCls = preferAwakened ? " is-awakened" : "";
-  const decode = Math.max(size * 2, 128);
+  const isHeroPreview = /\bmon-preview-img\b/.test(className);
+  const decode = isHeroPreview ? 768 : Math.max(size * 2, 128);
   return `<img class="${className}${awakenCls}" src="${src}" width="${decode}" height="${decode}" alt="" draggable="false" decoding="async"${imgSrcOnerrorChain(fallbacks)} />`;
 }
 
@@ -21506,7 +21507,7 @@ function renderMonBookDetailHtml(): string {
         const atSix = starN >= 6;
         const awakened = ownedMonsterAwakened(m);
         const previewArt =
-          ownedMonsterArtImg(m, "mon-preview-img", 256, awakened) ||
+          ownedMonsterArtImg(m, "mon-preview-img", 384, awakened) ||
           `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
         const maxLevel = monsterMaxLevel(m);
         const nextExp = monsterExpToNext(m);

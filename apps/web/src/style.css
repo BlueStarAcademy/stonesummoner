@@ -20855,7 +20855,7 @@ span.stage-drop-info-tab {
   display: block;
   width: 100%;
   height: 100%;
-  max-height: 152px;
+  max-height: none;
   margin: 0 auto;
   line-height: 0;
   background: transparent;
@@ -20863,6 +20863,8 @@ span.stage-drop-info-tab {
   transform-origin: center center;
   /* Shadow on the frame — avoids filter blur on the bitmap */
   filter: none;
+  overflow: hidden;
+  border-radius: 10px;
 }
 
 .mon-preview-art.is-mirrored {
@@ -20908,9 +20910,9 @@ span.stage-drop-info-tab {
   z-index: 1;
   width: 100%;
   height: 100%;
-  max-height: 152px;
-  object-fit: contain;
-  object-position: center center;
+  max-height: none;
+  object-fit: cover;
+  object-position: center 26%;
   display: block;
   margin: 0 auto;
   pointer-events: none;
@@ -20921,8 +20923,8 @@ span.stage-drop-info-tab {
   animation: none;
   transform: none;
   transform-origin: center center;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: high-quality;
+  /* Painted WebP — smooth downscale, not contrast-optimized pixel crunch */
+  image-rendering: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -20949,7 +20951,8 @@ span.stage-drop-info-tab {
 
 .mon-inspect-title-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
 }
@@ -20975,16 +20978,20 @@ span.stage-drop-info-tab {
 }
 
 .mon-inspect-hero-info .mon-inspect-name {
-  font-size: 1.05rem;
+  font-size: clamp(0.92rem, 2.8vw, 1.05rem);
   font-weight: 800;
   line-height: 1.2;
   color: #f5edd8;
   letter-spacing: 0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   min-width: 0;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+}
 }
 
 .mon-inspect-meta-row {
@@ -25331,9 +25338,7 @@ img.el-tint-dark {
   filter: sepia(0.04) hue-rotate(235deg) saturate(1.04) brightness(1.02);
 }
 
-/* Book / rail portraits: prefer crisp downscale over soft GPU filters */
-.mon-preview-img,
-.sum-preview-img,
+/* Slot thumbs stay contrast-crisp; book hero uses painted cover (see .mon-preview-img). */
 .mon-slot-img,
 .power-up-preview-img,
 .codex-cell-img,
@@ -25343,6 +25348,12 @@ img.el-tint-dark {
 .sum-awaken-portrait img {
   image-rendering: -webkit-optimize-contrast;
   image-rendering: high-quality;
+}
+
+.sum-preview-img {
+  object-fit: contain;
+  object-position: center center;
+  image-rendering: auto;
 }
 
 .mon-slot.is-active {
@@ -29256,8 +29267,8 @@ button.linkish {
   /* Book fit tokens — shrink with design height so phones need no vertical scroll. */
   --book-chrome-bottom: clamp(72px, calc(var(--design-h) * 0.115), 96px);
   --book-gap: clamp(4px, calc(var(--design-h) * 0.008), 8px);
-  --book-hero-h: clamp(148px, calc(var(--design-h) * 0.22), 196px);
-  --book-art-max: clamp(132px, calc(var(--design-h) * 0.2), 180px);
+  --book-hero-h: clamp(176px, calc(var(--design-h) * 0.26), 236px);
+  --book-art-max: 100%;
   --book-rail-slot: clamp(48px, calc(var(--design-h) * 0.072), 56px);
   --book-rail-gap: clamp(4px, calc(var(--design-h) * 0.007), 6px);
   --book-rail-pad: clamp(4px, calc(var(--design-h) * 0.008), 8px);
@@ -33837,25 +33848,23 @@ button.linkish {
 
 #app.monster-mode .mon-inspect-preview,
 .facility-layer--enhance .mon-inspect-preview {
-  min-height: var(--book-hero-h);
-  max-height: var(--book-hero-h);
-  padding: clamp(4px, calc(var(--design-h) * 0.008), 8px) clamp(4px, calc(var(--design-h) * 0.008), 8px);
+  width: min(100%, var(--book-hero-h));
+  aspect-ratio: 1 / 1;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--grade-rim, #c9a227) 38%, transparent);
   background: var(--inv-grade-well, transparent);
   box-shadow: none;
-}
-
-#app.summoner-mode .mon-inspect-preview {
-  min-height: var(--book-hero-h);
-  max-height: none;
-  padding: clamp(6px, calc(var(--design-h) * 0.012), 12px) clamp(4px, calc(var(--design-h) * 0.008), 8px);
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  overflow: hidden;
+  justify-self: start;
+  align-self: stretch;
 }
 
 #app.monster-mode .mon-inspect-hero,
 .facility-layer--enhance .mon-inspect-hero {
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 4px;
   padding-bottom: 0;
 }
@@ -33894,11 +33903,23 @@ button.linkish {
 
 #app.monster-mode .mon-preview-art,
 #app.monster-mode .mon-preview-img,
-#app.summoner-mode .mon-preview-art,
-#app.summoner-mode .mon-preview-img,
 .facility-layer--enhance .mon-preview-art,
 .facility-layer--enhance .mon-preview-img {
-  max-height: var(--book-art-max);
+  max-height: none;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+#app.monster-mode .mon-preview-img,
+.facility-layer--enhance .mon-preview-img {
+  object-fit: cover;
+  object-position: center 24%;
+}
+
+#app.summoner-mode .mon-preview-art,
+#app.summoner-mode .mon-preview-img {
+  max-height: var(--book-hero-h);
 }
 
 #app.monster-mode .mon-inspect-shell,
@@ -34172,8 +34193,8 @@ button.linkish {
 
 .facility-layer--enhance {
   --book-gap: clamp(6px, calc(var(--design-h) * 0.01), 10px);
-  --book-hero-h: clamp(148px, calc(var(--design-h) * 0.22), 196px);
-  --book-art-max: clamp(132px, calc(var(--design-h) * 0.2), 180px);
+  --book-hero-h: clamp(176px, calc(var(--design-h) * 0.26), 236px);
+  --book-art-max: 100%;
   --book-rail-slot: clamp(48px, calc(var(--design-h) * 0.072), 56px);
   --book-rail-gap: clamp(4px, calc(var(--design-h) * 0.007), 6px);
   --book-rail-pad: clamp(4px, calc(var(--design-h) * 0.008), 8px);
