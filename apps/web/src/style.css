@@ -20840,7 +20840,7 @@ span.stage-drop-info-tab {
   transform: scaleX(-1);
 }
 
-.mon-preview-art::after {
+#app.summoner-mode .mon-preview-art::after {
   content: "";
   position: absolute;
   left: 12%;
@@ -20886,6 +20886,7 @@ span.stage-drop-info-tab {
   margin: 0 auto;
   pointer-events: none;
   user-select: none;
+  border-radius: 10px;
   background: transparent !important;
   filter: none;
   animation: none;
@@ -29227,8 +29228,8 @@ button.linkish {
   /* Book fit tokens — shrink with design height so phones need no vertical scroll. */
   --book-chrome-bottom: clamp(72px, calc(var(--design-h) * 0.115), 96px);
   --book-gap: clamp(4px, calc(var(--design-h) * 0.008), 8px);
-  --book-hero-h: clamp(116px, calc(var(--design-h) * 0.165), 148px);
-  --book-art-max: clamp(96px, calc(var(--design-h) * 0.145), 128px);
+  --book-hero-h: clamp(148px, calc(var(--design-h) * 0.22), 196px);
+  --book-art-max: clamp(132px, calc(var(--design-h) * 0.2), 180px);
   --book-rail-slot: clamp(48px, calc(var(--design-h) * 0.072), 56px);
   --book-rail-gap: clamp(4px, calc(var(--design-h) * 0.007), 6px);
   --book-rail-pad: clamp(4px, calc(var(--design-h) * 0.008), 8px);
@@ -33578,7 +33579,7 @@ button.linkish {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  object-position: center 40%;
+  object-position: center center;
 }
 
 .codex-detail-body {
@@ -33850,9 +33851,7 @@ button.linkish {
   background: transparent;
 }
 
-#app.monster-mode .mon-preview-art,
-#app.summoner-mode .mon-preview-art,
-.facility-layer--enhance .mon-preview-art {
+#app.summoner-mode .mon-preview-art {
   -webkit-mask-image: radial-gradient(
     ellipse 90% 94% at 50% 42%,
     #000 62%,
@@ -34145,8 +34144,8 @@ button.linkish {
 
 .facility-layer--enhance {
   --book-gap: clamp(6px, calc(var(--design-h) * 0.01), 10px);
-  --book-hero-h: clamp(116px, calc(var(--design-h) * 0.165), 148px);
-  --book-art-max: clamp(96px, calc(var(--design-h) * 0.145), 128px);
+  --book-hero-h: clamp(148px, calc(var(--design-h) * 0.22), 196px);
+  --book-art-max: clamp(132px, calc(var(--design-h) * 0.2), 180px);
   --book-rail-slot: clamp(48px, calc(var(--design-h) * 0.072), 56px);
   --book-rail-gap: clamp(4px, calc(var(--design-h) * 0.007), 6px);
   --book-rail-pad: clamp(4px, calc(var(--design-h) * 0.008), 8px);

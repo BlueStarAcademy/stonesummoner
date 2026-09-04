@@ -19892,7 +19892,7 @@ function codexMonsterDetailHtml(monsterId: string | null): string {
   const role = monsterRoleLabel(def.role, def.baseStats);
   const grade = invGradeFromStars(def.naturalStars);
   const art =
-    monsterBattleArtImg(def.id, "codex-detail-img", 256, "front") ||
+    monsterArtImg(def.id, "codex-detail-img", 256) ||
     `<span class="codex-cell-fallback">${def.element[0]?.toUpperCase() ?? "?"}</span>`;
   const elSrc = monsterElementArtSrc(def.element) ?? "";
   const skills = (def.skills ?? [])
@@ -19986,12 +19986,11 @@ function refreshCodexDetailDom(): void {
   if (codexTab === "gear") {
     host.innerHTML = codexGearDetailHtml(codexDetailGearKey);
     bindCodexDetailControls(host);
-    dematteArtInTree(host, "img.codex-detail-img, img.gear-detail-hero-img");
+    dematteArtInTree(host, "img.gear-detail-hero-img");
     syncCodexGearActiveCells();
   } else {
     host.innerHTML = codexMonsterDetailHtml(codexDetailMonsterId);
     bindCodexDetailControls(host);
-    dematteArtInTree(host, "img.codex-detail-img");
     syncCodexActiveCells();
   }
 }
@@ -20251,7 +20250,7 @@ function bindCodexLayerInteractions(): void {
     closeCodexSoft();
   });
   bindCodexDetailControls(layer);
-  dematteArtInTree(layer, "img.codex-detail-img, img.codex-cell-img, img.gear-detail-hero-img");
+  dematteArtInTree(layer, "img.codex-cell-img, img.gear-detail-hero-img");
   layer.addEventListener("click", (ev) => {
     const target = ev.target as HTMLElement | null;
     if (!target) return;
@@ -21481,12 +21480,9 @@ function renderMonBookDetailHtml(): string {
           starN >= 6 || (m.evolve ?? 0) >= maxEvolveSteps(def?.naturalStars ?? 1);
         const atSix = starN >= 6;
         const awakened = ownedMonsterAwakened(m);
-        const previewArt = awakened
-          ? ownedMonsterBattleArtImg(m, "mon-preview-img", 256, "front", true) ||
-            ownedMonsterArtImg(m, "mon-preview-img", 256, true) ||
-            `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`
-          : ownedMonsterBattleArtImg(m, "mon-preview-img", 256) ||
-            `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
+        const previewArt =
+          ownedMonsterArtImg(m, "mon-preview-img", 256, awakened) ||
+          `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
         const maxLevel = monsterMaxLevel(m);
         const nextExp = monsterExpToNext(m);
         const levelPct = Math.max(
@@ -27757,7 +27753,7 @@ function bind(): void {
   if (view !== "battle") {
     dematteArtInTree(
       app,
-      "img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.summon-detail-img, img.summon-detail-skill-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.mon-slot-img, img.mon-preview-img, img.codex-cell-img, img.growth-rite-img, img.growth-skill-img, img.dojo-insc-seal-art, img.dojo-block-seal-img, img.dojo-block-seal-ring, img.dojo-insc-seal-ring-art, img.arena-defense-slot-img, img.pvp-rival-mon-img, img.fusion-recipe-mat-img, img.fusion-pair-img, img.fusion-flow-result-img, img.fusion-recipe-result-img",
+      "img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.summon-detail-img, img.summon-detail-skill-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.mon-slot-img, img.codex-cell-img, img.growth-rite-img, img.growth-skill-img, img.dojo-insc-seal-art, img.dojo-block-seal-img, img.dojo-block-seal-ring, img.dojo-insc-seal-ring-art, img.arena-defense-slot-img, img.pvp-rival-mon-img, img.fusion-recipe-mat-img, img.fusion-pair-img, img.fusion-flow-result-img, img.fusion-recipe-result-img",
     );
   }
 

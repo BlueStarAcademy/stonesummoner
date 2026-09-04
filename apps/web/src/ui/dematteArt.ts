@@ -390,7 +390,7 @@ export function dematteArtImg(img: HTMLImageElement): void {
 /** Apply dematte to all matching imgs under root (in place). */
 export function dematteArtInTree(
   root: ParentNode,
-  selector = "img.mon-preview-img, img.mon-inspect-art-img, img.mon-slot-img, img.battle-unit-img, img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.summon-detail-img, img.summon-detail-skill-img, img.mon-skill-ico-img, img.mon-skill-art-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.stage-prep-info-art, img.codex-cell-img, img.codex-detail-img, img.arena-defense-slot-img, img.pvp-rival-mon-img, img.fusion-recipe-mat-img, img.fusion-pair-img, img.fusion-flow-result-img, img.fusion-recipe-result-img",
+  selector = "img.mon-inspect-art-img, img.mon-slot-img, img.battle-unit-img, img.party-slot-art, img.party-card-img, img.summon-multi-img, img.summon-reveal-img, img.summon-detail-img, img.summon-detail-skill-img, img.mon-skill-ico-img, img.mon-skill-art-img, img.stage-prep-inv-img, img.stage-prep-slot-img, img.stage-prep-info-art, img.codex-cell-img, img.arena-defense-slot-img, img.pvp-rival-mon-img, img.fusion-recipe-mat-img, img.fusion-pair-img, img.fusion-flow-result-img, img.fusion-recipe-result-img",
 ): void {
   root.querySelectorAll<HTMLImageElement>(selector).forEach(dematteArtImg);
 }
