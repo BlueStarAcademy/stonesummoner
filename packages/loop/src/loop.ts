@@ -1094,11 +1094,11 @@ export function createEmptySummonerMagicLoadouts(): Record<
   SummonerMagicLoadout
 > {
   return {
-    fire: [null, null],
-    water: [null, null],
-    wind: [null, null],
-    light: [null, null],
-    dark: [null, null],
+    fire: defaultSummonerMagicLoadout("fire"),
+    water: defaultSummonerMagicLoadout("water"),
+    wind: defaultSummonerMagicLoadout("wind"),
+    light: defaultSummonerMagicLoadout("light"),
+    dark: defaultSummonerMagicLoadout("dark"),
   };
 }
 

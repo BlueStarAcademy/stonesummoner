@@ -5203,6 +5203,15 @@ function ensureActiveSummonerMagicLoadoutPersisted(): void {
   };
 }
 
+function summonerMagicSkillDef(
+  el: SummonerElement,
+  skillId: string | null | undefined,
+) {
+  if (!skillId) return null;
+  const kit = getSummonerKit(el);
+  return Object.values(kit.skills).find((skill) => skill.id === skillId) ?? null;
+}
+
 function renderAllyMagicEquipSlots(
   kind: "stage" | "party" | "arena-defense",
   summonerEl?: SummonerElement,
@@ -5218,7 +5227,9 @@ function renderAllyMagicEquipSlots(
   if (stagePrepMagicPendingId && !pendingMagic) stagePrepMagicPendingId = null;
   return loadout
     .map((skillId, index) => {
-      const skill = skillId ? magicById.get(skillId) : null;
+      const skill =
+        (skillId ? magicById.get(skillId) : null) ??
+        summonerMagicSkillDef(activeEl, skillId);
       const slotAttr =
         kind === "stage"
           ? `data-stage-prep-magic-slot="${index}"`
@@ -5229,11 +5240,10 @@ function renderAllyMagicEquipSlots(
           : `data-party-info="magic" data-party-info-magic="${escapeHtml(skill.id)}"`
         : "";
       return `<button type="button" class="stage-prep-magic-slot${pendingMagic ? " is-target" : ""}${skill ? "" : " is-empty"}" ${slotAttr} ${infoAttr} title="${escapeHtml(skill?.nameKo ?? t("ui.stagePrepSkillSlot", { n: index + 1 }))}" ${pendingMagic ? "" : skill ? "" : "disabled"}>
-        <span>${escapeHtml(t("ui.stagePrepSkillSlot", { n: index + 1 }))}</span>
         ${
           skill
-            ? summonerSkillArtImg(skill.id, "stage-prep-magic-slot-img", 34)
-            : `<i>+</i>`
+            ? `${summonerSkillArtImg(skill.id, "stage-prep-magic-slot-img", 40)}<span>${escapeHtml(skill.nameKo)}</span>`
+            : `<span>${escapeHtml(t("ui.stagePrepSkillSlot", { n: index + 1 }))}</span><i>+</i>`
         }
       </button>`;
     })
@@ -15505,12 +15515,24 @@ function preparePartyHall(): void {
   stagePrepSuppressClick = false;
   const presets = normalizePartyPresets(save, save.partyPresets);
   const idx = clampPartyPresetIndex(save.activePartyPreset);
+  const preset = presets[idx]!;
   save = {
     ...save,
     partyPresets: presets,
     activePartyPreset: idx,
+    summonerMagicLoadouts: {
+      ...save.summonerMagicLoadouts,
+      [preset.summoner]: withDefaultSummonerMagicLoadout(
+        preset.summoner,
+        preset.magic ?? save.summonerMagicLoadouts?.[preset.summoner],
+      ),
+    },
   };
-  partyDraft = new Set(save.party);
+  if (preset.summoner !== (save.activeSummoner ?? "light")) {
+    save = setActiveSummoner(save, preset.summoner);
+  }
+  ensureActiveSummonerMagicLoadoutPersisted();
+  partyDraft = new Set(preset.party.length ? preset.party : save.party);
   persist();
 }
 
