@@ -849,6 +849,12 @@ export function isChromaPlatePixel(r, g, b, a = 255) {
   return false;
 }
 
+/** Tight #FF00FF plate only — do not treat painted purple/red as matte. */
+export function isTightMagentaPlatePixel(r, g, b, a = 255) {
+  if (a < 12) return false;
+  return r >= 220 && b >= 220 && g <= 70 && r + b > g + 280;
+}
+
 export function floodBlackPlateFromEdges(rgba, w, h) {
   const visited = new Uint8Array(w * h);
   const q = [];
@@ -984,25 +990,31 @@ export function floodChromaPlateFromEdges(rgba, w, h) {
 
 /** Full chroma-key pass for magenta/black AI battle plates. */
 export async function processChromaBattleRgba(rgba, w, h, opts = {}) {
-  chromaKeyRgba(rgba, opts.chroma ?? { tolerance: 95 });
+  chromaKeyRgba(rgba, opts.chroma ?? { tolerance: 48 });
   floodChromaPlateFromEdges(rgba, w, h);
-  floodPurplePlateFromEdges(rgba, w, h);
-  floodBlackPlateFromEdges(rgba, w, h);
-  await dematteBuffer(rgba, w, h, 36, { plateOnly: true, plateMax: 0 });
   chromaSpillSuppress(rgba, w, h);
   const inside = buildSubjectInsideMask(rgba, w, h, {
-    yEndRatio: opts.yEndRatio ?? 0.88,
+    yEndRatio: opts.yEndRatio ?? 0.96,
     sealGrid: true,
-    sealGridSpread: opts.sealGridSpread ?? 0.2,
+    sealGridSpread: opts.sealGridSpread ?? 0.28,
     excludeChroma: true,
   });
-  stripChromaOutsideMask(rgba, w, h, inside);
-  stripExteriorChromaGlow(rgba, w, h, inside, { bottomRatio: 0.55 });
-  stripInteriorFloorGlow(rgba, w, h, { floorRatio: 0.72 });
-  stripLowerChromaFloor(rgba, w, h, { floorRatio: 0.74 });
-  stripBottomChromaWedge(rgba, w, h);
-  stripBottomChromaBand(rgba, w, h);
+  stripTightMagentaOutsideMask(rgba, w, h, inside);
   return inside;
+}
+
+export function stripTightMagentaOutsideMask(rgba, w, h, inside) {
+  for (let i = 0; i < w * h; i++) {
+    if (inside[i]) continue;
+    const o = i * 4;
+    if (!isTightMagentaPlatePixel(rgba[o], rgba[o + 1], rgba[o + 2], rgba[o + 3])) {
+      continue;
+    }
+    rgba[o] = 0;
+    rgba[o + 1] = 0;
+    rgba[o + 2] = 0;
+    rgba[o + 3] = 0;
+  }
 }
 
 /** Remove chroma plate in the lowest band (feet floor glow), keep orange fire. */
@@ -1230,7 +1242,7 @@ export function chromaKeyRgba(rgba, opts = {}) {
     const db = b - keyB;
     const dist = Math.sqrt(dr * dr + dg * dg + db * db);
     const plateMagenta =
-      r >= 210 && b >= 210 && g <= 95 && dist <= tol;
+      r >= 230 && b >= 230 && g <= 60 && dist <= tol;
     if (plateMagenta) {
       rgba[i] = 0;
       rgba[i + 1] = 0;
@@ -1334,7 +1346,12 @@ export async function imageToChromaBattleWebp(srcImage, dstWebp, opts = {}) {
     .toBuffer({ resolveWithObject: true });
   const rgba = new Uint8ClampedArray(data);
   await processChromaBattleRgba(rgba, info.width, info.height, opts);
-  await finishDematteRgba(rgba, info.width, info.height, opts);
+  await finishDematteRgba(rgba, info.width, info.height, {
+    ...opts,
+    fillHoles: false,
+    sealInterior: false,
+    punchEnclosedWhite: false,
+  });
   featherAlphaEdges(rgba, info.width, info.height, 2);
   zeroClearRgb(rgba);
   await rawRgbaToWebp(rgba, info.width, info.height, dstWebp, opts);
