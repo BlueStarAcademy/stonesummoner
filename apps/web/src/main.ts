@@ -7724,6 +7724,21 @@ function softRefreshStonePickBoard(canClick: boolean): boolean {
   return true;
 }
 
+/** Always clear pick blockers so skill / target taps are never dead after a stone. */
+function dismissStonePickOverlay(): void {
+  stonePickHoldOpen = false;
+  stoneSummonFx = null;
+  const layout = app.querySelector<HTMLElement>(".battle-layout");
+  layout?.classList.remove("is-stone-summoning", "is-stone-pick");
+  const layer = app.querySelector<HTMLElement>("#stone-pick-layer");
+  if (layer) {
+    layer.hidden = true;
+    layer.setAttribute("aria-hidden", "true");
+    layer.classList.remove("is-fading");
+    layer.style.removeProperty("--stone-pick-fade-ms");
+  }
+}
+
 async function fadeStonePickWithBuffs(buffMs: number): Promise<void> {
   const layer = app.querySelector<HTMLElement>("#stone-pick-layer");
   const fadeMs =
@@ -7734,14 +7749,10 @@ async function fadeStonePickWithBuffs(buffMs: number): Promise<void> {
     layer.style.setProperty("--stone-pick-fade-ms", `${fadeMs}ms`);
     layer.classList.add("is-fading");
     await waitFx(fadeMs);
-    layer.classList.remove("is-fading");
-    layer.style.removeProperty("--stone-pick-fade-ms");
   } else if (buffMs > 0) {
     await waitFx(buffMs);
   }
-  stonePickHoldOpen = false;
-  stoneSummonFx = null;
-  app.querySelector(".battle-layout")?.classList.remove("is-stone-summoning");
+  dismissStonePickOverlay();
   if (!refreshBattleView()) render();
 }
 
@@ -7800,8 +7811,7 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
 
     if (!battle.playStone({ x, y })) {
       const reason = battle.log[battle.log.length - 1] ?? t("ui.b72f5a4752");
-      stoneSummonFx = null;
-      stonePickHoldOpen = false;
+      dismissStonePickOverlay();
       flash(reason);
       if (!refreshBattleView()) render();
       return;
@@ -7827,12 +7837,20 @@ async function onCellClickAsync(x: number, y: number): Promise<void> {
     const pick = app.querySelector<HTMLElement>("#stone-pick-layer");
     const buffMs = spawnStoneBuffUntilFloat(report, { host: pick });
     await fadeStonePickWithBuffs(Math.max(buffMs, shapeMs));
+    // Skill / target UI is live after the plate dismisses — do not keep busy
+    // through outcome FX or the player cannot tap summoner skills.
+    const awaitingPlayerSkill =
+      !!battle &&
+      battle.phase === "await_skill" &&
+      !(autoMode && battleAutoLive.combat);
+    if (awaitingPlayerSkill) battleFxBusy = false;
     await presentStoneOutcome(report, { skipBuffFloat: true });
-    await resolveCombatUntilAllyInput({ holdBusy: true });
+    await resolveCombatUntilAllyInput({
+      holdBusy: !awaitingPlayerSkill,
+    });
     cueOnboardFirstSkills();
   } finally {
-    stonePickHoldOpen = false;
-    stoneSummonFx = null;
+    dismissStonePickOverlay();
     battleFxBusy = false;
   }
 }

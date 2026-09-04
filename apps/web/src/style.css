@@ -11159,9 +11159,15 @@ body > .battle-settings-layer.settings-layer {
   position: relative;
   z-index: 1;
   width: 100%;
-  pointer-events: auto;
+  pointer-events: none;
   overflow: visible;
   transform-style: preserve-3d;
+}
+
+/* Midfield grid only steals taps while stones can be placed. */
+.board-wrap--stage.is-live .board-frame--tilted .board,
+.board-frame--tilted.is-placeable .board {
+  pointer-events: auto;
 }
 
 .board-frame--tilted .board button.cell {
@@ -11933,7 +11939,18 @@ body > .battle-settings-layer.settings-layer {
 
 .stone-pick-layer.is-fading {
   animation: stone-pick-out var(--stone-pick-fade-ms, 1.2s) ease-in forwards;
-  pointer-events: none;
+  pointer-events: none !important;
+}
+
+/* Children with pointer-events:auto would otherwise keep eating skill taps. */
+.stone-pick-layer.is-fading .stone-pick-hit,
+.stone-pick-layer.is-fading .stone-pick-circle,
+.stone-pick-layer.is-fading .stone-pick-head,
+.stone-pick-layer.is-fading .stone-pick-board,
+.stone-pick-layer[hidden] .stone-pick-hit,
+.stone-pick-layer[hidden] .stone-pick-circle,
+.stone-pick-layer[hidden] .stone-pick-head {
+  pointer-events: none !important;
 }
 
 .stone-pick-card {
@@ -12006,7 +12023,8 @@ body > .battle-settings-layer.settings-layer {
   justify-content: center;
   width: 100%;
   touch-action: manipulation;
-  pointer-events: auto;
+  /* Only the plate itself receives taps — empty margins must not block units. */
+  pointer-events: none;
 }
 
 /* Large flat grid for easy taps; overlay is independent of the midfield circle. */
