@@ -21507,6 +21507,7 @@ function renderMonBookDetailHtml(): string {
         const atSix = starN >= 6;
         const awakened = ownedMonsterAwakened(m);
         const previewArt =
+          ownedMonsterBattleArtImg(m, "mon-preview-img", 256, "front", awakened) ||
           ownedMonsterArtImg(m, "mon-preview-img", 384, awakened) ||
           `<span class="mon-inspect-art-fallback">${def?.element?.[0]?.toUpperCase() ?? "?"}</span>`;
         const maxLevel = monsterMaxLevel(m);

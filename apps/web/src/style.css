@@ -8398,26 +8398,25 @@ main {
 .battle-sky-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  /* Keep the painted sky / far terrace in frame (do not crop the map top). */
-  object-position: center 14%;
+  object-fit: contain;
+  object-position: center center;
   opacity: 0.92;
   filter: brightness(1.06) contrast(1.04);
 }
 
-/* Thunder mountain: keep the far terrace, not the cliff crop. */
+/* Thunder mountain: bias slightly upward so the far terrace stays in frame. */
 .battle-sky[data-bg="map-07"] .battle-sky-img,
 .battle-screen[data-bg="map-07"] .battle-sky-img {
-  object-position: center 10%;
+  object-position: center 46%;
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy {
-  padding-top: 0;
+  padding-top: calc(96px + env(safe-area-inset-top) + var(--battle-midfield-drop, 0px));
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front {
   --battle-depth-scale: 0.96;
-  --battle-depth-y: 6px;
+  --battle-depth-y: calc(34px + var(--battle-midfield-drop, 0px) * 0.65);
 }
 
 .battle-screen[data-bg="map-07"] .battle-lane.enemy .battle-front::after {
@@ -8530,21 +8529,21 @@ main {
 .battle-layout--stage {
   --battle-midfield-drop: 0px;
   --battle-hud-span: calc(52px + env(safe-area-inset-bottom));
-  /* Midfield circle sits just above the ally rim. */
-  --board-map-span: min(70%, 24dvh, calc(var(--design-h) * 0.24));
-  gap: 0;
+  /* Midfield circle sits between rims and shrinks if the HUD would clip. */
+  --board-map-span: min(86%, 36dvh, calc(var(--design-h) * 0.36));
+  gap: 2px;
   padding: 4px 4px var(--battle-hud-span);
   min-height: 0;
   flex: 1;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .battle-layout--stage .board-wrap--stage {
-  flex: 0 0 auto;
+  flex: 1 1 0;
   min-height: 0;
-  max-height: min(260px, 24dvh);
+  max-height: min(372px, 36dvh);
   z-index: 1;
-  margin-top: 2px;
+  margin-top: 0;
   margin-bottom: 0;
   display: flex;
   align-items: center;
@@ -8705,15 +8704,15 @@ main {
   pointer-events: auto;
 }
 
-/* Far rim — sit on the far floor band, packed down toward the circle */
+/* Far rim — sit on the far floor band of the arena BG */
 .battle-lane.enemy {
   --battle-depth-scale: 0.94;
-  --battle-depth-y: 4px;
+  --battle-depth-y: calc(10px + var(--battle-midfield-drop, 0px) * 0.65);
   --battle-depth-z: -42px;
   --battle-depth-tilt: -1.5deg;
   --battle-depth-opacity: 0.94;
-  padding-top: 0;
-  min-height: clamp(80px, 11dvh, 104px);
+  padding-top: calc(52px + env(safe-area-inset-top));
+  min-height: clamp(96px, 14dvh, 124px);
   margin-bottom: 0;
 }
 
@@ -9147,9 +9146,9 @@ main {
     scale(var(--battle-depth-scale));
   transform-origin: center bottom;
   overflow: visible;
-  /* Skill strip is absolutely positioned; keep a short gap under the circle. */
+  /* Skill strip + select bubble sit above the unit head. */
   padding-bottom: 8px;
-  padding-top: 28px;
+  padding-top: 108px;
 }
 
 .battle-formation {
@@ -9830,8 +9829,8 @@ button.battle-unit,
   width: 100%;
   margin-left: 0;
   margin-right: 0;
-  height: clamp(52px, 8.4dvh, 68px);
-  transform: translateY(6px);
+  height: clamp(70px, 11.2dvh, 92px);
+  transform: none;
 }
 
 .battle-unit[data-art-family="dew_slime"] .battle-unit-img {
@@ -20911,8 +20910,8 @@ span.stage-drop-info-tab {
   width: 100%;
   height: 100%;
   max-height: none;
-  object-fit: cover;
-  object-position: center 26%;
+  object-fit: contain;
+  object-position: center bottom;
   display: block;
   margin: 0 auto;
   pointer-events: none;
@@ -20922,8 +20921,7 @@ span.stage-drop-info-tab {
   filter: none;
   animation: none;
   transform: none;
-  transform-origin: center center;
-  /* Painted WebP — smooth downscale, not contrast-optimized pixel crunch */
+  transform-origin: center bottom;
   image-rendering: auto;
 }
 
@@ -25425,8 +25423,9 @@ img.el-tint-dark {
 }
 
 .mon-slot.mon-slot--portrait:not(.mon-slot--empty) .mon-slot-img:not(.mon-slot-img--empty) {
-  transform: scale(1.38);
-  transform-origin: center 32%;
+  object-fit: cover;
+  object-position: center 30%;
+  transform: none;
 }
 
 /* Portrait-card element badge stays independent from painted character art. */
@@ -25511,16 +25510,16 @@ img.el-tint-dark {
   pointer-events: none;
 }
 
-/* Compact inventory portraits (e.g. dew_slime) — zoom so the body fills the cell. */
+/* Compact inventory portraits (e.g. dew_slime) — face the body without overflow scale. */
 .mon-slot.mon-slot--portrait[data-art-family="dew_slime"] .mon-slot-img,
+.stage-prep-slot[data-art-family="dew_slime"] .stage-prep-slot-img,
 .arena-defense-slot[data-art-family="dew_slime"] .arena-defense-slot-img,
 .pvp-rival-mon[data-art-family="dew_slime"] .pvp-rival-mon-img,
 .fusion-recipe-mat[data-art-family="dew_slime"] .fusion-recipe-mat-img,
 .codex-cell[data-art-family="dew_slime"] .codex-cell-img {
   object-fit: cover;
-  object-position: center 48%;
-  transform: scale(1.72);
-  transform-origin: center center;
+  object-position: center 46%;
+  transform: none;
 }
 
 .mon-slot-stars {
@@ -33523,9 +33522,8 @@ button.linkish {
   max-width: none;
   max-height: none;
   object-fit: cover;
-  object-position: center 36%;
-  transform: scale(1.38);
-  transform-origin: center 32%;
+  object-position: center 30%;
+  transform: none;
 }
 
 .codex-cell.is-locked .codex-cell-img,
@@ -33852,7 +33850,7 @@ button.linkish {
   height: auto;
   min-height: 0;
   max-height: none;
-  padding: 0;
+  padding: 8px 6px 4px;
   border: 1px solid color-mix(in srgb, var(--grade-rim, #c9a227) 38%, transparent);
   background: var(--inv-grade-well, transparent);
   box-shadow: none;
@@ -33912,8 +33910,8 @@ button.linkish {
 
 #app.monster-mode .mon-preview-img,
 .facility-layer--enhance .mon-preview-img {
-  object-fit: cover;
-  object-position: center 24%;
+  object-fit: contain;
+  object-position: center bottom;
 }
 
 #app.summoner-mode .mon-preview-art,
