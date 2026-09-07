@@ -8,12 +8,13 @@
 - **Upper third:** still shows a **far arena floor / terrace** so enemy units can stand grounded (not sky-only)
 - Mid: walls / props; continuous depth — no cliff under far feet
 - No floating islands, no sky-only floors, no UI/text/watermark
-- Soft painterly dark-fantasy, Summoners War mobile arena feel
+- Soft painterly dark-fantasy vertical arena
+- Client mounts with `object-fit: cover` and near-floor-biased `object-position` so CSS rims meet painted floors
 
 ## Master prompt
 
 ```
-Premium Com2uS Summoners War style vertical battle arena background,
+Premium modern mobile fantasy vertical battle arena background,
 portrait 9:16 composition, continuous solid ground from bottom through mid-frame,
 near floor in lower third AND a clear far arena floor band in the upper third
 so distant fighters stand on solid ground, atmospheric depth, no floating islands,

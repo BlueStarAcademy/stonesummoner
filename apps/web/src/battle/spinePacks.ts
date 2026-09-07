@@ -65,34 +65,39 @@ export const SPINE_PACKS: Record<string, SpinePack> = {
     atlasUrl: "/art/spine/fire_fang/fire_fang-pma.atlas",
     requiredAssets: ["/art/spine/fire_fang/fire_fang-pma.png"],
     clips: { ...PILOT_CLIPS },
-    scale: 0.36,
-    offsetY: 4,
+    scale: 0.48,
+    offsetY: 6,
     skins: { front: "front", back: "back" },
     stillFrontUrl: "/art/spine/fire_fang/src/front.png",
     stillBackUrl: "/art/spine/fire_fang/src/back.png",
   },
-  /** Pilot clone of fire_fang rig until unique Spine export ships. */
+  /**
+   * Full-body region pilot (same bone clips as fire_fang).
+   * Painted WebP remains the book/fallback still; Spine drives battle idle/cast/hit.
+   */
   wolf_fighter: {
     id: "wolf_fighter",
-    enabled: false,
+    enabled: true,
     skeletonUrl: "/art/spine/wolf_fighter/wolf_fighter.json",
     atlasUrl: "/art/spine/wolf_fighter/wolf_fighter-pma.atlas",
+    requiredAssets: ["/art/spine/wolf_fighter/wolf_fighter-pma.png"],
     clips: { ...PILOT_CLIPS },
-    scale: 0.36,
-    offsetY: 4,
+    scale: 0.5,
+    offsetY: 6,
     skins: { front: "front", back: "back" },
     stillFrontUrl: "/art/monster/battle/wolf_fighter-front.webp",
     stillBackUrl: "/art/monster/battle/wolf_fighter-back.webp",
   },
-  /** Pilot clone of fire_fang rig until unique Spine export ships. */
+  /** Full-body region pilot — heavier silhouette, slightly lower mount. */
   moss_turtle: {
     id: "moss_turtle",
-    enabled: false,
+    enabled: true,
     skeletonUrl: "/art/spine/moss_turtle/moss_turtle.json",
     atlasUrl: "/art/spine/moss_turtle/moss_turtle-pma.atlas",
+    requiredAssets: ["/art/spine/moss_turtle/moss_turtle-pma.png"],
     clips: { ...PILOT_CLIPS },
-    scale: 0.34,
-    offsetY: 2,
+    scale: 0.46,
+    offsetY: 4,
     skins: { front: "front", back: "back" },
     stillFrontUrl: "/art/monster/battle/moss_turtle-front.webp",
     stillBackUrl: "/art/monster/battle/moss_turtle-back.webp",

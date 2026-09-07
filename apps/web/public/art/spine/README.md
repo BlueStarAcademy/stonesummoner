@@ -2,13 +2,16 @@
 
 ## Production packs
 
-| id | Brief | Files |
-|----|-------|-------|
-| `fire_fang` | [`docs/art/spine/fire_fang-brief.md`](../../../../docs/art/spine/fire_fang-brief.md) | `fire_fang/` (**shipped**) |
-| `wolf_fighter` | pilot clone of fire_fang rig | `wolf_fighter/` (family stills for book) |
-| `moss_turtle` | pilot clone of fire_fang rig | `moss_turtle/` (family stills for book) |
+| id | Brief | Status |
+|----|-------|--------|
+| `fire_fang` | [`docs/art/spine/fire_fang-brief.md`](../../../../docs/art/spine/fire_fang-brief.md) | **enabled** |
+| `wolf_fighter` | full-body region pilot | **enabled** |
+| `moss_turtle` | full-body region pilot | **enabled** |
 
-Register in [`apps/web/src/battle/spinePacks.ts`](../../../src/battle/spinePacks.ts). Unregistered catalog ids use WebP.
+Register in [`apps/web/src/battle/spinePacks.ts`](../../../src/battle/spinePacks.ts).
+Unregistered catalog ids use WebP + CSS idle breath.
+
+Rollout procedure: [`docs/art/spine/cutup-rollout.md`](../../../../docs/art/spine/cutup-rollout.md).
 
 ## Dev-only (not loaded)
 
@@ -19,14 +22,15 @@ pilot/
   …
 ```
 
-Esoteric **spineboy** is kept for local Spine/Pixi plumbing checks only. It is **not** in `SPINE_PACKS` and must not appear in battle or the monster book.
+Esoteric **spineboy** is for local Spine/Pixi plumbing checks only. It is **not**
+in `SPINE_PACKS` and must not appear in battle or the monster book.
 
 ## Adding a pack
 
-1. Follow the `fire_fang` brief (dark fantasy, front/back skins, clip names).
+1. Follow the cutup rollout doc + `fire_fang` brief (front/back skins, clip names).
 2. Export Spine 4.2 → `{id}.json` + `{id}-pma.atlas` + png under `public/art/spine/{id}/`.
-3. Add an entry to `SPINE_PACKS` (clips + optional `skins`).
-4. Smoke: battle mount + book preview; confirm other units stay on WebP.
+3. Add `SPINE_PACKS` entry (`enabled`, `requiredAssets`, `scale`/`offsetY`).
+4. Smoke: battle mount + cast/hit clips; confirm other units stay on WebP.
 
 ## Runtime
 

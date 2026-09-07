@@ -88,7 +88,7 @@ export function battleUnitStature(
   opts?: { boss?: boolean },
 ): number {
   if (opts?.boss) return 1;
-  if (unit.kind === "summoner") return 0.9;
+  if (unit.kind === "summoner") return 0.94;
   const family = def?.familyId ? FAMILY_STATURE[def.familyId] : undefined;
   if (family != null) return family;
   const role = def?.role ? ROLE_STATURE[def.role] : undefined;

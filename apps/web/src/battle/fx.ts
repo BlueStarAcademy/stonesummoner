@@ -81,6 +81,17 @@ export function pulseUnitClass(
     className === "fx-hit-dark"
   ) {
     playSpineClip(unitId, "hit", { loop: false });
+  } else if (
+    className === "fx-cast-skill" ||
+    className === "fx-cast-place" ||
+    className === "fx-cast-release" ||
+    className === "fx-support-cast"
+  ) {
+    playSpineClip(unitId, "cast", { loop: false });
+  } else if (className === "fx-ult") {
+    playSpineClip(unitId, "ult", { loop: false });
+  } else if (className === "fx-lunge") {
+    playSpineClip(unitId, "attack", { loop: false });
   }
   el.classList.add(className);
   if (art) art.style.animationDuration = `${Math.max(40, ms)}ms`;

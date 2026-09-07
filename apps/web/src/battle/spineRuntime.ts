@@ -262,7 +262,11 @@ export async function mountSpineInHost(
       ready: true,
       play(clip, playOpts) {
         if (record.destroyed) return;
-        const name = record.pack.clips[clip];
+        let name = record.pack.clips[clip];
+        if (!name && clip === "cast") name = record.pack.clips.attack;
+        if (!name && clip === "ult") {
+          name = record.pack.clips.cast ?? record.pack.clips.attack;
+        }
         if (!name) return;
         const loop =
           playOpts?.loop ??
