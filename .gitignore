@@ -7,6 +7,7 @@ dist-app/
 .env
 .env.*
 !.env.example
+!apps/web/.env.app
 apps/web/dev-dist/
 NUL.css
 nul.css
