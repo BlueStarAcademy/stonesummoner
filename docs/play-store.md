@@ -12,7 +12,7 @@ StoneSummoner ships as a **Capacitor** Android app wrapping the Vite + Pixi PWA 
 
 ## Prerequisites
 
-- Node 20+
+- Node 20+ (Capacitor 8 CLI runs through `npx node@22` in `npm run cap`)
 - [Android Studio](https://developer.android.com/studio) (Ladybug+ recommended) with JDK 21
 - Android SDK Platform 35+, build-tools
 - A **HTTPS** public API URL (Railway) for login / cloud save from the device
