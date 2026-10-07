@@ -1,14 +1,15 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 /**
- * Android package wraps the Vite build in apps/web/dist.
- * Cloud sync requires VITE_API_BASE pointing at the HTTPS API (e.g. Railway)
- * when building for Capacitor — relative /api does not work inside the WebView.
+ * Android package wraps the app build in apps/web/dist-app (`npm run build:app`).
+ * Requires VITE_API_BASE pointing at the HTTPS API (e.g. Railway) — relative
+ * /api does not work inside the WebView. Monster / battle / stage art is not
+ * bundled; it loads from VITE_ASSET_BASE (defaults to VITE_API_BASE).
  */
 const config: CapacitorConfig = {
   appId: "com.bluestaracademy.stonesummoner",
   appName: "StoneSummoner",
-  webDir: "dist",
+  webDir: "dist-app",
   server: {
     androidScheme: "https",
   },

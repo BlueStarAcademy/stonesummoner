@@ -359,6 +359,9 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.decoding = "async";
+    if (/^https?:\/\//i.test(src) && new URL(src).origin !== location.origin) {
+      img.crossOrigin = "anonymous";
+    }
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("img load failed"));
     img.src = src;

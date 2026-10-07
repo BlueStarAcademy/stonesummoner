@@ -6,7 +6,8 @@ StoneSummoner ships as a **Capacitor** Android app wrapping the Vite + Pixi PWA 
 |------|--------|
 | Application ID | `com.bluestaracademy.stonesummoner` |
 | App name | StoneSummoner |
-| Web assets | `apps/web/dist` (`capacitor.config.ts` → `webDir`) |
+| Web assets | `apps/web/dist-app` (`npm run build:app`, `capacitor.config.ts` → `webDir`) |
+| Remote art | `art/monster`, `art/battle`, `art/stages` load from `VITE_ASSET_BASE` (defaults to `VITE_API_BASE`) |
 | Upload artifact | **AAB** (Play Console). APK for local/sideload only. |
 
 ## Prerequisites
@@ -74,6 +75,17 @@ With `apps/web/android/key.properties` present, `bundleRelease` / `assembleRelea
 | `NODE_ENV=production` | Secure cookies |
 
 Client build-time: `VITE_API_BASE=https://your-service.up.railway.app` (no trailing slash).
+
+### App build size
+
+`npm run build:app` (Vite `--mode app`) keeps UI / hub / summoner / audio in the package (~120 MB) and strips heavy painted art:
+
+- `art/monster`, `art/battle`, `art/stages` are removed from `dist-app` and every `/art/{monster,battle,stages}/` reference in JS / CSS / HTML is rewritten to `${VITE_ASSET_BASE}/art/...`.
+- `VITE_ASSET_BASE` defaults to `VITE_API_BASE`, so the Railway server that hosts the PWA also serves the art. Point it at a CDN later without code changes.
+- The server sends `Access-Control-Allow-Origin: *` on `/art/*` so canvas dematte works cross-origin.
+- `art/_staging`, `art/stages/_src`, `art/battle/_src` never ship (web or app).
+
+The build fails fast if neither variable is an `https://` origin.
 
 ## Store listing draft
 

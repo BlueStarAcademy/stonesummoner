@@ -59,6 +59,11 @@ app.use(
     lastModified: true,
     index: false,
     setHeaders(res, filePath) {
+      // App builds load painted art from this host; canvas reads need CORS.
+      if (filePath.replaceAll("\\", "/").includes("/art/")) {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      }
       if (process.env.NODE_ENV !== "production") {
         res.setHeader("Cache-Control", "no-store");
         return;

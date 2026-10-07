@@ -2,5 +2,6 @@
 .cursor
 **/node_modules
 **/dist
+**/dist-app
 assets
 apps/web/public/art/stages/_src
