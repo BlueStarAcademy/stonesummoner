@@ -7,6 +7,7 @@ COPY scripts ./scripts
 COPY docs ./docs
 RUN npm install
 RUN npm run build
+RUN npm run build:app -w stonesummoner-web
 
 FROM node:20-alpine
 WORKDIR /app
@@ -18,6 +19,7 @@ COPY --from=build /app/apps/web/server ./apps/web/server
 COPY --from=build /app/apps/web/shared ./apps/web/shared
 COPY --from=build /app/apps/web/sql ./apps/web/sql
 COPY --from=build /app/apps/web/dist ./apps/web/dist
+COPY --from=build /app/apps/web/dist-app ./apps/web/dist-app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
 EXPOSE 8080

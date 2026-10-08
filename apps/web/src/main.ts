@@ -2,6 +2,12 @@ import "./style.css";
 import { apiUrl } from "./api/url";
 import { registerPwaAutoUpdate } from "./pwa";
 import {
+  applyLiveUpdate,
+  findLiveUpdate,
+  markLiveUpdateReady,
+  type LiveUpdate,
+} from "./native/liveUpdate";
+import {
   CHAT_CHANNEL_CAP,
   CHAT_CHANNEL_COUNT,
   chatJoin,
@@ -10946,6 +10952,65 @@ function softMountOverlay(layerId: string, html: string): HTMLElement | null {
 function softRemoveOverlay(layerId: string): void {
   app.querySelector(`#${layerId}`)?.remove();
   rememberOverlayClose(layerId);
+}
+
+const APP_UPDATE_LAYER_ID = "app-update-layer";
+let appUpdateUi: { update: LiveUpdate; failed: boolean; percent: number } | null = null;
+
+function renderAppUpdateLayer(): string {
+  if (!appUpdateUi) return "";
+  const { failed, percent } = appUpdateUi;
+  const body = failed
+    ? `<div class="gear-sell-acts">
+        <button type="button" class="secondary" id="btn-app-update-later">${escapeHtml(t("appUpdate.later"))}</button>
+        <button type="button" class="auth-btn-primary" id="btn-app-update-retry">${escapeHtml(t("appUpdate.retry"))}</button>
+      </div>`
+    : `<div class="app-update-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span style="width:${percent}%"></span></div>
+      <strong class="app-update-pct">${percent}%</strong>`;
+  return `<div class="settings-layer app-update-layer" id="${APP_UPDATE_LAYER_ID}" aria-hidden="false">
+    <div class="settings-backdrop" aria-hidden="true"></div>
+    <div class="gear-sell-confirm-sheet sys-confirm-sheet app-update-sheet" role="dialog" aria-modal="true" aria-labelledby="app-update-title">
+      <h2 class="gear-sell-confirm-title" id="app-update-title">${escapeHtml(t(failed ? "appUpdate.failed" : "appUpdate.title"))}</h2>
+      ${body}
+    </div>
+  </div>`;
+}
+
+function mountAppUpdateLayer(): void {
+  const layer = softMountOverlay(APP_UPDATE_LAYER_ID, renderAppUpdateLayer());
+  if (!layer || !appUpdateUi?.failed) return;
+  const update = appUpdateUi.update;
+  layer.querySelector("#btn-app-update-retry")?.addEventListener("click", () => {
+    void runLiveUpdate(update);
+  });
+  layer.querySelector("#btn-app-update-later")?.addEventListener("click", () => {
+    appUpdateUi = null;
+    softRemoveOverlay(APP_UPDATE_LAYER_ID);
+  });
+}
+
+function patchAppUpdateProgress(percent: number): void {
+  if (!appUpdateUi) return;
+  appUpdateUi.percent = percent;
+  const layer = app.querySelector<HTMLElement>(`#${APP_UPDATE_LAYER_ID}`);
+  const bar = layer?.querySelector<HTMLElement>(".app-update-bar");
+  if (!bar) return;
+  bar.setAttribute("aria-valuenow", String(percent));
+  const fill = bar.querySelector<HTMLElement>("span");
+  if (fill) fill.style.width = `${percent}%`;
+  const pct = layer?.querySelector(".app-update-pct");
+  if (pct) pct.textContent = `${percent}%`;
+}
+
+async function runLiveUpdate(update: LiveUpdate): Promise<void> {
+  appUpdateUi = { update, failed: false, percent: 0 };
+  mountAppUpdateLayer();
+  try {
+    await applyLiveUpdate(update, patchAppUpdateProgress);
+  } catch {
+    appUpdateUi = { update, failed: true, percent: 0 };
+    mountAppUpdateLayer();
+  }
 }
 
 /** Toggle the monster EXP power-up modal without a full screen re-render. */
@@ -26492,7 +26557,11 @@ function closeTopOverlay(): boolean {
       overlayBackStack.pop();
       continue;
     }
-    if (id === "nick-setup-layer" || id === "starter-summoner-layer") {
+    if (
+      id === "nick-setup-layer" ||
+      id === "starter-summoner-layer" ||
+      id === APP_UPDATE_LAYER_ID
+    ) {
       return true;
     }
     if (closeOverlayById(id)) {
@@ -27795,15 +27864,29 @@ function bind(): void {
   if (gloryUpgradeId && !app.querySelector(`#${GLORY_UP_LAYER_ID}`)) {
     remountGloryUpgradeOverlay();
   }
+  if (appUpdateUi && !app.querySelector(`#${APP_UPDATE_LAYER_ID}`)) {
+    mountAppUpdateLayer();
+  }
   applyGuideRailOpen();
 }
 
 async function boot(): Promise<void> {
   bindSaveFlush();
+  void markLiveUpdateReady();
+  const liveUpdateCheck = findLiveUpdate();
   const health = await apiJson<{ ok?: boolean; db?: string }>("/api/health");
   ephemeralStore = health?.db === "memory";
   const me = await apiJson<{ user: SessionUser }>("/api/me");
+  const liveUpdate = await liveUpdateCheck;
   bootReady = true;
+  if (liveUpdate) {
+    if (me?.user) await hydrateSession(me.user);
+    authUi.pane = "gate";
+    view = "auth";
+    render();
+    void runLiveUpdate(liveUpdate);
+    return;
+  }
   if (me?.user) {
     const prefs = readAuthPrefs();
     if (prefs.autoLogin) {

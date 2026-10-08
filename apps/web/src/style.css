@@ -33201,6 +33201,29 @@ button.linkish {
   margin: 8px 28px 16px;
 }
 
+.app-update-bar {
+  height: 10px;
+  margin: 0 8px;
+  border-radius: 999px;
+  background: #ffffff1f;
+  overflow: hidden;
+}
+
+.app-update-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8f6bff, #e6c36a);
+  transition: width 0.2s ease-out;
+}
+
+.app-update-pct {
+  display: block;
+  margin: 10px 0 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .codex-layer {
   position: fixed;
   inset: 0;

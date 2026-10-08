@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { mountApi } from "./server/api.mjs";
+import { mountAppUpdate } from "./server/appUpdate.mjs";
 import { createStore } from "./server/store.mjs";
 import {
   PUBLIC_FILE_CACHE_CONTROL,
@@ -52,6 +53,7 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "1mb" }));
 mountApi(app, store);
+mountAppUpdate(app, path.join(__dirname, "dist-app"));
 
 app.use(
   express.static(dist, {

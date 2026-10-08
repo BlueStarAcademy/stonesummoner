@@ -26,6 +26,11 @@ const config: CapacitorConfig = {
     App: {
       disableBackButtonHandler: true,
     },
+    // Self-hosted live update: the auth screen checks /api/app-update/latest.
+    CapacitorUpdater: {
+      autoUpdate: "off",
+      appReadyTimeout: 15000,
+    },
   },
 };
 
