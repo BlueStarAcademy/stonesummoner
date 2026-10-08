@@ -87,6 +87,15 @@ Client build-time: `VITE_API_BASE=https://your-service.up.railway.app` (no trail
 
 The build fails fast if neither variable is an `https://` origin.
 
+### Live update (no APK reinstall)
+
+Web code / UI changes reach installed apps without a new APK:
+
+1. Push to `main` → Railway Docker build runs `npm run build:app`, which writes `dist-app/app-manifest.json` (SHA-256 per file) and `app-version.json` (content-hash version).
+2. On launch the app compares its `app-version.json` with `GET /api/app-update/latest`. If they differ, the auth screen shows a progress sheet, `@capgo/capacitor-updater` downloads only changed files from `/app-bundle/…` (unchanged files are copied from the APK), then switches bundles and reloads.
+
+A new APK is still required when native code changes (new Capacitor plugin, `capacitor.config.ts` plugin settings, Android manifest / permissions).
+
 ## Store listing draft
 
 Use these as a starting point in Play Console (edit before publish).
